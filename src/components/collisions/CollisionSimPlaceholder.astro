@@ -1,0 +1,51 @@
+<div class="flex h-full min-h-[28rem] flex-col bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_14%,transparent),transparent_42%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_14%,transparent),transparent_36%),var(--sim-bg)]">
+  <div class="border-b border-[var(--grid-line)] px-6 py-5">
+    <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent-blue)]">1D Collision Simulation</p>
+    <h3 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">Interactive stage coming next</h3>
+    <p class="mt-3 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
+      This placeholder reserves space for a cart-on-track simulation with collision type controls, live momentum and energy readouts, and a fullscreen teaching view.
+    </p>
+  </div>
+
+  <div class="grid flex-1 gap-6 px-6 py-6 lg:grid-cols-[1.4fr_0.8fr]">
+    <div class="relative overflow-hidden rounded-[1.75rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm">
+      <div class="absolute inset-x-8 top-1/2 h-2 -translate-y-1/2 rounded-full bg-[color-mix(in_srgb,var(--grid-line)_70%,transparent)]"></div>
+      <div class="absolute left-[18%] top-1/2 h-12 w-16 -translate-y-1/2 rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--accent-blue)_16%,white)] shadow-sm"></div>
+      <div class="absolute right-[18%] top-1/2 h-12 w-16 -translate-y-1/2 rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--accent-red)_14%,white)] shadow-sm"></div>
+
+      <div class="absolute left-[18%] top-[30%] flex items-center gap-2 rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-primary)] shadow-sm">
+        <span class="h-2 w-2 rounded-full bg-[var(--accent-blue)]"></span>
+        Cart A
+      </div>
+      <div class="absolute right-[18%] top-[62%] flex items-center gap-2 rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-1.5 text-xs font-medium text-[color:var(--text-primary)] shadow-sm">
+        <span class="h-2 w-2 rounded-full bg-[var(--accent-red)]"></span>
+        Cart B
+      </div>
+
+      <div class="absolute inset-x-0 bottom-0 flex items-center justify-between border-t border-[var(--grid-line)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[color:var(--text-muted)]">
+        <span>Track view</span>
+        <span>Animation area</span>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      <div class="rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-5 shadow-sm">
+        <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Planned Controls</p>
+        <ul class="mt-3 mb-0 space-y-2 pl-5 text-sm leading-7 text-[color:var(--text-primary)]">
+          <li>Elastic, inelastic, and perfectly inelastic modes</li>
+          <li>Mass and velocity sliders for both carts</li>
+          <li>Play, reset, and step-through interaction</li>
+        </ul>
+      </div>
+
+      <div class="rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-5 shadow-sm">
+        <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-red)]">Planned Readouts</p>
+        <ul class="mt-3 mb-0 space-y-2 pl-5 text-sm leading-7 text-[color:var(--text-primary)]">
+          <li>Total momentum before and after</li>
+          <li>Total kinetic energy before and after</li>
+          <li>Visual comparison of conserved vs transformed quantities</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,79 @@
+---
+const comparisonRows = [
+  {
+    topic: 'Momentum',
+    elastic: 'Total momentum stays constant because the interaction forces are internal to the system.',
+    inelastic: 'Total momentum still stays constant, even when the objects crumple, stick, or warm up.',
+  },
+  {
+    topic: 'Kinetic Energy',
+    elastic: 'Kinetic energy before and after the collision is the same.',
+    inelastic: 'Some kinetic energy is transformed into sound, thermal energy, or deformation.',
+  },
+  {
+    topic: 'After the Impact',
+    elastic: 'Objects separate with new speeds that still satisfy both conservation laws.',
+    inelastic: 'Objects may separate more slowly, or in the perfectly inelastic case move together.',
+  },
+];
+---
+
+<div class="flex h-full flex-col bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_18%,transparent),transparent_42%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_14%,transparent),transparent_38%),var(--sim-bg)]">
+  <div class="border-b border-[var(--grid-line)] px-6 py-5">
+    <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent-blue)]">Collision Guide</p>
+    <h3 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">Track what is conserved and what changes form.</h3>
+    <p class="mt-3 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
+      In an isolated system, momentum is conserved in every collision. The key distinction is whether kinetic energy remains kinetic or is redistributed into other forms of energy.
+    </p>
+  </div>
+
+  <div class="grid gap-px bg-[var(--grid-line)] md:grid-cols-[0.9fr_1fr_1fr]">
+    <div class="bg-[var(--surface-elevated)] px-5 py-4 text-sm font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+      What to Track
+    </div>
+    <div class="bg-[var(--surface-elevated)] px-5 py-4">
+      <p class="m-0 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Elastic</p>
+      <p class="mt-1 mb-0 text-sm leading-6 text-[color:var(--text-primary)]">Momentum and kinetic energy are both conserved.</p>
+    </div>
+    <div class="bg-[var(--surface-elevated)] px-5 py-4">
+      <p class="m-0 text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-red)]">Inelastic</p>
+      <p class="mt-1 mb-0 text-sm leading-6 text-[color:var(--text-primary)]">Momentum is conserved, but kinetic energy is not.</p>
+    </div>
+
+    {comparisonRows.map((row) => (
+      <div class="contents">
+        <div class="bg-[var(--bg-primary)] px-5 py-5">
+          <p class="m-0 text-base font-semibold text-[color:var(--text-primary)]">{row.topic}</p>
+        </div>
+        <div class="bg-[var(--bg-primary)] px-5 py-5 text-sm leading-7 text-[color:var(--text-primary)]">
+          {row.elastic}
+        </div>
+        <div class="bg-[var(--bg-primary)] px-5 py-5 text-sm leading-7 text-[color:var(--text-primary)]">
+          {row.inelastic}
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <div class="grid gap-4 px-6 py-6 md:grid-cols-2">
+    <div class="rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-5 shadow-sm">
+      <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Always True</p>
+      <p class="mt-3 mb-0 text-sm leading-7 text-[color:var(--text-primary)]">
+        <span class="font-semibold">Total momentum:</span> p<sub>before</sub> = p<sub>after</sub>
+      </p>
+      <p class="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
+        As long as outside forces are negligible, internal pushes and pulls cancel in pairs.
+      </p>
+    </div>
+
+    <div class="rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-5 shadow-sm">
+      <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-red)]">Perfectly Inelastic Limit</p>
+      <p class="mt-3 mb-0 text-sm leading-7 text-[color:var(--text-primary)]">
+        m<sub>1</sub>v<sub>1,i</sub> + m<sub>2</sub>v<sub>2,i</sub> = (m<sub>1</sub> + m<sub>2</sub>)v<sub>f</sub>
+      </p>
+      <p class="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
+        The objects share a common final speed, which tells you the lost kinetic energy was converted into other forms.
+      </p>
+    </div>
+  </div>
+</div>

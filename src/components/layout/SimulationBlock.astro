@@ -3,12 +3,16 @@ interface Props {
   title?: string;
   description?: string;
   width?: 'wide' | 'full';
+  showHeader?: boolean;
+  showFullscreen?: boolean;
 }
 
 const {
   title,
   description,
   width = 'wide',
+  showHeader = true,
+  showFullscreen = true,
 } = Astro.props;
 
 const breakoutClass =
@@ -22,15 +26,17 @@ const breakoutClass =
     data-simulation-block
     class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-theme-sim shadow-sm"
   >
-    <button
-      type="button"
-      data-simulation-fullscreen-toggle
-      class="absolute top-4 right-4 z-20 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-text shadow-sm transition-colors hover:border-theme-blue hover:text-theme-blue"
-      aria-label="Enter fullscreen"
-    >
-      Fullscreen
-    </button>
-    {(title || description) && (
+    {showFullscreen && (
+      <button
+        type="button"
+        data-simulation-fullscreen-toggle
+        class="absolute top-4 right-4 z-20 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-text shadow-sm transition-colors hover:border-theme-blue hover:text-theme-blue"
+        aria-label="Enter fullscreen"
+      >
+        Fullscreen
+      </button>
+    )}
+    {showHeader && (title || description) && (
       <header class="border-b border-theme-grid bg-[var(--surface-elevated)] px-5 py-4 pr-28 backdrop-blur">
         {title && <h2 class="m-0 text-lg font-semibold text-theme-text">{title}</h2>}
         {description && <p class="mt-1 mb-0 text-sm text-[var(--text-muted)]">{description}</p>}

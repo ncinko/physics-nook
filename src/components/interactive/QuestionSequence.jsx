@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import renderMathInElement from 'katex/contrib/auto-render';
 
-export default function QuestionSequence({ questions = [] }) {
+export default function QuestionSequence({ questions = [], eyebrow = 'Concept Checkpoint' }) {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -92,7 +92,7 @@ export default function QuestionSequence({ questions = [] }) {
     <section className="not-prose rounded-3xl border border-[var(--grid-line)] bg-[color:var(--sim-bg)] p-5 text-[color:var(--text-primary)] shadow-sm md:p-6">
       <div className="mb-4 flex items-center justify-between gap-4">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
-          Relativity Checkpoint
+          {eyebrow}
         </p>
         <p className="rounded-full border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
           Question {questionIndex + 1} of {questions.length}

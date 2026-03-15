@@ -6,9 +6,12 @@ import SpacetimeDiagram from '../components/simulations/SpacetimeDiagram.jsx';
 import SimulationBlock from '../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 
-# Special Relativity
+# Spacetime Diagrams
 
-Einstein's key insight was not just that moving clocks run slow or moving rulers contract. It was that **space and time have to be described together** if the speed of light is the same for every inertial observer. A spacetime diagram gives us a way to see that geometry directly. Instead of tracking position alone, we track an event by its spatial coordinate $x$ and its time coordinate $ct$, where multiplying time by $c$ puts both axes in the same units.
+Einstein's key insight was not just that moving clocks run slow or moving rulers contract. 
+It was that **space and time have to be described together** if the speed of light is the same for every inertial observer.
+ A spacetime diagram gives us a way to see that geometry directly. Instead of tracking position alone, we track an event by its spatial coordinate $x$ 
+ and its time coordinate $t$.
 
 ## Events, Worldlines, and Frames
 
@@ -18,11 +21,14 @@ An **event** is a single happening: a flash, a detector click, a spaceship passi
   - A moving object has a slanted worldline because both position and time change.
   - A light pulse travels on a $45^\circ$ line, since it obeys $x = \pm ct$.
 
-The axes $(x, ct)$ describe one observer's frame. A second observer moving at constant velocity relative to the first uses a different set of axes, $(x^{\prime}, ct^{\prime})$. The important change is not that one observer is "wrong" and the other is "right"; it is that they slice spacetime into "space" and "time" differently.
+The axes $(x, t)$ describe one observer's frame. A second observer moving at constant velocity relative to the first uses a different set of axes, $(x^{\prime}, t^{\prime})$. 
+These coordinate axes correspond to **inertial frames**, meaning reference frames that are not accelerating or rotating.
+The important change is not that one observer is "wrong" and the other is "right"; it is that they slice spacetime into "space" and "time" differently.
 
 ## The Light Cone
 
-The lines $x = ct$ and $x = -ct$ form the **light cone**. They mark the worldlines of light that passes through the origin. Different inertial observers may disagree about coordinates, but they agree on the causal structure:
+The lines $x = ct$ and $x = -ct$ form the **light cone**. They mark the worldlines of light that passes through the origin. 
+Different inertial observers may disagree about coordinates, but they agree on the causal structure:
 
   - events inside the light cone can be connected by slower-than-light motion
   - events on the cone can be connected by light
@@ -39,7 +45,7 @@ $$
 ## Simultaneity
 
 In ordinary Newtonian intuition, "at the same time" feels universal. In relativity, it is not. For the unprimed observer, 
-events on a horizontal line share the same value of $ct$, so they are simultaneous in that frame. But the moving observer uses tilted lines of constant $ct^{\prime}$ instead. 
+events on a horizontal line share the same value of $t$, so they are simultaneous in that frame. But the moving observer uses tilted lines of constant $t^{\prime}$ instead. 
 That means **two events can be simultaneous for one observer and not simultaneous for another**.
 
 This single geometric fact drives a lot of the rest of the theory:
@@ -55,9 +61,14 @@ $$
 s^2 = (ct)^2 - x^2.
 $$
 
-That value is invariant under relativistic (Lorentz) transformations. So when you click an event in the simulation and compare its primed and unprimed coordinates, the numbers may change, but the interval does not.
+That value is invariant under relativistic (Lorentz) transformations. So when you click an event in the simulation and compare its primed and unprimed coordinates, 
+the numbers may change, but the interval does not.
 
 ## Minkowski Diagrams
+
+Minkowski (spacetime) diagrams place both sets of axes on the same plot, rather than attempting to animate
+a set of moving axes.  It turns out this appears as a rotation/stretching of axes.  It's also common to scale the time coordinates by the speed of light $$c$$.  This gives both the $$x$$-axis and $$ct$$-axis units of length and makes sketching the light cone easier.
+
 
 As you explore the diagram below, try this sequence:
 
@@ -86,6 +97,7 @@ As you work with the diagram, pay attention to three patterns:
 
 <QuestionSequence 
   client:visible 
+  eyebrow="Spacetime Diagram Checkpoint"
   questions={[
     {
       id: 'simultaneity',
@@ -107,7 +119,7 @@ As you work with the diagram, pay attention to three patterns:
     },
     {
       id: 'length-contraction',
-      question: 'Why must the length of a moving rod be measured using two endpoint events that are simultaneous in the observer\\\'s frame?',
+      question: 'Why must the length of a moving rod be measured using two endpoint events that are simultaneous in each frame?',
       options: [
         { id: 'A', text: 'Because otherwise the rod changes its rest length as it moves.', isCorrect: false, explanation: 'The rod\\\'s rest length is a property of the rod in its own rest frame. The issue in another frame is not that the rod changes physically, but that the endpoint measurements must refer to the same instant in that observer\\\'s frame.' },
         { id: 'B', text: 'Because length is the spatial separation between endpoints at one instant, and simultaneity depends on the frame.', isCorrect: true, explanation: 'Exactly. To define a length, you need both ends at the same time in the measuring frame. Since simultaneity is frame-dependent, different observers can assign different lengths, giving rise to length contraction.' },

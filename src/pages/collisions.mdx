@@ -1,0 +1,146 @@
+---
+layout: ../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import CollisionComparisonPanel from '../components/collisions/CollisionComparisonPanel.astro';
+import CollisionFieldSection from '../components/collisions/CollisionFieldSection';
+import Collision1D from '../components/simulations/Collision1D.jsx';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+
+
+# Collisions
+
+A collision is a short interaction during which objects push strongly on one another and change their motion. 
+The details of the contact can be messy, but the bookkeeping is not: **in an isolated system, total momentum is conserved**. 
+The big question is what happens to the kinetic energy. 
+
+## Momentum
+
+Momentum quantifies how difficult it is to stop or redirect motion. For a single object,
+
+$$
+\vec{p} = m\vec{v}.
+$$
+
+For a system of objects, we add the momenta of every part:
+
+$$
+\vec{p}_{\text{total}} = \sum_i m_i \vec{v}_i.
+$$
+
+If external forces are negligible during the collision, then the system is isolated and
+
+$$
+\vec{p}_{\text{before}} = \vec{p}_{\text{after}}.
+$$
+
+During collisions, objects may bounce apart, deform, or stick together. Although individual momenta can change dramatically during impact, the vector sum of the system's total momentum 
+stays fixed throughout.
+
+## Energy
+
+Kinetic energy is the energy of motion:
+
+$$
+K = \frac{1}{2}mv^2.
+$$
+
+Total energy is always conserved, but **kinetic energy is not always conserved by itself**. During a collision, some of the original kinetic energy can become
+
+- thermal energy from friction and internal vibration.
+- sound produced during impact.
+- permanent deformation of the objects.
+
+So when we classify collisions, we are really asking whether the kinetic energy remains kinetic after the interaction.
+
+<CollisionFieldSection mode="elastic" client:visible>
+  ## Elastic Collisions
+
+  An **elastic collision** conserves both total momentum and total kinetic energy:
+
+  $$
+  \vec{p}_{\text{before}} = \vec{p}_{\text{after}},
+  \qquad
+  K_{\text{before}} = K_{\text{after}}.
+  $$
+
+  These collisions are good models for idealized billiard balls, gas particles, and many microscopic scattering processes. 
+  In an elastic collision, the objects separate after the collision, and no kinetic energy is "lost" to heat or deformation.
+</CollisionFieldSection>
+
+<CollisionFieldSection mode="inelastic" client:visible>
+  ## Inelastic Collisions
+
+  An **inelastic collision** still conserves momentum, but it does **not** conserve kinetic energy:
+
+  $$
+  \vec{p}_{\text{before}} = \vec{p}_{\text{after}},
+  \qquad
+  K_{\text{after}} < K_{\text{before}}.
+  $$
+
+  The "missing" kinetic energy has not vanished. It has been transformed into other forms of energy inside or around the colliding objects. A special case is the **perfectly inelastic collision**, where the objects stick together and move with one shared final velocity. In one dimension,
+
+  $$
+  m_1 v_{1,i} + m_2 v_{2,i} = (m_1 + m_2) v_f.
+  $$
+</CollisionFieldSection>
+
+
+<SimulationBlock
+  title="1D Collisions"
+  description="Explore the differences between elastic and inelastic collisions."
+>
+  <Collision1D client:only="react"/>
+</SimulationBlock>
+
+
+
+<SimulationBlock showHeader={false} showFullscreen={false}>
+  <CollisionComparisonPanel />
+</SimulationBlock>
+
+
+
+## What to Notice
+
+As you compare different collision types, pay attention to three patterns:
+
+- Momentum conserved in both elastic and inelastic processes.
+- Kinetic energy is the classifier: if it is conserved, the collision is elastic; if not, it is inelastic.
+- "Lost" kinetic energy is really transformed energy, not destroyed energy.
+
+<QuestionSequence
+  client:visible
+  eyebrow="Collisions Checkpoint"
+  questions={[
+    {
+      id: 'sticking-together',
+      question: 'Two carts collide and stick together. Which statement must still be true if outside forces are negligible during the collision?',
+      options: [
+        { id: 'A', text: 'The total momentum of the two-cart system is conserved, even though kinetic energy is not.', isCorrect: true, explanation: 'Exactly. Sticking together identifies the collision as perfectly inelastic, so kinetic energy decreases, but the system momentum still remains the same if external forces are negligible.' },
+        { id: 'B', text: 'Both total momentum and total kinetic energy must be conserved because energy can never change form.', isCorrect: false, explanation: 'Total energy is conserved, but kinetic energy can change into sound, thermal energy, and deformation. In a perfectly inelastic collision, momentum is conserved while kinetic energy is not.' },
+        { id: 'C', text: 'Neither momentum nor kinetic energy is conserved because the objects no longer move separately.', isCorrect: false, explanation: 'Whether the objects separate afterward is not what controls momentum conservation. If the system is isolated, total momentum is conserved regardless of whether the objects stick together.' }
+      ]
+    },
+    {
+      id: 'energy-transfer',
+      question: 'Why can the total kinetic energy decrease in an inelastic collision without violating conservation of energy?',
+      options: [
+        { id: 'A', text: 'Because some of the kinetic energy is transformed into thermal energy, sound, or deformation.', isCorrect: true, explanation: 'Right. The collision redistributes energy into other forms, so total energy is still conserved even though the kinetic-energy portion becomes smaller.' },
+        { id: 'B', text: 'Because momentum conservation replaces energy conservation during collisions.', isCorrect: false, explanation: 'Momentum conservation does not replace energy conservation. Both principles still hold, but kinetic energy alone may not stay constant in an inelastic collision.' },
+        { id: 'C', text: 'Because the masses of the objects decrease during impact.', isCorrect: false, explanation: 'Ordinary collision problems do not rely on changing mass. The drop in kinetic energy comes from energy conversion, not from mass disappearing.' }
+      ]
+    },
+    {
+      id: 'extra-equation',
+      question: 'When solving a one-dimensional collision problem, which extra equation can you write only if the collision is elastic?',
+      options: [
+        { id: 'A', text: '$m_1 v_{1,i} + m_2 v_{2,i} = m_1 v_{1,f} + m_2 v_{2,f}$', isCorrect: false, explanation: 'That equation expresses momentum conservation, and it applies to both elastic and inelastic collisions as long as the system is isolated.' },
+        { id: 'B', text: '$\\tfrac{1}{2} m_1 v_{1,i}^2 + \\tfrac{1}{2} m_2 v_{2,i}^2 = \\tfrac{1}{2} m_1 v_{1,f}^2 + \\tfrac{1}{2} m_2 v_{2,f}^2$', isCorrect: true, explanation: 'Exactly. Conservation of kinetic energy is the additional equation that is available only for elastic collisions.' },
+        { id: 'C', text: '$m_1 v_{1,i} + m_2 v_{2,i} = (m_1 + m_2) v_f$', isCorrect: false, explanation: 'That equation is the special momentum equation for a perfectly inelastic collision, where the objects stick together. It does not describe the general elastic case.' }
+      ]
+    }
+  ]}
+/>

@@ -1,0 +1,157 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+@layer base {
+  /* Light Theme (Default) */
+  :root, [data-theme="light"] {
+    --bg-primary: #ffffff;
+    --text-primary: #111827;
+    --text-muted: #4b5563;
+    --grid-line: #d1d5db;
+    --sim-bg: #f9fafb;
+    --surface-elevated: rgba(255, 255, 255, 0.82);
+    --accent-red: #ef4444;
+    --accent-blue: #3b82f6;
+  }
+
+  /* Dark Theme */
+  [data-theme="dark"] {
+    --bg-primary: #111827;
+    --text-primary: #f9fafb;
+    --text-muted: #cbd5e1;
+    --grid-line: #374151;
+    --sim-bg: #1f2937;
+    --surface-elevated: rgba(17, 24, 39, 0.9);
+    --accent-red: #f87171;
+    --accent-blue: #60a5fa;
+  }
+
+  /* Pastel Theme */
+  [data-theme="pastel"] {
+    --bg-primary: #fdf6e3;
+    --text-primary: #5c6b73;
+    --text-muted: #7a8a92;
+    --grid-line: #e2e8f0;
+    --sim-bg: #fefae0;
+    --surface-elevated: rgba(255, 250, 224, 0.9);
+    --accent-red: #ffb4a2;
+    --accent-blue: #bde0fe;
+  }
+}
+
+@layer components {
+  .prose-theme {
+    --tw-prose-body: var(--text-primary);
+    --tw-prose-lead: var(--text-muted);
+    --tw-prose-headings: var(--text-primary);
+    --tw-prose-links: var(--accent-blue);
+    --tw-prose-bold: var(--text-primary);
+    --tw-prose-counters: var(--text-primary);
+    --tw-prose-bullets: var(--grid-line);
+    --tw-prose-hr: var(--grid-line);
+    --tw-prose-quotes: var(--text-primary);
+    --tw-prose-quote-borders: var(--grid-line);
+    --tw-prose-captions: var(--text-primary);
+    --tw-prose-code: var(--accent-red);
+    --tw-prose-pre-code: var(--text-primary);
+    --tw-prose-pre-bg: color-mix(in srgb, var(--sim-bg) 88%, black 12%);
+    --tw-prose-th-borders: var(--grid-line);
+    --tw-prose-td-borders: var(--grid-line);
+  }
+
+  .prose-theme :where(h1, h2, h3, h4) {
+    color: var(--text-primary);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .prose-theme :where(p) {
+    margin-top: 0;
+    margin-bottom: 1.2rem;
+    color: var(--text-primary);
+    line-height: 1.8;
+  }
+
+  .prose-theme :where(ul, ol) {
+    margin-top: 0.4rem;
+    margin-bottom: 1.35rem;
+    padding-left: 1.5rem;
+  }
+
+  .prose-theme :where(ul) {
+    list-style-type: disc;
+    list-style-position: outside;
+  }
+
+  .prose-theme :where(ol) {
+    list-style-position: outside;
+  }
+
+  .prose-theme :where(li) {
+    margin-top: 0.45rem;
+    margin-bottom: 0.45rem;
+    padding-left: 0.35rem;
+  }
+
+  .prose-theme :where(ul > li)::marker,
+  .prose-theme :where(ol > li)::marker {
+    color: var(--accent-blue);
+  }
+
+  .prose-theme :where(h1) {
+    margin-bottom: 1.25rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--grid-line);
+    font-size: clamp(2.25rem, 4vw, 3.25rem);
+    line-height: 1.05;
+  }
+
+  .prose-theme :where(h2) {
+    margin-top: 3rem;
+    margin-bottom: 1rem;
+    font-size: clamp(1.6rem, 2.2vw, 2.1rem);
+    line-height: 1.15;
+  }
+
+  .prose-theme :where(h3) {
+    margin-top: 2.25rem;
+    margin-bottom: 0.75rem;
+    font-size: clamp(1.25rem, 1.7vw, 1.5rem);
+    line-height: 1.25;
+  }
+
+  .prose-theme :where(h4) {
+    margin-top: 1.75rem;
+    margin-bottom: 0.65rem;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
+}
+
+::selection {
+  background-color: color-mix(in srgb, var(--accent-blue) 28%, transparent);
+}
+
+a,
+button,
+section,
+article,
+header,
+nav,
+div {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease;
+}

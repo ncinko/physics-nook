@@ -1,0 +1,118 @@
+---
+interface Props {
+  title?: string;
+  description?: string;
+  width?: 'wide' | 'full';
+}
+
+const {
+  title,
+  description,
+  width = 'wide',
+} = Astro.props;
+
+const breakoutClass =
+  width === 'full'
+    ? 'w-screen max-w-none'
+    : 'w-screen max-w-7xl';
+---
+
+<section class={`not-prose relative left-1/2 my-10 -translate-x-1/2 px-4 sm:px-6 lg:px-8 ${breakoutClass}`}>
+  <div
+    data-simulation-block
+    class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-theme-sim shadow-sm"
+  >
+    <button
+      type="button"
+      data-simulation-fullscreen-toggle
+      class="absolute top-4 right-4 z-20 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-text shadow-sm transition-colors hover:border-theme-blue hover:text-theme-blue"
+      aria-label="Enter fullscreen"
+    >
+      Fullscreen
+    </button>
+    {(title || description) && (
+      <header class="border-b border-theme-grid bg-[var(--surface-elevated)] px-5 py-4 pr-28 backdrop-blur">
+        {title && <h2 class="m-0 text-lg font-semibold text-theme-text">{title}</h2>}
+        {description && <p class="mt-1 mb-0 text-sm text-[var(--text-muted)]">{description}</p>}
+      </header>
+    )}
+    <div class="simulation-content flex-1 min-h-[24rem]">
+      <slot />
+    </div>
+  </div>
+</section>
+
+<script>
+  const syncButtonState = (block, button, isActive) => {
+    button.textContent = isActive ? 'Exit Fullscreen' : 'Fullscreen';
+    button.setAttribute('aria-label', isActive ? 'Exit fullscreen' : 'Enter fullscreen');
+    block.classList.toggle('is-fallback-fullscreen', isActive && !document.fullscreenElement);
+    document.body.classList.toggle('simulation-block-lock', isActive && !document.fullscreenElement);
+  };
+
+  document.querySelectorAll('[data-simulation-block]').forEach((block) => {
+    const button = block.querySelector('[data-simulation-fullscreen-toggle]');
+    if (!button) return;
+
+    const updateFromFullscreenState = () => {
+      const isNativeFullscreen = document.fullscreenElement === block;
+      const isFallbackFullscreen = block.classList.contains('is-fallback-fullscreen');
+      syncButtonState(block, button, isNativeFullscreen || isFallbackFullscreen);
+    };
+
+    button.addEventListener('click', async () => {
+      const isNativeFullscreen = document.fullscreenElement === block;
+      const isFallbackFullscreen = block.classList.contains('is-fallback-fullscreen');
+
+      if (isNativeFullscreen) {
+        await document.exitFullscreen?.();
+        return;
+      }
+
+      if (isFallbackFullscreen) {
+        syncButtonState(block, button, false);
+        return;
+      }
+
+      if (block.requestFullscreen) {
+        try {
+          await block.requestFullscreen();
+          return;
+        } catch {
+          // Fall back to CSS pseudo-fullscreen if the API is unavailable or blocked.
+        }
+      }
+
+      syncButtonState(block, button, true);
+    });
+
+    document.addEventListener('fullscreenchange', updateFromFullscreenState);
+  });
+</script>
+
+<style>
+  :global(.simulation-shell:fullscreen),
+  :global(.simulation-shell.is-fallback-fullscreen) {
+    width: 100vw;
+    max-width: none;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  :global(.simulation-shell:fullscreen),
+  :global(.simulation-shell.is-fallback-fullscreen) {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    margin: 0;
+  }
+
+  :global(.simulation-shell:fullscreen .simulation-content),
+  :global(.simulation-shell.is-fallback-fullscreen .simulation-content) {
+    min-height: 0;
+  }
+
+  :global(body.simulation-block-lock) {
+    overflow: hidden;
+  }
+</style>

@@ -1,11 +1,42 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
-
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+import BaseLayout from '../layouts/BaseLayout.astro';
+import LandingWaveField from '../components/simulations/LandingWaveField.jsx';
 ---
 
-<Layout>
-	<Welcome />
-</Layout>
+<BaseLayout>
+	<div class="relative overflow-hidden">
+		<div class="absolute inset-x-0 top-0 z-20 h-[40rem]">
+			<LandingWaveField client:load />
+		</div>
+
+		<section class="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-12 px-4 py-16 md:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
+			<div>
+				
+				<h1 class="max-w-3xl text-5xl font-bold tracking-[-0.05em] text-theme-text sm:text-6xl">
+					Learn physics by clicking, playing, and seeing the math respond.
+				</h1>
+				<p class="mt-6 max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
+					Physics Nook pairs short explanations with interactive simulations so abstract ideas become visual and tangible.
+				</p>
+			</div>
+
+			<div class="relative z-30">
+				<div class="absolute -inset-6 -z-10 rounded-[2rem] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.22),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(239,68,68,0.18),transparent_35%)] blur-2xl"></div>
+				<a
+					href="/relativity"
+					class="group relative z-30 block overflow-hidden rounded-[2rem] border border-theme-grid bg-[var(--surface-elevated)] p-6 shadow-[0_24px_80px_rgba(17,24,39,0.12)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[var(--accent-blue)] hover:shadow-[0_28px_90px_rgba(17,24,39,0.16)]"
+				>
+					<div class="flex items-center justify-between border-b border-theme-grid pb-4">
+						<div>
+							<p class="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Featured Module</p>
+							<h2 class="mt-2 text-2xl font-semibold tracking-tight text-theme-text transition-colors duration-300 group-hover:text-[var(--accent-blue)]">Spacetime Explorer</h2>
+						</div>
+						
+					</div>
+
+				
+				</a>
+			</div>
+		</section>
+	</div>
+</BaseLayout>

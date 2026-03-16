@@ -50,6 +50,16 @@ export default function SpacetimeDiagram() {
         { name: 'Left End', x: -5, ct: -3 },
         { name: 'Right End', x: 5, ct: 3 }
       ]
+    },
+    {
+      id: 'train_tunnel',
+      name: 'Train and Tunnel Paradox',
+      description: "Train and Tunnel both have a rest length of 8. Tunnel is unprimed; Train is primed (β=0.8). In the Tunnel's frame, the Back Enters (ct=-2) BEFORE the Front Exits (ct=2), so the train fits inside. But in the Train's frame, the Front Exits (ct'=-2) BEFORE the Back Enters (ct'=2)!",
+      beta: 0.8,
+      events: [
+        { name: 'Back Enters', x: -4, ct: -2 },
+        { name: 'Front Exits', x: 4, ct: 2 }
+      ]
     }
   ];
 
@@ -249,6 +259,7 @@ export default function SpacetimeDiagram() {
       {!isFullscreen && (
         <div className="w-full md:w-96 bg-white border-r border-gray-200 flex flex-col shadow-sm z-10 flex-shrink-0">
           <div className="p-6 border-b border-gray-100">
+            <h1 className="text-2xl font-bold tracking-tight text-gray-900 mb-1">Spacetime Diagram</h1>
           
           <div className="space-y-6">
             {/* Beta Control */}
@@ -354,7 +365,7 @@ export default function SpacetimeDiagram() {
                 onChange={(e) => loadScenario(e.target.value)}
                 className="w-full text-sm border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
               >
-                <option value="custom">Custom (Free Play)</option>
+                <option value="custom">Custom</option>
                 {scenarios.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
@@ -518,6 +529,39 @@ export default function SpacetimeDiagram() {
               <g>
                 <line x1={-20} y1={20} x2={20} y2={-20} stroke="#fbbf24" strokeDasharray="0.2, 0.2" vectorEffect="non-scaling-stroke" strokeWidth="2" />
                 <line x1={-20} y1={-20} x2={20} y2={20} stroke="#fbbf24" strokeDasharray="0.2, 0.2" vectorEffect="non-scaling-stroke" strokeWidth="2" />
+              </g>
+            )}
+
+            {/* Scenario-Specific Graphics */}
+            {activeScenario === 'train_tunnel' && (
+              <g>
+                {/* Tunnel Body (Rest frame) */}
+                <polygon points="-4,-30 4,-30 4,30 -4,30" fill="#9ca3af" opacity="0.15" />
+                <line x1={-4} y1={-30} x2={-4} y2={30} stroke="#4b5563" strokeWidth="3" opacity="0.6" strokeDasharray="0.2, 0.2" vectorEffect="non-scaling-stroke" />
+                <line x1={4} y1={-30} x2={4} y2={30} stroke="#4b5563" strokeWidth="3" opacity="0.6" strokeDasharray="0.2, 0.2" vectorEffect="non-scaling-stroke" />
+                
+                {/* Train Body (Moving frame) */}
+                <polygon 
+                  points={`
+                    ${gamma * (-4 + beta * (-30))},${-(gamma * (-30 + beta * (-4)))} 
+                    ${gamma * (4 + beta * (-30))},${-(gamma * (-30 + beta * 4))} 
+                    ${gamma * (4 + beta * 30)},${-(gamma * (30 + beta * 4))} 
+                    ${gamma * (-4 + beta * 30)},${-(gamma * (30 + beta * (-4)))}
+                  `} 
+                  fill="#ef4444" opacity="0.15" 
+                />
+                {/* Train Rear */}
+                <line 
+                  x1={gamma * (-4 + beta * (-30))} y1={-(gamma * (-30 + beta * (-4)))} 
+                  x2={gamma * (-4 + beta * 30)} y2={-(gamma * (30 + beta * (-4)))} 
+                  stroke="#dc2626" strokeWidth="3" opacity="0.6" vectorEffect="non-scaling-stroke" 
+                />
+                {/* Train Front */}
+                <line 
+                  x1={gamma * (4 + beta * (-30))} y1={-(gamma * (-30 + beta * 4))} 
+                  x2={gamma * (4 + beta * 30)} y2={-(gamma * (30 + beta * 4))} 
+                  stroke="#dc2626" strokeWidth="3" opacity="0.6" vectorEffect="non-scaling-stroke" 
+                />
               </g>
             )}
 

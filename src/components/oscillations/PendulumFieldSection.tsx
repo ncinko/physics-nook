@@ -60,6 +60,9 @@ const STRING_TAUT_EPSILON = 0.75;
 const STRING_RELAXATION_PASSES = 18;
 const STRING_RELAXATION_STEPS = 2;
 const STRING_SEGMENT_TARGET = 18;
+const STRING_MIN_SEGMENTS = 12;
+const STRING_MAX_SEGMENTS = 40;
+const STRING_VERTICAL_RESOLUTION_BOOST = 0.65;
 const STRING_RENDER_SMOOTHING_PASSES = 2;
 const PENDULUM_STAGE_OVERFLOW = 420;
 const TEXT_EDGE_OFFSET = 100;
@@ -222,7 +225,11 @@ const getSlackStringPoints = (pendulum: PendulumGeometry, bob: Point) => {
     return [anchor, bob];
   }
 
-  const segmentCount = Math.round(clamp(pendulum.length / STRING_SEGMENT_TARGET, 12, 28));
+  const verticalAlignment = 1 - clamp(Math.abs(spanX) / (pendulum.length * 0.3), 0, 1);
+  const resolutionBoost = 1 + verticalAlignment * STRING_VERTICAL_RESOLUTION_BOOST;
+  const segmentCount = Math.round(
+    clamp((pendulum.length / STRING_SEGMENT_TARGET) * resolutionBoost, STRING_MIN_SEGMENTS, STRING_MAX_SEGMENTS),
+  );
   const segmentLength = pendulum.length / segmentCount;
   const slack = pendulum.length - straightDistance;
   const bendDirection = Math.abs(spanX) > 0.5 ? Math.sign(spanX) : pendulum.anchorRatio < 0.5 ? 1 : -1;

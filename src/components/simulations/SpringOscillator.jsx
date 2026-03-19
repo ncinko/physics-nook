@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Pause, Play, RotateCcw } from 'lucide-react';
+import { ChevronDown, GripVertical, Pause, Play, RotateCcw } from 'lucide-react';
 
 const DISPLAY_RANGE = 2.2;
 const VELOCITY_PLOT_RANGE = 12.5;
@@ -82,6 +82,8 @@ const VECTOR_OPTIONS = [
     threshold: 0.08,
   },
 ];
+
+const PANEL_ORDER = ['playback', 'parameters', 'positionHistory', 'energy', 'kinematics', 'velocityHistory'];
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -231,36 +233,122 @@ function ControlSlider({ label, value, valueLabel, min, max, step, onChange }) {
   );
 }
 
-function CollapsiblePanel({ title, accentColor, preview, description, badge, isOpen, onToggle, children, className = '' }) {
+function PanelFrame({ children, className = '', isDragging = false, isDropTarget = false }) {
   return (
-    <div className={`overflow-hidden rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm ${className}`}>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-        className="flex w-full items-start justify-between gap-4 p-5 text-left"
-      >
-        <div>
-          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: accentColor }}>
-            {title}
+    <div
+      data-sort-panel="true"
+      className={`overflow-hidden rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm transition-all duration-300 ${
+        isDragging ? 'scale-[0.985] opacity-45 shadow-none' : ''
+      } ${isDropTarget ? 'ring-2 ring-[var(--accent-blue)] ring-offset-2 ring-offset-[var(--sim-bg)]' : ''} ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PanelDragHandle({ title, onDragStart, onDragEnd }) {
+  return (
+    <button
+      type="button"
+      draggable
+      onClick={(event) => event.preventDefault()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      aria-label={`Drag ${title} panel to rearrange`}
+      title={`Drag ${title} panel to rearrange`}
+      className="flex h-10 w-10 flex-shrink-0 cursor-grab items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-muted)] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] active:cursor-grabbing"
+    >
+      <GripVertical className="h-4 w-4" />
+    </button>
+  );
+}
+
+function PlaybackPanel({ isDragging, isDropTarget, onDragStart, onDragEnd, isPlaying, onTogglePlayback, onReset }) {
+  return (
+    <PanelFrame className="bg-[var(--surface-elevated)]" isDragging={isDragging} isDropTarget={isDropTarget}>
+      <div className="flex flex-wrap items-start justify-between gap-4 p-4">
+        <div className="min-w-[14rem] flex-1">
+          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Playback</p>
+          <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
+            Click-drag the mass to start the oscillation.
           </p>
-          {isOpen ? <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">{description}</p> : null}
         </div>
 
-        <div className="flex flex-shrink-0 items-center gap-3">
-          {badge ? (
-            <span className="rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[color:var(--text-muted)]">
-              {badge}
-            </span>
-          ) : null}
-          <span className="rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-2 text-[color:var(--text-muted)]">
-            <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
-          </span>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={onTogglePlayback}
+            className="flex items-center gap-2 rounded-full bg-[var(--accent-blue)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {isPlaying ? 'Pause' : 'Play'}
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            className="rounded-full border border-[var(--grid-line)] bg-[var(--bg-primary)] p-2.5 text-[color:var(--text-muted)] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
+            aria-label="Reset motion"
+            title="Reset motion"
+          >
+            <RotateCcw className="h-5 w-5" />
+          </button>
+          <PanelDragHandle title="Playback" onDragStart={onDragStart} onDragEnd={onDragEnd} />
         </div>
-      </button>
+      </div>
+    </PanelFrame>
+  );
+}
+
+function CollapsiblePanel({
+  title,
+  accentColor,
+  preview,
+  description,
+  badge,
+  isOpen,
+  onToggle,
+  onDragStart,
+  onDragEnd,
+  isDragging = false,
+  isDropTarget = false,
+  children,
+  className = '',
+}) {
+  return (
+    <PanelFrame className={className} isDragging={isDragging} isDropTarget={isDropTarget}>
+      <div className="flex items-start gap-4 p-5">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isOpen}
+          className="flex min-w-0 flex-1 items-start justify-between gap-4 text-left"
+        >
+          <div className="min-w-0">
+            <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: accentColor }}>
+              {title}
+            </p>
+            {isOpen && description ? <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">{description}</p> : null}
+            {!isOpen && preview ? <p className="mt-2 mb-0 text-sm leading-6 text-[color:var(--text-muted)]">{preview}</p> : null}
+          </div>
+
+          <div className="flex flex-shrink-0 items-center gap-3">
+            {badge ? (
+              <span className="rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-1 text-xs font-medium text-[color:var(--text-muted)]">
+                {badge}
+              </span>
+            ) : null}
+            <span className="rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-2 text-[color:var(--text-muted)]">
+              <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+            </span>
+          </div>
+        </button>
+
+        <PanelDragHandle title={title} onDragStart={onDragStart} onDragEnd={onDragEnd} />
+      </div>
 
       {isOpen ? <div className="border-t border-[var(--grid-line)] px-5 pb-5 pt-4">{children}</div> : null}
-    </div>
+    </PanelFrame>
   );
 }
 
@@ -319,10 +407,13 @@ export default function SpringOscillator() {
   const [energyReference, setEnergyReference] = useState(0);
   const [activeVector, setActiveVector] = useState('none');
   const [isVectorPanelOpen, setIsVectorPanelOpen] = useState(false);
+  const [panelOrder, setPanelOrder] = useState(PANEL_ORDER);
+  const [draggedPanelId, setDraggedPanelId] = useState(null);
+  const [dragTargetPanelId, setDragTargetPanelId] = useState(null);
   const [openSections, setOpenSections] = useState({
     kinematics: false,
     parameters: false,
-    positionHistory: true,
+    positionHistory: false,
     velocityHistory: false,
     energy: false,
   });
@@ -342,6 +433,20 @@ export default function SpringOscillator() {
   const commitSimState = (nextState) => {
     simStateRef.current = nextState;
     setSimState(nextState);
+  };
+
+  const movePanel = (currentOrder, sourceId, targetId) => {
+    const sourceIndex = currentOrder.indexOf(sourceId);
+    const targetIndex = currentOrder.indexOf(targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+      return currentOrder;
+    }
+
+    const nextOrder = [...currentOrder];
+    nextOrder.splice(sourceIndex, 1);
+    nextOrder.splice(targetIndex, 0, sourceId);
+    return nextOrder;
   };
 
   useEffect(() => {
@@ -421,6 +526,55 @@ export default function SpringOscillator() {
       ...previous,
       [section]: !previous[section],
     }));
+  };
+
+  const handlePanelDragStart = (panelId) => (event) => {
+    const panelElement = event.currentTarget.closest('[data-sort-panel="true"]');
+    if (panelElement && event.dataTransfer) {
+      const rect = panelElement.getBoundingClientRect();
+      event.dataTransfer.setDragImage(panelElement, Math.min(rect.width / 2, 120), 28);
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', panelId);
+    }
+
+    setDraggedPanelId(panelId);
+    setDragTargetPanelId(panelId);
+  };
+
+  const handlePanelDragOver = (panelId) => (event) => {
+    event.preventDefault();
+    const sourceId = draggedPanelId ?? event.dataTransfer?.getData('text/plain');
+
+    if (!sourceId || sourceId === panelId) {
+      return;
+    }
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+
+    setDragTargetPanelId(panelId);
+    setPanelOrder((currentOrder) => movePanel(currentOrder, sourceId, panelId));
+  };
+
+  const clearPanelDrag = () => {
+    setDraggedPanelId(null);
+    setDragTargetPanelId(null);
+  };
+
+  const handlePanelDrop = (panelId) => (event) => {
+    event.preventDefault();
+    const sourceId = draggedPanelId ?? event.dataTransfer?.getData('text/plain');
+
+    if (sourceId && sourceId !== panelId) {
+      setPanelOrder((currentOrder) => movePanel(currentOrder, sourceId, panelId));
+    }
+
+    clearPanelDrag();
+  };
+
+  const handlePanelDragEnd = () => {
+    clearPanelDrag();
   };
 
   const getStagePoint = (event) => {
@@ -649,7 +803,7 @@ export default function SpringOscillator() {
         ? Math.abs(current.velocity) * 36
         : activeVector === 'force'
           ? Math.abs(-springConstant * current.position) * 2.8
-          : Math.abs(current.acceleration) * 1.9,
+          : Math.abs(current.acceleration) * 5,
     ARROW_MIN_TOTAL_LENGTH,
     ARROW_MAX_TOTAL_LENGTH,
   );
@@ -680,6 +834,251 @@ export default function SpringOscillator() {
       : Math.abs(current.position) > 0.04 || Math.abs(current.velocity) > 0.04
         ? 'Paused'
         : 'Drag to launch';
+
+  const renderMenuPanel = (panelId) => {
+    const dragProps = {
+      onDragStart: handlePanelDragStart(panelId),
+      onDragEnd: handlePanelDragEnd,
+      isDragging: draggedPanelId === panelId,
+      isDropTarget: dragTargetPanelId === panelId && draggedPanelId !== null && draggedPanelId !== panelId,
+    };
+
+    const wrapperProps = {
+      key: panelId,
+      onDragOver: handlePanelDragOver(panelId),
+      onDrop: handlePanelDrop(panelId),
+    };
+
+    if (panelId === 'playback') {
+      return (
+        <div {...wrapperProps}>
+          <PlaybackPanel
+            {...dragProps}
+            isPlaying={isPlaying}
+            onTogglePlayback={() => setIsPlaying((playing) => !playing)}
+            onReset={resetMotion}
+          />
+        </div>
+      );
+    }
+
+    if (panelId === 'parameters') {
+      return (
+        <div {...wrapperProps}>
+          <CollapsiblePanel
+            {...dragProps}
+            title="Parameters"
+            accentColor="var(--accent-blue)"
+            isOpen={openSections.parameters}
+            onToggle={() => toggleSection('parameters')}
+          >
+            <div className="space-y-5">
+              <ControlSlider
+                label="Mass"
+                value={mass}
+                valueLabel={`${formatNumber(mass)} kg`}
+                min="0.6"
+                max="3.2"
+                step="0.1"
+                onChange={setMass}
+              />
+
+              <ControlSlider
+                label="Spring constant"
+                value={springConstant}
+                valueLabel={`${formatNumber(springConstant)} N/m`}
+                min="4"
+                max="18"
+                step="0.5"
+                onChange={setSpringConstant}
+              />
+
+              <ControlSlider
+                label="Damping ratio"
+                value={dampingRatio}
+                valueLabel={formatNumber(dampingRatio, 2)}
+                min="0"
+                max="1"
+                step="0.01"
+                onChange={setDampingRatio}
+              />
+            </div>
+          </CollapsiblePanel>
+        </div>
+      );
+    }
+
+    if (panelId === 'energy') {
+      return (
+        <div {...wrapperProps}>
+          <CollapsiblePanel
+            {...dragProps}
+            title="Energy Exchange"
+            accentColor={COLORS.position}
+            preview={`E = ${formatNumber(mechanicalEnergy)} J`}
+            isOpen={openSections.energy}
+            onToggle={() => toggleSection('energy')}
+          >
+            <div className="space-y-4">
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
+                  <span className="text-[color:var(--text-muted)]">Spring potential</span>
+                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(potentialEnergy)} J</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(100, (potentialEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.position }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
+                  <span className="text-[color:var(--text-muted)]">Kinetic</span>
+                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(kineticEnergy)} J</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(100, (kineticEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.velocity }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
+                  <span className="text-[color:var(--text-muted)]">Mechanical total</span>
+                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(mechanicalEnergy)} J</span>
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
+                  <div
+                    className="h-full rounded-full"
+                    style={{ width: `${Math.min(100, (mechanicalEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.neutral }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4">
+              {energyReference > 0 ? (
+                <>
+                  <p className="m-0 text-sm leading-7 text-[color:var(--text-primary)]">
+                    Relative to the last launch: <span className="font-semibold">{formatNumber(relativeEnergy * 100, 1)}%</span>
+                  </p>
+                  <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
+                    With zero damping, this stays essentially fixed. With damping, mechanical energy steadily leaks away; changing the mass or spring constant can also change the total because the system itself has changed.
+                  </p>
+                </>
+              ) : (
+                <p className="m-0 text-sm leading-7 text-[color:var(--text-muted)]">
+                  Launch the mass once to set a reference energy for the bar scaling.
+                </p>
+              )}
+            </div>
+          </CollapsiblePanel>
+        </div>
+      );
+    }
+
+    if (panelId === 'kinematics') {
+      return (
+        <div {...wrapperProps}>
+          <CollapsiblePanel
+            {...dragProps}
+            title="Kinematics"
+            accentColor={COLORS.neutral}
+            preview={`x ${formatSigned(current.position, 1)} m, v ${formatSigned(current.velocity, 1)} m/s`}
+            isOpen={openSections.kinematics}
+            onToggle={() => toggleSection('kinematics')}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.position }}>Position</p>
+                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.position, 1)} m</p>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.velocity }}>Velocity</p>
+                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.velocity, 1)} m/s</p>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.acceleration }}>Acceleration</p>
+                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.acceleration, 1)} m/s^2</p>
+                <p className="m-0 text-sm text-[color:var(--text-muted)]">net from spring & damping</p>
+              </div>
+
+              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-muted)]">Timing</p>
+                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+                  {isCriticallyDamped ? 'critical' : `${formatNumber(dampedPeriod, 1)} s`}
+                </p>
+                {isCriticallyDamped ? (
+                  <p className="m-0 text-sm text-[color:var(--text-muted)]">Returns to equilibrium without oscillating</p>
+                ) : (
+                  <p className="m-0 text-sm text-[color:var(--text-muted)]">
+                    Ideal: {formatNumber(idealPeriod, 1)} s, {formatNumber(frequency, 1)} Hz
+                  </p>
+                )}
+              </div>
+            </div>
+          </CollapsiblePanel>
+        </div>
+      );
+    }
+
+    if (panelId === 'positionHistory') {
+      return (
+        <div {...wrapperProps}>
+          <CollapsiblePanel
+            {...dragProps}
+            title="Position History"
+            accentColor={COLORS.position}
+            badge={`last ${HISTORY_WINDOW}s`}
+            isOpen={openSections.positionHistory}
+            onToggle={() => toggleSection('positionHistory')}
+          >
+            <HistoryChart
+              history={simState.history}
+              accessor={(sample) => sample.position}
+              valueRange={DISPLAY_RANGE}
+              stroke={COLORS.position}
+              markerFill={COLORS.position}
+            />
+          </CollapsiblePanel>
+        </div>
+      );
+    }
+
+    if (panelId === 'velocityHistory') {
+      return (
+        <div {...wrapperProps}>
+          <CollapsiblePanel
+            {...dragProps}
+            title="Velocity History"
+            accentColor={COLORS.velocity}
+            badge={`last ${HISTORY_WINDOW}s`}
+            isOpen={openSections.velocityHistory}
+            onToggle={() => toggleSection('velocityHistory')}
+          >
+            <HistoryChart
+              history={simState.history}
+              accessor={(sample) => sample.velocity}
+              valueRange={VELOCITY_PLOT_RANGE}
+              stroke={COLORS.velocity}
+              markerFill={COLORS.velocity}
+            />
+          </CollapsiblePanel>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const leftColumnPanels = panelOrder.slice(0, 3);
+  const rightColumnPanels = panelOrder.slice(3);
 
   return (
     <div className="flex h-full min-h-[44rem] w-full flex-col overflow-hidden bg-[var(--sim-bg)] text-[color:var(--text-primary)]">
@@ -852,9 +1251,7 @@ export default function SpringOscillator() {
               </>
             ) : null}
 
-            <text x="94" y="286" fill="rgba(71, 85, 105, 0.95)" fontSize="16" fontWeight="600">
-              wall
-            </text>
+
             <text
               x={TRACK.equilibriumX + 12}
               y="300"
@@ -869,225 +1266,8 @@ export default function SpringOscillator() {
       </div>
 
       <div className="grid flex-1 grid-cols-1 gap-6 p-5 lg:grid-cols-[1.08fr_0.92fr]">
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4 shadow-sm">
-            <div>
-              <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Playback</p>
-              <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
-                Click-drag the mass to start the oscillation.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsPlaying((playing) => !playing)}
-                className="flex items-center gap-2 rounded-full bg-[var(--accent-blue)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
-              >
-                {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {isPlaying ? 'Pause' : 'Play'}
-              </button>
-              <button
-                type="button"
-                onClick={resetMotion}
-                className="rounded-full border border-[var(--grid-line)] bg-[var(--bg-primary)] p-2.5 text-[color:var(--text-muted)] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
-                aria-label="Reset motion"
-                title="Reset motion"
-              >
-                <RotateCcw className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-
-          <CollapsiblePanel
-            title="Parameters"
-            accentColor="var(--accent-blue)"
-            preview={`m ${formatNumber(mass)} kg, k ${formatNumber(springConstant)} N/m, zeta ${formatNumber(dampingRatio, 2)}`}
-            isOpen={openSections.parameters}
-            onToggle={() => toggleSection('parameters')}
-          >
-            <div className="space-y-5">
-              <ControlSlider
-                label="Mass"
-                value={mass}
-                valueLabel={`${formatNumber(mass)} kg`}
-                min="0.6"
-                max="3.2"
-                step="0.1"
-                onChange={setMass}
-              />
-
-              <ControlSlider
-                label="Spring constant"
-                value={springConstant}
-                valueLabel={`${formatNumber(springConstant)} N/m`}
-                min="4"
-                max="18"
-                step="0.5"
-                onChange={setSpringConstant}
-              />
-
-              <ControlSlider
-                label="Damping ratio"
-                value={dampingRatio}
-                valueLabel={formatNumber(dampingRatio, 2)}
-                min="0"
-                max="1"
-                step="0.01"
-                onChange={setDampingRatio}
-              />
-            </div>
-
-
-          </CollapsiblePanel>
-
-          <CollapsiblePanel
-            title="Energy Exchange"
-            accentColor={COLORS.position}
-            preview={`E = ${formatNumber(mechanicalEnergy)} J`}
-            isOpen={openSections.energy}
-            onToggle={() => toggleSection('energy')}
-          >
-            <div className="space-y-4">
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
-                  <span className="text-[color:var(--text-muted)]">Spring potential</span>
-                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(potentialEnergy)} J</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${Math.min(100, (potentialEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.position }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
-                  <span className="text-[color:var(--text-muted)]">Kinetic</span>
-                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(kineticEnergy)} J</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${Math.min(100, (kineticEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.velocity }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <div className="mb-1 flex items-center justify-between gap-4 text-sm">
-                  <span className="text-[color:var(--text-muted)]">Mechanical total</span>
-                  <span className="font-mono text-[color:var(--text-primary)]">{formatNumber(mechanicalEnergy)} J</span>
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-[var(--grid-line)]">
-                  <div
-                    className="h-full rounded-full"
-                    style={{ width: `${Math.min(100, (mechanicalEnergy / energyScale) * 100)}%`, backgroundColor: COLORS.neutral }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-4 rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4">
-              {energyReference > 0 ? (
-                <>
-                  <p className="m-0 text-sm leading-7 text-[color:var(--text-primary)]">
-                    Relative to the last launch: <span className="font-semibold">{formatNumber(relativeEnergy * 100, 1)}%</span>
-                  </p>
-                  <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
-                    With zero damping, this stays essentially fixed. With damping, mechanical energy steadily leaks away; changing the mass or spring constant can also change the total because the system itself has changed.
-                  </p>
-                </>
-              ) : (
-                <p className="m-0 text-sm leading-7 text-[color:var(--text-muted)]">
-                  Launch the mass once to set a reference energy for the bar scaling.
-                </p>
-              )}
-            </div>
-          </CollapsiblePanel>
-        </div>
-
-        <div className="space-y-4">
-          <CollapsiblePanel
-            title="Kinematics"
-            accentColor={COLORS.neutral}
-            description="Open to compare the current displacement, velocity, acceleration, and timing of the oscillator."
-            isOpen={openSections.kinematics}
-            onToggle={() => toggleSection('kinematics')}
-          >
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.position }}>Position</p>
-                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.position, 1)} m</p>
-                <p className="m-0 text-sm text-[color:var(--text-muted)]">Signed displacement from equilibrium</p>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.velocity }}>Velocity</p>
-                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.velocity, 1)} m/s</p>
-                <p className="m-0 text-sm text-[color:var(--text-muted)]">Fastest near the equilibrium crossing</p>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: COLORS.acceleration }}>Acceleration</p>
-                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{formatSigned(current.acceleration, 1)} m/s^2</p>
-                <p className="m-0 text-sm text-[color:var(--text-muted)]">Net response from the spring pull and damping</p>
-              </div>
-
-              <div className="rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-                <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--text-muted)]">Timing</p>
-                <p className="mt-3 mb-1 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
-                  {isCriticallyDamped ? 'critical' : `${formatNumber(dampedPeriod, 1)} s`}
-                </p>
-                {isCriticallyDamped ? (
-                  <p className="m-0 text-sm text-[color:var(--text-muted)]">Returns to equilibrium without oscillating</p>
-                ) : (
-                  <p className="m-0 text-sm text-[color:var(--text-muted)]">
-                    Ideal: {formatNumber(idealPeriod, 1)} s, {formatNumber(frequency, 1)} Hz
-                  </p>
-                )}
-              </div>
-            </div>
-          </CollapsiblePanel>
-
-          <CollapsiblePanel
-            title="Position History"
-            accentColor={COLORS.position}
-            preview={`Current x(t): ${formatSigned(current.position)} m`}
-            description="The displacement trace shows the repeating motion and how damping narrows the oscillation envelope over time."
-            badge={`last ${HISTORY_WINDOW}s`}
-            isOpen={openSections.positionHistory}
-            onToggle={() => toggleSection('positionHistory')}
-          >
-            <HistoryChart
-              history={simState.history}
-              accessor={(sample) => sample.position}
-              valueRange={DISPLAY_RANGE}
-              stroke={COLORS.position}
-              markerFill={COLORS.position}
-            />
-          </CollapsiblePanel>
-
-          <CollapsiblePanel
-            title="Velocity History"
-            accentColor={COLORS.velocity}
-            preview={`Current v(t): ${formatSigned(current.velocity)} m/s`}
-            description="Velocity flips sign at each turning point and reaches its largest magnitude near equilibrium."
-            badge={`last ${HISTORY_WINDOW}s`}
-            isOpen={openSections.velocityHistory}
-            onToggle={() => toggleSection('velocityHistory')}
-          >
-            <HistoryChart
-              history={simState.history}
-              accessor={(sample) => sample.velocity}
-              valueRange={VELOCITY_PLOT_RANGE}
-              stroke={COLORS.velocity}
-              markerFill={COLORS.velocity}
-            />
-          </CollapsiblePanel>
-
-        </div>
+        <div className="space-y-5">{leftColumnPanels.map(renderMenuPanel)}</div>
+        <div className="space-y-5">{rightColumnPanels.map(renderMenuPanel)}</div>
       </div>
     </div>
   );

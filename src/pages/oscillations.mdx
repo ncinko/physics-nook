@@ -1,0 +1,136 @@
+---
+layout: ../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import OscillationCyclePanel from '../components/oscillations/OscillationCyclePanel.astro';
+import PendulumFieldSection from '../components/oscillations/PendulumFieldSection';
+import SinusoidEquationExplorer from '../components/oscillations/SinusoidEquationExplorer.jsx';
+import SpringOscillator from '../components/simulations/SpringOscillator.jsx';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+
+# Oscillations
+
+An oscillation is motion that repeats around an equilibrium point. Pull a mass on a spring, pluck a string, or nudge a pendulum and the system does not simply return once and stop. Inertia carries it past equilibrium, the restoring force pulls it back, and the cycle repeats. The cleanest version of that story is **simple harmonic motion**, where the restoring force is proportional to displacement.
+
+## Equilibrium and Restoring Force
+
+A stable equilibrium is a point the system naturally returns to after a small disturbance. For a spring, Hooke's law says
+
+$$
+F = -kx.
+$$
+
+In this case, $x=0$ is the **equilibrium point** of the system.  
+If the mass is displaced by $x$, the spring pulls back with a force proportional to how far it has been stretched or compressed.  The minus sign matters: it reminds us that the force points back toward equilibrium. This type of force is called a **restoring force**.
+
+
+<PendulumFieldSection client:visible>
+  ## Period and Frequency
+
+  The period $T$ is the interval of time it takes to complete one full oscillation, or cycle, of the system.  For an ideal mass-spring oscillator,
+
+  $$
+  T = 2\pi \sqrt{\frac{m}{k}}.
+  $$
+
+  A stiffer spring makes the oscillation quicker, while a larger mass makes it slower.  For small swings, a pendulum follows the same basic timing idea with
+
+  $$
+  T_{\text{pendulum}} \approx 2\pi \sqrt{\frac{L}{g}},
+  $$
+
+  so a longer pendulum swings more slowly than a shorter one. It's also convenient to define **frequency** $f$ and **angular frequency** $\omega$ as
+  $$
+  f = \frac{1}{T},
+  \qquad
+  \omega = \frac{2\pi}{T}.
+  $$
+  These measure cycles per second and radians per second, respectively (where each cycle corresponds to $2\pi$ radians).
+  Note that "cycles" and "radians" are considered dimensionless.
+</PendulumFieldSection>
+
+## A Sinusoidal Pattern
+
+In ideal simple harmonic motion, position and velocity follow simple trigonometric functions. 
+Here $A$ is the amplitude, $\omega$ is the angular frequency, and $\phi$ sets the starting phase. 
+Click either equation below to open a plot and see how those three parameters reshape the curve.
+
+<SinusoidEquationExplorer client:visible />
+
+Due to the restoring force, the acceleration is proportional to displacement and directed back toward equilibrium:
+
+$$
+a(t) = -\omega^2 x(t).
+$$
+
+## Energy Exchange
+
+An oscillator is a continual trade between kinetic energy and stored potential energy. For a spring,
+
+$$
+U_s = \frac{1}{2}kx^2,
+\qquad
+K = \frac{1}{2}mv^2,
+\qquad
+E_{\text{mech}} = K + U_s.
+$$
+
+If damping is negligible, the total mechanical energy stays fixed and simply shifts form over the cycle. Real systems lose some of that mechanical energy to internal friction, air resistance, or sound, so the motion gradually fades unless something keeps driving it.
+
+<OscillationCyclePanel />
+
+
+
+As you explore the simulation below, try this sequence:
+
+1. Set damping to zero and compare how changing $m$ and $k$ changes the cycle time.
+2. Watch the energy bars at the center crossing and at the turning points.
+3. Raise the damping and notice how the amplitude envelope shrinks as mechanical energy leaves the system.
+
+<SimulationBlock
+  title="Spring-Mass Oscillator"
+  description="Explore how amplitude, mass, spring stiffness, and damping shape the motion and energy flow."
+>
+  <SpringOscillator client:only="react" />
+</SimulationBlock>
+
+## What to Notice
+
+- In simple harmonic motion, the force and acceleration always point toward equilibrium.
+- The period is set by the system parameters $m$ and $k$, not by how far you pull in the ideal model.
+- Position and energy are out of phase: maximum displacement coincides with minimum speed, and maximum speed occurs at equilibrium.
+
+<QuestionSequence
+  client:load
+  eyebrow="Oscillations Checkpoint"
+  questions={[
+    {
+      id: 'restoring-force',
+      question: 'A spring-mass oscillator is displaced farther from equilibrium. How does the restoring force change in ideal simple harmonic motion?',
+      options: [
+        { id: 'A', text: 'Its magnitude increases in proportion to the displacement, and it points back toward equilibrium.', isCorrect: true, explanation: 'Exactly. Hooke\\\'s law says $F = -kx$, so a larger displacement produces a larger restoring force, while the minus sign keeps the force directed back toward the equilibrium position.' },
+        { id: 'B', text: 'It stays constant because the spring always pulls with the same force once it is moving.', isCorrect: false, explanation: 'The restoring force in SHM is not constant. It depends on displacement, which is why the motion speeds up near the center and slows near the turning points.' },
+        { id: 'C', text: 'It points in the same direction as the displacement so the oscillator can complete the cycle.', isCorrect: false, explanation: 'That would push the mass farther away from equilibrium instead of bringing it back. The defining feature of a restoring force is that it opposes the displacement.' }
+      ]
+    },
+    {
+      id: 'period',
+      question: 'For an ideal mass-spring oscillator, which change makes the period larger?',
+      options: [
+        { id: 'A', text: 'Increasing the mass while keeping the spring constant the same.', isCorrect: true, explanation: 'Right. Since $T = 2\\pi\\sqrt{m/k}$, increasing $m$ makes the period longer and the oscillation slower.' },
+        { id: 'B', text: 'Increasing the spring constant while keeping the mass the same.', isCorrect: false, explanation: 'A larger spring constant makes the oscillator stiffer, which decreases the period and speeds up the motion.' },
+        { id: 'C', text: 'Doubling the amplitude while keeping both $m$ and $k$ fixed.', isCorrect: false, explanation: 'In the ideal linear model, amplitude changes the total energy but not the period. The timing still depends only on $m$ and $k$.' }
+      ]
+    },
+    {
+      id: 'energy-at-center',
+      question: 'As the mass passes through equilibrium in an ideal spring oscillator, which statement is correct?',
+      options: [
+        { id: 'A', text: 'The speed is largest, so kinetic energy is largest while spring potential energy is smallest.', isCorrect: true, explanation: 'Exactly. At equilibrium the spring is closest to its relaxed length, so its stored potential energy is minimal, and the mass is moving fastest, which makes the kinetic energy maximal.' },
+        { id: 'B', text: 'Both kinetic and spring potential energy are zero because the displacement is zero.', isCorrect: false, explanation: 'Zero displacement makes the spring potential energy minimal, not the kinetic energy. The mass is moving fastest at the center, so kinetic energy is not zero there.' },
+        { id: 'C', text: 'The speed is zero because the oscillator is changing direction at equilibrium.', isCorrect: false, explanation: 'The oscillator changes direction at the turning points, not at equilibrium. It crosses equilibrium with its greatest speed.' }
+      ]
+    }
+  ]}
+/>

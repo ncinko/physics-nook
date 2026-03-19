@@ -7,6 +7,7 @@
     <div class="flex items-center gap-3 text-sm font-medium text-[color:var(--text-primary)]">
       <a href="/" class="transition-colors hover:text-theme-blue">Home</a>
       <a href="/relativity" class="transition-colors hover:text-theme-blue">Spacetime</a>
+      <a href="/oscillations" class="transition-colors hover:text-theme-blue">Oscillations</a>
       <a href="/collisions" class="transition-colors hover:text-theme-blue">Collisions</a>
       <button
         id="theme-toggle"
@@ -36,6 +37,7 @@
 </nav>
 
 <script>
+  const THEME_STORAGE_KEY = 'physics-nook-theme';
   const navbar = document.getElementById('site-navbar');
   const themeToggle = document.getElementById('theme-toggle');
   let lastScrollY = window.scrollY;
@@ -73,7 +75,7 @@
   themeToggle?.addEventListener('click', () => {
     const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', nextTheme);
-    localStorage.setItem('theme', nextTheme);
+    localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
     syncThemeToggle();
   });
 

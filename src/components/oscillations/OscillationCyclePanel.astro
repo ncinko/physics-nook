@@ -1,0 +1,166 @@
+---
+import SpringBannerField from './SpringBannerField.jsx';
+
+const stageWidth = 176;
+const stageHeight = 72;
+const wallX = 18;
+const anchorX = 36;
+const equilibriumX = 105;
+const massWidth = 26;
+const massHeight = 24;
+const y = 36;
+
+const createSpringPoints = (endX: number) => {
+  const lead = 14;
+  const tail = 12;
+  const coilCount = 8;
+  const usable = Math.max(18, endX - anchorX - lead - tail);
+  const points = [
+    [anchorX, y],
+    [anchorX + lead * 0.4, y],
+    [anchorX + lead, y],
+  ];
+
+  for (let index = 0; index < coilCount; index += 1) {
+    const x = anchorX + lead + usable * ((index + 0.5) / coilCount);
+    const offset = index % 2 === 0 ? -11 : 11;
+    points.push([x, y + offset]);
+  }
+
+  points.push([endX - tail, y]);
+  points.push([endX, y]);
+
+  return points.map(([xPoint, yPoint]) => `${xPoint},${yPoint}`).join(' ');
+};
+
+const phases = [
+  {
+    label: 't = 0',
+    title: 'Right turning point',
+    massCenterX: 140,
+    displacement: '+A',
+    speed: '0',
+    note: 'Released from rest',
+    energy: 'Spring potential is largest.',
+    accent: 'var(--accent-red)',
+  },
+  {
+    label: 't = T/4',
+    title: 'Center crossing',
+    massCenterX: equilibriumX,
+    displacement: '0',
+    speed: 'maximum',
+    note: 'Moving left fastest',
+    energy: 'Kinetic energy is largest.',
+    accent: '#0f766e',
+  },
+  {
+    label: 't = T/2',
+    title: 'Left turning point',
+    massCenterX: 75,
+    displacement: '-A',
+    speed: '0',
+    note: 'About to reverse',
+    energy: 'Spring potential is largest.',
+    accent: 'var(--accent-red)',
+  },
+  {
+    label: 't = 3T/4',
+    title: 'Center crossing',
+    massCenterX: equilibriumX,
+    displacement: '0',
+    speed: 'maximum',
+    note: 'Moving right fastest',
+    energy: 'Kinetic energy is largest.',
+    accent: '#0f766e',
+  },
+];
+---
+
+<section class="not-prose my-10 overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[var(--sim-bg)] shadow-sm">
+  <div class="relative min-h-[16rem] overflow-hidden border-b border-[var(--grid-line)] bg-[var(--sim-bg)]">
+    <SpringBannerField client:visible />
+    <div class="pointer-events-none relative z-10 px-6 py-5">
+      <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent-blue)]">One Cycle</p>
+      <p class="mt-3 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
+        As the system oscillates, kinetic energy is continuously exchanged with spring potential energy. It's helpful to pause and consider the energy and motion at key points in each cycle.
+      </p>
+    </div>
+  </div>
+
+  <div class="grid gap-px bg-[var(--grid-line)] md:grid-cols-2 xl:grid-cols-4">
+    {phases.map((phase) => {
+      const massLeft = phase.massCenterX - massWidth / 2;
+      return (
+        <article class="bg-[var(--bg-primary)] p-5">
+          <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={`color:${phase.accent}`}>
+            {phase.label}
+          </p>
+          <h4 class="mt-3 mb-2 text-lg font-semibold text-[color:var(--text-primary)]">{phase.title}</h4>
+          <p class="mt-0 mb-4 text-sm leading-7 text-[color:var(--text-muted)]">{phase.note}</p>
+
+          <div class="rounded-2xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--sim-bg)_78%,white)] p-3">
+            <svg
+              viewBox={`0 0 ${stageWidth} ${stageHeight}`}
+              class="h-auto w-full"
+              role="img"
+              aria-label={`${phase.title} illustration`}
+            >
+              <rect x={wallX} y="12" width="6" height="48" rx="2" fill="color-mix(in srgb, var(--text-primary) 72%, transparent)" />
+              <line
+                x1={equilibriumX}
+                x2={equilibriumX}
+                y1="12"
+                y2="60"
+                stroke="color-mix(in srgb, var(--text-muted) 60%, transparent)"
+                stroke-width="1.5"
+                stroke-dasharray="4 5"
+              />
+              <line
+                x1={wallX + 6}
+                x2={stageWidth - 10}
+                y1={y}
+                y2={y}
+                stroke="color-mix(in srgb, var(--grid-line) 92%, white)"
+                stroke-width="3"
+                stroke-linecap="round"
+              />
+              <polyline
+                points={createSpringPoints(massLeft)}
+                fill="none"
+                stroke={phase.accent}
+                stroke-width="3"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+              <rect
+                x={massLeft}
+                y={y - massHeight / 2}
+                width={massWidth}
+                height={massHeight}
+                rx="7"
+                fill="color-mix(in srgb, var(--bg-primary) 72%, white)"
+                stroke={phase.accent}
+                stroke-width="2.5"
+              />
+            </svg>
+          </div>
+
+          <div class="mt-4 space-y-2 rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4 shadow-sm">
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-[color:var(--text-muted)]">Displacement</span>
+              <span class="font-semibold text-[color:var(--text-primary)]">{phase.displacement}</span>
+            </div>
+            <div class="flex items-center justify-between gap-4 text-sm">
+              <span class="text-[color:var(--text-muted)]">Speed</span>
+              <span class="font-semibold text-[color:var(--text-primary)]">{phase.speed}</span>
+            </div>
+            <p class="m-0 rounded-xl px-3 py-2 text-sm leading-6" style={`background:color-mix(in srgb, ${phase.accent} 10%, var(--bg-primary)); color:${phase.accent};`}>
+              {phase.energy}
+            </p>
+          </div>
+        </article>
+      );
+    })}
+  </div>
+</section>

@@ -8,9 +8,10 @@ import '../styles/global.css';
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width" />
 		<script is:inline>
+			const THEME_STORAGE_KEY = 'physics-nook-theme';
 			const theme = (() => {
-				if (typeof localStorage !== 'undefined' && localStorage.getItem('theme')) {
-					return localStorage.getItem('theme');
+				if (typeof localStorage !== 'undefined' && localStorage.getItem(THEME_STORAGE_KEY)) {
+					return localStorage.getItem(THEME_STORAGE_KEY);
 				}
 				return 'light';
 			})();

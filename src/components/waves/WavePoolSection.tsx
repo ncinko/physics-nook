@@ -1,7 +1,11 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
+  className?: string;
+  poolAriaLabel?: string;
+  secretLinkHref?: string;
+  secretLinkLabel?: string;
 }
 
 interface GridState {
@@ -40,6 +44,8 @@ const VERTICAL_DAMPING_LAYER_CELLS = 5;
 const VERTICAL_DAMPING_MAX = 0.82;
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
+
+const classes = (...values: Array<string | undefined>) => values.filter(Boolean).join(' ');
 
 const createGridState = (cols: number, rows: number): GridState => {
   const size = cols * rows;
@@ -95,7 +101,13 @@ const addSplash = (
   }
 };
 
-export default function WavePoolSection({ children }: Props) {
+export default function WavePoolSection({
+  children,
+  className,
+  poolAriaLabel = 'Interactive wave pool; click or drag to create disturbances',
+  secretLinkHref,
+  secretLinkLabel = 'Open hidden fullscreen wave pool',
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationRef = useRef<number | null>(null);
@@ -381,13 +393,13 @@ export default function WavePoolSection({ children }: Props) {
   return (
     <section
       ref={containerRef}
-      className="relative isolate my-8 min-h-[34rem] max-w-none overflow-hidden"
+      className={classes('relative isolate my-8 min-h-[34rem] max-w-none overflow-hidden', className)}
       style={{ touchAction: 'none', marginInline: 'calc(50% - 50vw)' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
-      aria-label="Interactive wave pool; click or drag to create disturbances"
+      aria-label={poolAriaLabel}
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.18),transparent_34%),radial-gradient(circle_at_78%_26%,rgba(14,165,233,0.12),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(15,118,110,0.16),transparent_34%),linear-gradient(180deg,color-mix(in_srgb,var(--bg-primary)_84%,transparent),color-mix(in_srgb,var(--sim-bg)_76%,transparent))]" />
       <canvas
@@ -399,11 +411,30 @@ export default function WavePoolSection({ children }: Props) {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[linear-gradient(180deg,color-mix(in_srgb,var(--bg-primary)_76%,transparent),transparent)]" />
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-28 bg-[linear-gradient(0deg,color-mix(in_srgb,var(--bg-primary)_70%,transparent),transparent)]" />
 
-      <div className="relative z-10 mx-auto flex min-h-[34rem] w-full max-w-4xl items-center px-4 py-6 md:px-6 md:py-8">
-        <div className="mx-auto max-w-[65ch] [&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0">
-          {children}
+      {secretLinkHref ? (
+        <a
+          href={secretLinkHref}
+          className="absolute bottom-0 right-0 z-20 flex h-14 w-14 items-center justify-center border-l border-t border-[color-mix(in_srgb,var(--grid-line)_82%,transparent)] bg-[linear-gradient(225deg,color-mix(in_srgb,var(--surface-elevated)_80%,transparent),color-mix(in_srgb,var(--bg-primary)_14%,transparent))] text-[color:var(--text-muted)] opacity-70 shadow-[-10px_-10px_32px_-24px_rgba(59,130,246,0.75)] transition-all duration-200 hover:opacity-100 hover:text-[var(--accent-blue)] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] sm:h-16 sm:w-16"
+          aria-label={secretLinkLabel}
+          title={secretLinkLabel}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="sr-only">{secretLinkLabel}</span>
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-[2px] border border-current" />
+        </a>
+      ) : null}
+
+      {children ? (
+        <div className="relative z-10 mx-auto flex min-h-[34rem] w-full max-w-4xl items-center px-4 py-6 md:px-6 md:py-8">
+          <div className="mx-auto max-w-[65ch] [&>*:first-child]:!mt-0 [&>*:last-child]:!mb-0">
+            {children}
+          </div>
         </div>
-      </div>
+      ) : null}
     </section>
   );
 }

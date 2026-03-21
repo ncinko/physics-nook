@@ -11,7 +11,7 @@ import WaveSimulator from '../components/simulations/WaveSimulator.jsx';
 
 # Waves
 
-<WavePoolSection client:visible>
+<WavePoolSection client:visible secretLinkHref="/waves/deep-pool">
   A wave is a disturbance that propagates through space and time. 
   Waves are identified by particular patterns that move through a corresponding **medium** (like water), although
   some waves can travel through a vacuum.  As a wave propagates, the medium itself does not necessarily move all that far.
@@ -82,19 +82,15 @@ $$
 
 where $A$ is the amplitude, $k = 2\pi/\lambda$ is the **wave number**, and $\omega = 2\pi/T = 2\pi f$ is the **angular frequency**. The minus sign tells us the pattern moves toward larger $x$. Reversing that sign produces the same shape traveling the other way.
 
-The important roles are:
+Note that the dependent variable $y$ could represent many different things depending on the type of wave. It may be the displacement of a small segment along a vibrating guitar string, the height of a lilypad riding on a water wave, or the local pressure of air at a music concert.  For simplicity, we're starting with 1D waves (i.e. one spatial dimension $$x$$).  A solid understanding of these will allow you to generalize to higher dimensions.
 
-- $A$ sets the maximum displacement from equilibrium.
-- $\lambda$ sets the spatial spacing of the pattern.
-- $T$, or equivalently $f = 1/T$, sets how rapidly each point repeats its motion.
-- $v = \lambda/T = \lambda f$ then describes how quickly the overall pattern propagates.
 
 As you explore the simulation below, try this sequence:
 
 1. Keep the wavelength fixed and raise the frequency. Watch how the pattern arrives more often.
 2. Hold the frequency steady and lengthen the wavelength. Notice the crests or compressions spread farther apart.
 3. Switch between transverse and longitudinal modes and compare what the medium itself is doing.
-4. Reverse the direction and confirm that the shape is the same even though the phase shifts the opposite way.
+4. **Careful**: changes to wavelength and frequency affect the wave speed, but it's usually the speed that is constant.
 
 <SimulationBlock
   title="Wave Propagation Explorer"

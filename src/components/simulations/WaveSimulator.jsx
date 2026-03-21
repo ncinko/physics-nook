@@ -179,7 +179,9 @@ const stageXFromPhysical = (x) =>
   STAGE.padding.left +
   (x / STAGE.domainLength) * (STAGE.width - STAGE.padding.left - STAGE.padding.right);
 
-function ControlSlider({ label, value, valueLabel, min, max, step, onChange }) {
+function ControlSlider({ label, value, valueLabel, min, max, step, onChange, onCommit }) {
+  const commitValue = (event) => onCommit(parseFloat(event.currentTarget.value));
+
   return (
     <label className="block">
       <div className="mb-2 flex items-center justify-between gap-4 text-sm">
@@ -193,6 +195,9 @@ function ControlSlider({ label, value, valueLabel, min, max, step, onChange }) {
         step={step}
         value={value}
         onChange={(event) => onChange(parseFloat(event.target.value))}
+        onPointerUp={commitValue}
+        onKeyUp={commitValue}
+        onBlur={commitValue}
         className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-slate-700"
       />
     </label>
@@ -220,8 +225,11 @@ export default function WaveSimulator() {
   const [mode, setMode] = useState('transverse');
   const [direction, setDirection] = useState(INITIAL_DIRECTION);
   const [amplitude, setAmplitude] = useState(INITIAL_AMPLITUDE);
+  const [draftAmplitude, setDraftAmplitude] = useState(INITIAL_AMPLITUDE);
   const [wavelength, setWavelength] = useState(INITIAL_WAVELENGTH);
+  const [draftWavelength, setDraftWavelength] = useState(INITIAL_WAVELENGTH);
   const [frequency, setFrequency] = useState(INITIAL_FREQUENCY);
+  const [draftFrequency, setDraftFrequency] = useState(INITIAL_FREQUENCY);
   const [isPlaying, setIsPlaying] = useState(true);
   const [time, setTime] = useState(0);
   const [waveEvents, setWaveEvents] = useState(() =>
@@ -236,6 +244,11 @@ export default function WaveSimulator() {
 
   const frameRef = useRef(null);
   const lastTimeRef = useRef(null);
+  const committedParamsRef = useRef({
+    amplitude: INITIAL_AMPLITUDE,
+    wavelength: INITIAL_WAVELENGTH,
+    frequency: INITIAL_FREQUENCY,
+  });
 
   useEffect(() => {
     if (!isPlaying) {
@@ -265,11 +278,7 @@ export default function WaveSimulator() {
     };
   }, [isPlaying]);
 
-  const appendWaveEvent = ({
-    nextAmplitude = amplitude,
-    nextWavelength = wavelength,
-    nextFrequency = frequency,
-  }) => {
+  const appendWaveEvent = ({ nextAmplitude, nextWavelength, nextFrequency }) => {
     const eventTime = time;
 
     setWaveEvents((currentEvents) => {
@@ -288,31 +297,76 @@ export default function WaveSimulator() {
     });
   };
 
-  const handleAmplitudeChange = (nextAmplitude) => {
-    if (nextAmplitude === amplitude) {
+  const handleAmplitudePreview = (nextAmplitude) => {
+    setDraftAmplitude(nextAmplitude);
+  };
+
+  const handleAmplitudeCommit = (nextAmplitude) => {
+    if (nextAmplitude === committedParamsRef.current.amplitude) {
       return;
     }
 
-    appendWaveEvent({ nextAmplitude });
+    const nextParams = {
+      ...committedParamsRef.current,
+      amplitude: nextAmplitude,
+    };
+
+    committedParamsRef.current = nextParams;
+    appendWaveEvent({
+      nextAmplitude: nextParams.amplitude,
+      nextWavelength: nextParams.wavelength,
+      nextFrequency: nextParams.frequency,
+    });
     setAmplitude(nextAmplitude);
+    setDraftAmplitude(nextAmplitude);
   };
 
-  const handleWavelengthChange = (nextWavelength) => {
-    if (nextWavelength === wavelength) {
+  const handleWavelengthPreview = (nextWavelength) => {
+    setDraftWavelength(nextWavelength);
+  };
+
+  const handleWavelengthCommit = (nextWavelength) => {
+    if (nextWavelength === committedParamsRef.current.wavelength) {
       return;
     }
 
-    appendWaveEvent({ nextWavelength });
+    const nextParams = {
+      ...committedParamsRef.current,
+      wavelength: nextWavelength,
+    };
+
+    committedParamsRef.current = nextParams;
+    appendWaveEvent({
+      nextAmplitude: nextParams.amplitude,
+      nextWavelength: nextParams.wavelength,
+      nextFrequency: nextParams.frequency,
+    });
     setWavelength(nextWavelength);
+    setDraftWavelength(nextWavelength);
   };
 
-  const handleFrequencyChange = (nextFrequency) => {
-    if (nextFrequency === frequency) {
+  const handleFrequencyPreview = (nextFrequency) => {
+    setDraftFrequency(nextFrequency);
+  };
+
+  const handleFrequencyCommit = (nextFrequency) => {
+    if (nextFrequency === committedParamsRef.current.frequency) {
       return;
     }
 
-    appendWaveEvent({ nextFrequency });
+    const nextParams = {
+      ...committedParamsRef.current,
+      frequency: nextFrequency,
+    };
+
+    committedParamsRef.current = nextParams;
+    appendWaveEvent({
+      nextAmplitude: nextParams.amplitude,
+      nextWavelength: nextParams.wavelength,
+      nextFrequency: nextParams.frequency,
+    });
     setFrequency(nextFrequency);
+    setDraftFrequency(nextFrequency);
   };
 
   const handleDirectionChange = (nextDirection) => {
@@ -327,18 +381,18 @@ export default function WaveSimulator() {
       buildResetWaveEvents({
         time: 0,
         direction: nextDirection,
-        amplitude,
-        wavelength,
-        frequency,
+        amplitude: committedParamsRef.current.amplitude,
+        wavelength: committedParamsRef.current.wavelength,
+        frequency: committedParamsRef.current.frequency,
       }),
     );
   };
 
   const plotWidth = STAGE.width - STAGE.padding.left - STAGE.padding.right;
   const amplitudePx = amplitude * 52;
-  const period = 1 / frequency;
-  const speed = wavelength * frequency;
-  const k = (2 * Math.PI) / wavelength;
+  const period = 1 / draftFrequency;
+  const speed = draftWavelength * draftFrequency;
+  const k = (2 * Math.PI) / draftWavelength;
   const omega = 2 * Math.PI * frequency;
   const wavelengthPx = (wavelength / STAGE.domainLength) * plotWidth;
   const highlightStageX = stageXFromPhysical(4.8);
@@ -656,32 +710,35 @@ export default function WaveSimulator() {
           <div className="space-y-5">
             <ControlSlider
               label="Amplitude"
-              value={amplitude}
-              valueLabel={`${formatNumber(amplitude)} m`}
+              value={draftAmplitude}
+              valueLabel={`${formatNumber(draftAmplitude)} m`}
               min="0.2"
               max="1.2"
               step="0.05"
-              onChange={handleAmplitudeChange}
+              onChange={handleAmplitudePreview}
+              onCommit={handleAmplitudeCommit}
             />
 
             <ControlSlider
               label="Wavelength"
-              value={wavelength}
-              valueLabel={`${formatNumber(wavelength)} m`}
+              value={draftWavelength}
+              valueLabel={`${formatNumber(draftWavelength)} m`}
               min="1.2"
               max="4.6"
               step="0.05"
-              onChange={handleWavelengthChange}
+              onChange={handleWavelengthPreview}
+              onCommit={handleWavelengthCommit}
             />
 
             <ControlSlider
               label="Frequency"
-              value={frequency}
-              valueLabel={`${formatNumber(frequency)} Hz`}
+              value={draftFrequency}
+              valueLabel={`${formatNumber(draftFrequency)} Hz`}
               min="0.4"
               max="2.2"
               step="0.05"
-              onChange={handleFrequencyChange}
+              onChange={handleFrequencyPreview}
+              onCommit={handleFrequencyCommit}
             />
           </div>
         </div>

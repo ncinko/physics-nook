@@ -1,0 +1,144 @@
+---
+layout: ../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import WaveFieldSection from '../components/waves/WaveFieldSection.astro';
+import WavePoolSection from '../components/waves/WavePoolSection';
+import WaveQuickReference from '../components/waves/WaveQuickReference.astro';
+import WaveSimulator from '../components/simulations/WaveSimulator.jsx';
+
+# Waves
+
+<WavePoolSection client:visible>
+  A wave is a disturbance that propagates through space and time. 
+  Waves are identified by particular patterns that move through a corresponding **medium** (like water), although
+  some waves can travel through a vacuum.  As a wave propagates, the medium itself does not necessarily move all that far.
+  The key idea is that **energy, momentum, and information are carried by the wave**, 
+  while the medium oscillates around an equilibrium position.
+
+
+  Each wave begins with a local perturbation: a plucked string, a shifted tectonic plate, or a drop in a pond. 
+  If one part of the system is coupled to the next part, this disturbance can persist. 
+  In a string, tension pulls together neighboring segments. In air, pressure differences compress/rarefact adjacent regions. 
+  This coupling allows particular patterns to then propagate through the medium.
+
+The definition of a wave is rather broad, so we will focus on **periodic, traveling waves**, in which the wave pattern repeats in both space and time.
+</WavePoolSection>
+
+## Transverse & Longitudinal
+
+Waves are often classified by how the medium moves in relation to the waveform.
+
+- In a **transverse wave**, the medium oscillates perpendicular to the direction of propagation. A wave on a taut string is the standard example.
+- In a **longitudinal wave**, the medium oscillates parallel to the direction of propagation. Sound in air is the classic case, with alternating compressions and rarefactions.
+
+The geometry looks different, but the bookkeeping is the same: the pattern advances, while each local part of the medium mainly moves back and forth about equilibrium.
+
+<WaveFieldSection />
+
+## Amplitude, Wavelength, and Period
+
+Three measurements organize most introductory wave problems:
+
+$$
+\qquad
+A = \text{amplitude},
+\qquad
+\lambda = \text{wavelength},
+\qquad
+T = \text{period}.
+$$
+
+**Amplitude** $A$ measures the maximum displacement from equilibrium. 
+The **wavelength** $\lambda$ measures the spatial distance over which the pattern repeats, such as crest-to-crest or compression-to-compression. 
+The **period** $T$ measures the time it takes one repetition of the pattern to pass by.  Thinking locally, this is also the time it takes a particular oscillating piece of medium to complete one cycle.
+
+
+
+
+
+
+
+<WaveQuickReference />
+
+With these in mind, you can quantify the **wave speed**:
+
+$$
+v = \frac{\lambda}{T}.
+$$
+
+Note that the speed at which waves propagate is usually constant for each "type" of wave, being largely determined by properties of the medium rather than the wave itself (although longitudinal and transverse waves can have dramatically different speeds).  
+
+
+## A Traveling Sinusoid
+
+For a simple traveling wave moving in the $+x$ direction, one common model is
+
+$$
+y(x,t) = A\sin(kx - \omega t + \phi),
+$$
+
+where $A$ is the amplitude, $k = 2\pi/\lambda$ is the **wave number**, and $\omega = 2\pi/T = 2\pi f$ is the **angular frequency**. The minus sign tells us the pattern moves toward larger $x$. Reversing that sign produces the same shape traveling the other way.
+
+The important roles are:
+
+- $A$ sets the maximum displacement from equilibrium.
+- $\lambda$ sets the spatial spacing of the pattern.
+- $T$, or equivalently $f = 1/T$, sets how rapidly each point repeats its motion.
+- $v = \lambda/T = \lambda f$ then describes how quickly the overall pattern propagates.
+
+As you explore the simulation below, try this sequence:
+
+1. Keep the wavelength fixed and raise the frequency. Watch how the pattern arrives more often.
+2. Hold the frequency steady and lengthen the wavelength. Notice the crests or compressions spread farther apart.
+3. Switch between transverse and longitudinal modes and compare what the medium itself is doing.
+4. Reverse the direction and confirm that the shape is the same even though the phase shifts the opposite way.
+
+<SimulationBlock
+  title="Wave Propagation Explorer"
+  description="Compare transverse and longitudinal motion while changing amplitude, wavelength, and frequency."
+>
+  <WaveSimulator client:only="react" />
+</SimulationBlock>
+
+## What to Notice
+
+- The wave pattern moves through the medium, but the medium elements oscillate around equilibrium rather than drifting forward with the pattern.
+- One spatial variable and one temporal variable are enough to determine the propagation speed.
+- Transverse and longitudinal waves differ in the direction of particle motion, not in the core bookkeeping of amplitude, wavelength, and period.
+
+<QuestionSequence
+  client:load
+  eyebrow="Waves Checkpoint"
+  questions={[
+    {
+      id: 'energy-vs-matter',
+      question: 'Which statement best describes what a mechanical wave transports through a medium?',
+      options: [
+        { id: 'A', text: 'It transports energy and the disturbance pattern, while the medium typically oscillates around equilibrium.', isCorrect: true, explanation: 'Exactly. In an ordinary wave, neighboring parts of the medium pass the disturbance along. The pattern and energy move, but the material itself usually just vibrates about an equilibrium position.' },
+        { id: 'B', text: 'It transports the medium itself in the direction of travel, so each particle keeps moving with the wave.', isCorrect: false, explanation: 'That would describe bulk flow, not the usual picture of wave motion. In a wave, the medium elements usually oscillate locally while the disturbance moves through them.' },
+        { id: 'C', text: 'It cannot transport either energy or information because each particle returns to its starting point.', isCorrect: false, explanation: 'Returning near the starting point does not prevent a wave from carrying energy or information. The disturbance can still propagate from one region to the next.' }
+      ]
+    },
+    {
+      id: 'speed-relation',
+      question: 'A wave travels through the same medium with the same speed, but its period is cut in half. What happens to the wavelength?',
+      options: [
+        { id: 'A', text: 'It is cut in half.', isCorrect: true, explanation: 'Right. Since $v = \\lambda/T$, keeping $v$ fixed means wavelength and period scale together. Halving $T$ makes $\\lambda$ half as large.' },
+        { id: 'B', text: 'It doubles as well, because both quantities count how much wave there is.', isCorrect: false, explanation: 'Period and wavelength do not usually grow in opposite ways in a fixed medium. If the speed stays the same, a shorter period requires a shorter wavelength.' },
+        { id: 'C', text: 'It stays the same because wavelength depends only on amplitude.', isCorrect: false, explanation: 'Amplitude measures maximum displacement, not spacing. Wavelength is the spatial separation between matching points on the wave.' }
+      ]
+    },
+    {
+      id: 'longitudinal-motion',
+      question: 'In a longitudinal wave such as sound in air, how do the particles of the medium move?',
+      options: [
+        { id: 'A', text: 'They move parallel to the direction the wave travels, creating compressions and rarefactions.', isCorrect: true, explanation: 'Exactly. A longitudinal wave is defined by particle motion along the propagation direction, which produces alternating dense and sparse regions.' },
+        { id: 'B', text: 'They move perpendicular to the direction of travel, making crests and troughs like a string wave.', isCorrect: false, explanation: 'Perpendicular particle motion describes a transverse wave, not a longitudinal one.' },
+        { id: 'C', text: 'They remain motionless while only the energy moves.', isCorrect: false, explanation: 'The particles do move in a longitudinal wave. Their back-and-forth motion is what creates the traveling compressions and rarefactions.' }
+      ]
+    }
+  ]}
+/>

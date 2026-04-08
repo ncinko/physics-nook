@@ -1,19 +1,135 @@
+---
+import {
+  isNavItemActive,
+  menuNavSections,
+  primaryNavItems,
+} from '../../data/navigation';
+import { normalizePath } from '../../utils/paths';
+
+interface Props {
+  currentPath?: string;
+}
+
+const { currentPath = '/' } = Astro.props;
+const normalizedCurrentPath = normalizePath(currentPath);
+const homeItem = primaryNavItems.find((item) => item.href === '/') ?? primaryNavItems[0];
+const exploreActive = menuNavSections.some((section) =>
+  section.items.some((item) => isNavItemActive(item, normalizedCurrentPath)),
+);
+
+const desktopLinkClasses = (isActive: boolean) =>
+  [
+    'inline-flex items-center rounded-full px-3 py-2 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]',
+    isActive
+      ? 'bg-[color-mix(in_srgb,var(--accent-blue)_14%,transparent)] text-[var(--accent-blue)]'
+      : 'text-[color:var(--text-primary)] hover:text-[var(--accent-blue)]',
+  ].join(' ');
+
+const panelLinkClasses = (isActive: boolean) =>
+  [
+    'block rounded-[1.15rem] border px-4 py-3 shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]',
+    isActive
+      ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color-mix(in_srgb,var(--accent-blue)_12%,var(--surface-elevated))]'
+      : 'border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] hover:border-[var(--accent-blue)] hover:-translate-y-0.5',
+  ].join(' ');
+
+const mobileLinkClasses = (isActive: boolean) =>
+  [
+    'block rounded-[1rem] border px-4 py-3 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]',
+    isActive
+      ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color-mix(in_srgb,var(--accent-blue)_12%,var(--surface-elevated))] text-[var(--accent-blue)]'
+      : 'border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_84%,transparent)] text-[color:var(--text-primary)] hover:border-[var(--accent-blue)]',
+  ].join(' ');
+---
+
 <nav
   id="site-navbar"
   class="fixed top-0 z-50 w-full border-b border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] backdrop-blur transition-transform duration-300"
 >
-  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-    <a href="/" class="text-lg font-semibold tracking-tight text-theme-text">Physics Nook</a>
-    <div class="flex items-center gap-3 text-sm font-medium text-[color:var(--text-primary)]">
-      <a href="/" class="transition-colors hover:text-theme-blue">Home</a>
-      <a href="/relativity" class="transition-colors hover:text-theme-blue">Spacetime</a>
-      <a href="/oscillations" class="transition-colors hover:text-theme-blue">Oscillations</a>
-      <a href="/waves" class="transition-colors hover:text-theme-blue">Waves</a>
-      <a href="/collisions" class="transition-colors hover:text-theme-blue">Collisions</a>
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+    <div class="flex min-w-0 items-center gap-4 lg:gap-8">
+      <a
+        href="/"
+        class="truncate text-lg font-semibold tracking-tight text-[color:var(--text-primary)] transition-colors hover:text-[var(--accent-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+      >
+        Physics Nook
+      </a>
+
+      <div class="hidden items-center gap-2 text-sm font-medium md:flex">
+        {homeItem && (
+          <a
+            href={homeItem.href}
+            class={desktopLinkClasses(isNavItemActive(homeItem, normalizedCurrentPath))}
+            aria-current={isNavItemActive(homeItem, normalizedCurrentPath) ? 'page' : undefined}
+          >
+            {homeItem.label}
+          </a>
+        )}
+
+        <div class="relative">
+          <button
+            id="explore-menu-toggle"
+            type="button"
+            class:list={[
+              'inline-flex items-center gap-2 rounded-full px-3 py-2 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]',
+              exploreActive
+                ? 'bg-[color-mix(in_srgb,var(--accent-blue)_14%,transparent)] text-[var(--accent-blue)]'
+                : 'text-[color:var(--text-primary)] hover:text-[var(--accent-blue)]',
+            ]}
+            aria-expanded="false"
+            aria-controls="explore-menu-panel"
+            aria-haspopup="true"
+          >
+            <span>Explore</span>
+            <svg
+              id="explore-menu-icon"
+              aria-hidden="true"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="h-4 w-4 transition-transform duration-200"
+            >
+              <path d="m6 9 6 6 6-6"></path>
+            </svg>
+          </button>
+
+          <div
+            id="explore-menu-panel"
+            class="absolute left-0 top-full z-50 mt-3 hidden w-[26rem] max-w-[calc(100vw-2rem)] rounded-[1.5rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_96%,transparent)] p-4 shadow-[0_22px_70px_rgba(15,23,42,0.18)] backdrop-blur"
+            aria-label="Explore site sections"
+          >
+            <div class="grid gap-2">
+              {menuNavSections.map((section) => {
+                const sectionHref = section.items[0]?.href ?? '#';
+                const sectionActive = section.items.some((item) =>
+                  isNavItemActive(item, normalizedCurrentPath),
+                );
+
+                return (
+                  <a
+                    href={sectionHref}
+                    class={panelLinkClasses(sectionActive)}
+                    aria-current={sectionActive ? 'page' : undefined}
+                  >
+                    <span class="block text-sm font-semibold text-[color:var(--text-primary)]">{section.label}</span>
+                  </a>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2">
       <button
         id="theme-toggle"
         type="button"
-        class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] shadow-sm transition-all duration-300 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
+        class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] shadow-sm transition-all duration-300 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
         aria-label="Toggle theme"
         title="Toggle theme"
       >
@@ -33,6 +149,69 @@
           <path d="M12 2a6 6 0 0 0-3.8 10.64c.75.6 1.3 1.31 1.6 2.16L10 16h4l.2-1.2c.3-.85.85-1.56 1.6-2.16A6 6 0 0 0 12 2Z" />
         </svg>
       </button>
+
+      <button
+        id="mobile-nav-toggle"
+        type="button"
+        class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] shadow-sm transition-all duration-300 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] md:hidden"
+        aria-expanded="false"
+        aria-controls="mobile-nav-panel"
+        aria-label="Open navigation menu"
+      >
+        <span class="sr-only">Open navigation menu</span>
+        <svg
+          aria-hidden="true"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="h-5 w-5"
+        >
+          <path d="M4 7h16" />
+          <path d="M4 12h16" />
+          <path d="M4 17h16" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div
+    id="mobile-nav-panel"
+    class="absolute inset-x-0 top-full z-40 hidden border-b border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_94%,transparent)] backdrop-blur md:hidden"
+    aria-label="Mobile navigation"
+  >
+    <div class="mx-auto max-w-6xl px-4 pb-4 pt-3 sm:px-6">
+      <div class="space-y-4 rounded-[1.5rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
+        {homeItem && (
+          <a
+            href={homeItem.href}
+            class={mobileLinkClasses(isNavItemActive(homeItem, normalizedCurrentPath))}
+            aria-current={isNavItemActive(homeItem, normalizedCurrentPath) ? 'page' : undefined}
+          >
+            <span class="block text-sm font-semibold">{homeItem.label}</span>
+          </a>
+        )}
+
+        {menuNavSections.map((section) => {
+          const sectionHref = section.items[0]?.href ?? '#';
+          const sectionActive = section.items.some((item) =>
+            isNavItemActive(item, normalizedCurrentPath),
+          );
+
+          return (
+            <a
+              href={sectionHref}
+              class={mobileLinkClasses(sectionActive)}
+              aria-current={sectionActive ? 'page' : undefined}
+            >
+              <span class="block text-sm font-semibold">{section.label}</span>
+            </a>
+          );
+        })}
+      </div>
     </div>
   </div>
 </nav>
@@ -41,12 +220,89 @@
   const THEME_STORAGE_KEY = 'physics-nook-theme';
   const navbar = document.getElementById('site-navbar');
   const themeToggle = document.getElementById('theme-toggle');
+  const exploreToggle = document.getElementById('explore-menu-toggle');
+  const explorePanel = document.getElementById('explore-menu-panel');
+  const exploreIcon = document.getElementById('explore-menu-icon');
+  const mobileToggle = document.getElementById('mobile-nav-toggle');
+  const mobilePanel = document.getElementById('mobile-nav-panel');
   let lastScrollY = window.scrollY;
+  let isExploreOpen = false;
+  let isMobileMenuOpen = false;
+
+  const setExpandedState = (button, expanded) => {
+    button?.setAttribute('aria-expanded', String(expanded));
+  };
+
+  const setPanelVisibility = (panel, visible) => {
+    if (!panel) return;
+    panel.classList.toggle('hidden', !visible);
+  };
+
+  const syncExploreMenu = () => {
+    setExpandedState(exploreToggle, isExploreOpen);
+    setPanelVisibility(explorePanel, isExploreOpen);
+    exploreIcon?.classList.toggle('rotate-180', isExploreOpen);
+  };
+
+  const syncMobileMenu = () => {
+    setExpandedState(mobileToggle, isMobileMenuOpen);
+    setPanelVisibility(mobilePanel, isMobileMenuOpen);
+
+    if (mobileToggle) {
+      mobileToggle.setAttribute(
+        'aria-label',
+        isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu',
+      );
+      mobileToggle.title = isMobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu';
+    }
+  };
+
+  const closeExploreMenu = ({ restoreFocus = false } = {}) => {
+    if (!isExploreOpen) return;
+    isExploreOpen = false;
+    syncExploreMenu();
+    if (restoreFocus) {
+      exploreToggle?.focus();
+    }
+  };
+
+  const closeMobileMenu = ({ restoreFocus = false } = {}) => {
+    if (!isMobileMenuOpen) return;
+    isMobileMenuOpen = false;
+    syncMobileMenu();
+    if (restoreFocus) {
+      mobileToggle?.focus();
+    }
+  };
+
+  const toggleExploreMenu = () => {
+    isExploreOpen = !isExploreOpen;
+    if (isExploreOpen) {
+      closeMobileMenu();
+    }
+    syncExploreMenu();
+  };
+
+  const toggleMobileMenu = () => {
+    isMobileMenuOpen = !isMobileMenuOpen;
+    if (isMobileMenuOpen) {
+      closeExploreMenu();
+    }
+    syncMobileMenu();
+  };
+
+  const isNavigationExpanded = () => isExploreOpen || isMobileMenuOpen;
 
   const onScroll = () => {
     if (!navbar) return;
 
     const currentScrollY = window.scrollY;
+
+    if (isNavigationExpanded()) {
+      navbar.classList.remove('-translate-y-full');
+      lastScrollY = currentScrollY;
+      return;
+    }
 
     if (currentScrollY <= 0) {
       navbar.classList.remove('-translate-y-full');
@@ -67,18 +323,82 @@
 
   const syncThemeToggle = () => {
     if (!themeToggle) return;
-    const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    const currentTheme =
+      document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
     themeToggle.setAttribute('aria-pressed', String(currentTheme === 'dark'));
-    themeToggle.setAttribute('aria-label', currentTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
-    themeToggle.setAttribute('title', currentTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme');
+    themeToggle.setAttribute(
+      'aria-label',
+      currentTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+    );
+    themeToggle.setAttribute(
+      'title',
+      currentTheme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme',
+    );
   };
 
   themeToggle?.addEventListener('click', () => {
-    const nextTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+    const nextTheme =
+      document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', nextTheme);
     localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
     syncThemeToggle();
   });
 
+  exploreToggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleExploreMenu();
+  });
+
+  mobileToggle?.addEventListener('click', (event) => {
+    event.stopPropagation();
+    toggleMobileMenu();
+  });
+
+  mobilePanel?.querySelectorAll('a').forEach((link) => {
+    link.addEventListener('click', () => {
+      closeMobileMenu();
+    });
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+
+    if (
+      isExploreOpen &&
+      !exploreToggle?.contains(target) &&
+      !explorePanel?.contains(target)
+    ) {
+      closeExploreMenu();
+    }
+
+    if (
+      isMobileMenuOpen &&
+      !mobileToggle?.contains(target) &&
+      !mobilePanel?.contains(target)
+    ) {
+      closeMobileMenu();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+
+    const shouldRestoreExploreFocus = isExploreOpen;
+    if (isExploreOpen) {
+      closeExploreMenu({ restoreFocus: true });
+    }
+    if (isMobileMenuOpen) {
+      closeMobileMenu({ restoreFocus: !shouldRestoreExploreFocus });
+    }
+  });
+
+  window.addEventListener('resize', () => {
+    closeExploreMenu();
+    closeMobileMenu();
+  });
+
+  syncExploreMenu();
+  syncMobileMenu();
   syncThemeToggle();
 </script>

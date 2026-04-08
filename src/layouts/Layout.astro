@@ -1,5 +1,24 @@
 ---
 import '../styles/global.css';
+import { buildDocumentTitle, siteMeta, type PageMeta } from '../data/site';
+import { getPageMetaByPath } from '../data/modules';
+
+interface Props extends Partial<PageMeta> {}
+
+const currentPath = Astro.url.pathname;
+const defaults = getPageMetaByPath(currentPath);
+const {
+	title = defaults?.title ?? 'Astro Basics',
+	description = defaults?.description ?? siteMeta.description,
+	canonicalPath = defaults?.canonicalPath ?? currentPath,
+	image = defaults?.image ?? siteMeta.defaultSocialImage,
+	noindex = defaults?.noindex ?? false,
+} = Astro.props;
+
+const pageMeta = { title, description, canonicalPath, image, noindex };
+const documentTitle = buildDocumentTitle(pageMeta);
+const canonicalUrl = Astro.site ? new URL(pageMeta.canonicalPath, Astro.site).toString() : undefined;
+const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString() : undefined;
 ---
 
 <!doctype html>
@@ -10,8 +29,11 @@ import '../styles/global.css';
 		<script is:inline>
 			const THEME_STORAGE_KEY = 'physics-nook-theme';
 			const theme = (() => {
-				if (typeof localStorage !== 'undefined' && localStorage.getItem(THEME_STORAGE_KEY)) {
-					return localStorage.getItem(THEME_STORAGE_KEY);
+				if (typeof localStorage !== 'undefined') {
+					const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+					if (savedTheme === 'light' || savedTheme === 'dark') {
+						return savedTheme;
+					}
 				}
 				return 'light';
 			})();
@@ -20,7 +42,20 @@ import '../styles/global.css';
 		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 		<link rel="icon" href="/favicon.ico" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Astro Basics</title>
+		<title>{documentTitle}</title>
+		<meta name="description" content={pageMeta.description} />
+		{canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+		{pageMeta.noindex && <meta name="robots" content="noindex, nofollow" />}
+		<meta property="og:site_name" content={siteMeta.name} />
+		<meta property="og:type" content="website" />
+		<meta property="og:title" content={documentTitle} />
+		<meta property="og:description" content={pageMeta.description} />
+		{canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
+		{socialImageUrl && <meta property="og:image" content={socialImageUrl} />}
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={documentTitle} />
+		<meta name="twitter:description" content={pageMeta.description} />
+		{socialImageUrl && <meta name="twitter:image" content={socialImageUrl} />}
 	</head>
 	<body>
 		<slot />

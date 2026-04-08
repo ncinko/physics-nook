@@ -1,0 +1,109 @@
+---
+interface Props {
+  title: string;
+  prompt?: string;
+  defaultOpen?: boolean;
+  accent?: 'blue' | 'red';
+}
+
+const {
+  title,
+  prompt,
+  defaultOpen = false,
+  accent = 'blue',
+} = Astro.props;
+
+const accentStyles = accent === 'red'
+  ? {
+      focus: 'focus-visible:ring-[var(--accent-red)]',
+    }
+  : {
+      focus: 'focus-visible:ring-[var(--accent-blue)]',
+    };
+
+const chevronBubbleClass = 'border-[color:color-mix(in_srgb,#9bb8ab_52%,var(--grid-line))] bg-[color-mix(in_srgb,#d8ebe1_44%,var(--surface-elevated))] text-[color:color-mix(in_srgb,#56786b_78%,var(--text-primary))]';
+---
+
+<details
+  open={defaultOpen}
+  class="worked-example overflow-hidden rounded-[1.6rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)] shadow-sm"
+>
+  <summary
+    class={`flex cursor-pointer list-none items-start gap-4 px-5 py-5 transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--surface-elevated)_84%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sim-bg)] ${accentStyles.focus}`}
+  >
+    <div class="min-w-0 flex-1">
+      <div class="min-w-0">
+        <h3 class="m-0 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{title}</h3>
+        {prompt && <p class="mt-2 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">{prompt}</p>}
+      </div>
+    </div>
+
+    <span class={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border shadow-sm transition-transform duration-200 worked-example-chevron ${chevronBubbleClass}`}>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="h-5 w-5"
+        aria-hidden="true"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M7.22 4.97a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.19 10 7.22 6.03a.75.75 0 0 1 0-1.06Z"
+          clip-rule="evenodd"
+        />
+      </svg>
+    </span>
+  </summary>
+
+  <div class="border-t border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_68%,var(--surface-elevated))] px-5 py-5">
+    <div class="worked-example-body prose prose-theme max-w-none">
+      <slot />
+    </div>
+  </div>
+</details>
+
+<style>
+  .worked-example summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .worked-example summary {
+    list-style: none;
+  }
+
+  .worked-example[open] .worked-example-chevron {
+    transform: rotate(90deg);
+  }
+
+  .worked-example-body :global(:first-child) {
+    margin-top: 0;
+  }
+
+  .worked-example-body :global(:last-child) {
+    margin-bottom: 0;
+  }
+
+  .worked-example-body :global(h4) {
+    margin-top: 1.35rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .worked-example-body :global(ul),
+  .worked-example-body :global(ol) {
+    margin-top: 0.35rem;
+  }
+
+  .worked-example-body :global(h4[id^="given"] + ul) {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .worked-example-body :global(h4[id^="given"] + ul li) {
+    padding-left: 0;
+  }
+
+  .worked-example-body :global(.katex-display) {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+  }
+</style>

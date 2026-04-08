@@ -7,6 +7,8 @@ import CollisionComparisonPanel from '../components/collisions/CollisionComparis
 import CollisionFieldSection from '../components/collisions/CollisionFieldSection';
 import Collision1D from '../components/simulations/Collision1D.jsx';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 
 
 # Collisions
@@ -87,7 +89,6 @@ So when we classify collisions, we are really asking whether the kinetic energy 
   $$
 </CollisionFieldSection>
 
-
 <SimulationBlock
   title="1D Collisions"
   description="Explore the differences between elastic and inelastic collisions."
@@ -101,15 +102,230 @@ So when we classify collisions, we are really asking whether the kinetic energy 
   <CollisionComparisonPanel />
 </SimulationBlock>
 
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="General 1D Elastic Collision"
+    accent="blue"
+  >
+    #### Problem
 
+    A $2\,\text{kg}$ cart moving at $5\,\text{m/s}$ collides elastically with a $1\,\text{kg}$ cart moving at $-1\,\text{m/s}$. Find the two final velocities.
 
-## What to Notice
+    #### Given
 
-As you compare different collision types, pay attention to three patterns:
+    - $m_1 = 2\,\text{kg}$
+    - $v_{1,i} = 5\,\text{m/s}$
+    - $m_2 = 1\,\text{kg}$
+    - $v_{2,i} = -1\,\text{m/s}$
+    - the collision is elastic
 
-- Momentum conserved in both elastic and inelastic processes.
-- Kinetic energy is the classifier: if it is conserved, the collision is elastic; if not, it is inelastic.
-- "Lost" kinetic energy is really transformed energy, not destroyed energy.
+    #### Use
+
+    Momentum is conserved:
+
+    $$
+    m_1 v_{1,i} + m_2 v_{2,i} = m_1 v_{1,f} + m_2 v_{2,f}.
+    $$
+
+    For a one-dimensional elastic collision, the relative speed of approach equals the relative speed of separation:
+
+    $$
+    v_{1,i} - v_{2,i} = v_{2,f} - v_{1,f}.
+    $$
+
+    #### Solve
+
+    Substitute the known values into momentum conservation:
+
+    $$
+    (2)(5) + (1)(-1) = (2)v_{1,f} + (1)v_{2,f}
+    \qquad \Rightarrow \qquad
+    9 = 2v_{1,f} + v_{2,f}.
+    $$
+
+    Now use the elastic-collision relation:
+
+    $$
+    5 - (-1) = v_{2,f} - v_{1,f}
+    \qquad \Rightarrow \qquad
+    6 = v_{2,f} - v_{1,f}.
+    $$
+
+    Substitute $v_{2,f} = v_{1,f} + 6$ into the momentum equation:
+
+    $$
+    9 = 2v_{1,f} + (v_{1,f} + 6)
+    \qquad \Rightarrow \qquad
+    3 = 3v_{1,f}
+    \qquad \Rightarrow \qquad
+    v_{1,f} = 1\,\text{m/s}.
+    $$
+
+    Then
+
+    $$
+    v_{2,f} = 7\,\text{m/s}.
+    $$
+
+    #### Check
+
+    The initial kinetic energy is
+
+    $$
+    K_i = \frac{1}{2}(2)(5^2) + \frac{1}{2}(1)(1^2) = 25.5\,\text{J}.
+    $$
+
+    The final kinetic energy is
+
+    $$
+    K_f = \frac{1}{2}(2)(1^2) + \frac{1}{2}(1)(7^2) = 25.5\,\text{J}.
+    $$
+
+    Both momentum and kinetic energy are conserved, as expected for an elastic collision. Because the masses are different and both carts are already moving, the final speeds are not just swapped; they must satisfy both equations at the same time.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Perfectly Inelastic Collision"
+    accent="red"
+  >
+    #### Problem
+
+    A $2\,\text{kg}$ cart moving at $3\,\text{m/s}$ collides with a $1\,\text{kg}$ cart at rest. The carts stick together after the collision. Find the shared final speed $v_f$.
+
+    #### Given
+
+    - $m_1 = 2\,\text{kg}$
+    - $v_{1,i} = 3\,\text{m/s}$
+    - $m_2 = 1\,\text{kg}$
+    - $v_{2,i} = 0$
+    - perfectly inelastic collision, so both carts share one final speed $v_f$
+
+    #### Use
+
+    For a perfectly inelastic collision in one dimension,
+
+    $$
+    m_1 v_{1,i} + m_2 v_{2,i} = (m_1 + m_2) v_f.
+    $$
+
+    #### Solve
+
+    Substitute the known values:
+
+    $$
+    (2)(3) + (1)(0) = (2 + 1) v_f.
+    $$
+
+    So
+
+    $$
+    6 = 3v_f
+    \qquad \Rightarrow \qquad
+    v_f = 2\,\text{m/s}.
+    $$
+
+    #### Check
+
+    The initial kinetic energy is
+
+    $$
+    K_i = \frac{1}{2}(2)(3^2) + \frac{1}{2}(1)(0^2) = 9\,\text{J}.
+    $$
+
+    The final kinetic energy is
+
+    $$
+    K_f = \frac{1}{2}(2 + 1)(2^2) = 6\,\text{J}.
+    $$
+
+    The kinetic energy changes by
+
+    $$
+    \Delta K = K_f - K_i = 6 - 9 = -3\,\text{J}.
+    $$
+
+    That missing $3\,\text{J}$ was transformed into other forms of energy such as sound, thermal energy, or deformation. The total momentum still remained conserved throughout the collision.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="2D Perfectly Inelastic Collision"
+    accent="blue"
+  >
+    #### Problem
+
+    A $0.20\,\text{kg}$ puck moves east at $4.0\,\text{m/s}$ and collides with a $0.30\,\text{kg}$ puck moving north at $2.0\,\text{m/s}$. The pucks stick together. Find the final velocity vector, including its speed and direction.
+
+    #### Given
+
+    - $m_1 = 0.20\,\text{kg}$, moving east at $4.0\,\text{m/s}$
+    - $m_2 = 0.30\,\text{kg}$, moving north at $2.0\,\text{m/s}$
+    - perfectly inelastic collision, so the pucks move together afterward
+
+    #### Use
+
+    In two dimensions, momentum is conserved separately in each component:
+
+    $$
+    p_{x,\text{before}} = p_{x,\text{after}},
+    \qquad
+    p_{y,\text{before}} = p_{y,\text{after}}.
+    $$
+
+    If the objects stick together, then
+
+    $$
+    (m_1 + m_2)v_{f,x} = p_{x,\text{before}},
+    \qquad
+    (m_1 + m_2)v_{f,y} = p_{y,\text{before}}.
+    $$
+
+    #### Solve
+
+    First find the momentum components before the collision:
+
+    $$
+    p_{x,\text{before}} = (0.20)(4.0) = 0.80\,\text{kg}\cdot\text{m/s},
+    $$
+
+    $$
+    p_{y,\text{before}} = (0.30)(2.0) = 0.60\,\text{kg}\cdot\text{m/s}.
+    $$
+
+    The combined mass is
+
+    $$
+    m_1 + m_2 = 0.50\,\text{kg}.
+    $$
+
+    So the final velocity components are
+
+    $$
+    v_{f,x} = \frac{0.80}{0.50} = 1.6\,\text{m/s},
+    \qquad
+    v_{f,y} = \frac{0.60}{0.50} = 1.2\,\text{m/s}.
+    $$
+
+    Now find the speed:
+
+    $$
+    |\vec{v}_f| = \sqrt{v_{f,x}^2 + v_{f,y}^2}
+    = \sqrt{1.6^2 + 1.2^2}
+    = 2.0\,\text{m/s}.
+    $$
+
+    The direction is
+
+    $$
+    \theta = \tan^{-1}\left(\frac{1.2}{1.6}\right) \approx 36.9^\circ
+    $$
+
+    north of east.
+
+    #### Check
+
+    The final velocity points northeast, which makes sense because one puck initially carries eastward momentum and the other carries northward momentum. The speed is smaller than either incoming component speed because the collision is perfectly inelastic and the two pucks share one combined motion after impact.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
 
 <QuestionSequence
   client:load

@@ -1,0 +1,64 @@
+---
+import type { ModuleMeta } from '../../data/modules';
+import { normalizePath } from '../../utils/paths';
+
+type ModulePanel = Pick<ModuleMeta, 'href' | 'cardEyebrow' | 'pages'>;
+
+interface Props {
+  module: ModulePanel;
+  currentPath?: string;
+}
+
+const { module, currentPath = module.href } = Astro.props;
+const normalizedCurrentPath = normalizePath(currentPath);
+---
+
+<section class="not-prose relative left-1/2 my-10 w-screen max-w-7xl -translate-x-1/2 px-4 sm:px-6 lg:px-8">
+  <div class="overflow-hidden rounded-[1.6rem] border border-theme-grid bg-[linear-gradient(145deg,rgba(59,130,246,0.08),transparent_45%),var(--surface-elevated)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+    <div class="px-5 py-5 lg:px-6 lg:py-5">
+      <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
+        {module.cardEyebrow}
+      </p>
+
+      <section id="module-path" class="mt-4 border-t border-theme-grid pt-4">
+        <div class="grid gap-3 lg:grid-cols-3">
+          {module.pages.map((page, index) => {
+            const isCurrent = normalizePath(page.href) === normalizedCurrentPath;
+            const linkHref = isCurrent ? '#page-content' : page.href;
+            const stateLabel = isCurrent ? 'Here' : index === 0 ? 'Start' : index === module.pages.length - 1 ? 'Finish' : 'Next';
+
+            return (
+              <a
+                href={linkHref}
+                class:list={[
+                  'block rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
+                  isCurrent
+                    ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color:color-mix(in_srgb,var(--accent-blue)_10%,transparent)] shadow-sm'
+                    : 'border-theme-grid bg-[color:color-mix(in_srgb,var(--bg-primary)_82%,transparent)] hover:-translate-y-0.5 hover:border-[var(--accent-blue)]',
+                ]}
+                aria-current={isCurrent ? 'step' : undefined}
+              >
+                <div class="flex items-start justify-between gap-4">
+                  <div class="min-w-0">
+                    <h2 class="m-0 text-base font-semibold leading-6 text-theme-text">{page.title}</h2>
+                    <p class="mt-2 mb-0 text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
+                  </div>
+                  <span
+                    class:list={[
+                      'shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em]',
+                      isCurrent
+                        ? 'bg-[var(--accent-blue)] text-white'
+                        : 'border border-theme-grid text-[var(--text-muted)]',
+                    ]}
+                  >
+                    {stateLabel}
+                  </span>
+                </div>
+              </a>
+            );
+          })}
+        </div>
+      </section>
+    </div>
+  </div>
+</section>

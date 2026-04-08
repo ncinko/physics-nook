@@ -1,0 +1,215 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import EnergyLedgerPanel from '../../components/energy/EnergyLedgerPanel.astro';
+import EnergyTrackExplorer from '../../components/simulations/EnergyTrackExplorer.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+
+# Energy
+
+One of the most useful entry points into energy is the **work-energy theorem**. Rather than starting with a list of energy types, it starts with a direct statement about motion: when the net force does work on a system, the kinetic energy changes. From there, we can reinterpret the work done by conservative forces as a change in a potential-energy function and build the familiar conservation laws from that idea.
+
+## The Work-Energy Theorem
+
+For a moving object, the kinetic-energy term is
+
+$$
+K = \frac{1}{2}mv^2.
+$$
+
+Work measures energy transfer caused by a force acting through a displacement, and the net work done on a system changes its kinetic energy:
+
+$$
+W_{\text{net}} = \Delta K.
+$$
+
+This theorem is often the fastest way to connect forces and motion. If gravity, a spring, or friction does work on an object, the kinetic energy responds. That statement is more fundamental than the later bookkeeping language. The energy framework becomes especially powerful once we recognize that some kinds of work can be packaged into a new function.
+
+## Reinterpreting Conservative Work as Potential Energy
+
+Suppose a force is **conservative**, meaning the work it does depends only on the starting and ending points, not on the path taken. In that case, we can define a potential-energy function so that
+
+$$
+W_{\text{cons}} = -\Delta U.
+$$
+
+That lets us replace a work calculation with a bookkeeping statement about stored energy. Gravity is the standard example near Earth's surface:
+
+$$
+U_g = mgh.
+$$
+
+Now the work-energy theorem becomes
+
+$$
+\Delta K + \Delta U = W_{\text{non-cons}}.
+$$
+
+If only conservative forces act, then the non-conservative work term is zero and the combination $K + U$ stays fixed. In other words, the usual conservation law is not a separate mystery; it is what the work-energy theorem looks like after we reinterpret conservative work as a potential-energy change.
+
+<EnergyLedgerPanel />
+
+## Systems, Conservation, and Friction
+
+Before writing a final energy equation, decide what belongs in the **system**. If the system is just a moving cart, then gravity and friction may look like outside influences. If the system includes the cart, the track, and Earth, then gravitational potential energy and thermal energy become part of the bookkeeping inside the system.
+
+When friction is negligible, the cart continually trades gravitational potential energy and kinetic energy:
+
+$$
+E_{\text{mech}} = K + U_g \approx \text{constant}.
+$$
+
+When friction matters, the mechanical energy is no longer constant by itself. A more complete ledger includes the energy converted into thermal energy:
+
+$$
+E_{\text{total}} = K + U_g + E_{\text{thermal}}.
+$$
+
+That is why collisions can "lose" kinetic energy without violating conservation of energy, and why oscillations fade when damping is present. The energy is not destroyed; the work done by non-conservative forces is being recorded in a different column of the ledger.
+
+As you explore the track below, try this sequence:
+
+1. Set track friction to zero and release the cart from a high point. Watch the kinetic and gravitational bars trade places while the total stays fixed.
+2. Keep the same release height but increase the mass. Notice that the energy values grow, yet the frictionless speed reached near the bottom stays the same.
+3. Add track friction and compare the shrinking mechanical energy with the growing thermal-energy bar.
+4. Change the gravity preset to compare how the same track shape behaves on the Moon, Earth, and Jupiter.
+
+<SimulationBlock
+  title="Energy Track Explorer"
+  description="Release a cart on a curved track and watch kinetic, gravitational, and thermal energy rebalance in real time."
+>
+  <EnergyTrackExplorer client:only="react" />
+</SimulationBlock>
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Find Speed from a Frictionless Drop"
+    accent="blue"
+  >
+    #### Problem
+
+    A cart starts from rest $1.8\,\text{m}$ above the lowest point of a frictionless track. Find its speed at the bottom.
+
+    #### Given
+
+    - $h = 1.8\,\text{m}$
+    - $g = 9.8\,\text{m/s}^2$
+    - starts from rest
+
+    #### Use
+
+    With no friction,
+
+    $$
+    mgh = \frac{1}{2}mv^2.
+    $$
+
+    The mass cancels, leaving
+
+    $$
+    v = \sqrt{2gh}.
+    $$
+
+    #### Solve
+
+    $$
+    v = \sqrt{2(9.8)(1.8)}
+    = \sqrt{35.28}
+    \approx 5.94\,\text{m/s}.
+    $$
+
+    #### Check
+
+    The result depends only on the height drop, not on the cart mass. That is the same mass cancellation the explorer shows when you compare carts released from the same point.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Include Thermal Energy from Friction"
+    accent="red"
+  >
+    #### Problem
+
+    A $2.0\,\text{kg}$ cart starts from rest and descends $1.5\,\text{m}$. Friction transfers $6.0\,\text{J}$ into thermal energy during the motion. Find the cart's final speed.
+
+    #### Given
+
+    - $m = 2.0\,\text{kg}$
+    - $h = 1.5\,\text{m}$
+    - $E_{\text{thermal}} = 6.0\,\text{J}$
+    - starts from rest
+
+    #### Use
+
+    The lost gravitational potential energy is split between kinetic and thermal energy:
+
+    $$
+    mgh = K_f + E_{\text{thermal}}.
+    $$
+
+    #### Solve
+
+    First find the available gravitational energy:
+
+    $$
+    mgh = (2.0)(9.8)(1.5) = 29.4\,\text{J}.
+    $$
+
+    So the final kinetic energy is
+
+    $$
+    K_f = 29.4 - 6.0 = 23.4\,\text{J}.
+    $$
+
+    Now solve for the speed:
+
+    $$
+    \frac{1}{2}(2.0)v^2 = 23.4
+    \qquad \Rightarrow \qquad
+    v^2 = 23.4
+    \qquad \Rightarrow \qquad
+    v \approx 4.84\,\text{m/s}.
+    $$
+
+    #### Check
+
+    This speed is smaller than the frictionless value because part of the gravitational energy was redirected into thermal energy instead of staying in the mechanical ledger.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Energy Checkpoint"
+  questions={[
+    {
+      id: 'conservation-vs-transfer',
+      question: 'A cart slides down a frictionless track. Which statement best describes the energy bookkeeping?',
+      options: [
+        { id: 'A', text: 'Gravitational potential energy is converted into kinetic energy while the total mechanical energy stays constant.', isCorrect: true, explanation: 'Exactly. On a frictionless track, height energy is traded for motion energy, but the sum $K + U_g$ stays fixed for the run.' },
+        { id: 'B', text: 'Energy is created because the cart speeds up as it goes downhill.', isCorrect: false, explanation: 'The cart speeds up because stored gravitational potential energy is being converted into kinetic energy. Faster motion does not mean energy was created from nothing.' },
+        { id: 'C', text: 'Kinetic energy stays constant because only the height is changing.', isCorrect: false, explanation: 'As the cart drops, the height changes and so does the speed. That is exactly why kinetic energy increases while gravitational potential energy decreases.' }
+      ]
+    },
+    {
+      id: 'mass-and-speed',
+      question: 'Two carts start from the same height on the same frictionless track, but one cart has twice the mass. What happens near the bottom?',
+      options: [
+        { id: 'A', text: 'They reach the same speed, even though the heavier cart has larger kinetic energy.', isCorrect: true, explanation: 'Right. The speed follows from the drop in height, so both carts reach the same frictionless speed. The heavier cart still carries more kinetic energy because $K = \\tfrac{1}{2}mv^2$.' },
+        { id: 'B', text: 'The heavier cart must move faster because it has more mass.', isCorrect: false, explanation: 'More mass means more energy is involved, but for the same frictionless height drop the speed depends on the conversion of $mgh$ into $\\tfrac{1}{2}mv^2$, and the mass cancels out.' },
+        { id: 'C', text: 'The lighter cart must move faster because it is easier to accelerate.', isCorrect: false, explanation: 'It is tempting to focus on inertia alone, but the energy argument is cleaner: for the same height change on a frictionless track, both carts reach the same speed.' }
+      ]
+    },
+    {
+      id: 'friction-thermal',
+      question: 'When track friction is increased, which statement is correct?',
+      options: [
+        { id: 'A', text: 'Mechanical energy decreases because some of it is transferred into thermal energy, while the full energy ledger can still remain constant.', isCorrect: true, explanation: 'Exactly. Friction converts part of the kinetic-plus-potential ledger into thermal energy. Mechanical energy alone decreases, but total tracked energy can still be conserved when that thermal term is included.' },
+        { id: 'B', text: 'Total energy is no longer conserved because friction destroys part of it.', isCorrect: false, explanation: 'Friction does not destroy energy. It transfers energy into less mechanically useful forms such as thermal energy.' },
+        { id: 'C', text: 'Friction only changes the direction of motion, not the energy bookkeeping.', isCorrect: false, explanation: 'Friction changes both the motion and the energy ledger because it converts mechanical energy into thermal energy over time.' }
+      ]
+    }
+  ]}
+/>

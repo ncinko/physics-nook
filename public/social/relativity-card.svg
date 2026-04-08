@@ -1,0 +1,44 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" rx="36" fill="#F8FBFF"/>
+  <rect x="36" y="36" width="1128" height="558" rx="28" fill="url(#panel)"/>
+  <rect x="108" y="104" width="496" height="422" rx="28" fill="white" fill-opacity="0.84" stroke="#BFDBFE" stroke-width="2"/>
+  <text x="144" y="186" fill="#2563EB" font-family="Georgia, 'Times New Roman', serif" font-size="24" font-weight="700" letter-spacing="4">
+    FLAGSHIP PATH
+  </text>
+  <text x="144" y="276" fill="#0F172A" font-family="Georgia, 'Times New Roman', serif" font-size="70" font-weight="700">
+    Relativity
+  </text>
+  <text x="144" y="354" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="30">
+    Spacetime diagrams, relativistic dynamics,
+  </text>
+  <text x="144" y="396" fill="#334155" font-family="Arial, Helvetica, sans-serif" font-size="30">
+    and curved spacetime in one guided arc.
+  </text>
+  <line x1="804" y1="486" x2="804" y2="126" stroke="#1E293B" stroke-width="8" stroke-linecap="round"/>
+  <line x1="636" y1="306" x2="1080" y2="306" stroke="#1E293B" stroke-width="8" stroke-linecap="round"/>
+  <line x1="668" y1="458" x2="1050" y2="154" stroke="#2563EB" stroke-width="10" stroke-linecap="round"/>
+  <line x1="682" y1="154" x2="1040" y2="458" stroke="#0EA5E9" stroke-width="10" stroke-linecap="round"/>
+  <line x1="716" y1="458" x2="970" y2="154" stroke="#60A5FA" stroke-width="7" stroke-dasharray="18 18" stroke-linecap="round"/>
+  <line x1="724" y1="154" x2="962" y2="458" stroke="#60A5FA" stroke-width="7" stroke-dasharray="18 18" stroke-linecap="round"/>
+  <circle cx="874" cy="242" r="16" fill="#2563EB"/>
+  <circle cx="954" cy="382" r="16" fill="#0EA5E9"/>
+  <circle cx="770" cy="330" r="13" fill="#0F172A"/>
+  <text x="834" y="232" fill="#2563EB" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">
+    ct'
+  </text>
+  <text x="962" y="416" fill="#0EA5E9" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">
+    x'
+  </text>
+  <text x="814" y="116" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">
+    ct
+  </text>
+  <text x="1088" y="298" fill="#0F172A" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700">
+    x
+  </text>
+  <defs>
+    <linearGradient id="panel" x1="62" y1="72" x2="1122" y2="586" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#EFF6FF"/>
+      <stop offset="1" stop-color="#F8FAFC"/>
+    </linearGradient>
+  </defs>
+</svg>

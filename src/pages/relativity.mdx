@@ -5,6 +5,14 @@ layout: ../layouts/TextbookLayout.astro
 import SpacetimeDiagram from '../components/simulations/SpacetimeDiagram.jsx';
 import SimulationBlock from '../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import { featuredModule } from '../data/modules';
+
+<ModuleHero module={featuredModule} currentPath="/relativity" />
+
+<div id="page-content"></div>
 
 # Spacetime Diagrams
 
@@ -85,13 +93,98 @@ As you explore the diagram below, try this sequence:
   <SpacetimeDiagram client:only="react" />
 </SimulationBlock>
 
-## What to Notice
+## Next Steps
 
-As you work with the diagram, pay attention to three patterns:
+- Continue to [Relativistic Momentum and Energy](/relativity/momentum-energy) to follow the special-relativistic dynamics of fast particles in one dimension.
+- Continue to [General Relativity](/relativity/general-relativity) to see how gravity becomes geometry, how the equivalence principle works, and how nearby geodesics converge or diverge in curved spacetime.
 
-  - As the relative speed increases, the primed axes tilt closer to the light cone.
-  - Events that look simultaneous in one frame generally do not remain simultaneous in the other.
-  - The coordinates of an event change from frame to frame, but the invariant interval stays fixed.
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Classify an Interval"
+    accent="blue"
+  >
+    #### Problem
+
+    Event $A$ occurs at the origin. Event $B$ occurs at $x = 300\,\text{m}$ and $t = 2.0\,\mu\text{s}$. Find the spacetime interval $s^2 = (ct)^2 - x^2$ and classify it.
+
+    #### Given
+
+    - $x = 300\,\text{m}$
+    - $t = 2.0\,\mu\text{s} = 2.0 \times 10^{-6}\,\text{s}$
+    - $c = 3.0 \times 10^8\,\text{m/s}$
+
+    #### Use
+
+    First compute $ct$, then evaluate
+
+    $$
+    s^2 = (ct)^2 - x^2.
+    $$
+
+    A positive value means the separation is timelike.
+
+    #### Solve
+
+    $$
+    ct = (3.0 \times 10^8)(2.0 \times 10^{-6}) = 600\,\text{m}.
+    $$
+
+    So
+
+    $$
+    s^2 = 600^2 - 300^2
+    = 360000 - 90000
+    = 270000\,\text{m}^2.
+    $$
+
+    Because $s^2 > 0$, the interval is timelike.
+
+    #### Check
+
+    Light would need only $1.0\,\mu\text{s}$ to cross $300\,\text{m}$, so there is enough time for a slower-than-light signal to connect the two events. That matches the timelike result.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Time Dilation for a Moving Clock"
+    accent="red"
+  >
+    #### Problem
+
+    A spacecraft moves at $\beta = 0.80$ relative to Earth. Earth measures $\Delta t = 15\,\mu\text{s}$ between two ticks of a clock on the ship. How much proper time $\Delta \tau$ passes on the ship?
+
+    #### Given
+
+    - $\beta = 0.80$
+    - $\Delta t = 15\,\mu\text{s}$
+
+    #### Use
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-\beta^2}},
+    \qquad
+    \Delta \tau = \frac{\Delta t}{\gamma}.
+    $$
+
+    #### Solve
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-0.80^2}}
+    = \frac{1}{\sqrt{0.36}}
+    = \frac{5}{3}.
+    $$
+
+    Then
+
+    $$
+    \Delta \tau = \frac{15\,\mu\text{s}}{5/3}
+    = 9.0\,\mu\text{s}.
+    $$
+
+    #### Check
+
+    The clock riding with the spacecraft records less elapsed time than the Earth frame does, which is exactly the time-dilation pattern the tilted axes encode on the diagram.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
 
 
 
@@ -126,5 +219,5 @@ As you work with the diagram, pay attention to three patterns:
         { id: 'C', text: 'Because Lorentz contraction only applies when the rod is accelerating.', isCorrect: false, explanation: 'Length contraction is a special-relativistic effect for uniform relative motion. Acceleration is not required for the basic contraction result.' }
       ]
     }
-  ]} 
-/>
+  ]}
+/> 

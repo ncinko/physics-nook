@@ -4,10 +4,18 @@ layout: ../layouts/TextbookLayout.astro
 
 import SimulationBlock from '../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import WaveFieldSection from '../components/waves/WaveFieldSection.astro';
 import WavePoolSection from '../components/waves/WavePoolSection';
 import WaveQuickReference from '../components/waves/WaveQuickReference.astro';
 import WaveSimulator from '../components/simulations/WaveSimulator.jsx';
+import { wavesAndOscillationsPath } from '../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/waves" />
+
+<div id="page-content"></div>
 
 # Waves
 
@@ -99,11 +107,88 @@ As you explore the simulation below, try this sequence:
   <WaveSimulator client:only="react" />
 </SimulationBlock>
 
-## What to Notice
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Find Frequency and Wave Speed"
+    accent="blue"
+  >
+    #### Problem
 
-- The wave pattern moves through the medium, but the medium elements oscillate around equilibrium rather than drifting forward with the pattern.
-- One spatial variable and one temporal variable are enough to determine the propagation speed.
-- Transverse and longitudinal waves differ in the direction of particle motion, not in the core bookkeeping of amplitude, wavelength, and period.
+    A periodic wave on a rope has wavelength $\lambda = 0.80\,\text{m}$ and period $T = 0.20\,\text{s}$. Find the frequency and the wave speed.
+
+    #### Given
+
+    - $\lambda = 0.80\,\text{m}$
+    - $T = 0.20\,\text{s}$
+
+    #### Use
+
+    $$
+    f = \frac{1}{T},
+    \qquad
+    v = \frac{\lambda}{T} = f\lambda.
+    $$
+
+    #### Solve
+
+    First compute the frequency:
+
+    $$
+    f = \frac{1}{0.20} = 5.0\,\text{Hz}.
+    $$
+
+    Now compute the speed:
+
+    $$
+    v = \frac{0.80}{0.20} = 4.0\,\text{m/s}.
+    $$
+
+    #### Check
+
+    A wave that repeats five times each second and stretches less than a meter from crest to crest should travel a few meters per second, so the result is reasonable.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Same Medium, Higher Frequency"
+    accent="red"
+  >
+    #### Problem
+
+    A rope wave travels at $12\,\text{m/s}$. If the frequency is increased from $3.0\,\text{Hz}$ to $6.0\,\text{Hz}$ while the rope and its tension stay the same, find the initial and final wavelengths.
+
+    #### Given
+
+    - $v = 12\,\text{m/s}$
+    - $f_1 = 3.0\,\text{Hz}$
+    - $f_2 = 6.0\,\text{Hz}$
+
+    #### Use
+
+    In the same medium, the speed stays fixed, so
+
+    $$
+    \lambda = \frac{v}{f}.
+    $$
+
+    #### Solve
+
+    Initially,
+
+    $$
+    \lambda_1 = \frac{12}{3.0} = 4.0\,\text{m}.
+    $$
+
+    After the frequency doubles,
+
+    $$
+    \lambda_2 = \frac{12}{6.0} = 2.0\,\text{m}.
+    $$
+
+    #### Check
+
+    The wavelength is cut in half because the wave speed stayed fixed while the oscillations arrived twice as often. That is the same tradeoff you can see in the simulator when the medium stays the same.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
 
 <QuestionSequence
   client:load

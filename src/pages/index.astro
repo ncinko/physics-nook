@@ -1,59 +1,61 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import LandingWaveField from '../components/simulations/LandingWaveField.jsx';
+import WavePoolSection from '../components/waves/WavePoolSection';
+import { featuredModule, getModuleBySlug } from '../data/modules';
+
+const oscillationsModule = getModuleBySlug('oscillations');
+const wavesModule = getModuleBySlug('waves');
+
+const homeCards = [
+  {
+    title: featuredModule.title,
+    href: featuredModule.href,
+    description: featuredModule.summary,
+    accent: featuredModule.accent,
+  },
+  {
+    title: 'Waves & Oscillations',
+    href: oscillationsModule?.href ?? '/oscillations',
+    description:
+      'Periodic motion, springs, pendulums, and traveling waves collected under one quieter thread.',
+    accent: wavesModule?.accent ?? oscillationsModule?.accent ?? '#0f766e',
+  },
+];
 ---
 
 <BaseLayout>
-	<div class="relative overflow-hidden">
-		<div class="pointer-events-none absolute inset-x-0 top-0 z-20 h-[40rem]">
-			<LandingWaveField client:load />
-		</div>
+  <div class="relative overflow-hidden">
+    <div class="absolute inset-x-0 top-0 z-0 h-[42rem] overflow-hidden">
+      <WavePoolSection client:load className="!my-0 !min-h-[42rem]" />
+    </div>
 
-		<section class="relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-12 px-4 py-16 md:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
-			<div>
-				
-				<h1 class="max-w-3xl text-5xl font-bold tracking-[-0.05em] text-theme-text sm:text-6xl">
-					Learn physics by clicking, playing, and seeing the math respond.
-				</h1>
-				<p class="mt-6 max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
-					Physics Nook pairs concepts with interactive simulations so abstract ideas become visual and tangible.
-				</p>
-			</div>
+    <section class="pointer-events-none relative z-10 mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl items-center gap-10 px-4 py-16 md:px-6 lg:grid-cols-[1.1fr_0.9fr] lg:py-24">
+      <div>
+        <h1 class="max-w-3xl text-5xl font-bold tracking-[-0.05em] text-theme-text sm:text-6xl">
+          Learn physics by seeing it in action.
+        </h1>
+        <p class="mt-6 max-w-2xl text-lg leading-8 text-[var(--text-muted)]">
+          Physics Nook is an interactive environment for exploring fundamental physics concepts.
+        </p>
+      </div>
 
-			<div class="relative z-30 space-y-5">
-				<div class="absolute -inset-6 -z-10 rounded-[2rem] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.22),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(239,68,68,0.18),transparent_35%)] blur-2xl"></div>
-				<a
-					href="/relativity"
-					class="group relative z-30 block overflow-hidden rounded-[2rem] border border-theme-grid bg-[var(--surface-elevated)] p-6 shadow-[0_24px_80px_rgba(17,24,39,0.12)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[var(--accent-blue)] hover:shadow-[0_28px_90px_rgba(17,24,39,0.16)]"
-				>
-					<div class="flex items-center justify-between border-b border-theme-grid pb-4">
-						<div>
-							<p class="text-sm font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">Featured Module</p>
-							<h2 class="mt-2 text-2xl font-semibold tracking-tight text-theme-text transition-colors duration-300 group-hover:text-[var(--accent-blue)]">Spacetime Diagrams</h2>
-						</div>
-					</div>
-					<p class="mt-4 max-w-xl text-sm leading-7 text-[var(--text-muted)]">
-						See how the locations of events change between inertial frames with an interactive Minkowski diagram.
-					</p>
-				</a>
-
-				<a
-					href="/oscillations"
-					class="group relative z-30 block overflow-hidden rounded-[2rem] border border-theme-grid bg-[var(--surface-elevated)] p-6 shadow-[0_18px_60px_rgba(17,24,39,0.1)] backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:border-[#0f766e] hover:shadow-[0_24px_80px_rgba(17,24,39,0.14)]"
-				>
-					<div class="flex items-center justify-between border-b border-theme-grid pb-4">
-						<div>
-							<p class="text-sm font-semibold uppercase tracking-[0.18em] text-[#0f766e]">New Module</p>
-							<h2 class="mt-2 text-2xl font-semibold tracking-tight text-theme-text transition-colors duration-300 group-hover:text-[#0f766e]">Oscillations</h2>
-						</div>
-					</div>
-					<p class="mt-4 max-w-xl text-sm leading-7 text-[var(--text-muted)]">
-						See the flow of energy in harmonic motion with springs and pendulums.
-					</p>
-				</a>
-
-
-			</div>
-		</section>
-	</div>
+      <aside class="pointer-events-none relative z-20 grid gap-4">
+        <div class="absolute -inset-6 -z-10 rounded-[2rem] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.24),transparent_40%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.2),transparent_36%)] blur-2xl"></div>
+        {homeCards.map((card) => (
+          <a
+            href={card.href}
+            class="pointer-events-auto group block rounded-[2rem] border border-theme-grid bg-[color:color-mix(in_srgb,var(--surface-elevated)_96%,transparent)] p-6 shadow-[0_28px_85px_rgba(15,23,42,0.14)] backdrop-blur transition-all duration-300 hover:-translate-y-1"
+            style={`--card-accent: ${card.accent};`}
+          >
+            <h2 class="text-3xl font-semibold tracking-tight text-theme-text transition-colors duration-300 group-hover:text-[var(--card-accent)]">
+              {card.title}
+            </h2>
+            <p class="mt-3 max-w-xl text-sm leading-7 text-[var(--text-muted)]">
+              {card.description}
+            </p>
+          </a>
+        ))}
+      </aside>
+    </section>
+  </div>
 </BaseLayout>

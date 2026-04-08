@@ -1,0 +1,168 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import CoupledResonanceExplorer from '../../components/simulations/CoupledResonanceExplorer.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { wavesAndOscillationsPath } from '../../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/oscillations/resonance" />
+
+<div id="page-content"></div>
+
+# Resonance
+
+Resonance begins with a simple idea: if you keep pushing a system with the right rhythm, each push reinforces the motion already there. A drive that is badly timed can still move the system, but the response stays comparatively small. A drive that lines up with one of the system's natural rhythms can build a much larger motion, especially when damping is weak.
+
+That story gets richer as soon as neighboring parts are coupled. Now there is no longer just one preferred rhythm. Instead, the system develops **shared patterns of motion** that each come with their own characteristic frequency. Those shared patterns are the bridge between ordinary oscillators and waves.
+
+## Driven Response and Resonance
+
+A lone oscillator has one main natural frequency. If you drive it much slower or much faster than that, the pushes do not add efficiently. Near the natural frequency, they do.
+
+Damping matters here. Strong damping bleeds energy away quickly, so the resonance peak becomes broader and less dramatic. Weak damping lets the drive pile energy into the motion for longer, which is why resonance becomes sharper and more obvious.
+
+## Coupling Creates Shared Modes
+
+For two coupled oscillators, resonance is no longer about a single favorite rhythm. The system has multiple **normal modes**: preferred shared motions in which the pieces keep a fixed phase relationship while oscillating together.
+
+In the lower shared mode, neighboring masses tend to move in the same direction at the same time. In the higher shared mode, neighboring masses tend to move in opposite directions. When the driving frequency lands near one of those mode frequencies, that pattern becomes the easiest one for the system to support.
+
+## From Shared Modes to Waves
+
+Now add more neighbors. A longer chain of coupled oscillators still has normal modes, but it also starts to look like a medium that can pass a disturbance along one link at a time. That is the key wave idea hiding inside the oscillator story:
+
+- each piece mainly oscillates near its own equilibrium position
+- coupling passes the disturbance onward to nearby pieces
+- with enough neighbors, those shared motions start to resemble wave behavior
+
+As you explore the simulation below, try this sequence:
+
+1. Start in `1 oscillator` mode and click the `resonance` preset. This gives you the clean single-oscillator version of the story.
+2. Switch to `2 oscillators`, then compare `lower mode` and `higher mode`. The pair should flip between mostly same-direction and opposite-direction motion.
+3. Move to `5 oscillators` and reuse the presets. Notice how the same coupling idea now organizes several neighbors at once.
+4. Finish in `chain (~50)` mode and compare the larger pattern. The motion should feel much closer to a discrete medium than to a single spring-mass toy.
+
+<SimulationBlock
+  title="Coupled Resonance Explorer"
+  description="Drive one or more coupled oscillators and compare how resonance picks out different shared patterns."
+>
+  <CoupledResonanceExplorer client:only="react" />
+</SimulationBlock>
+
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Identify the Resonant Two-Mass Mode"
+    accent="blue"
+  >
+    #### Problem
+
+    A pair of identical coupled oscillators has a lower shared mode at $0.68\,\text{Hz}$ and a higher shared mode at $1.17\,\text{Hz}$. The system is driven at $1.10\,\text{Hz}$ with light damping. In steady motion, the two masses move mostly in opposite directions. Which mode is being excited most strongly?
+
+    #### Given
+
+    - lower mode: $0.68\,\text{Hz}$
+    - higher mode: $1.17\,\text{Hz}$
+    - drive frequency: $1.10\,\text{Hz}$
+    - neighboring masses move mostly opposite directions
+
+    #### Use
+
+    Resonance is strongest near a mode frequency, and the phase pattern tells you which shared mode the system is favoring.
+
+    #### Solve
+
+    The drive frequency $1.10\,\text{Hz}$ lies much closer to the higher-mode value than to the lower-mode value:
+
+    $$
+    |1.10 - 1.17| = 0.07\,\text{Hz},
+    \qquad
+    |1.10 - 0.68| = 0.42\,\text{Hz}.
+    $$
+
+    That already points toward the higher mode. The observed motion confirms it: opposite-direction motion is the signature of the higher shared mode in this two-mass system.
+
+    #### Check
+
+    Both the frequency match and the phase pattern tell the same story, so the higher mode is the dominant resonant response.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Interpret a Short Chain Pattern"
+    accent="red"
+  >
+    #### Problem
+
+    A short fixed-end chain has a first mode near $0.35\,\text{Hz}$ and a second mode near $0.68\,\text{Hz}$. It is driven at $0.66\,\text{Hz}$. The middle of the chain stays relatively quiet while neighboring sections swing with opposite signs. Which pattern is the drive selecting?
+
+    #### Given
+
+    - first chain mode: $0.35\,\text{Hz}$
+    - second chain mode: $0.68\,\text{Hz}$
+    - drive frequency: $0.66\,\text{Hz}$
+    - the chain shows an internal sign change
+
+    #### Use
+
+    Higher modes have more internal structure. A sign change or near-node inside the chain means the pattern is no longer the smooth first mode.
+
+    #### Solve
+
+    The drive sits very close to the second mode:
+
+    $$
+    |0.66 - 0.68| = 0.02\,\text{Hz}.
+    $$
+
+    It is far from the first mode:
+
+    $$
+    |0.66 - 0.35| = 0.31\,\text{Hz}.
+    $$
+
+    The extra internal structure in the chain also matches the second mode rather than the first. So the drive is selecting the second resonant pattern.
+
+    #### Check
+
+    A first-mode response would look smoother across the whole chain. The extra turning point is the clue that a higher pattern has taken over.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Resonance Checkpoint"
+  questions={[
+    {
+      id: 'coupling-and-resonance',
+      question: 'Why does coupling change the resonance story compared with a single isolated oscillator?',
+      options: [
+        { id: 'A', text: 'Because coupling creates multiple shared mode frequencies, so the system can resonate in more than one organized pattern.', isCorrect: true, explanation: 'Exactly. A single ideal oscillator has one main natural frequency, but a coupled system develops multiple normal modes, each with its own preferred frequency and motion pattern.' },
+        { id: 'B', text: 'Because coupling removes the need for a driving force once the oscillators are connected.', isCorrect: false, explanation: 'Coupling changes how the motion is shared, but it does not eliminate the role of a driving force in a driven-resonance experiment.' },
+        { id: 'C', text: 'Because coupling guarantees that every driving frequency produces the same large response.', isCorrect: false, explanation: 'Resonance is still selective. Coupling adds more preferred frequencies, but the response is not equally large at every drive setting.' }
+      ]
+    },
+    {
+      id: 'normal-modes',
+      question: 'What is a normal mode in a coupled-oscillator system?',
+      options: [
+        { id: 'A', text: 'A shared pattern in which all parts oscillate with a fixed phase relationship at one characteristic frequency.', isCorrect: true, explanation: 'Right. In a normal mode, the whole system moves in one organized pattern, with each part keeping a stable timing relationship to the others.' },
+        { id: 'B', text: 'A moment when all of the oscillators happen to pass through equilibrium at the same time.', isCorrect: false, explanation: 'That could happen during many kinds of motion, but it is not the definition of a normal mode. A normal mode is a sustained shared pattern, not a single instant.' },
+        { id: 'C', text: 'The strongest possible damping setting for a resonant system.', isCorrect: false, explanation: 'Damping affects how sharply the system responds, but it is not what defines a normal mode.' }
+      ]
+    },
+    {
+      id: 'bridge-to-waves',
+      question: 'Why is a short chain of coupled oscillators a useful bridge to waves?',
+      options: [
+        { id: 'A', text: 'Because each oscillator passes the disturbance to its neighbors, so the system begins to behave like a medium carrying a wave pattern.', isCorrect: true, explanation: 'Exactly. A wave can be viewed as many nearby parts oscillating while coupling carries the disturbance onward through the system.' },
+        { id: 'B', text: 'Because once you have enough oscillators, the individual masses stop moving and only the wave moves.', isCorrect: false, explanation: 'The individual pieces still move. The wave picture is about how the pattern propagates while the local parts continue oscillating near equilibrium.' },
+        { id: 'C', text: 'Because resonance disappears and is replaced by an unrelated wave process.', isCorrect: false, explanation: 'The wave story grows out of the same coupling idea. Resonance and normal modes are part of the bridge, not something that gets discarded.' }
+      ]
+    }
+  ]}
+/>

@@ -1,0 +1,157 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import AppleSurfaceCurvatureExplorer from '../../components/simulations/AppleSurfaceCurvatureExplorer.jsx';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import EquivalenceElevatorFieldSection from '../../components/relativity/EquivalenceElevatorFieldSection';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { featuredModule } from '../../data/modules';
+
+<ModuleHero module={featuredModule} currentPath="/relativity/general-relativity" />
+
+<div id="page-content"></div>
+
+# General Relativity
+
+Special relativity explains physics in flat spacetime. General relativity asks the next question: what happens when spacetime itself is curved? Einstein's answer is that gravity is not an ordinary force pulling on objects across empty space. Instead, **matter and energy curve spacetime, and free-falling objects follow the straightest paths in that geometry**.
+
+
+<EquivalenceElevatorFieldSection client:visible>
+  ## The Equivalence Principle
+
+  Einstein's key stepping stone was the **equivalence principle**. Imagine a small laboratory sealed inside an elevator. If the cabin accelerates upward through empty space, dropped objects fall toward the floor. Inside a small enough lab, the local physics can mimic standing still in a uniform gravitational field.
+
+  As with special relativity, Maxwell's theory of light as electromagnetic waves was taken as an axiom.  Since a light beam would follow a parabolic path in our accelerating elevator, this implied gravitational effects on light.  Once again, the usual Newtonian way of thinking about space and time needed to be reconsidered to account for this.
+
+</EquivalenceElevatorFieldSection>
+
+## Geodesics
+
+The equivalence principle gives a clean way of connecting accelerating reference frames to gravity.  However, it is a local statement, holding strictly true in a sufficiently small region of spacetime.  (The gravitational effects of Earth are not equivalent to a giant accelerating elevator.)  The curvature of spacetime becomes apparent when you **compare nearby free-fall trajectories**. If those paths move closer together or farther apart, the spacetime is not flat.
+
+To make that idea more tangible, consider the motion of ants along the surface of an apple.  The ants are always trying to walk "straight ahead", and the corresponding trajectories are known as **geodesics**. The apple's geometry causes nearby ants to converge (**positive curvature**) or diverge (**negative curvature**).
+
+This is an analogy, not the full Einstein equations. The surface of an apple is an example of extrinsic curvature.  It's a 2D surface that bends/curves in a third spatial dimension.  Spacetime is a 4D manifold with intrinsic curvature.  Not only is it mind-bending to consider time as a geometric dimension, but there's actually no need for a fifth embedding dimension.  The math gets tricky, so let's instead build intuition for curvature by watching how nearby paths fail to stay perfectly parallel.
+
+
+<SimulationBlock
+  title="Apple Geodesics"
+  description="(Locally) shortest paths on a curved surface."
+>
+  <AppleSurfaceCurvatureExplorer client:visible />
+</SimulationBlock>
+
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Elevator Kinematics"
+    accent="blue"
+  >
+    #### Problem
+
+    An elevator accelerates upward at $9.8\,\text{m/s}^2$ in deep space. A ball is released from rest relative to the cabin when it is $1.2\,\text{m}$ above the floor. How long does the ball take to reach the floor according to someone inside the elevator?
+
+    #### Given
+
+    - effective downward acceleration $a = 9.8\,\text{m/s}^2$
+    - drop distance $y = 1.2\,\text{m}$
+    - initial speed relative to cabin is zero
+
+    #### Use
+
+    In the accelerating cabin, the motion matches the constant-acceleration relation
+
+    $$
+    y = \frac{1}{2}at^2.
+    $$
+
+    #### Solve
+
+    $$
+    1.2 = \frac{1}{2}(9.8)t^2
+    \qquad \Rightarrow \qquad
+    t^2 = \frac{2.4}{9.8} \approx 0.245.
+    $$
+
+    So
+
+    $$
+    t \approx 0.49\,\text{s}.
+    $$
+
+    #### Check
+
+    The calculation is exactly what you would do for a small cabin resting in a uniform gravitational field. That is the local content of the equivalence principle.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Converging Geodesics"
+    accent="red"
+  >
+    #### Problem
+
+    Two shuttles, moving parallel to each other, are in radial free fall toward the surface of a planet.  They begin $3.0\,\text{km}$ apart and later are only $2.9\,\text{km}$ apart, even though neither fires a rocket. What does that change in separation tell you?
+
+    #### Given
+
+    - initial separation: $3.0\,\text{km}$
+    - later separation: $2.9\,\text{km}$
+    - both shuttles remain in free-fall
+
+    #### Use
+
+    Free-fall paths represent geodesics. Decreasing spatial separation implies the geodesics are converging (the full spacetime geodesics are a bit trickier to consider).
+
+    #### Solve
+
+    The separation changes by
+
+    $$
+    \Delta d = 2.9\,\text{km} - 3.0\,\text{km} = -0.1\,\text{km}.
+    $$
+
+    This inward focusing is evidence that spacetime has positive curvature in this region.
+
+    #### Check
+
+    In flat spacetime, initially parallel free-fall paths would not naturally focus together this way.  A more Newtonian description would point out that this tidal effect could be explained as both shuttles moving toward the center of the planet.
+    </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="General Relativity Checkpoint"
+  questions={[
+    {
+      id: 'equivalence-principle',
+      question: 'Why does the equivalence principle matter for general relativity?',
+      options: [
+        { id: 'A', text: 'Because it shows that a small accelerating lab and a small lab in a uniform gravitational field can produce the same local physics.', isCorrect: true, explanation: 'Exactly. That local equivalence is the clue that gravity should be described geometrically rather than as an ordinary force acting in flat spacetime.' },
+        { id: 'B', text: 'Because it proves that gravity disappears everywhere once an observer accelerates fast enough.', isCorrect: false, explanation: 'The equivalence principle is local, not global. It does not remove curvature or tidal gravity everywhere; it only says that in a small enough region, local experiments can mimic a uniform gravitational field.' },
+        { id: 'C', text: 'Because it says that clocks and rulers stop working inside an accelerating elevator.', isCorrect: false, explanation: 'Clocks and rulers still work. The important point is that their local measurements inside a small cabin cannot always distinguish acceleration from a uniform gravitational field.' }
+      ]
+    },
+    {
+      id: 'free-fall',
+      question: 'Why does a freely falling elevator feel weightless even in a gravitational field?',
+      options: [
+        { id: 'A', text: 'Because the elevator and the objects inside share the same free-fall motion, so there is little relative acceleration between them locally.', isCorrect: true, explanation: 'Right. In free fall, the floor is no longer pushing upward on the objects inside, so the usual feeling of weight disappears in a small local region.' },
+        { id: 'B', text: 'Because gravity itself turns off whenever the elevator starts moving downward.', isCorrect: false, explanation: 'Gravity has not turned off. What changes is the local frame: the cabin and everything inside are moving together along nearby free-fall paths.' },
+        { id: 'C', text: 'Because free fall makes spacetime flat everywhere around the observer.', isCorrect: false, explanation: 'Free fall does not erase curvature everywhere. It only removes the local feeling of weight. Tidal effects can still remain if the spacetime is curved.' }
+      ]
+    },
+    {
+      id: 'geodesic-deviation',
+      question: 'What does it mean physically when a bundle of nearby geodesics converges or diverges?',
+      options: [
+        { id: 'A', text: 'It means spacetime curvature is changing the relative motion of nearby free-fall paths, which is the geometric content of tidal gravity.', isCorrect: true, explanation: 'Exactly. Geodesic deviation is how curvature shows up operationally: nearby freely falling objects do not keep the same separation in curved spacetime.' },
+        { id: 'B', text: 'It means one of the objects must have turned on a rocket engine, because geodesics can never change their separation.', isCorrect: false, explanation: 'In flat spacetime, parallel geodesics can stay parallel, but in curved spacetime their separation can change even when all of the objects are in free fall.' },
+        { id: 'C', text: 'It means the speed of light has changed inside the simulation.', isCorrect: false, explanation: 'The simulation is about the geometry of free-fall paths, not about changing the speed of light. The key effect is curvature altering the relative behavior of nearby geodesics.' }
+      ]
+    }
+  ]}
+/>

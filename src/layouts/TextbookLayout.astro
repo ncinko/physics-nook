@@ -1,11 +1,19 @@
 ---
 import BaseLayout from './BaseLayout.astro';
+
+const { title, description, canonicalPath, image, noindex } = Astro.props;
 ---
 
-<BaseLayout>
-  <main class="mx-auto max-w-4xl px-4 py-8">
+<BaseLayout
+  title={title}
+  description={description}
+  canonicalPath={canonicalPath}
+  image={image}
+  noindex={noindex}
+>
+  <div class="mx-auto max-w-4xl px-4 py-8">
     <article class="prose prose-theme">
       <slot />
     </article>
-  </main>
+  </div>
 </BaseLayout>

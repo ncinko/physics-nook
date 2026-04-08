@@ -25,7 +25,8 @@ Special relativity explains physics in flat spacetime. General relativity asks t
 
   Einstein's key stepping stone was the **equivalence principle**. Imagine a small laboratory sealed inside an elevator. If the cabin accelerates upward through empty space, dropped objects fall toward the floor. Inside a small enough lab, the local physics can mimic standing still in a uniform gravitational field.
 
-  As with special relativity, Maxwell's theory of light as electromagnetic waves was taken as an axiom.  Since a light beam would follow a parabolic path in our accelerating elevator, this implied gravitational effects on light.  Once again, the usual Newtonian way of thinking about space and time needed to be reconsidered to account for this.
+  As with special relativity, Maxwell's theory of light as electromagnetic waves was taken as an axiom.  These waves are massless and should not feel any gravitational effects according to Newton. 
+  However, light in the accelerating elevator appears to follow a parabolic trajectory.  Taking the equivalence principle seriously implies a gravitational effect on light.  This insight led to a further reshaping of our understanding of space and time.
 
 </EquivalenceElevatorFieldSection>
 
@@ -44,6 +45,190 @@ This is an analogy, not the full Einstein equations. The surface of an apple is 
 >
   <AppleSurfaceCurvatureExplorer client:visible />
 </SimulationBlock>
+
+## From Interval to Metric
+
+The apple picture helps build intuition, but the actual geometry of spacetime is encoded in the **metric**. On the first relativity page, the flat-spacetime interval in three spatial dimensions would be written as
+
+$$
+ds^2 = c^2dt^2 - dx^2 - dy^2 - dz^2.
+$$
+
+This plays a role similar to the Euclidean distance formula from ordinary geometry. In flat 3D space, you might write
+
+$$
+d\ell^2 = dx^2 + dy^2 + dz^2,
+$$
+
+which tells you how small coordinate changes combine into an actual distance. The spacetime interval does the same kind of bookkeeping, except that time and space enter with different signs.
+
+General relativity keeps the idea of an invariant interval, but it allows the coefficients to vary from place to place:
+
+$$
+ds^2 = g_{\mu \nu}(x)\,dx^{\mu}dx^{\nu}.
+$$
+
+The collection of coefficients $g_{\mu \nu}(x)$ is the metric (the notation above implies summation over indices $\mu$ and $\nu$, so 16 coefficients for a 4D spacetime). In flat spacetime those coefficients are constant. Near matter and energy they change with location, and in the full theory Einstein's equations determine them from the local mass-energy distribution.
+
+Outside a nonrotating spherical mass, one important example is the Schwarzschild metric:
+
+$$
+ds^2 = \left(1 - \frac{2GM}{rc^2}\right)c^2dt^2 - \frac{dr^2}{1 - \frac{2GM}{rc^2}} - r^2d\theta^2 - r^2\sin^2\theta\,d\phi^2.
+$$
+
+Note that the coefficient of $c^2dt^2$ is no longer just $1$; it depends on the distance $r$ from the gravitating body.
+
+Once the metric is known, it tells you how to measure tiny intervals and decide what counts as "straight ahead" from one moment to the next. A freely falling object follows a **geodesic**: the straightest possible worldline according to that metric.
+
+<WorkedExampleCard
+  title="Geodesic Equation"
+  prompt="How the metric turns the idea of 'straight ahead' into an equation."
+  accent="blue"
+>
+  For a freely falling massive object, the geodesic is the worldline that makes the proper time locally extremal:
+
+  $$
+  \delta \int d\tau = 0.
+  $$
+
+  Writing that condition as a differential equation gives the geodesic equation
+
+  $$
+  \frac{d^2 x^\mu}{d\tau^2} + \Gamma^\mu_{\alpha\beta}\frac{dx^\alpha}{d\tau}\frac{dx^\beta}{d\tau} = 0,
+  $$
+
+  where the Christoffel symbols $\Gamma^\mu_{\alpha\beta}$ are built from the metric. As a simple example, in flat spacetime, this reduces to
+
+  $$
+  \frac{d^2 x^\mu}{d\tau^2} = 0.
+  $$
+
+  Integrating once gives
+
+  $$
+  \frac{dx^\mu}{d\tau} = A^\mu,
+  $$
+
+  where $A^\mu$ is constant, and integrating again gives
+
+  $$
+  x^\mu(\tau) = A^\mu \tau + B^\mu.
+  $$
+
+  Each coordinate changes linearly with $\tau$, which is just uniform straight-line motion.
+</WorkedExampleCard>
+
+
+
+### A Simple Clock Calculation
+
+Take a clock that is held at a fixed radius outside the mass, so $dr = d\theta = d\phi = 0$. Along the clock's worldline we can write $ds^2 = c^2d\tau^2$, where $\tau$ is the proper time measured by that clock. The metric then becomes
+
+$$
+c^2d\tau^2 = \left(1 - \frac{2GM}{rc^2}\right)c^2dt^2,
+$$
+
+so
+
+$$
+d\tau = \sqrt{1 - \frac{2GM}{rc^2}}\,dt.
+$$
+
+Here $t$ can be interpreted as the time kept by a clock very far from the mass, where the gravitational field is negligible. Since the square root is less than $1$, a clock deeper in the gravitational field accumulates less proper time.
+
+At Earth's surface,
+
+$$
+\frac{2GM}{Rc^2}
+= \frac{2(6.67 \times 10^{-11})(5.97 \times 10^{24})}{(6.37 \times 10^6)(3.0 \times 10^8)^2}
+\approx 1.39 \times 10^{-9}.
+$$
+
+That gives
+
+$$
+\frac{d\tau}{dt}
+= \sqrt{1 - 1.39 \times 10^{-9}}
+\approx 1 - 6.95 \times 10^{-10}.
+$$
+
+Over one day, $t = 86400\,\text{s}$, so
+
+$$
+\tau \approx (1 - 6.95 \times 10^{-10})(86400\,\text{s})
+\approx 86399.999940\,\text{s}.
+$$
+
+That is about $6.0 \times 10^{-5}\,\text{s} = 60\,\mu\text{s}$ less than a clock very far from Earth. The effect is tiny here, but it is real: gravity changes the metric, and the metric changes how clocks accumulate time.
+
+<WorkedExampleCard
+  title="Weak-Field Light Deflection"
+  prompt="A simple estimate of light bending near a gravitating body."
+  accent="red"
+>
+  In the weak-field limit, a light ray passing a spherical mass is deflected by
+
+  $$
+  \Delta \phi \approx \frac{4GM}{bc^2},
+  $$
+
+  where $M$ is the mass of the gravitating body and $b$ is the closest-approach distance of the light ray. The scaling makes good physical sense: larger masses bend light more, while larger fly-by distances bend it less. The factor of $c^2$ in the denominator also shows why the effect is usually tiny unless the gravitating body is very massive or very compact.
+
+  The accelerating-elevator picture tells you why there should be any bending at all. In an upward-accelerating cabin, a horizontal light beam appears to deflect as the floor rises while the beam crosses the room. By the equivalence principle, light near a gravitating body should also be deflected.
+
+  A quick elevator-style estimate goes like this. If the cabin has width $L$, the light-crossing time is
+
+  $$
+  t \approx \frac{L}{c}.
+  $$
+
+  During that time, the floor rises by
+
+  $$
+  y \approx \frac{1}{2}gt^2
+  = \frac{1}{2}g\frac{L^2}{c^2}.
+  $$
+
+  The beam therefore picks up a small tilt. Using the slope of the parabolic path, the exit angle is approximately
+
+  $$
+  \theta \approx \frac{dy}{dx} \approx \frac{gL}{c^2}.
+  $$
+
+  To turn this into a rough gravitational estimate for a light ray passing a mass $M$, take the local field strength near closest approach $b$ to be
+
+  $$
+  g \approx \frac{GM}{b^2},
+  $$
+
+  and take the interaction distance to be of order
+
+  $$
+  L \approx 2b.
+  $$
+
+  Then
+
+  $$
+  \theta \approx \frac{gL}{c^2}
+  \approx \frac{GM}{b^2}\frac{2b}{c^2}
+  = \frac{2GM}{bc^2}.
+  $$
+
+  That elevator argument gets the right qualitative idea and roughly the right scale, but it is not the whole story. A simple elevator-style estimate gives only about
+
+  $$
+  \Delta \phi \approx \frac{2GM}{bc^2},
+  $$
+
+  while the full Schwarzschild geometry gives
+
+  $$
+  \Delta \phi \approx \frac{4GM}{bc^2}.
+  $$
+
+  The extra factor of $2$ comes from the fact that general relativity curves not just time, but space as well.
+</WorkedExampleCard>
 
 
 <ProblemSolvingSection>
@@ -119,7 +304,104 @@ This is an analogy, not the full Einstein equations. The surface of an apple is 
     #### Check
 
     In flat spacetime, initially parallel free-fall paths would not naturally focus together this way.  A more Newtonian description would point out that this tidal effect could be explained as both shuttles moving toward the center of the planet.
-    </WorkedExampleCard>
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Deflection of Light"
+    accent="blue"
+  >
+    #### Problem
+
+    A ray of starlight just grazes the surface of the Sun on its way to Earth. Estimate the angle by which the light is deflected by the Sun's gravity.
+
+    #### Given
+
+    - $G = 6.67 \times 10^{-11}\,\text{N}\,\text{m}^2/\text{kg}^2$
+    - $M_{\odot} = 1.99 \times 10^{30}\,\text{kg}$
+    - $R_{\odot} = 6.96 \times 10^8\,\text{m}$
+    - $c = 3.0 \times 10^8\,\text{m/s}$
+
+    #### Use
+
+    For a light ray passing a spherical mass in the weak-field limit,
+
+    $$
+    \Delta \phi \approx \frac{4GM}{bc^2},
+    $$
+
+    where $b$ is the closest approach distance. For light grazing the Sun, $b \approx R_{\odot}$.
+
+    #### Solve
+
+    $$
+    \Delta \phi \approx \frac{4(6.67 \times 10^{-11})(1.99 \times 10^{30})}{(6.96 \times 10^8)(3.0 \times 10^8)^2}
+    \approx 8.5 \times 10^{-6}\,\text{rad}.
+    $$
+
+    Converting to arcseconds using $1\,\text{rad} \approx 206265$ arcsec,
+
+    $$
+    \Delta \phi \approx (8.5 \times 10^{-6})(206265)
+    \approx 1.75 \text{ arcsec}.
+    $$
+
+    #### Check
+
+    The deflection is tiny, but still measurable. This is why stars viewed near the edge of the Sun appear slightly shifted on the sky, one of the classic early tests of general relativity.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Gravitational Time Dilation"
+    accent="red"
+  >
+    #### Problem
+
+    In a simplified Schwarzschild black hole model, a landing team spends time at a radius $r = 1.00000001\,r_s$, where $r_s = 2GM/c^2$, while the main ship waits very far away. If $10.0$ years pass on the ship, how much proper time passes for the landing team?
+
+    #### Given
+
+    - $r = 1.00000001\,r_s$
+    - distant-ship time $\Delta t = 10.0\,\text{yr}$
+
+    #### Use
+
+    For a clock held at fixed radius outside a nonrotating black hole,
+
+    $$
+    \Delta \tau = \sqrt{1 - \frac{r_s}{r}}\,\Delta t.
+    $$
+
+    #### Solve
+
+    First compute the time-dilation factor:
+
+    $$
+    \frac{\Delta \tau}{\Delta t}
+    = \sqrt{1 - \frac{r_s}{1.00000001\,r_s}}
+    = \sqrt{1 - \frac{1}{1.00000001}}
+    \approx \sqrt{1.0 \times 10^{-8}}
+    \approx 1.0 \times 10^{-4}.
+    $$
+
+    So
+
+    $$
+    \Delta \tau \approx (1.0 \times 10^{-4})(10.0\,\text{yr})
+    = 1.0 \times 10^{-3}\,\text{yr}.
+    $$
+
+    Converting to more familiar units,
+
+    $$
+    1.0 \times 10^{-3}\,\text{yr}
+    \approx 0.365\,\text{day}
+    \approx 8.8\,\text{h}.
+    $$
+
+    #### Check
+
+    This is the same kind of effect dramatized in *Interstellar*: the crew deeper in the gravitational well experiences far less elapsed time than the crew farther away. This example uses a highly simplified nonrotating-black-hole model, but it captures the basic idea that strong gravity can create enormous time differences.
+  </WorkedExampleCard>
 </ProblemSolvingSection>
 
 <QuestionSequence

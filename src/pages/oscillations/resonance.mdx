@@ -16,36 +16,33 @@ import { wavesAndOscillationsPath } from '../../data/modules';
 
 # Resonance
 
-Resonance begins with a simple idea: if you keep pushing a system with the right rhythm, each push reinforces the motion already there. A drive that is badly timed can still move the system, but the response stays comparatively small. A drive that lines up with one of the system's natural rhythms can build a much larger motion, especially when damping is weak.
+To efficiently push your friend on a swing, you must match the natural rhythm of their swings.  Many small pushes can lead to a relatively large amplitude in your friend's motion.  Driving a system at one of its natural frequencies is known as **resonance**.
 
-That story gets richer as soon as neighboring parts are coupled. Now there is no longer just one preferred rhythm. Instead, the system develops **shared patterns of motion** that each come with their own characteristic frequency. Those shared patterns are the bridge between ordinary oscillators and waves.
+A single oscillator has one natural frequency at which it can exhibit resonance.  Once you start connecting oscillators together, shared patterns of motion begin to emerge, each with its own characteristic frequency. These patterns and corresponding frequencies are the bridge between simple oscillations and waves.
 
-## Driven Response and Resonance
+## Driven Response
 
-A lone oscillator has one main natural frequency. If you drive it much slower or much faster than that, the pushes do not add efficiently. Near the natural frequency, they do.
+A lone oscillator has one main natural frequency. A drive that is badly timed can still move the system, but the response stays comparatively small. 
+A drive that lines up with one of the system's natural rhythms can build a much larger motion, especially when damping is weak.
 
 Damping matters here. Strong damping bleeds energy away quickly, so the resonance peak becomes broader and less dramatic. Weak damping lets the drive pile energy into the motion for longer, which is why resonance becomes sharper and more obvious.
 
-## Coupling Creates Shared Modes
+## Normal Modes
 
-For two coupled oscillators, resonance is no longer about a single favorite rhythm. The system has multiple **normal modes**: preferred shared motions in which the pieces keep a fixed phase relationship while oscillating together.
+For two coupled oscillators, resonance is no longer about a single favorite rhythm. The system has multiple **normal modes**: patterns of motion in which the pieces keep a fixed phase relationship while oscillating together.
 
 In the lower shared mode, neighboring masses tend to move in the same direction at the same time. In the higher shared mode, neighboring masses tend to move in opposite directions. When the driving frequency lands near one of those mode frequencies, that pattern becomes the easiest one for the system to support.
 
-## From Shared Modes to Waves
+## Shared Modes to Waves
 
-Now add more neighbors. A longer chain of coupled oscillators still has normal modes, but it also starts to look like a medium that can pass a disturbance along one link at a time. That is the key wave idea hiding inside the oscillator story:
-
-- each piece mainly oscillates near its own equilibrium position
-- coupling passes the disturbance onward to nearby pieces
-- with enough neighbors, those shared motions start to resemble wave behavior
+Now add more neighbors. A longer chain of coupled oscillators still has normal modes, but it also starts to look like a medium that can pass a disturbance along one link at a time. That is the key wave idea hiding inside the oscillator story.
 
 As you explore the simulation below, try this sequence:
 
 1. Start in `1 oscillator` mode and click the `resonance` preset. This gives you the clean single-oscillator version of the story.
 2. Switch to `2 oscillators`, then compare `lower mode` and `higher mode`. The pair should flip between mostly same-direction and opposite-direction motion.
 3. Move to `5 oscillators` and reuse the presets. Notice how the same coupling idea now organizes several neighbors at once.
-4. Finish in `chain (~50)` mode and compare the larger pattern. The motion should feel much closer to a discrete medium than to a single spring-mass toy.
+4. Finish in `chain` mode and wait for the larger pattern to emerge.
 
 <SimulationBlock
   title="Coupled Resonance Explorer"

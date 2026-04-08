@@ -49,7 +49,7 @@ export const modules: ModuleMeta[] = [
     title: 'Relativity',
     navLabel: 'Relativity',
     summary:
-      'A guided path from spacetime diagrams to relativistic energy and curved spacetime.',
+      'Spacetime diagrams, relativistic energy & momentum, and general relativity.',
     audience: 'Self-learners building intuition before or alongside a formal course.',
     prerequisites: [
       'Comfort reading graphs and coordinate axes',

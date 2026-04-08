@@ -74,7 +74,7 @@ export const modules: ModuleMeta[] = [
         title: 'Spacetime Diagrams',
         shortTitle: 'Spacetime',
         description:
-          'Start with events, worldlines, and the geometric reason simultaneity changes between frames.',
+          'Events, worldlines, and a geometric interpretation of space & time.',
         seo: {
           title: 'Relativity',
           description:
@@ -89,7 +89,7 @@ export const modules: ModuleMeta[] = [
         title: 'Relativistic Momentum and Energy',
         shortTitle: 'Momentum and Energy',
         description:
-          'See how beta and gamma reshape momentum, total energy, and kinetic energy near the speed of light.',
+          'See how momentum and energy transform near the speed of light.',
         seo: {
           title: 'Relativistic Momentum and Energy',
           description:
@@ -104,7 +104,7 @@ export const modules: ModuleMeta[] = [
         title: 'General Relativity',
         shortTitle: 'General Relativity',
         description:
-          'Finish the path by connecting free fall, the equivalence principle, and geodesic curvature.',
+          'Connect accelerating frames to gravity through the equivalence principle, and move beyond flat spacetime.',
         seo: {
           title: 'General Relativity',
           description:

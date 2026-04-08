@@ -3,7 +3,9 @@ import React, { startTransition, useEffect, useEffectEvent, useRef, useState } f
 const MIN_FREQUENCY = 0.35;
 const MAX_FREQUENCY = 1.85;
 const NATURAL_FREQUENCY = 1.05;
-const DAMPING_RATIO = 0.14;
+const MIN_DAMPING = 0.03;
+const MAX_DAMPING = 0.42;
+const DEFAULT_DAMPING = 0.14;
 const DEFAULT_FREQUENCY = 0.92;
 const CURVE_SAMPLE_COUNT = 180;
 
@@ -25,11 +27,15 @@ const STAGE = {
   platformY: 272,
   platformWidth: 118,
   platformHeight: 22,
-  rodBaseY: 254,
+  rodBaseY: 272,
   rodHeight: 196,
 };
 
 const BASE_SHAKE_AMPLITUDE = 10;
+const MANUAL_MAX_SHIFT = 42;
+const BASE_FOLLOW_RATE = 18;
+const AUTO_RESUME_DELAY = 2.6;
+const AUTO_RESUME_BLEND_DURATION = 0.85;
 const ROD_VISUAL_SCALE = 1;
 const ROD_SEGMENTS = 28;
 const X_TICKS = [0.4, 0.8, 1.2, 1.6];
@@ -43,18 +49,34 @@ function formatNumber(value, digits = 2) {
   return fixed === '-0.00' || fixed === '-0.0' ? fixed.slice(1) : fixed;
 }
 
-function getResponseFactor(frequency) {
+function getResponseFactor(frequency, dampingRatio) {
   const ratio = frequency / NATURAL_FREQUENCY;
   const denominator = Math.sqrt(
-    (1 - ratio * ratio) * (1 - ratio * ratio) + (2 * DAMPING_RATIO * ratio) * (2 * DAMPING_RATIO * ratio),
+    (1 - ratio * ratio) * (1 - ratio * ratio) + (2 * dampingRatio * ratio) * (2 * dampingRatio * ratio),
   );
 
   return 1 / denominator;
 }
 
-function getPhaseLag(frequency) {
+function getPhaseLag(frequency, dampingRatio) {
   const ratio = frequency / NATURAL_FREQUENCY;
-  return Math.atan2(2 * DAMPING_RATIO * ratio, 1 - ratio * ratio);
+  return Math.atan2(2 * dampingRatio * ratio, 1 - ratio * ratio);
+}
+
+function getAutoTableState(frequency, dampingRatio, timeValue) {
+  const responseFactor = getResponseFactor(frequency, dampingRatio);
+  const phaseLag = getPhaseLag(frequency, dampingRatio);
+  const angularFrequency = 2 * Math.PI * frequency;
+  const tipAmplitude = BASE_SHAKE_AMPLITUDE * responseFactor;
+
+  return {
+    responseFactor,
+    phaseLag,
+    angularFrequency,
+    baseShift: BASE_SHAKE_AMPLITUDE * Math.sin(angularFrequency * timeValue),
+    tipShift: tipAmplitude * Math.sin(angularFrequency * timeValue - phaseLag),
+    tipVelocity: angularFrequency * tipAmplitude * Math.cos(angularFrequency * timeValue - phaseLag),
+  };
 }
 
 function getModeShapeAt(u) {
@@ -75,6 +97,18 @@ function getModeShapeAt(u) {
   return raw / normalization;
 }
 
+function getModeSlopeAt(u) {
+  const epsilon = 0.008;
+  const before = clamp(u - epsilon, 0, 1);
+  const after = clamp(u + epsilon, 0, 1);
+
+  if (after === before) {
+    return 0;
+  }
+
+  return (getModeShapeAt(after) - getModeShapeAt(before)) / (after - before);
+}
+
 function frequencyToPlotX(frequency) {
   const usableWidth = PLOT.width - PLOT.padding.left - PLOT.padding.right;
   return (
@@ -89,52 +123,86 @@ const CURVE_SAMPLES = Array.from({ length: CURVE_SAMPLE_COUNT + 1 }, (_, index) 
 
   return {
     frequency,
-    response: getResponseFactor(frequency),
   };
 });
 
-const Y_MAX =
-  Math.ceil(Math.max(...CURVE_SAMPLES.map((sample) => sample.response)) * 10) / 10 + 0.4;
-const Y_TICKS = Array.from({ length: Math.ceil(Y_MAX) + 1 }, (_, index) => index).filter(
-  (tick) => tick <= Y_MAX,
-);
+function getYAxisConfig(maxResponse) {
+  const paddedMax = Math.max(1, maxResponse * 1.06);
+  const roughStep = paddedMax / 7;
+  const exponent = 10 ** Math.floor(Math.log10(roughStep || 1));
+  const normalized = roughStep / exponent;
+  let niceFactor = 10;
 
-function responseToPlotY(response) {
-  const usableHeight = PLOT.height - PLOT.padding.top - PLOT.padding.bottom;
-  return PLOT.padding.top + ((Y_MAX - response) / Y_MAX) * usableHeight;
-}
-
-const CURVE_PATH = CURVE_SAMPLES.map((sample, index) => {
-  const x = frequencyToPlotX(sample.frequency);
-  const y = responseToPlotY(sample.response);
-  return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-}).join(' ');
-
-const CURVE_AREA_PATH = [
-  `M ${frequencyToPlotX(MIN_FREQUENCY)} ${responseToPlotY(0)}`,
-  ...CURVE_SAMPLES.map((sample) => {
-    const x = frequencyToPlotX(sample.frequency);
-    const y = responseToPlotY(sample.response);
-    return `L ${x} ${y}`;
-  }),
-  `L ${frequencyToPlotX(MAX_FREQUENCY)} ${responseToPlotY(0)}`,
-  'Z',
-].join(' ');
-
-function buildRodPath(baseShift, tipBend) {
-  const points = [];
-
-  for (let index = 0; index <= ROD_SEGMENTS; index += 1) {
-    const u = index / ROD_SEGMENTS;
-    const x =
-      STAGE.centerX +
-      baseShift +
-      tipBend * getModeShapeAt(u) * ROD_VISUAL_SCALE;
-    const y = STAGE.rodBaseY - STAGE.rodHeight * u;
-    points.push(`${index === 0 ? 'M' : 'L'} ${x} ${y}`);
+  if (normalized <= 1) {
+    niceFactor = 1;
+  } else if (normalized <= 2) {
+    niceFactor = 2;
+  } else if (normalized <= 2.5) {
+    niceFactor = 2.5;
+  } else if (normalized <= 5) {
+    niceFactor = 5;
   }
 
-  return points.join(' ');
+  const step = niceFactor * exponent;
+  const yMax = Math.ceil(paddedMax / step) * step;
+  const yTicks = [];
+
+  for (let tick = 0; tick <= yMax + step * 0.1; tick += step) {
+    yTicks.push(Number(tick.toFixed(6)));
+  }
+
+  return { yMax, yTicks };
+}
+
+function responseToPlotY(response, yMax) {
+  const usableHeight = PLOT.height - PLOT.padding.top - PLOT.padding.bottom;
+  return PLOT.padding.top + ((yMax - response) / yMax) * usableHeight;
+}
+
+function buildRodGeometry(baseShift, tipBend) {
+  const segmentLength = STAGE.rodHeight / ROD_SEGMENTS;
+  const points = [
+    {
+      x: STAGE.centerX + baseShift,
+      y: STAGE.rodBaseY,
+    },
+  ];
+
+  for (let index = 1; index <= ROD_SEGMENTS; index += 1) {
+    const uMid = (index - 0.5) / ROD_SEGMENTS;
+    const slope =
+      ((tipBend * ROD_VISUAL_SCALE) / STAGE.rodHeight) * getModeSlopeAt(uMid);
+    const normalization = Math.sqrt(1 + slope * slope);
+    const dx = (segmentLength * slope) / normalization;
+    const dy = segmentLength / normalization;
+    const previous = points[points.length - 1];
+
+    points.push({
+      x: previous.x + dx,
+      y: previous.y - dy,
+    });
+  }
+
+  return {
+    path: points
+      .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
+      .join(' '),
+    baseX: points[0].x,
+    baseY: points[0].y,
+    tipX: points[points.length - 1].x,
+    tipY: points[points.length - 1].y,
+  };
+}
+
+function getPointInStage(element, event) {
+  const rect = element.getBoundingClientRect();
+  const scaleX = STAGE.width / rect.width;
+  const scaleY = STAGE.height / rect.height;
+
+  return {
+    x: (event.clientX - rect.left) * scaleX,
+    y: (event.clientY - rect.top) * scaleY,
+  };
 }
 
 function getRegimeCopy(frequency) {
@@ -151,12 +219,41 @@ function getRegimeCopy(frequency) {
 
 export default function ResonanceResponseInline() {
   const [driveFrequency, setDriveFrequency] = useState(DEFAULT_FREQUENCY);
+  const [dampingRatio, setDampingRatio] = useState(DEFAULT_DAMPING);
   const [time, setTime] = useState(0);
+  const [isManualTableControl, setIsManualTableControl] = useState(false);
+  const [manualFrame, setManualFrame] = useState({
+    baseShift: 0,
+    tipShift: 0,
+  });
   const plotRef = useRef(null);
+  const stageRef = useRef(null);
   const lastTimestampRef = useRef(0);
+  const timeRef = useRef(0);
+  const driveFrequencyRef = useRef(DEFAULT_FREQUENCY);
+  const dampingRatioRef = useRef(DEFAULT_DAMPING);
   const dragRef = useRef({
     active: false,
     pointerId: null,
+  });
+  const tableDragRef = useRef({
+    active: false,
+    pointerId: null,
+    pointerOffsetX: 0,
+  });
+  const manualModeRef = useRef(false);
+  const manualIdleElapsedRef = useRef(0);
+  const handoffRef = useRef({
+    active: false,
+    elapsed: 0,
+    fromBase: 0,
+    fromTip: 0,
+  });
+  const manualMotionRef = useRef({
+    baseShift: 0,
+    targetShift: 0,
+    tipShift: 0,
+    tipVelocity: 0,
   });
 
   const updateFrequencyFromClientX = useEffectEvent((clientX) => {
@@ -179,6 +276,18 @@ export default function ResonanceResponseInline() {
   });
 
   useEffect(() => {
+    manualModeRef.current = isManualTableControl;
+  }, [isManualTableControl]);
+
+  useEffect(() => {
+    driveFrequencyRef.current = driveFrequency;
+  }, [driveFrequency]);
+
+  useEffect(() => {
+    dampingRatioRef.current = dampingRatio;
+  }, [dampingRatio]);
+
+  useEffect(() => {
     let frameId = 0;
 
     const animate = (timestamp) => {
@@ -188,7 +297,73 @@ export default function ResonanceResponseInline() {
 
       const dt = Math.min((timestamp - lastTimestampRef.current) / 1000, 1 / 24);
       lastTimestampRef.current = timestamp;
-      setTime((current) => current + dt);
+      timeRef.current += dt;
+      setTime(timeRef.current);
+
+      if (manualModeRef.current) {
+        const manual = manualMotionRef.current;
+        const naturalAngularFrequency = 2 * Math.PI * NATURAL_FREQUENCY;
+        const dampingCoefficient = 2 * dampingRatioRef.current * naturalAngularFrequency;
+        const springCoefficient = naturalAngularFrequency * naturalAngularFrequency;
+        const followAmount = clamp(dt * BASE_FOLLOW_RATE, 0, 1);
+        manual.baseShift += (manual.targetShift - manual.baseShift) * followAmount;
+
+        const tipAcceleration =
+          springCoefficient * (manual.baseShift - manual.tipShift) -
+          dampingCoefficient * manual.tipVelocity;
+        manual.tipVelocity += tipAcceleration * dt;
+        manual.tipShift += manual.tipVelocity * dt;
+
+        setManualFrame({
+          baseShift: manual.baseShift,
+          tipShift: manual.tipShift,
+        });
+
+        if (tableDragRef.current.active) {
+          manualIdleElapsedRef.current = 0;
+        } else {
+          manualIdleElapsedRef.current += dt;
+
+          if (manualIdleElapsedRef.current >= AUTO_RESUME_DELAY) {
+            handoffRef.current = {
+              active: true,
+              elapsed: 0,
+              fromBase: manual.baseShift,
+              fromTip: manual.tipShift,
+            };
+            manualIdleElapsedRef.current = 0;
+            manualModeRef.current = false;
+            setIsManualTableControl(false);
+          }
+        }
+      } else if (handoffRef.current.active) {
+        const autoState = getAutoTableState(
+          driveFrequencyRef.current,
+          dampingRatioRef.current,
+          timeRef.current,
+        );
+        handoffRef.current.elapsed += dt;
+        const progress = clamp(
+          handoffRef.current.elapsed / AUTO_RESUME_BLEND_DURATION,
+          0,
+          1,
+        );
+        const eased = progress * progress * (3 - 2 * progress);
+
+        setManualFrame({
+          baseShift:
+            handoffRef.current.fromBase +
+            (autoState.baseShift - handoffRef.current.fromBase) * eased,
+          tipShift:
+            handoffRef.current.fromTip +
+            (autoState.tipShift - handoffRef.current.fromTip) * eased,
+        });
+
+        if (progress >= 1) {
+          handoffRef.current.active = false;
+        }
+      }
+
       frameId = window.requestAnimationFrame(animate);
     };
 
@@ -198,6 +373,22 @@ export default function ResonanceResponseInline() {
       window.cancelAnimationFrame(frameId);
     };
   }, []);
+
+  const updateTableTargetFromPointer = useEffectEvent((event) => {
+    if (!stageRef.current) {
+      return;
+    }
+
+    const point = getPointInStage(stageRef.current, event);
+    const restPlatformX = STAGE.centerX - STAGE.platformWidth / 2;
+    const nextPlatformX = clamp(
+      point.x - tableDragRef.current.pointerOffsetX,
+      restPlatformX - MANUAL_MAX_SHIFT,
+      restPlatformX + MANUAL_MAX_SHIFT,
+    );
+
+    manualMotionRef.current.targetShift = nextPlatformX - restPlatformX;
+  });
 
   const handlePointerDown = (event) => {
     event.preventDefault();
@@ -264,13 +455,18 @@ export default function ResonanceResponseInline() {
     setDriveFrequency((current) => clamp(current + delta, MIN_FREQUENCY, MAX_FREQUENCY));
   };
 
-  const responseFactor = getResponseFactor(driveFrequency);
-  const phaseLag = getPhaseLag(driveFrequency);
+  const responseFactor = getResponseFactor(driveFrequency, dampingRatio);
+  const phaseLag = getPhaseLag(driveFrequency, dampingRatio);
   const phaseLagDegrees = (phaseLag * 180) / Math.PI;
-  const angularFrequency = 2 * Math.PI * driveFrequency;
-  const baseShift = BASE_SHAKE_AMPLITUDE * Math.sin(angularFrequency * time);
+  const autoState = getAutoTableState(driveFrequency, dampingRatio, time);
+  const autoBaseShift = autoState.baseShift;
   const tipAmplitude = BASE_SHAKE_AMPLITUDE * responseFactor;
-  const tipAbsoluteShift = tipAmplitude * Math.sin(angularFrequency * time - phaseLag);
+  const autoTipAbsoluteShift = autoState.tipShift;
+  const autoTipVelocity = autoState.tipVelocity;
+  const baseShift =
+    isManualTableControl || handoffRef.current.active ? manualFrame.baseShift : autoBaseShift;
+  const tipAbsoluteShift =
+    isManualTableControl || handoffRef.current.active ? manualFrame.tipShift : autoTipAbsoluteShift;
   const tipBend = tipAbsoluteShift - baseShift;
   const relativeBendAmplitude =
     BASE_SHAKE_AMPLITUDE *
@@ -279,25 +475,108 @@ export default function ResonanceResponseInline() {
         1 -
         2 * responseFactor * Math.cos(phaseLag),
     );
+  const maxCurveResponse = Math.max(
+    responseFactor,
+    ...CURVE_SAMPLES.map((sample) => getResponseFactor(sample.frequency, dampingRatio)),
+  );
+  const { yMax, yTicks } = getYAxisConfig(maxCurveResponse);
+  const curvePath = CURVE_SAMPLES.map((sample, index) => {
+    const x = frequencyToPlotX(sample.frequency);
+    const y = responseToPlotY(getResponseFactor(sample.frequency, dampingRatio), yMax);
+    return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+  }).join(' ');
+  const curveAreaPath = [
+    `M ${frequencyToPlotX(MIN_FREQUENCY)} ${responseToPlotY(0, yMax)}`,
+    ...CURVE_SAMPLES.map((sample) => {
+      const x = frequencyToPlotX(sample.frequency);
+      const y = responseToPlotY(getResponseFactor(sample.frequency, dampingRatio), yMax);
+      return `L ${x} ${y}`;
+    }),
+    `L ${frequencyToPlotX(MAX_FREQUENCY)} ${responseToPlotY(0, yMax)}`,
+    'Z',
+  ].join(' ');
   const pointX = frequencyToPlotX(driveFrequency);
-  const pointY = responseToPlotY(responseFactor);
+  const pointY = responseToPlotY(responseFactor, yMax);
   const naturalFrequencyX = frequencyToPlotX(NATURAL_FREQUENCY);
-  const liveRodPath = buildRodPath(baseShift, tipBend);
-  const positiveEnvelopePath = buildRodPath(0, relativeBendAmplitude);
-  const negativeEnvelopePath = buildRodPath(0, -relativeBendAmplitude);
+  const liveRod = buildRodGeometry(baseShift, tipBend);
+  const positiveEnvelope = buildRodGeometry(0, relativeBendAmplitude);
+  const negativeEnvelope = buildRodGeometry(0, -relativeBendAmplitude);
   const platformX = STAGE.centerX - STAGE.platformWidth / 2 + baseShift;
-  const tipX = STAGE.centerX + tipAbsoluteShift;
-  const tipY = STAGE.rodBaseY - STAGE.rodHeight;
+  const tipX = liveRod.tipX;
+  const tipY = liveRod.tipY;
+  const mountX = liveRod.baseX - 11;
+
+  const handleTablePointerDown = (event) => {
+    if (event.button !== 0 || !stageRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    handoffRef.current.active = false;
+    manualIdleElapsedRef.current = 0;
+
+    const currentBaseShift = manualModeRef.current ? manualMotionRef.current.baseShift : autoBaseShift;
+    const currentTipShift = manualModeRef.current ? manualMotionRef.current.tipShift : autoTipAbsoluteShift;
+    const currentTipVelocity = manualModeRef.current ? manualMotionRef.current.tipVelocity : autoTipVelocity;
+    const point = getPointInStage(stageRef.current, event);
+    const currentPlatformX = STAGE.centerX - STAGE.platformWidth / 2 + currentBaseShift;
+
+    manualMotionRef.current = {
+      baseShift: currentBaseShift,
+      targetShift: currentBaseShift,
+      tipShift: currentTipShift,
+      tipVelocity: currentTipVelocity,
+    };
+
+    setManualFrame({
+      baseShift: currentBaseShift,
+      tipShift: currentTipShift,
+    });
+    setIsManualTableControl(true);
+    manualModeRef.current = true;
+
+    tableDragRef.current = {
+      active: true,
+      pointerId: event.pointerId,
+      pointerOffsetX: point.x - currentPlatformX,
+    };
+
+    stageRef.current.setPointerCapture?.(event.pointerId);
+    updateTableTargetFromPointer(event);
+  };
+
+  const handleTablePointerMove = (event) => {
+    if (!tableDragRef.current.active || tableDragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    event.preventDefault();
+    updateTableTargetFromPointer(event);
+  };
+
+  const finishTablePointerDrag = (event) => {
+    if (!tableDragRef.current.active || tableDragRef.current.pointerId !== event.pointerId) {
+      return;
+    }
+
+    tableDragRef.current = {
+      active: false,
+      pointerId: null,
+      pointerOffsetX: 0,
+    };
+
+    manualMotionRef.current.targetShift = 0;
+    manualIdleElapsedRef.current = 0;
+    stageRef.current?.releasePointerCapture?.(event.pointerId);
+  };
 
   return (
     <section className="not-prose my-8">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="m-0 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-            Inline Interactive
-          </p>
+
           <h3 className="mt-2 mb-0 text-[1.35rem] font-semibold tracking-tight text-[color:var(--text-primary)]">
-            Sweep the drive along the resonance curve
+            Sweep along the resonance curve
           </h3>
         </div>
         <p className="m-0 inline-flex items-center rounded-full border border-[var(--grid-line)] px-3 py-1 text-xs font-medium text-[color:var(--text-muted)]">
@@ -305,10 +584,7 @@ export default function ResonanceResponseInline() {
         </p>
       </div>
 
-      <p className="mt-0 mb-5 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
-        Drag the marker directly on the response curve. Its horizontal position sets the table frequency,
-        and the rod animation updates to the matching steady-state response and phase lag.
-      </p>
+
 
       <div className="grid items-start gap-7 xl:grid-cols-[1.14fr_0.86fr]">
         <div>
@@ -349,8 +625,8 @@ export default function ResonanceResponseInline() {
                 </linearGradient>
               </defs>
 
-              {Y_TICKS.map((tick) => {
-                const y = responseToPlotY(tick);
+              {yTicks.map((tick) => {
+                const y = responseToPlotY(tick, yMax);
                 return (
                   <g key={`y-${tick}`}>
                     <line
@@ -369,7 +645,7 @@ export default function ResonanceResponseInline() {
                       fontSize="13"
                       fontWeight="600"
                     >
-                      {tick.toFixed(0)}x
+                      {`${Number.isInteger(tick) ? formatNumber(tick, 0) : formatNumber(tick, 1)}x`}
                     </text>
                   </g>
                 );
@@ -420,9 +696,9 @@ export default function ResonanceResponseInline() {
                 natural mode
               </text>
 
-              <path d={CURVE_AREA_PATH} fill="url(#response-curve-fill)" />
+              <path d={curveAreaPath} fill="url(#response-curve-fill)" />
               <path
-                d={CURVE_PATH}
+                d={curvePath}
                 fill="none"
                 stroke="url(#response-curve-line)"
                 strokeWidth="4.5"
@@ -434,7 +710,7 @@ export default function ResonanceResponseInline() {
                 x1={pointX}
                 x2={pointX}
                 y1={pointY}
-                y2={responseToPlotY(0)}
+                y2={responseToPlotY(0, yMax)}
                 stroke="rgba(239, 68, 68, 0.58)"
                 strokeDasharray="4 6"
                 strokeWidth="2"
@@ -482,6 +758,23 @@ export default function ResonanceResponseInline() {
             </div>
           </div>
 
+          <div className="mt-4 max-w-sm">
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[color:var(--text-primary)]">
+                damping
+              </span>
+              <input
+                type="range"
+                min={MIN_DAMPING}
+                max={MAX_DAMPING}
+                step="0.01"
+                value={dampingRatio}
+                onChange={(event) => setDampingRatio(parseFloat(event.target.value))}
+                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-slate-700"
+              />
+            </label>
+          </div>
+
           <p className="mt-3 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
             {getRegimeCopy(driveFrequency)}
           </p>
@@ -489,10 +782,16 @@ export default function ResonanceResponseInline() {
 
         <div>
           <svg
+            ref={stageRef}
             viewBox={`0 0 ${STAGE.width} ${STAGE.height}`}
-            className="h-auto w-full"
+            className="h-auto w-full select-none"
             role="img"
             aria-label="Flexible rod on a shake table"
+            style={{ touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+            onPointerMove={handleTablePointerMove}
+            onPointerUp={finishTablePointerDrag}
+            onPointerCancel={finishTablePointerDrag}
+            onDragStart={(event) => event.preventDefault()}
           >
             <defs>
               <linearGradient id="rod-gradient" x1="0%" x2="0%" y1="0%" y2="100%">
@@ -526,14 +825,14 @@ export default function ResonanceResponseInline() {
             />
 
             <path
-              d={negativeEnvelopePath}
+              d={negativeEnvelope.path}
               fill="none"
               stroke="rgba(239, 68, 68, 0.18)"
               strokeWidth="7"
               strokeLinecap="round"
             />
             <path
-              d={positiveEnvelopePath}
+              d={positiveEnvelope.path}
               fill="none"
               stroke="rgba(239, 68, 68, 0.18)"
               strokeWidth="7"
@@ -549,32 +848,30 @@ export default function ResonanceResponseInline() {
               fill="url(#platform-gradient)"
               stroke="rgba(71, 85, 105, 0.92)"
               strokeWidth="2.6"
+              className="cursor-grab active:cursor-grabbing"
+              onPointerDown={handleTablePointerDown}
             />
 
-            {[0.2, 0.5, 0.8].map((fraction) => {
-              const wheelX = platformX + STAGE.platformWidth * fraction;
-              return (
-                <circle
-                  key={fraction}
-                  cx={wheelX}
-                  cy={STAGE.platformY + STAGE.platformHeight + 11}
-                  r="6.5"
-                  fill="rgba(226, 232, 240, 0.98)"
-                  stroke="rgba(71, 85, 105, 0.88)"
-                  strokeWidth="2"
-                />
-              );
-            })}
+            <rect
+              x={mountX}
+              y={STAGE.platformY - 10}
+              width="22"
+              height="12"
+              rx="4"
+              fill="rgba(226, 232, 240, 0.98)"
+              stroke="rgba(71, 85, 105, 0.92)"
+              strokeWidth="2.2"
+            />
 
             <path
-              d={liveRodPath}
+              d={liveRod.path}
               fill="none"
               stroke="url(#rod-gradient)"
               strokeWidth="10"
               strokeLinecap="round"
             />
             <path
-              d={liveRodPath}
+              d={liveRod.path}
               fill="none"
               stroke="rgba(255, 255, 255, 0.22)"
               strokeWidth="3.4"
@@ -589,33 +886,10 @@ export default function ResonanceResponseInline() {
               stroke="rgba(255, 255, 255, 0.95)"
               strokeWidth="2.5"
             />
-            <line
-              x1={tipX}
-              x2={tipX}
-              y1={tipY + 18}
-              y2={STAGE.platformY - 10}
-              stroke="rgba(239, 68, 68, 0.34)"
-              strokeDasharray="4 6"
-              strokeWidth="1.8"
-            />
+  
 
-            <line
-              x1={STAGE.centerX - 34}
-              x2={STAGE.centerX + 34}
-              y1={STAGE.platformY + STAGE.platformHeight + 58}
-              y2={STAGE.platformY + STAGE.platformHeight + 58}
-              stroke="rgba(59, 130, 246, 0.92)"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-            />
-            <path
-              d={`M ${STAGE.centerX - 34} ${STAGE.platformY + STAGE.platformHeight + 58} l 10 -6 v 12 z`}
-              fill="rgba(59, 130, 246, 0.92)"
-            />
-            <path
-              d={`M ${STAGE.centerX + 34} ${STAGE.platformY + STAGE.platformHeight + 58} l -10 -6 v 12 z`}
-              fill="rgba(59, 130, 246, 0.92)"
-            />
+
+
 
             <text
               x="44"
@@ -624,34 +898,19 @@ export default function ResonanceResponseInline() {
               fontSize="15"
               fontWeight="700"
             >
-              Shake table
+              {isManualTableControl ? 'Manual shake' : 'Shake table'}
             </text>
-            <text
-              x="44"
-              y="56"
-              fill="rgba(71, 85, 105, 0.92)"
-              fontSize="13"
-            >
-              base motion = 1.00x
-            </text>
-            <text
-              x={tipX + 12}
-              y={tipY - 10}
-              fill="rgba(239, 68, 68, 0.96)"
-              fontSize="13"
-              fontWeight="700"
-            >
-              rod tip
-            </text>
+
+
           </svg>
 
           <div className="mt-4">
             <div className="rounded-2xl border border-[var(--grid-line)] p-4">
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-red)]">
-                Reading the Peak
+                System Response
               </p>
               <p className="mt-2 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
-                Near the crest of the curve, the base motion is unchanged, but the rod tip moves about {formatNumber(responseFactor)} times the base motion.
+                The rod tip moves about {formatNumber(responseFactor)} times the base amplitude.
               </p>
             </div>
           </div>

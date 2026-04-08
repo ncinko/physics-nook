@@ -6,6 +6,7 @@ import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import CoupledResonanceExplorer from '../../components/simulations/CoupledResonanceExplorer.jsx';
+import ResonanceResponseInline from '../../components/simulations/ResonanceResponseInline.jsx';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
@@ -26,6 +27,8 @@ A lone oscillator has one main natural frequency. A drive that is badly timed ca
 A drive that lines up with one of the system's natural rhythms can build a much larger motion, especially when damping is weak.
 
 Damping matters here. Strong damping bleeds energy away quickly, so the resonance peak becomes broader and less dramatic. Weak damping lets the drive pile energy into the motion for longer, which is why resonance becomes sharper and more obvious.
+
+<ResonanceResponseInline client:visible />
 
 ## Normal Modes
 

@@ -1,0 +1,194 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import ParticleInBoxExplorer from '../../components/simulations/ParticleInBoxExplorer.jsx';
+import { quantumModuleMeta } from '../../data/modules';
+
+<ModuleHero module={quantumModuleMeta} currentPath="/quantum/quantization" />
+
+<div id="page-content"></div>
+
+# Quantization and Tunneling
+
+Once a quantum system is described by a wavefunction, the next question is: which wavefunctions are actually allowed? The answer comes from the Schrödinger equation together with the boundary conditions imposed by the physical setup. Those two ingredients explain both **quantized bound states** and the seemingly strange effect of **tunneling**.
+
+## The Time-Independent Schrödinger Equation
+
+For a particle in one dimension, the time-independent Schrödinger equation is
+
+$$
+-\frac{\hbar^2}{2m}\frac{d^2 \psi}{dx^2} + V(x)\psi = E\psi.
+$$
+
+This equation plays a role somewhat analogous to Newton's second law in classical mechanics: it connects the system's environment, represented by the potential energy function $V(x)$, to the allowed states $\psi$ and their energies $E$.
+
+## Boundary Conditions and Discrete Energies
+
+Inside a rigid one-dimensional box, the walls force the wavefunction to vanish at the boundaries:
+
+$$
+\psi(0) = 0,
+\qquad
+\psi(L) = 0.
+$$
+
+Those conditions mean only standing waves that fit exactly inside the box are allowed. The result is a discrete family of states labeled by an integer $n$, with energies
+
+$$
+E_n = \frac{n^2 h^2}{8mL^2},
+\qquad
+n = 1, 2, 3, \dots
+$$
+
+The allowed energies are therefore **quantized**, not continuous. There is no $n=0$ bound state in this model, so even the lowest state carries nonzero energy.
+
+## Why Tunneling Happens
+
+A classical particle with energy less than a barrier height would simply bounce back. A quantum wavefunction behaves differently. In a barrier region where $E < V$, the wavefunction usually decays rather than dropping instantly to zero. If the barrier is thin enough, some amplitude survives to the far side. The transmitted intensity can be small, but it is not always zero.
+
+That is the essence of **tunneling**. It does not mean the particle borrows energy in a careless way. It means the wavefunction satisfies the Schrödinger equation across the whole region, including the barrier, and the resulting probability for transmission can be nonzero.
+
+As you explore the diagram below, try this sequence:
+
+1. In particle-in-a-box mode, raise the quantum number and count the added nodes.
+2. Keep the same quantum number but widen the box and watch the relative energy drop.
+3. Switch to barrier mode and compare transmission for narrow versus wide barriers.
+4. Raise the energy closer to the barrier height and notice the under-barrier decay become less severe.
+
+<SimulationBlock
+  title="Quantization and Tunneling Explorer"
+  description="Compare standing-wave bound states in a box with a decaying wavefunction inside a finite barrier."
+>
+  <ParticleInBoxExplorer client:only="react" />
+</SimulationBlock>
+
+## A Useful Scaling Idea
+
+Even when you do not plug in constants, the structure of the formulas is revealing:
+
+- For a fixed box width, energies grow like $n^2$.
+- For a fixed quantum number, energies shrink like $1/L^2$.
+- For tunneling, thicker or taller barriers reduce transmission very quickly because the wavefunction decays exponentially inside the forbidden region.
+
+Those scaling rules are often more important for intuition than any single number.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Compare Particle-In-A-Box Energy Levels"
+    accent="blue"
+  >
+    #### Problem
+
+    In a one-dimensional infinite square well, compare the energies of the first three states by finding $E_2/E_1$ and $E_3/E_1$.
+
+    #### Given
+
+    $$
+    E_n = \frac{n^2 h^2}{8mL^2}.
+    $$
+
+    #### Use
+
+    Since the prefactor is the same for every level in the same box, the ratios depend only on $n^2$.
+
+    #### Solve
+
+    $$
+    \frac{E_2}{E_1} = \frac{2^2}{1^2} = 4,
+    \qquad
+    \frac{E_3}{E_1} = \frac{3^2}{1^2} = 9.
+    $$
+
+    So the second state has four times the ground-state energy, and the third state has nine times the ground-state energy.
+
+    #### Check
+
+    The rapid growth reflects the fact that fitting shorter standing wavelengths into the same box requires stronger curvature in the wavefunction, which the Schrödinger equation associates with higher energy.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="See How A Wider Barrier Changes Transmission"
+    accent="red"
+  >
+    #### Problem
+
+    A simple tunneling estimate has the form
+
+    $$
+    T \approx e^{-2\kappa a},
+    $$
+
+    where $a$ is the barrier width. If the width doubles from $a$ to $2a$ while $\kappa$ stays the same, how does the transmission change?
+
+    #### Given
+
+    - initial transmission: $T_1 \approx e^{-2\kappa a}$
+    - doubled width: $2a$
+
+    #### Use
+
+    Substitute the new width into the same exponential form.
+
+    #### Solve
+
+    $$
+    T_2 \approx e^{-2\kappa (2a)} = e^{-4\kappa a}.
+    $$
+
+    But
+
+    $$
+    e^{-4\kappa a} = \left(e^{-2\kappa a}\right)^2.
+    $$
+
+    So
+
+    $$
+    T_2 \approx T_1^2.
+    $$
+
+    #### Check
+
+    This shows why tunneling is so sensitive to barrier width: doubling the width can reduce the transmission dramatically rather than by a small linear factor.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Quantization Checkpoint"
+  questions={[
+    {
+      id: 'boundary-conditions',
+      question: 'Why do energy levels become discrete for a particle trapped in an ideal one-dimensional box?',
+      options: [
+        { id: 'A', text: 'Because the boundary conditions allow only standing waves that fit exactly between the walls.', isCorrect: true, explanation: 'Exactly. Requiring the wavefunction to vanish at the walls selects only certain wavelengths, and those allowed wavelengths correspond to a discrete set of energies.' },
+        { id: 'B', text: 'Because the particle slows down whenever it reaches the middle of the box.', isCorrect: false, explanation: 'The quantization is not caused by slowing down at the center. It comes from the wavefunction constraints at the boundaries.' },
+        { id: 'C', text: 'Because every confined particle must have zero energy in the lowest state.', isCorrect: false, explanation: 'In fact the lowest state in the box has nonzero energy. The box does not permit an $n=0$ standing-wave solution.' }
+      ]
+    },
+    {
+      id: 'n-squared',
+      question: 'If the box width stays fixed, how does the particle-in-a-box energy scale with quantum number $n$?',
+      options: [
+        { id: 'A', text: 'It scales like $n^2$.', isCorrect: true, explanation: 'Right. For a fixed box width and particle mass, the formula is $E_n = n^2 h^2 / (8mL^2)$, so the energy grows with the square of the quantum number.' },
+        { id: 'B', text: 'It scales linearly with $n$.', isCorrect: false, explanation: 'The dependence is steeper than linear. Doubling $n$ multiplies the energy by four, not by two.' },
+        { id: 'C', text: 'It does not depend on $n$ at all.', isCorrect: false, explanation: 'Different allowed standing waves correspond to different energies, so $n$ matters crucially.' }
+      ]
+    },
+    {
+      id: 'tunneling',
+      question: 'What is the clearest qualitative statement about tunneling when a particle has energy below a barrier height?',
+      options: [
+        { id: 'A', text: 'The wavefunction can decay inside the barrier and still leave a nonzero transmission probability on the far side.', isCorrect: true, explanation: 'Exactly. The under-barrier wavefunction usually falls off exponentially, but if the barrier is finite, some amplitude can survive and produce a nonzero transmission chance.' },
+        { id: 'B', text: 'Transmission is impossible because classical mechanics forbids it.', isCorrect: false, explanation: 'Classical mechanics would forbid it, but the quantum wavefunction does not stop abruptly at the barrier. That is why tunneling can occur.' },
+        { id: 'C', text: 'The particle must gain extra energy while inside the barrier so the total energy is no longer conserved.', isCorrect: false, explanation: 'Tunneling does not require a careless violation of energy conservation. It follows from solving the Schrödinger equation across the whole barrier region.' }
+      ]
+    }
+  ]}
+/>

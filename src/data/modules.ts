@@ -203,6 +203,77 @@ export const modules: ModuleMeta[] = [
     ],
   },
   {
+    slug: 'quantum',
+    href: '/quantum',
+    title: 'Quantum',
+    navLabel: 'Quantum',
+    summary:
+      'Move from key experiments into wavefunctions, superposition, quantization, and tunneling.',
+    audience: 'Self-learners building a first modern-physics intuition before a formal quantum course.',
+    prerequisites: [
+      'Core wave vocabulary such as wavelength, frequency, and interference',
+      'Basic energy relationships and algebra',
+      'Comfort reading graphs and simple probability statements',
+    ],
+    learningObjectives: [
+      'Use the photoelectric effect and double-slit interference to explain why classical pictures break down',
+      'Interpret a wavefunction through amplitudes, probabilities, normalization, and measurement',
+      'Connect boundary conditions to quantized energy levels and describe tunneling qualitatively',
+    ],
+    status: 'active',
+    navVisibility: 'hidden',
+    cardEyebrow: 'Next module',
+    accent: '#0891b2',
+    heroImage: '/social/physics-nook-card.svg',
+    pages: [
+      {
+        id: 'quantum-foundations',
+        href: '/quantum',
+        title: 'Quantum Foundations',
+        shortTitle: 'Foundations',
+        description:
+          'Use the photoelectric effect and single-particle interference to motivate quantum ideas.',
+        seo: {
+          title: 'Quantum Foundations',
+          description:
+            'Start the quantum path with the photoelectric effect, de Broglie wavelength, and a double-slit build-up explorer.',
+          canonicalPath: '/quantum',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'quantum-wavefunctions',
+        href: '/quantum/wavefunctions',
+        title: 'Wavefunctions and Superposition',
+        shortTitle: 'Wavefunctions',
+        description:
+          'Interpret amplitudes, probabilities, phase, and measurement in a one-dimensional quantum state.',
+        seo: {
+          title: 'Wavefunctions and Superposition',
+          description:
+            'Learn how wavefunctions encode amplitudes, normalization, superposition, and position measurements.',
+          canonicalPath: '/quantum/wavefunctions',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'quantum-quantization',
+        href: '/quantum/quantization',
+        title: 'Quantization and Tunneling',
+        shortTitle: 'Quantization',
+        description:
+          'Use boundary conditions and barriers to build intuition for discrete energies and tunneling.',
+        seo: {
+          title: 'Quantization and Tunneling',
+          description:
+            'Explore the Schrödinger equation, particle-in-a-box states, and tunneling through a finite barrier.',
+          canonicalPath: '/quantum/quantization',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+    ],
+  },
+  {
     slug: 'collisions',
     href: '/collisions',
     title: 'Collisions',
@@ -293,7 +364,10 @@ const mustGetModuleBySlug = (slug: string) => {
 const relativityModule = mustGetModuleBySlug('relativity');
 const oscillationsModule = mustGetModuleBySlug('oscillations');
 const wavesModule = mustGetModuleBySlug('waves');
+const quantumModule = mustGetModuleBySlug('quantum');
 const collisionsModule = mustGetModuleBySlug('collisions');
+
+export const quantumModuleMeta = quantumModule;
 
 export const relativityPath = {
   id: 'relativity',

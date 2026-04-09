@@ -1,0 +1,186 @@
+---
+layout: ../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import DoubleSlitBuildUpExplorer from '../components/simulations/DoubleSlitBuildUpExplorer.jsx';
+import { quantumModuleMeta } from '../data/modules';
+
+<ModuleHero module={quantumModuleMeta} currentPath="/quantum" />
+
+<div id="page-content"></div>
+
+# Quantum Foundations
+
+Classical physics explains an enormous range of motion, fields, and waves, but early twentieth-century experiments revealed sharp limits to that picture. Light sometimes behaves as if it arrives in packets of energy. Electrons sometimes produce interference patterns that look unmistakably wave-like. Quantum mechanics is the framework that keeps both stories true at once.
+
+## Where the Classical Picture Breaks
+
+Two experiments are especially useful starting points:
+
+- In the **photoelectric effect**, light ejects electrons from a metal only when the light frequency is high enough. Brighter low-frequency light does not compensate for a frequency that is too small.
+- In the **double-slit experiment**, even single particles build up an interference pattern over time, as though each detection is guided by a wave-like probability rule.
+
+Those two facts push in opposite directions if we insist on a purely classical model. The photoelectric effect says light carries energy in discrete packets,
+
+$$
+E = hf,
+$$
+
+while the double-slit experiment says matter can display interference, diffraction, and other wave phenomena.
+
+## Photons, Thresholds, and the Photoelectric Effect
+
+Einstein's photoelectric explanation treats light as photons, each carrying one energy packet $E = hf$. A metal surface needs a minimum energy called the **work function** $\Phi$ to remove one electron. Any leftover energy appears as the emitted electron's kinetic energy:
+
+$$
+K_{\max} = hf - \Phi.
+$$
+
+The key prediction is that **frequency** controls whether electrons are emitted at all, while **intensity** mainly controls how many photons arrive each second. That is why dim ultraviolet light can eject electrons while bright red light can fail completely.
+
+## Matter Waves
+
+The second clue comes from particles that act wave-like. De Broglie proposed that matter with momentum $p$ has an associated wavelength
+
+$$
+\lambda = \frac{h}{p}.
+$$
+
+That relation connects quantum behavior back to the waves module. Shorter wavelengths usually mean smaller visible interference features, while larger wavelengths spread fringes farther apart. For everyday objects the wavelength is absurdly tiny, so the wave behavior is effectively invisible. For electrons and other microscopic particles, it becomes measurable.
+
+## Single Particles and Interference
+
+Quantum mechanics does **not** say that a particle smears out like classical dust. Instead, it says the experiment is governed by a complex amplitude whose squared magnitude gives probabilities. In a double-slit setup, amplitudes associated with the two paths combine before probabilities are computed. That is why the screen shows alternating bright and dark bands rather than two smooth piles.
+
+As you explore the screen below, try this sequence:
+
+1. Leave coherence high and watch the fringe pattern emerge from single detections.
+2. Increase the wavelength and compare the spacing between neighboring bright bands.
+3. Increase the slit separation and notice the fringes squeeze closer together.
+4. Reduce the coherence and watch the dark gaps fill in toward a classical-looking envelope.
+
+<SimulationBlock
+  title="Double-Slit Build-Up Explorer"
+  description="Accumulate single detections on a screen and compare the emerging quantum pattern with a classical no-interference envelope."
+>
+  <DoubleSlitBuildUpExplorer client:only="react" />
+</SimulationBlock>
+
+## Next Steps
+
+- Continue to [Wavefunctions and Superposition](/quantum/wavefunctions) to translate these experimental clues into the language of amplitudes, normalization, and measurement.
+- Continue later to [Quantization and Tunneling](/quantum/quantization) to see how boundary conditions create discrete energies and how waves leak through barriers.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Check Whether Light Can Eject Electrons"
+    accent="blue"
+  >
+    #### Problem
+
+    A metal has work function $\Phi = 2.2\,\text{eV}$. Light of frequency $f = 7.5 \times 10^{14}\,\text{Hz}$ shines on the surface. Using $h = 4.14 \times 10^{-15}\,\text{eV}\cdot\text{s}$, determine whether electrons are emitted and find the maximum kinetic energy if they are.
+
+    #### Given
+
+    - $\Phi = 2.2\,\text{eV}$
+    - $f = 7.5 \times 10^{14}\,\text{Hz}$
+    - $h = 4.14 \times 10^{-15}\,\text{eV}\cdot\text{s}$
+
+    #### Use
+
+    $$K_{\max} = hf - \Phi.$$
+
+    #### Solve
+
+    First compute the photon energy:
+
+    $$
+    hf = (4.14 \times 10^{-15})(7.5 \times 10^{14}) \approx 3.11\,\text{eV}.
+    $$
+
+    Then subtract the work function:
+
+    $$
+    K_{\max} = 3.11 - 2.2 = 0.91\,\text{eV}.
+    $$
+
+    Since the photon energy exceeds the work function, electrons are emitted.
+
+    #### Check
+
+    The result is positive, so the photons have enough energy to free electrons and still leave some kinetic energy behind.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Estimate An Electron's De Broglie Wavelength"
+    accent="red"
+  >
+    #### Problem
+
+    An electron has momentum $p = 6.6 \times 10^{-24}\,\text{kg}\cdot\text{m/s}$. Estimate its de Broglie wavelength using $h = 6.63 \times 10^{-34}\,\text{J}\cdot\text{s}$.
+
+    #### Given
+
+    - $p = 6.6 \times 10^{-24}\,\text{kg}\cdot\text{m/s}$
+    - $h = 6.63 \times 10^{-34}\,\text{J}\cdot\text{s}$
+
+    #### Use
+
+    $$\lambda = \frac{h}{p}.$$
+
+    #### Solve
+
+    $$
+    \lambda = \frac{6.63 \times 10^{-34}}{6.6 \times 10^{-24}}
+    \approx 1.00 \times 10^{-10}\,\text{m}.
+    $$
+
+    So the wavelength is about
+    $$
+    0.10\,\text{nm}.
+    $$
+
+    #### Check
+
+    A sub-nanometer wavelength is microscopic but not absurdly tiny, which is why electron diffraction can be observed in atomic-scale experiments.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Quantum Foundations Checkpoint"
+  questions={[
+    {
+      id: 'photoelectric-threshold',
+      question: 'In the photoelectric effect, what happens if the light intensity is increased while the light frequency stays below the threshold frequency?',
+      options: [
+        { id: 'A', text: 'No electrons are emitted, because each photon still lacks the minimum required energy.', isCorrect: true, explanation: 'Exactly. Raising the intensity mainly increases how many photons arrive, but if each photon has energy $hf$ below the work function, none of them can eject an electron on their own.' },
+        { id: 'B', text: 'Electrons are emitted with larger kinetic energy because the wave is brighter.', isCorrect: false, explanation: 'Brightness by itself does not raise the energy per photon. In the photoelectric effect, the relevant quantity for emission is the photon energy $E = hf$.' },
+        { id: 'C', text: 'Electrons are emitted only after enough low-frequency photons pile up on one electron.', isCorrect: false, explanation: 'That classical accumulation picture is exactly what the experiment rules out. The emission depends on single-photon energy, not on many low-energy photons slowly pooling their energy.' }
+      ]
+    },
+    {
+      id: 'de-broglie',
+      question: 'Which change makes a particle\'s de Broglie wavelength smaller?',
+      options: [
+        { id: 'A', text: 'Increasing its momentum.', isCorrect: true, explanation: 'Right. Since $\\lambda = h/p$, a larger momentum corresponds to a shorter de Broglie wavelength.' },
+        { id: 'B', text: 'Increasing Planck\'s constant.', isCorrect: false, explanation: 'If $h$ were larger, the wavelength would be larger for the same momentum. In nature, though, $h$ is fixed.' },
+        { id: 'C', text: 'Reducing the slit separation while keeping momentum fixed.', isCorrect: false, explanation: 'Changing slit separation changes the interference geometry, but it does not change the particle\'s own de Broglie wavelength if the momentum stays the same.' }
+      ]
+    },
+    {
+      id: 'single-particle-pattern',
+      question: 'Why is the single-particle double-slit experiment such a strong clue that quantum mechanics uses amplitudes rather than classical particle paths?',
+      options: [
+        { id: 'A', text: 'Because even one-at-a-time detections build up an interference pattern that cannot be explained by two independent classical particle streams.', isCorrect: true, explanation: 'Exactly. If particles simply chose one slit or the other in a classical way, the screen would approach a smooth two-lump pattern rather than alternating bright and dark fringes.' },
+        { id: 'B', text: 'Because the particles stop behaving like particles once the source becomes weak enough.', isCorrect: false, explanation: 'The detections are still particle-like in the sense that they arrive one at a time at definite spots. What changes is the distribution of those spots.' },
+        { id: 'C', text: 'Because the experiment shows that particles always move in circles after the slits.', isCorrect: false, explanation: 'The important observation is the interference pattern on the screen, not any circular motion. The pattern points to path amplitudes combining before probabilities are computed.' }
+      ]
+    }
+  ]}
+/>

@@ -1,0 +1,205 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import WavefunctionMixer from '../../components/simulations/WavefunctionMixer.jsx';
+import { quantumModuleMeta } from '../../data/modules';
+
+<ModuleHero module={quantumModuleMeta} currentPath="/quantum/wavefunctions" />
+
+<div id="page-content"></div>
+
+# Wavefunctions and Superposition
+
+The experimental clues from quantum foundations need a mathematical language. That language is the **wavefunction** $\psi$. It is not a classical material wave, and it is not a direct probability by itself. Instead, it is an amplitude whose squared magnitude tells us how measurement outcomes are distributed.
+
+## From Amplitude to Probability
+
+For a normalized wavefunction, the probability density is
+
+$$
+P(x) = |\psi(x)|^2.
+$$
+
+That single rule matters more than almost anything else in introductory quantum mechanics. It says quantum predictions come from amplitudes first and probabilities second. Since amplitudes can interfere, the probability pattern can contain peaks, dips, and cancellations that a classical probability mixture would miss.
+
+## Normalization
+
+If a particle must be found somewhere, then the total probability must add to $1$. In continuous language, that becomes
+
+$$
+\int |\psi(x)|^2\,dx = 1.
+$$
+
+This condition is called **normalization**. It does not tell you the shape of the state by itself, but it fixes the overall scale. If you double the amplitude everywhere, the probability density becomes four times larger, so the state would no longer represent a valid total probability of $1$.
+
+## Phase and Superposition
+
+Quantum states can be added. If $\phi_1$ and $\phi_2$ are allowed states, then a new state can be built from
+
+$$
+\psi = a\phi_1 + b\phi_2.
+$$
+
+This is the principle of **superposition**. The coefficients $a$ and $b$ are amplitudes, not probabilities. Their phases matter because the sum is taken before the magnitude is squared. Two contributions can reinforce one another in one region and partly cancel in another.
+
+That is why changing phase can alter the amplitude picture even when the state remains perfectly normalized.
+
+## Measurement Language
+
+Before a position measurement, the wavefunction carries the information needed to assign probabilities to different outcomes. After a measurement, the system is found at one specific outcome. Repeating the same experiment many times rebuilds the distribution encoded by $|\psi|^2$.
+
+The same idea applies more generally: if a state is written as a combination of energy eigenstates, then the squared magnitudes of the coefficients give the probabilities for those energy outcomes.
+
+As you explore the mixer below, try this sequence:
+
+1. Start with a small excited-state share and notice how close the probability density stays to the ground-state shape.
+2. Increase the excited-state share until the density develops more structure.
+3. Rotate the relative phase and compare what changes in the amplitude plot versus the probability plot.
+4. Use repeated position measurements to watch individual outcomes rebuild the $|\psi|^2$ curve.
+
+<SimulationBlock
+  title="Wavefunction Mixer"
+  description="Blend two stationary states, inspect the real and imaginary amplitudes, and sample position measurements from the resulting probability density."
+>
+  <WavefunctionMixer client:only="react" />
+</SimulationBlock>
+
+## Next Steps
+
+- Return to [Quantum Foundations](/quantum) if you want to reconnect the wavefunction language to the motivating experiments.
+- Continue to [Quantization and Tunneling](/quantum/quantization) to see how boundary conditions and barriers shape the allowed quantum states.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Normalize A Simple Box State"
+    accent="blue"
+  >
+    #### Problem
+
+    A particle in a one-dimensional box has wavefunction
+
+    $$
+    \psi(x) = A \sin\!\left(\frac{\pi x}{L}\right)
+    $$
+
+    for $0 \le x \le L$, and $\psi(x)=0$ elsewhere. Find the normalization constant $A$.
+
+    #### Given
+
+    - $\psi(x) = A\sin(\pi x/L)$ in the box
+    - the state must satisfy $\int_0^L |\psi(x)|^2\,dx = 1$
+
+    #### Use
+
+    $$
+    \int_0^L A^2 \sin^2\!\left(\frac{\pi x}{L}\right) dx = 1.
+    $$
+
+    Also,
+
+    $$
+    \int_0^L \sin^2\!\left(\frac{\pi x}{L}\right) dx = \frac{L}{2}.
+    $$
+
+    #### Solve
+
+    Substitute the integral result:
+
+    $$
+    A^2 \frac{L}{2} = 1.
+    $$
+
+    So
+
+    $$
+    A^2 = \frac{2}{L}
+    \qquad \Rightarrow \qquad
+    A = \sqrt{\frac{2}{L}}.
+    $$
+
+    #### Check
+
+    The amplitude scale depends on box width. A wider box spreads the same total probability over a larger region, so the normalized amplitude becomes smaller.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Read Energy Probabilities From Coefficients"
+    accent="red"
+  >
+    #### Problem
+
+    A state is written as
+
+    $$
+    \psi = \sqrt{0.75}\,\phi_1 + e^{i\pi/3}\sqrt{0.25}\,\phi_2,
+    $$
+
+    where $\phi_1$ and $\phi_2$ are energy eigenstates. What are the probabilities of measuring the energies associated with $\phi_1$ and $\phi_2$?
+
+    #### Given
+
+    - coefficient of $\phi_1$: $\sqrt{0.75}$
+    - coefficient of $\phi_2$: $e^{i\pi/3}\sqrt{0.25}$
+
+    #### Use
+
+    For an energy measurement in this basis, the probabilities are the squared magnitudes of the coefficients.
+
+    #### Solve
+
+    $$
+    P(E_1) = \left|\sqrt{0.75}\right|^2 = 0.75,
+    \qquad
+    P(E_2) = \left|e^{i\pi/3}\sqrt{0.25}\right|^2 = 0.25.
+    $$
+
+    So the outcomes are
+
+    - $75\%$ for the energy of $\phi_1$
+    - $25\%$ for the energy of $\phi_2$
+
+    #### Check
+
+    The phase factor changes the amplitude but not the coefficient magnitude, so it does not change these basis-measurement probabilities.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Wavefunctions Checkpoint"
+  questions={[
+    {
+      id: 'probability-density',
+      question: 'What does $|\\psi(x)|^2$ represent in introductory quantum mechanics?',
+      options: [
+        { id: 'A', text: 'The probability density for finding the particle near position $x$.', isCorrect: true, explanation: 'Exactly. The wavefunction itself is an amplitude, while its squared magnitude gives the probability density used to predict measurement outcomes.' },
+        { id: 'B', text: 'The particle\'s exact path through space as a function of time.', isCorrect: false, explanation: 'Quantum mechanics does not identify $|\\psi|^2$ with a classical trajectory. It tells you how likely different measurement outcomes are, not which exact path a particle secretly followed.' },
+        { id: 'C', text: 'The total energy of the state at position $x$.', isCorrect: false, explanation: 'Energy is not given directly by $|\\psi(x)|^2$. The quantity $|\\psi(x)|^2$ is about position-space probabilities.' }
+      ]
+    },
+    {
+      id: 'normalization',
+      question: 'Why must a valid wavefunction be normalized?',
+      options: [
+        { id: 'A', text: 'Because the total probability of finding the particle somewhere must add up to 1.', isCorrect: true, explanation: 'Right. Normalization enforces the statement that the particle is certain to be found somewhere in the allowed set of outcomes.' },
+        { id: 'B', text: 'Because otherwise the particle would move faster than light.', isCorrect: false, explanation: 'Normalization is about total probability, not about limiting speed.' },
+        { id: 'C', text: 'Because every quantum state must have zero phase.', isCorrect: false, explanation: 'A quantum state can have nonzero and even position-dependent phase. The normalization condition constrains total probability, not phase.' }
+      ]
+    },
+    {
+      id: 'superposition-phase',
+      question: 'Why can a relative phase between two amplitudes matter in a superposition?',
+      options: [
+        { id: 'A', text: 'Because amplitudes combine before probabilities are computed, so phase can change reinforcement and cancellation.', isCorrect: true, explanation: 'Exactly. Superposition happens at the amplitude level. When the pieces are added and then squared, the relative phase can change the resulting probability distribution.' },
+        { id: 'B', text: 'Because phase tells you the particle\'s exact hidden position before measurement.', isCorrect: false, explanation: 'Relative phase affects interference and probability patterns, but it is not a label for a definite hidden position.' },
+        { id: 'C', text: 'Because phase only changes the color used to draw the wavefunction, not any physics.', isCorrect: false, explanation: 'Phase can be physically important because it influences how amplitudes interfere. It is not just a plotting decoration.' }
+      ]
+    }
+  ]}
+/>

@@ -7,11 +7,18 @@ const LIGHT_BACKGROUND_FALLBACK = '#f9fafb';
 const ANT_SPEED = 0.35;
 const MAX_TRAIL_POINTS = 300;
 const DEFAULT_SPACING = 0.15;
-const TRAIL_COLOR_SETS = [
-  [0xff3333, 0xff8888, 0xffcccc],
-  [0x33ff33, 0x88ff88, 0xccffcc],
-  [0x3333ff, 0x8888ff, 0xccccff],
-];
+const TRAIL_COLOR_SETS_BY_MODE = {
+  apple: [
+    [0x67e8f9, 0xa5f3fc, 0xe0f2fe],
+    [0x6ee7b7, 0xa7f3d0, 0xd1fae5],
+    [0xc4b5fd, 0xddd6fe, 0xf5f3ff],
+  ],
+  curvature: [
+    [0x831843, 0x9d174d, 0xbe185d],
+    [0x7f1d1d, 0x991b1b, 0xb91c1c],
+    [0x581c87, 0x6b21a8, 0x7e22ce],
+  ],
+};
 
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
@@ -26,6 +33,11 @@ const getSceneBackgroundColor = () => {
   }
 
   return getComputedStyle(root).getPropertyValue('--sim-bg').trim() || LIGHT_BACKGROUND_FALLBACK;
+};
+
+const getTrailColorSet = (isCurvatureMode, paletteIndex) => {
+  const colorSets = isCurvatureMode ? TRAIL_COLOR_SETS_BY_MODE.curvature : TRAIL_COLOR_SETS_BY_MODE.apple;
+  return colorSets[((paletteIndex % colorSets.length) + colorSets.length) % colorSets.length];
 };
 
 function getRTarget(phi) {
@@ -262,6 +274,10 @@ class Ant {
     this.frameCount = Math.floor(Math.random() * 10);
   }
 
+  setTrailColor(color) {
+    this.trailMaterial.uniforms.color.value.setHex(color);
+  }
+
   update(dt, time) {
     const clampedDt = Math.min(dt, 0.05);
 
@@ -328,7 +344,14 @@ class Ant {
   }
 }
 
-function spawnAntSet(scene, ants, centerPos, initialVelDir, rightDir, spacing, colors) {
+function disposeAnts(scene, ants) {
+  ants.forEach((ant) => ant.dispose(scene));
+  ants.length = 0;
+}
+
+function spawnAntSet(scene, ants, centerPos, initialVelDir, rightDir, spacing, isCurvatureMode, paletteIndex) {
+  const colors = getTrailColorSet(isCurvatureMode, paletteIndex);
+
   for (let index = -1; index <= 1; index += 1) {
     const offset = rightDir.clone().multiplyScalar(index * spacing);
     const point = centerPos.clone().add(offset);
@@ -338,7 +361,10 @@ function spawnAntSet(scene, ants, centerPos, initialVelDir, rightDir, spacing, c
     const velocity = initialVelDir.clone();
     velocity.sub(normal.clone().multiplyScalar(velocity.dot(normal)));
 
-    ants.push(new Ant(scene, colors[index + 1], point, velocity));
+    const ant = new Ant(scene, colors[index + 1], point, velocity);
+    ant.paletteIndex = paletteIndex;
+    ant.paletteSlot = index + 1;
+    ants.push(ant);
   }
 }
 
@@ -347,6 +373,7 @@ export default function AppleSurfaceCurvatureExplorer() {
   const canvasHostRef = useRef(null);
   const runtimeRef = useRef(null);
   const placingModeRef = useRef(false);
+  const curvatureModeRef = useRef(false);
   const [isCurvatureMode, setIsCurvatureMode] = useState(false);
   const [isPlacingMode, setIsPlacingMode] = useState(false);
   const [isInView, setIsInView] = useState(true);
@@ -356,6 +383,7 @@ export default function AppleSurfaceCurvatureExplorer() {
   );
 
   placingModeRef.current = isPlacingMode;
+  curvatureModeRef.current = isCurvatureMode;
 
   useEffect(() => {
     const root = rootRef.current;
@@ -429,6 +457,7 @@ export default function AppleSurfaceCurvatureExplorer() {
     const pointer = new THREE.Vector2();
     const dragStartPoint = new THREE.Vector3();
     const dragCurrentDir = new THREE.Vector3();
+    let nextTrailPaletteIndex = 0;
 
     const aimArrow = new THREE.ArrowHelper(
       new THREE.Vector3(0, 1, 0),
@@ -528,8 +557,10 @@ export default function AppleSurfaceCurvatureExplorer() {
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(0, 0, 1),
       DEFAULT_SPACING,
-      TRAIL_COLOR_SETS[0],
+      false,
+      nextTrailPaletteIndex,
     );
+    nextTrailPaletteIndex += 1;
     spawnAntSet(
       scene,
       ants,
@@ -537,8 +568,10 @@ export default function AppleSurfaceCurvatureExplorer() {
       new THREE.Vector3(-1, 0, 0),
       new THREE.Vector3(0, 1, 0),
       DEFAULT_SPACING,
-      TRAIL_COLOR_SETS[1],
+      false,
+      nextTrailPaletteIndex,
     );
+    nextTrailPaletteIndex += 1;
     spawnAntSet(
       scene,
       ants,
@@ -546,8 +579,10 @@ export default function AppleSurfaceCurvatureExplorer() {
       new THREE.Vector3(0, 1, 0),
       new THREE.Vector3(0, 0, 1),
       DEFAULT_SPACING,
-      TRAIL_COLOR_SETS[2],
+      false,
+      nextTrailPaletteIndex,
     );
+    nextTrailPaletteIndex += 1;
 
     const renderScene = () => {
       renderer.render(scene, camera);
@@ -643,12 +678,17 @@ export default function AppleSurfaceCurvatureExplorer() {
 
       const normal = getNormal(dragStartPoint);
       const rightDir = dragCurrentDir.clone().cross(normal).normalize();
-      const hue = Math.random();
-      const color1 = new THREE.Color().setHSL(hue, 1, 0.5).getHex();
-      const color2 = new THREE.Color().setHSL((hue + 0.05) % 1, 1, 0.6).getHex();
-      const color3 = new THREE.Color().setHSL((hue - 0.05 + 1) % 1, 1, 0.6).getHex();
-
-      spawnAntSet(scene, ants, dragStartPoint, dragCurrentDir, rightDir, DEFAULT_SPACING, [color1, color2, color3]);
+      spawnAntSet(
+        scene,
+        ants,
+        dragStartPoint,
+        dragCurrentDir,
+        rightDir,
+        DEFAULT_SPACING,
+        curvatureModeRef.current,
+        nextTrailPaletteIndex,
+      );
+      nextTrailPaletteIndex += 1;
       setIsPlacingMode(false);
       renderScene();
     };
@@ -673,12 +713,17 @@ export default function AppleSurfaceCurvatureExplorer() {
       lastTimestamp: null,
       elapsedTime: 0,
       isDragging: false,
+      clearAnts: () => {
+        disposeAnts(scene, ants);
+        nextTrailPaletteIndex = 0;
+        aimArrow.visible = false;
+      },
       cleanup: () => {
         renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
         window.removeEventListener('pointermove', handlePointerMove);
         window.removeEventListener('pointerup', handlePointerUp);
         resizeObserver.disconnect();
-        ants.forEach((ant) => ant.dispose(scene));
+        disposeAnts(scene, ants);
         appleGeometry.dispose();
         appleMaterial.dispose();
         stemGeometry.dispose();
@@ -727,6 +772,10 @@ export default function AppleSurfaceCurvatureExplorer() {
     const targetAttr = isCurvatureMode ? 'colorCurv' : 'colorOrig';
     runtime.appleGeometry.attributes.color.array.set(runtime.appleGeometry.attributes[targetAttr].array);
     runtime.appleGeometry.attributes.color.needsUpdate = true;
+    runtime.ants.forEach((ant) => {
+      const colors = getTrailColorSet(isCurvatureMode, ant.paletteIndex ?? 0);
+      ant.setTrailColor(colors[ant.paletteSlot ?? 0]);
+    });
     runtime.renderScene();
   }, [isCurvatureMode]);
 
@@ -814,6 +863,24 @@ export default function AppleSurfaceCurvatureExplorer() {
           }`}
         >
           {isPlacingMode ? 'Cancel Placement' : '+ Place Ants (Drag to Aim)'}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            const runtime = runtimeRef.current;
+            if (!runtime) {
+              return;
+            }
+
+            runtime.clearAnts();
+            setIsPlacingMode(false);
+            runtime.renderScene();
+          }}
+          className="pointer-events-auto mt-2 block w-full rounded-md border border-rose-400/40 bg-rose-500/20 px-3.5 py-2 text-[13px] text-white transition-all duration-200 hover:bg-rose-500/30"
+          title="Delete all ants"
+        >
+          formicide
         </button>
 
         <div className="mt-3 text-[12px] leading-6" style={{ display: isCurvatureMode ? 'block' : 'none' }}>

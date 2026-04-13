@@ -7,20 +7,20 @@ import QuestionSequence from '../../components/interactive/QuestionSequence.jsx'
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
-import ParticleInBoxExplorer from '../../components/simulations/ParticleInBoxExplorer.jsx';
+import QuantizationExplorer from '../../components/simulations/QuantizationExplorer.jsx';
 import { quantumModuleMeta } from '../../data/modules';
 
 <ModuleHero module={quantumModuleMeta} currentPath="/quantum/quantization" />
 
 <div id="page-content"></div>
 
-# Quantization and Tunneling
+# Quantization
 
-Once a quantum system is described by a wavefunction, the next question is: which wavefunctions are actually allowed? The answer comes from the Schrödinger equation together with the boundary conditions imposed by the physical setup. Those two ingredients explain both **quantized bound states** and the seemingly strange effect of **tunneling**.
+Once a quantum system is described by a wavefunction, the next question is: which states are actually allowed? The time-independent Schrodinger equation does not accept every imaginable shape. Boundary conditions, normalizability, and the form of the potential select only certain stationary states. That is what quantization means: a bound system admits a discrete set of energies rather than a continuous range.
 
-## The Time-Independent Schrödinger Equation
+## Time-Independent Schrodinger Equation
 
-For a particle in one dimension, the time-independent Schrödinger equation is
+For a particle in one dimension, the time-independent Schrodinger equation is
 
 $$
 -\frac{\hbar^2}{2m}\frac{d^2 \psi}{dx^2} + V(x)\psi = E\psi.
@@ -28,9 +28,9 @@ $$
 
 This equation plays a role somewhat analogous to Newton's second law in classical mechanics: it connects the system's environment, represented by the potential energy function $V(x)$, to the allowed states $\psi$ and their energies $E$.
 
-## Boundary Conditions and Discrete Energies
+## Rigid Box
 
-Inside a rigid one-dimensional box, the walls force the wavefunction to vanish at the boundaries:
+Inside a rigid one-dimensional box (aka infinite potential well), the walls force the wavefunction to vanish at the boundaries:
 
 $$
 \psi(0) = 0,
@@ -38,7 +38,15 @@ $$
 \psi(L) = 0.
 $$
 
-Those conditions mean only standing waves that fit exactly inside the box are allowed. The result is a discrete family of states labeled by an integer $n$, with energies
+Those conditions mean only standing waves that fit exactly inside the box are allowed. The resulting stationary states are
+
+$$
+\psi_n(x) = \sqrt{\frac{2}{L}} \sin\!\left(\frac{n\pi x}{L}\right),
+\qquad
+n = 1, 2, 3, \dots
+$$
+
+with energies
 
 $$
 E_n = \frac{n^2 h^2}{8mL^2},
@@ -46,37 +54,60 @@ E_n = \frac{n^2 h^2}{8mL^2},
 n = 1, 2, 3, \dots
 $$
 
-The allowed energies are therefore **quantized**, not continuous. There is no $n=0$ bound state in this model, so even the lowest state carries nonzero energy.
+The allowed energies are therefore **quantized**, not continuous. There is no $n=0$ bound state in this model, so even the lowest state carries nonzero energy. 
 
-## Why Tunneling Happens
+## Quantization Beyond Hard Walls
 
-A classical particle with energy less than a barrier height would simply bounce back. A quantum wavefunction behaves differently. In a barrier region where $E < V$, the wavefunction usually decays rather than dropping instantly to zero. If the barrier is thin enough, some amplitude survives to the far side. The transmitted intensity can be small, but it is not always zero.
+The rigid box is the cleanest example, but discrete energies are not unique to hard-wall boundaries.
 
-That is the essence of **tunneling**. It does not mean the particle borrows energy in a careless way. It means the wavefunction satisfies the Schrödinger equation across the whole region, including the barrier, and the resulting probability for transmission can be nonzero.
+For the **harmonic oscillator**, the potential is smooth rather than abrupt:
+
+$$
+V(x) = \frac{1}{2}m\omega^2 x^2.
+$$
+
+Here the wavefunction must stay normalizable as $|x| \to \infty$. That requirement picks out the equally spaced energy ladder
+
+$$
+E_n = \left(n + \frac{1}{2}\right)\hbar\omega,
+\qquad
+n = 0, 1, 2, \dots
+$$
+
+The ground state already has the nonzero zero-point energy $\frac{1}{2}\hbar\omega$, and each excited state adds another node.
+
+For the **hydrogen atom**, the potential comes from the Coulomb attraction between the proton and electron. 
+$$
+V(r) = -\frac{e^2}{4\pi\varepsilon_0 r},
+$$
+
+
+As a more complex system, we can expect the wavefunction to require more than one integer $n$ to describe the allowed states.  The hydrogen atom states are labeled with three quantum numbers $n$, $l$, and $m$. We do not need the full derivation here to see the main quantization pattern:
+
+$$
+E_n = -\frac{13.6\ \text{eV}}{n^2},
+\qquad
+n = 1, 2, 3, \dots
+$$
+
+The radial part of the hydrogen wavefunction depends on both $n$ and $l$, while the angular part is carried by spherical harmonics. In the explorer below, the hydrogen panel focuses on that **radial component** so you can compare its nodes and radial probability pattern with the box and oscillator states.
 
 As you explore the diagram below, try this sequence:
 
-1. In particle-in-a-box mode, raise the quantum number and count the added nodes.
-2. Keep the same quantum number but widen the box and watch the relative energy drop.
-3. Switch to barrier mode and compare transmission for narrow versus wide barriers.
-4. Raise the energy closer to the barrier height and notice the under-barrier decay become less severe.
+1. In infinite-well mode, raise the quantum number and count the added nodes.
+2. Switch to the harmonic oscillator and compare the equal energy spacing with the box's $n^2$ growth.
+3. In the hydrogen panel, keep $n$ fixed and change $l$ to see the radial shape change even when the simple energy formula still depends only on $n$.
+4. Compare the probability view in all three systems and look for how nodes in the amplitude create dips in the probability density.
+
+Note that it's convention to overlay the wavefunction $\psi(x)$ on the same plot describing the allowed energies of a system.  Below, the potential energy function is also drawn in black.  It's a lot at first, but helpful once you start to see the connection between things like frequency and energy.
 
 <SimulationBlock
-  title="Quantization and Tunneling Explorer"
-  description="Compare standing-wave bound states in a box with a decaying wavefunction inside a finite barrier."
+  title="Quantization Explorer"
+  description="Compare stationary states in the infinite well, harmonic oscillator, and hydrogen radial problem."
 >
-  <ParticleInBoxExplorer client:only="react" />
+  <QuantizationExplorer client:only="react" />
 </SimulationBlock>
 
-## A Useful Scaling Idea
-
-Even when you do not plug in constants, the structure of the formulas is revealing:
-
-- For a fixed box width, energies grow like $n^2$.
-- For a fixed quantum number, energies shrink like $1/L^2$.
-- For tunneling, thicker or taller barriers reduce transmission very quickly because the wavefunction decays exponentially inside the forbidden region.
-
-Those scaling rules are often more important for intuition than any single number.
 
 <ProblemSolvingSection>
   <WorkedExampleCard
@@ -109,53 +140,46 @@ Those scaling rules are often more important for intuition than any single numbe
 
     #### Check
 
-    The rapid growth reflects the fact that fitting shorter standing wavelengths into the same box requires stronger curvature in the wavefunction, which the Schrödinger equation associates with higher energy.
+    The rapid growth reflects the fact that fitting shorter standing wavelengths into the same box requires stronger curvature in the wavefunction, which the Schrodinger equation associates with higher energy.
   </WorkedExampleCard>
 
   <WorkedExampleCard
-    title="See How A Wider Barrier Changes Transmission"
+    title="Compare Hydrogen Energy Levels"
     accent="red"
   >
     #### Problem
 
-    A simple tunneling estimate has the form
+    Use the hydrogen energy formula
 
     $$
-    T \approx e^{-2\kappa a},
+    E_n = -\frac{13.6\ \text{eV}}{n^2}
     $$
 
-    where $a$ is the barrier width. If the width doubles from $a$ to $2a$ while $\kappa$ stays the same, how does the transmission change?
+    to find the energies of the $n=2$ and $n=3$ levels.
 
     #### Given
 
-    - initial transmission: $T_1 \approx e^{-2\kappa a}$
-    - doubled width: $2a$
+    $$
+    E_n = -\frac{13.6\ \text{eV}}{n^2}
+    $$
 
     #### Use
 
-    Substitute the new width into the same exponential form.
+    Substitute $n=2$ and $n=3$.
 
     #### Solve
 
     $$
-    T_2 \approx e^{-2\kappa (2a)} = e^{-4\kappa a}.
+    E_2 = -\frac{13.6}{2^2}\ \text{eV} = -3.4\ \text{eV}
     $$
 
-    But
-
     $$
-    e^{-4\kappa a} = \left(e^{-2\kappa a}\right)^2.
-    $$
-
-    So
-
-    $$
-    T_2 \approx T_1^2.
+    E_3 = -\frac{13.6}{3^2}\ \text{eV} \approx -1.51\ \text{eV}
     $$
 
     #### Check
 
-    This shows why tunneling is so sensitive to barrier width: doubling the width can reduce the transmission dramatically rather than by a small linear factor.
+    Both values are less negative than the ground-state energy, so they are less tightly bound. The $n=3$ state lies closer to $0$, which is the ionization limit in this simple model.
   </WorkedExampleCard>
 </ProblemSolvingSection>
 
@@ -167,27 +191,27 @@ Those scaling rules are often more important for intuition than any single numbe
       id: 'boundary-conditions',
       question: 'Why do energy levels become discrete for a particle trapped in an ideal one-dimensional box?',
       options: [
-        { id: 'A', text: 'Because the boundary conditions allow only standing waves that fit exactly between the walls.', isCorrect: true, explanation: 'Exactly. Requiring the wavefunction to vanish at the walls selects only certain wavelengths, and those allowed wavelengths correspond to a discrete set of energies.' },
         { id: 'B', text: 'Because the particle slows down whenever it reaches the middle of the box.', isCorrect: false, explanation: 'The quantization is not caused by slowing down at the center. It comes from the wavefunction constraints at the boundaries.' },
+        { id: 'A', text: 'Because the boundary conditions allow only standing waves that fit exactly between the walls.', isCorrect: true, explanation: 'Exactly. Requiring the wavefunction to vanish at the walls selects only certain wavelengths, and those allowed wavelengths correspond to a discrete set of energies.' },
         { id: 'C', text: 'Because every confined particle must have zero energy in the lowest state.', isCorrect: false, explanation: 'In fact the lowest state in the box has nonzero energy. The box does not permit an $n=0$ standing-wave solution.' }
       ]
     },
     {
-      id: 'n-squared',
-      question: 'If the box width stays fixed, how does the particle-in-a-box energy scale with quantum number $n$?',
+      id: 'oscillator-spacing',
+      question: 'For a harmonic oscillator with fixed frequency, how are neighboring energy levels spaced?',
       options: [
-        { id: 'A', text: 'It scales like $n^2$.', isCorrect: true, explanation: 'Right. For a fixed box width and particle mass, the formula is $E_n = n^2 h^2 / (8mL^2)$, so the energy grows with the square of the quantum number.' },
-        { id: 'B', text: 'It scales linearly with $n$.', isCorrect: false, explanation: 'The dependence is steeper than linear. Doubling $n$ multiplies the energy by four, not by two.' },
-        { id: 'C', text: 'It does not depend on $n$ at all.', isCorrect: false, explanation: 'Different allowed standing waves correspond to different energies, so $n$ matters crucially.' }
+        { id: 'A', text: 'They are equally spaced by $\\hbar\\omega$.', isCorrect: true, explanation: 'Right. The harmonic oscillator has the ladder $E_n = (n + 1/2)\\hbar\\omega$, so every step up changes the energy by the same amount.' },
+        { id: 'B', text: 'They spread farther apart like $n^2$.', isCorrect: false, explanation: 'That steeper growth belongs to the box, not the harmonic oscillator. The oscillator ladder is evenly spaced.' },
+        { id: 'C', text: 'They squeeze together toward zero spacing at large $n$.', isCorrect: false, explanation: 'In the introductory harmonic oscillator, the gap stays fixed at $\\hbar\\omega$ for every neighboring pair.' }
       ]
     },
     {
-      id: 'tunneling',
-      question: 'What is the clearest qualitative statement about tunneling when a particle has energy below a barrier height?',
+      id: 'hydrogen-energy',
+      question: 'In the simple hydrogen model introduced on this page, which quantum number sets the energy level?',
       options: [
-        { id: 'A', text: 'The wavefunction can decay inside the barrier and still leave a nonzero transmission probability on the far side.', isCorrect: true, explanation: 'Exactly. The under-barrier wavefunction usually falls off exponentially, but if the barrier is finite, some amplitude can survive and produce a nonzero transmission chance.' },
-        { id: 'B', text: 'Transmission is impossible because classical mechanics forbids it.', isCorrect: false, explanation: 'Classical mechanics would forbid it, but the quantum wavefunction does not stop abruptly at the barrier. That is why tunneling can occur.' },
-        { id: 'C', text: 'The particle must gain extra energy while inside the barrier so the total energy is no longer conserved.', isCorrect: false, explanation: 'Tunneling does not require a careless violation of energy conservation. It follows from solving the Schrödinger equation across the whole barrier region.' }
+        { id: 'B', text: 'Only the principal quantum number $n$.', isCorrect: true, explanation: 'Exactly. In the basic hydrogen result shown here, $E_n = -13.6\\,\\text{eV}/n^2$, so the energy depends on $n$ while $l$ changes the radial shape.' },
+        { id: 'A', text: 'Only the angular momentum quantum number $l$.', isCorrect: false, explanation: 'The angular momentum quantum number changes the radial shape and node count, but the simple hydrogen energy formula on this page depends on $n$.' },
+        { id: 'C', text: 'The magnetic quantum number $m$ by itself.', isCorrect: false, explanation: 'The magnetic quantum number labels orientation information in the full hydrogen solution, but it does not set the simple energy formula introduced here.' }
       ]
     }
   ]}

@@ -2,7 +2,6 @@
 import {
   isNavItemActive,
   menuNavSections,
-  primaryNavItems,
 } from '../../data/navigation';
 import { normalizePath } from '../../utils/paths';
 
@@ -12,7 +11,6 @@ interface Props {
 
 const { currentPath = '/' } = Astro.props;
 const normalizedCurrentPath = normalizePath(currentPath);
-const homeItem = primaryNavItems.find((item) => item.href === '/') ?? primaryNavItems[0];
 const exploreActive = menuNavSections.some((section) =>
   section.items.some((item) => isNavItemActive(item, normalizedCurrentPath)),
 );
@@ -56,16 +54,6 @@ const mobileLinkClasses = (isActive: boolean) =>
       </a>
 
       <div class="hidden items-center gap-2 text-sm font-medium md:flex">
-        {homeItem && (
-          <a
-            href={homeItem.href}
-            class={desktopLinkClasses(isNavItemActive(homeItem, normalizedCurrentPath))}
-            aria-current={isNavItemActive(homeItem, normalizedCurrentPath) ? 'page' : undefined}
-          >
-            {homeItem.label}
-          </a>
-        )}
-
         <div class="relative">
           <button
             id="explore-menu-toggle"
@@ -185,16 +173,6 @@ const mobileLinkClasses = (isActive: boolean) =>
   >
     <div class="mx-auto max-w-6xl px-4 pb-4 pt-3 sm:px-6">
       <div class="space-y-4 rounded-[1.5rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_94%,transparent)] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)]">
-        {homeItem && (
-          <a
-            href={homeItem.href}
-            class={mobileLinkClasses(isNavItemActive(homeItem, normalizedCurrentPath))}
-            aria-current={isNavItemActive(homeItem, normalizedCurrentPath) ? 'page' : undefined}
-          >
-            <span class="block text-sm font-semibold">{homeItem.label}</span>
-          </a>
-        )}
-
         {menuNavSections.map((section) => {
           const sectionHref = section.items[0]?.href ?? '#';
           const sectionActive = section.items.some((item) =>

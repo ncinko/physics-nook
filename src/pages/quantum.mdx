@@ -2,12 +2,12 @@
 layout: ../layouts/TextbookLayout.astro
 ---
 
-import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import DoubleSlitInlineLab from '../components/simulations/DoubleSlitInlineLab.jsx';
+import PhotoelectricInlineLab from '../components/simulations/PhotoelectricInlineLab.jsx';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
-import DoubleSlitBuildUpExplorer from '../components/simulations/DoubleSlitBuildUpExplorer.jsx';
 import { quantumModuleMeta } from '../data/modules';
 
 <ModuleHero module={quantumModuleMeta} currentPath="/quantum" />
@@ -16,69 +16,95 @@ import { quantumModuleMeta } from '../data/modules';
 
 # Quantum Foundations
 
-Classical physics explains an enormous range of motion, fields, and waves, but early twentieth-century experiments revealed sharp limits to that picture. Light sometimes behaves as if it arrives in packets of energy. Electrons sometimes produce interference patterns that look unmistakably wave-like. Quantum mechanics is the framework that keeps both stories true at once.
+Classical physics explains an enormous range of phenomena, but early twentieth-century experiments revealed sharp limits to that picture. Light sometimes behaves as if it arrives in packets of energy. Electrons sometimes produce interference patterns that look unmistakably wave-like. Quantum mechanics provides a framework for making sense of these unexpected results.
 
 ## Where the Classical Picture Breaks
 
-Two experiments are especially useful starting points:
-
-- In the **photoelectric effect**, light ejects electrons from a metal only when the light frequency is high enough. Brighter low-frequency light does not compensate for a frequency that is too small.
-- In the **double-slit experiment**, even single particles build up an interference pattern over time, as though each detection is guided by a wave-like probability rule.
-
-Those two facts push in opposite directions if we insist on a purely classical model. The photoelectric effect says light carries energy in discrete packets,
+At the turn of the 20th century, Max Planck found that the spectrum of blackbody radiation could be explained if energy was exchanged in discrete packets.  This quantization of energy set a theoretical relationship between the frequency of light and its corresponding energy:
 
 $$
-E = hf,
+E = hf.
 $$
 
-while the double-slit experiment says matter can display interference, diffraction, and other wave phenomena.
+At the time, this resolved the "ultraviolet catastrophe", a failure of combining statistical mechanics with classical electromagnetism.  More importantly, the quantized treatment of light would eventually lead to a revolution in physics.  Planck's constant $h= 6.6 \times 10^{-34} \ \text{J} \cdot \text{s}$ sets the scale for this new quantum theory.   
 
-## Photons, Thresholds, and the Photoelectric Effect
+To better appreciate the failings of classical physics, we'll consider two important experimental results:
 
-Einstein's photoelectric explanation treats light as photons, each carrying one energy packet $E = hf$. A metal surface needs a minimum energy called the **work function** $\Phi$ to remove one electron. Any leftover energy appears as the emitted electron's kinetic energy:
+- In the **photoelectric effect**, light ejects electrons from a metal only when the light frequency is high enough. 
+- In the **double-slit experiment**, wave-like interference patterns are formed one particle at a time.
+
+A classical view of physics fails in both cases. If light were only a wave, then a sufficiently bright low-frequency beam should eventually shake electrons loose. If particles behaved classically, then opening two slits should produce nothing more than the sum of two piles on the screen.  It's as if nature requires some blend of a particle-like and wave-like description.
+
+
+
+## Photons and the Photoelectric Effect
+
+Einstein's explanation of the photoelectric effect treats light as photons.  Following Planck's lead, each photon carries energy $E = hf$, where $f$ is the frequency of the corresponding electromagnetic wave (it's not clear yet what it means for a particle to have a frequency).  A metal surface needs a minimum energy called the **work function** $\Phi$ to remove one electron. Any leftover energy appears as the emitted electron's kinetic energy:
 
 $$
 K_{\max} = hf - \Phi.
 $$
 
-The key prediction is that **frequency** controls whether electrons are emitted at all, while **intensity** mainly controls how many photons arrive each second. That is why dim ultraviolet light can eject electrons while bright red light can fail completely.
+A classical wave account would suggest that brighter light should deliver energy more strongly to the surface, so one might expect low-frequency light to work if the beam is intense enough or if the electrons have time to "soak up" the energy.
 
-## Matter Waves
+In the actual experiment we observe a **threshold frequency**. Below it, no electrons are emitted no matter how bright the beam becomes.  Above threshold, emission begins essentially without delay.
+Increasing the intensity mainly increases how many electrons are emitted per second, while increasing the frequency raises the maximum kinetic energy of each emitted electron.
 
-The second clue comes from particles that act wave-like. De Broglie proposed that matter with momentum $p$ has an associated wavelength
+A further check comes from the **stopping potential**.  A negative collector voltage is used to slow and stop incoming electrons.  When it's just strong enough to stop even the fastest emitted electrons (those with maximum kinetic energy), the stopping potential satisfies
+
+$$
+eV_{\text{stop}} = K_{\max} = hf - \Phi.
+$$
+
+
+<PhotoelectricInlineLab client:visible />
+
+## Matter Waves and the Double Slit
+
+When a wave passes through a single opening in a barrier, the waveform will appear to spread out, or diffract.  When coherent waves pass through two nearby openings, the resultant waveforms interfere constructively or destructively, forming an **interference pattern**.  (A single opening also produces a similar **diffraction pattern**.)
+
+It's been known since 1801 that a pattern of bright and dark fringes can be formed by passing light through two closely spaced slits.  If you are familiar with wave phenomena, there's nothing particularly surprising here.  However, the explanation of the photoelectric effect indicates that light sometimes requires a particle-like description.
+
+Since a previously wave-like phenomenon has particle-like behavior, de Broglie hypothesized that massive particles also have associated wavelengths.  For a particle, like an electron, carrying momentum $$p$$, its de Broglie wavelength is
+
 
 $$
 \lambda = \frac{h}{p}.
 $$
 
-That relation connects quantum behavior back to the waves module. Shorter wavelengths usually mean smaller visible interference features, while larger wavelengths spread fringes farther apart. For everyday objects the wavelength is absurdly tiny, so the wave behavior is effectively invisible. For electrons and other microscopic particles, it becomes measurable.
+Careful analysis of double-slit experiments over the 20th century shows that this mixed description is closer to the truth: very dim light sources produce the interference pattern one "hit" at a time, and electrons also form the same double-slit interference pattern.
 
-## Single Particles and Interference
+<DoubleSlitInlineLab client:visible />
 
-Quantum mechanics does **not** say that a particle smears out like classical dust. Instead, it says the experiment is governed by a complex amplitude whose squared magnitude gives probabilities. In a double-slit setup, amplitudes associated with the two paths combine before probabilities are computed. That is why the screen shows alternating bright and dark bands rather than two smooth piles.
 
-As you explore the screen below, try this sequence:
+The screen is therefore telling you something subtle but decisive. Quantum mechanics keeps the one-at-a-time, particle-like detection events, yet it predicts their distribution by adding amplitudes as if a wave-like description of the possible paths still matters.
 
-1. Leave coherence high and watch the fringe pattern emerge from single detections.
-2. Increase the wavelength and compare the spacing between neighboring bright bands.
-3. Increase the slit separation and notice the fringes squeeze closer together.
-4. Reduce the coherence and watch the dark gaps fill in toward a classical-looking envelope.
-
-<SimulationBlock
-  title="Double-Slit Build-Up Explorer"
-  description="Accumulate single detections on a screen and compare the emerging quantum pattern with a classical no-interference envelope."
+<WorkedExampleCard
+  title="Classical vs. Quantum Interference"
+  accent="blue"
 >
-  <DoubleSlitBuildUpExplorer client:only="react" />
-</SimulationBlock>
+  A helpful classical comparison comes from looking at the electric field component of classical electromagnetic waves. For two coherent sources (like passing a plane wave through a double-slit barrier), the intensity on the screen can be written as
 
-## Next Steps
+  $$
+  I \propto \left| E_1 + E_2 \right|^2
+  = E_1^2 + E_2^2 + 2E_1E_2\cos(\Delta \phi).
+  $$
 
-- Continue to [Wavefunctions and Superposition](/quantum/wavefunctions) to translate these experimental clues into the language of amplitudes, normalization, and measurement.
-- Continue later to [Quantization and Tunneling](/quantum/quantization) to see how boundary conditions create discrete energies and how waves leak through barriers.
+The interference ultimately comes from the difference in phase $\Delta \phi$ at a particular location on the screen.  In quantum mechanics, we use wavefunctions $\psi$, and so called "probability amplitudes" take the place of electric-field amplitudes:
+
+  $$
+  P \propto \left| \psi_1 + \psi_2 \right|^2
+  = \left| \psi_1 \right|^2 + \left| \psi_2 \right|^2 + 2\,\mathrm{Re}\!\left(\psi_1^* \psi_2\right).
+  $$
+
+  Once again, the last term is the interference term. In both equations, it is the cross term that can reinforce the pattern in some places and cancel it in others. The important difference is interpretive, not algebraic: $E$ describes a classical electric field, while $\psi$ is a quantum probability amplitude. 
+</WorkedExampleCard>
+
+
 
 <ProblemSolvingSection>
   <WorkedExampleCard
-    title="Check Whether Light Can Eject Electrons"
+    title="Photoelectric Effect"
     accent="blue"
   >
     #### Problem
@@ -117,7 +143,7 @@ As you explore the screen below, try this sequence:
   </WorkedExampleCard>
 
   <WorkedExampleCard
-    title="Estimate An Electron's De Broglie Wavelength"
+    title="De Broglie Wavelength"
     accent="red"
   >
     #### Problem
@@ -159,9 +185,9 @@ As you explore the screen below, try this sequence:
       id: 'photoelectric-threshold',
       question: 'In the photoelectric effect, what happens if the light intensity is increased while the light frequency stays below the threshold frequency?',
       options: [
-        { id: 'A', text: 'No electrons are emitted, because each photon still lacks the minimum required energy.', isCorrect: true, explanation: 'Exactly. Raising the intensity mainly increases how many photons arrive, but if each photon has energy $hf$ below the work function, none of them can eject an electron on their own.' },
         { id: 'B', text: 'Electrons are emitted with larger kinetic energy because the wave is brighter.', isCorrect: false, explanation: 'Brightness by itself does not raise the energy per photon. In the photoelectric effect, the relevant quantity for emission is the photon energy $E = hf$.' },
-        { id: 'C', text: 'Electrons are emitted only after enough low-frequency photons pile up on one electron.', isCorrect: false, explanation: 'That classical accumulation picture is exactly what the experiment rules out. The emission depends on single-photon energy, not on many low-energy photons slowly pooling their energy.' }
+        { id: 'C', text: 'Electrons are emitted only after enough low-frequency photons pile up on one electron.', isCorrect: false, explanation: 'That classical accumulation picture is exactly what the experiment rules out. The emission depends on single-photon energy, not on many low-energy photons slowly pooling their energy.' },
+        { id: 'A', text: 'No electrons are emitted, because each photon still lacks the minimum required energy.', isCorrect: true, explanation: 'Exactly. Raising the intensity mainly increases how many photons arrive, but if each photon has energy $hf$ below the work function, none of them can eject an electron on their own.' }
       ]
     },
     {
@@ -177,8 +203,8 @@ As you explore the screen below, try this sequence:
       id: 'single-particle-pattern',
       question: 'Why is the single-particle double-slit experiment such a strong clue that quantum mechanics uses amplitudes rather than classical particle paths?',
       options: [
-        { id: 'A', text: 'Because even one-at-a-time detections build up an interference pattern that cannot be explained by two independent classical particle streams.', isCorrect: true, explanation: 'Exactly. If particles simply chose one slit or the other in a classical way, the screen would approach a smooth two-lump pattern rather than alternating bright and dark fringes.' },
         { id: 'B', text: 'Because the particles stop behaving like particles once the source becomes weak enough.', isCorrect: false, explanation: 'The detections are still particle-like in the sense that they arrive one at a time at definite spots. What changes is the distribution of those spots.' },
+        { id: 'A', text: 'Because even one-at-a-time detections build up an interference pattern that cannot be explained by two independent classical particle streams.', isCorrect: true, explanation: 'Exactly. If particles simply chose one slit or the other in a classical way, the screen would approach a smooth two-lump pattern rather than alternating bright and dark fringes.' },
         { id: 'C', text: 'Because the experiment shows that particles always move in circles after the slits.', isCorrect: false, explanation: 'The important observation is the interference pattern on the screen, not any circular motion. The pattern points to path amplitudes combining before probabilities are computed.' }
       ]
     }

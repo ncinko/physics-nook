@@ -49,7 +49,7 @@ export const modules: ModuleMeta[] = [
     title: 'Relativity',
     navLabel: 'Relativity',
     summary:
-      'Spacetime diagrams, relativistic energy & momentum, and general relativity.',
+      'Spacetime diagrams, Lorentz transformations, relativistic energy & momentum, and general relativity.',
     audience: 'Self-learners building intuition before or alongside a formal course.',
     prerequisites: [
       'Comfort reading graphs and coordinate axes',
@@ -58,6 +58,7 @@ export const modules: ModuleMeta[] = [
     ],
     learningObjectives: [
       'Read spacetime diagrams and explain why simultaneity depends on the observer',
+      'Derive and use the Lorentz transformations for one-dimensional inertial motion',
       'Connect beta, gamma, momentum, and energy in one-dimensional special relativity',
       'Describe gravity geometrically through the equivalence principle and geodesics',
     ],
@@ -80,6 +81,21 @@ export const modules: ModuleMeta[] = [
           description:
             'Start the relativity path with spacetime diagrams, worldlines, light cones, and relativity of simultaneity.',
           canonicalPath: '/relativity',
+          image: '/social/relativity-card.svg',
+        },
+      },
+      {
+        id: 'lorentz-transformations',
+        href: '/relativity/lorentz-transformations',
+        title: 'Lorentz Transformations',
+        shortTitle: 'Lorentz',
+        description:
+          'Derive the coordinate transformations that preserve the speed of light for every inertial observer.',
+        seo: {
+          title: 'Lorentz Transformations',
+          description:
+            'Derive the Lorentz transformations algebraically from the constancy of the speed of light and use them to compare events between inertial frames.',
+          canonicalPath: '/relativity/lorentz-transformations',
           image: '/social/relativity-card.svg',
         },
       },
@@ -208,7 +224,7 @@ export const modules: ModuleMeta[] = [
     title: 'Quantum',
     navLabel: 'Quantum',
     summary:
-      'Move from key experiments into wavefunctions, superposition, quantization, and tunneling.',
+      'Move from key experiments into wavefunctions, and quantized states.',
     audience: 'Self-learners building a first modern-physics intuition before a formal quantum course.',
     prerequisites: [
       'Core wave vocabulary such as wavelength, frequency, and interference',
@@ -218,7 +234,7 @@ export const modules: ModuleMeta[] = [
     learningObjectives: [
       'Use the photoelectric effect and double-slit interference to explain why classical pictures break down',
       'Interpret a wavefunction through amplitudes, probabilities, normalization, and measurement',
-      'Connect boundary conditions to quantized energy levels and describe tunneling qualitatively',
+      'Connect boundary conditions and normalizable solutions to quantized energy levels in the infinite well, harmonic oscillator, and hydrogen atom',
     ],
     status: 'active',
     navVisibility: 'hidden',
@@ -236,7 +252,7 @@ export const modules: ModuleMeta[] = [
         seo: {
           title: 'Quantum Foundations',
           description:
-            'Start the quantum path with the photoelectric effect, de Broglie wavelength, and a double-slit build-up explorer.',
+            'Start the quantum path with the photoelectric effect, de Broglie wavelength, and inline labs for the photoelectric and double-slit experiments.',
           canonicalPath: '/quantum',
           image: '/social/physics-nook-card.svg',
         },
@@ -244,14 +260,14 @@ export const modules: ModuleMeta[] = [
       {
         id: 'quantum-wavefunctions',
         href: '/quantum/wavefunctions',
-        title: 'Wavefunctions and Superposition',
+        title: 'Wavefunctions',
         shortTitle: 'Wavefunctions',
         description:
-          'Interpret amplitudes, probabilities, phase, and measurement in a one-dimensional quantum state.',
+          'Interpret amplitudes, probabilities, and measurement in a one-dimensional quantum state.',
         seo: {
-          title: 'Wavefunctions and Superposition',
+          title: 'Wavefunctions',
           description:
-            'Learn how wavefunctions encode amplitudes, normalization, superposition, and position measurements.',
+            'Learn how wavefunctions encode amplitudes, normalization, and position measurements.',
           canonicalPath: '/quantum/wavefunctions',
           image: '/social/physics-nook-card.svg',
         },
@@ -259,14 +275,14 @@ export const modules: ModuleMeta[] = [
       {
         id: 'quantum-quantization',
         href: '/quantum/quantization',
-        title: 'Quantization and Tunneling',
+        title: 'Quantization',
         shortTitle: 'Quantization',
         description:
-          'Use boundary conditions and barriers to build intuition for discrete energies and tunneling.',
+          'Use bound-state potentials to build intuition for discrete energies in quantum systems.',
         seo: {
-          title: 'Quantization and Tunneling',
+          title: 'Quantization',
           description:
-            'Explore the Schrödinger equation, particle-in-a-box states, and tunneling through a finite barrier.',
+            'Explore the Schrodinger equation, the infinite well, the harmonic oscillator, and hydrogen radial states.',
           canonicalPath: '/quantum/quantization',
           image: '/social/physics-nook-card.svg',
         },
@@ -394,6 +410,16 @@ export const wavesAndOscillationsPath = {
   ],
 } satisfies ModulePathGroup;
 
+export const quantumPath = {
+  id: 'quantum',
+  href: quantumModule.href,
+  navLabel: quantumModule.navLabel,
+  summary: quantumModule.summary,
+  cardEyebrow: quantumModule.cardEyebrow,
+  navVisibility: 'menu',
+  pages: quantumModule.pages,
+} satisfies ModulePathGroup;
+
 export const momentumPath = {
   id: 'momentum',
   href: '/collisions',
@@ -408,6 +434,7 @@ export const momentumPath = {
 export const exploreModuleGroups = [
   relativityPath,
   wavesAndOscillationsPath,
+  quantumPath,
   momentumPath,
 ].filter((group) => group.navVisibility === 'menu');
 

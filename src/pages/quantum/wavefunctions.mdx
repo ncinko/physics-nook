@@ -7,6 +7,7 @@ import QuestionSequence from '../../components/interactive/QuestionSequence.jsx'
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import WavePacketMeasurementInline from '../../components/simulations/WavePacketMeasurementInline.jsx';
 import WavefunctionMixer from '../../components/simulations/WavefunctionMixer.jsx';
 import { quantumModuleMeta } from '../../data/modules';
 
@@ -14,21 +15,36 @@ import { quantumModuleMeta } from '../../data/modules';
 
 <div id="page-content"></div>
 
-# Wavefunctions and Superposition
+# Wavefunctions
 
-The experimental clues from quantum foundations need a mathematical language. That language is the **wavefunction** $\psi$. It is not a classical material wave, and it is not a direct probability by itself. Instead, it is an amplitude whose squared magnitude tells us how measurement outcomes are distributed.
+The experimental clues from quantum foundations need a mathematical language. That language is the **wavefunction** $\psi$.  You can first think of it as a mysterious function of position $\psi(x)$, in order to help make the connection to our classical descriptions of nature.
+
+However, the new quantum ideas are much more general. The same quantum state can be expressed in whatever basis matches the question: position, momentum, energy, spin, or even the orbitals used in chemistry. In every case, $\psi$ is **not** a classical material wave.  Instead, it expresses a **probability amplitude** whose squared magnitude tells us how measurement outcomes are distributed.
 
 ## From Amplitude to Probability
 
-For a normalized wavefunction, the probability density is
+
+
+Loosely speaking, $\psi(x)$ tells you where you can expect the corresponding particle to be located in space.  In quantum mechanics, it is no longer correct to assume every particle has an exact location or every system has a precise state.  Instead, we describe things using the wavefunction and then **when a measurement is made**, we convert the wavefunction to a probability distribution to predict the measurement outcomes.
+
+For a normalized wavefunction, the corresponding probability density is
 
 $$
 P(x) = |\psi(x)|^2.
 $$
 
 That single rule matters more than almost anything else in introductory quantum mechanics. It says quantum predictions come from amplitudes first and probabilities second. Since amplitudes can interfere, the probability pattern can contain peaks, dips, and cancellations that a classical probability mixture would miss.
+One useful example is a localized wave packet:
 
-## Normalization
+$$
+\psi(x) = A e^{-(x-x_0)^2/(2\sigma^2)} \sin(kx).
+$$
+
+
+
+<WavePacketMeasurementInline client:visible />
+
+## Normalization and Probablity
 
 If a particle must be found somewhere, then the total probability must add to $1$. In continuous language, that becomes
 
@@ -36,44 +52,40 @@ $$
 \int |\psi(x)|^2\,dx = 1.
 $$
 
-This condition is called **normalization**. It does not tell you the shape of the state by itself, but it fixes the overall scale. If you double the amplitude everywhere, the probability density becomes four times larger, so the state would no longer represent a valid total probability of $1$.
+This condition is called **normalization**. It does not tell you the shape of the state by itself, but it fixes the overall scale. 
 
-## Phase and Superposition
-
-Quantum states can be added. If $\phi_1$ and $\phi_2$ are allowed states, then a new state can be built from
+Once you have a normalized wavefunction, the probability of measuring the location to be between $x$ and $x + \Delta x$ is
 
 $$
-\psi = a\phi_1 + b\phi_2.
+P(x,x + \Delta x) \approx |\psi(x)|^2 \Delta x
 $$
 
-This is the principle of **superposition**. The coefficients $a$ and $b$ are amplitudes, not probabilities. Their phases matter because the sum is taken before the magnitude is squared. Two contributions can reinforce one another in one region and partly cancel in another.
 
-That is why changing phase can alter the amplitude picture even when the state remains perfectly normalized.
 
-## Measurement Language
+## The Same Rule In Other Contexts
 
-Before a position measurement, the wavefunction carries the information needed to assign probabilities to different outcomes. After a measurement, the system is found at one specific outcome. Repeating the same experiment many times rebuilds the distribution encoded by $|\psi|^2$.
+The amplitude-to-probability rule shows up in a variety of settings:
 
-The same idea applies more generally: if a state is written as a combination of energy eigenstates, then the squared magnitudes of the coefficients give the probabilities for those energy outcomes.
+- **Position space:** $\psi(x,t)$ describes amplitudes across space, and $|\psi(x,t)|^2 dx$ gives the probability of finding the particle in a small interval near $x$ at time $t$.
+- **Chemistry:** a molecular orbital can be written as $\psi(\mathbf{r})$. Then $|\psi(\mathbf{r})|^2 d^3r$ gives the probability of finding an electron in a small region of space near the point $\mathbf{r}$. Electron-cloud pictures in chemistry come from this idea.
 
-As you explore the mixer below, try this sequence:
+- **Two-state example:** sometimes the state is not written as a function at all. A "quantum coin" can be written as
 
-1. Start with a small excited-state share and notice how close the probability density stays to the ground-state shape.
-2. Increase the excited-state share until the density develops more structure.
-3. Rotate the relative phase and compare what changes in the amplitude plot versus the probability plot.
-4. Use repeated position measurements to watch individual outcomes rebuild the $|\psi|^2$ curve.
+$$
+|\psi\rangle = \sqrt{0.8}\,|H\rangle + e^{i\phi}\sqrt{0.2}\,|T\rangle.
+$$
 
-<SimulationBlock
-  title="Wavefunction Mixer"
-  description="Blend two stationary states, inspect the real and imaginary amplitudes, and sample position measurements from the resulting probability density."
->
-  <WavefunctionMixer client:only="react" />
-</SimulationBlock>
+In that basis,
 
-## Next Steps
+$$
+P(\text{heads}) = 0.8,
+\qquad
+P(\text{tails}) = 0.2.
+$$
 
-- Return to [Quantum Foundations](/quantum) if you want to reconnect the wavefunction language to the motivating experiments.
-- Continue to [Quantization and Tunneling](/quantum/quantization) to see how boundary conditions and barriers shape the allowed quantum states.
+
+
+
 
 <ProblemSolvingSection>
   <WorkedExampleCard
@@ -129,7 +141,7 @@ As you explore the mixer below, try this sequence:
   </WorkedExampleCard>
 
   <WorkedExampleCard
-    title="Read Energy Probabilities From Coefficients"
+    title="Energy Probabilities"
     accent="red"
   >
     #### Problem
@@ -178,8 +190,8 @@ As you explore the mixer below, try this sequence:
       id: 'probability-density',
       question: 'What does $|\\psi(x)|^2$ represent in introductory quantum mechanics?',
       options: [
-        { id: 'A', text: 'The probability density for finding the particle near position $x$.', isCorrect: true, explanation: 'Exactly. The wavefunction itself is an amplitude, while its squared magnitude gives the probability density used to predict measurement outcomes.' },
         { id: 'B', text: 'The particle\'s exact path through space as a function of time.', isCorrect: false, explanation: 'Quantum mechanics does not identify $|\\psi|^2$ with a classical trajectory. It tells you how likely different measurement outcomes are, not which exact path a particle secretly followed.' },
+        { id: 'A', text: 'The probability density for finding the particle near position $x$.', isCorrect: true, explanation: 'Exactly. The wavefunction itself is an amplitude, while its squared magnitude gives the probability density used to predict measurement outcomes.' },
         { id: 'C', text: 'The total energy of the state at position $x$.', isCorrect: false, explanation: 'Energy is not given directly by $|\\psi(x)|^2$. The quantity $|\\psi(x)|^2$ is about position-space probabilities.' }
       ]
     },
@@ -187,9 +199,9 @@ As you explore the mixer below, try this sequence:
       id: 'normalization',
       question: 'Why must a valid wavefunction be normalized?',
       options: [
-        { id: 'A', text: 'Because the total probability of finding the particle somewhere must add up to 1.', isCorrect: true, explanation: 'Right. Normalization enforces the statement that the particle is certain to be found somewhere in the allowed set of outcomes.' },
         { id: 'B', text: 'Because otherwise the particle would move faster than light.', isCorrect: false, explanation: 'Normalization is about total probability, not about limiting speed.' },
-        { id: 'C', text: 'Because every quantum state must have zero phase.', isCorrect: false, explanation: 'A quantum state can have nonzero and even position-dependent phase. The normalization condition constrains total probability, not phase.' }
+        { id: 'C', text: 'Because every quantum state must have zero phase.', isCorrect: false, explanation: 'A quantum state can have nonzero and even position-dependent phase. The normalization condition constrains total probability, not phase.' },
+        { id: 'A', text: 'Because the total probability of finding the particle somewhere must add up to 1.', isCorrect: true, explanation: 'Right. Normalization enforces the statement that the particle is certain to be found somewhere in the allowed set of outcomes.' }
       ]
     },
     {
@@ -201,5 +213,6 @@ As you explore the mixer below, try this sequence:
         { id: 'C', text: 'Because phase only changes the color used to draw the wavefunction, not any physics.', isCorrect: false, explanation: 'Phase can be physically important because it influences how amplitudes interfere. It is not just a plotting decoration.' }
       ]
     }
+
   ]}
 />

@@ -23,32 +23,34 @@ It was that **space and time have to be described together** if the speed of lig
 
 ## Events, Worldlines, and Frames
 
-An **event** is a single happening: a flash, a detector click, a spaceship passing a marker. On the diagram, each event is one point. A moving object leaves behind a **worldline**, the path of all its events through spacetime.
+An **event** is a single happening: a flash, a detector click, a spaceship passing a marker. On a spacetime diagram, each event is represented by a single point. A moving object leaves behind a **worldline**, the path of all its events through spacetime.
 
-  - A stationary object has a vertical worldline because its position stays fixed while time passes.
-  - A moving object has a slanted worldline because both position and time change.
-  - A light pulse travels on a $45^\circ$ line, since it obeys $x = \pm ct$.
+Coordinate axes allow us to describe events according to an observer's frame of reference, i.e. label each event with a coordinate pair $(x, t)$.  A second observer moving at constant velocity relative to the first uses a different set of axes, and describes the same event with a different coordinate pair $(x^{\prime}, t^{\prime})$.  It is convention that the two sets of axes share a common origin, but they could in principle be translated.   In special relativity, these coordinate axes correspond to **inertial frames**, meaning reference frames that are not accelerating or rotating. 
 
-The axes $(x, t)$ describe one observer's frame. A second observer moving at constant velocity relative to the first uses a different set of axes, $(x^{\prime}, t^{\prime})$. 
-These coordinate axes correspond to **inertial frames**, meaning reference frames that are not accelerating or rotating.
-The important change is not that one observer is "wrong" and the other is "right"; it is that they slice spacetime into "space" and "time" differently.
+The disagreement in spacetime coordinates between two observers should not be surprising.  A bit of reasoning would lead you to expect something like:
+$$
+\begin{align*}
+x' &= x - vt\\
+t' &= t
+\end{align*}
+$$
+if the primed observer is moving to the right with velocity $v$ relative to the unprimed observer.  Note that one observer is not "wrong" while the other is "right"; it is that they slice spacetime into "space" and "time" differently.
 
 ## The Light Cone
 
-The lines $x = ct$ and $x = -ct$ form the **light cone**. They mark the worldlines of light that passes through the origin. 
+Worldlines of light that pass through a particular point form a **light cone** (more of a triangle with a single spatial dimension.)  At the origin, these lines are $x = ct$ and $x = -ct$. 
 Different inertial observers may disagree about coordinates, but they agree on the causal structure:
 
   - events inside the light cone can be connected by slower-than-light motion
   - events on the cone can be connected by light
   - events outside the cone cannot causally influence one another without exceeding $c$
 
-As the axes of the moving frame tilt, they never cross outside the light cone. They lean toward it as $|\beta|$ increases, where
+Before diving into the particular transformation that describes the coordinate axes of the moving observer, it's helpful to see how they relate to a light cone.  Both sets of axes must agree on the speed of light, which geometrically means the primed axes appear to *lean toward* part of the light cone.  As the relative speed of the two observers increases,
 
 $$
-\beta = \frac{v}{c},
-\qquad
-\gamma = \frac{1}{\sqrt{1-\beta^2}}.
+\tan \theta = \frac{v}{c},
 $$
+where $\theta$ is the angle between the two sets of axes.
 
 ## Simultaneity
 
@@ -92,11 +94,6 @@ As you explore the diagram below, try this sequence:
 >
   <SpacetimeDiagram client:only="react" />
 </SimulationBlock>
-
-## Next Steps
-
-- Continue to [Relativistic Momentum and Energy](/relativity/momentum-energy) to follow the special-relativistic dynamics of fast particles in one dimension.
-- Continue to [General Relativity](/relativity/general-relativity) to see how gravity becomes geometry, how the equivalence principle works, and how nearby geodesics converge or diverge in curved spacetime.
 
 <ProblemSolvingSection>
   <WorkedExampleCard
@@ -196,8 +193,8 @@ As you explore the diagram below, try this sequence:
       id: 'simultaneity',
       question: 'In the spacetime diagram, why can two events that lie on the same horizontal line $ct = \\text{constant}$ fail to be simultaneous in the moving frame?',
       options: [
-        { id: 'A', text: 'Because simultaneity depends on the observer, and the moving frame uses tilted lines of constant $ct^{\\prime}$.', isCorrect: true, explanation: 'Exactly. In the primed frame, simultaneity is read off from lines parallel to the $x^{\\prime}$ axis, so two events that are simultaneous in the unprimed frame generally do not share the same $ct^{\\prime}$ value.' },
         { id: 'B', text: 'Because the light cone changes shape when the observer moves.', isCorrect: false, explanation: 'The light cone does not change shape; it remains defined by $x = \\pm ct$. What changes is the orientation of the moving frame\\\'s axes, including the lines used to define simultaneity.' },
+        { id: 'A', text: 'Because simultaneity depends on the observer, and the moving frame uses tilted lines of constant $ct^{\\prime}$.', isCorrect: true, explanation: 'Exactly. In the primed frame, simultaneity is read off from lines parallel to the $x^{\\prime}$ axis, so two events that are simultaneous in the unprimed frame generally do not share the same $ct^{\\prime}$ value.' },
         { id: 'C', text: 'Because events at different positions can never be simultaneous in any frame.', isCorrect: false, explanation: 'Separated events can absolutely be simultaneous in a given frame. The key point is that different inertial frames disagree about which separated events are simultaneous.' }
       ]
     },
@@ -205,17 +202,17 @@ As you explore the diagram below, try this sequence:
       id: 'time-dilation',
       question: 'Suppose a clock is at rest in the moving frame, so its worldline follows the $ct^{\\prime}$ axis. Compared with the coordinate time $\\Delta t$ measured in the rest frame, how does its proper time $\\Delta \\tau$ behave?',
       options: [
-        { id: 'A', text: 'The moving clock accumulates less proper time, so $\\Delta \\tau = \\Delta t / \\gamma$.', isCorrect: true, explanation: 'Right. A clock moving relative to the unprimed frame is time-dilated, so for the same coordinate-time interval $\\Delta t$, the clock itself records the smaller proper time $\\Delta \\tau = \\Delta t / \\gamma$.' },
         { id: 'B', text: 'The moving clock accumulates more proper time, so $\\Delta \\tau = \\gamma \\Delta t$.', isCorrect: false, explanation: 'That reverses the relationship. The moving clock ticks more slowly in the unprimed frame, so its own elapsed proper time is smaller, not larger.' },
-        { id: 'C', text: 'The two times must be equal because all inertial clocks tick at the same intrinsic rate.', isCorrect: false, explanation: 'Each clock ticks normally in its own rest frame, but when compared between frames, the elapsed coordinate time and proper time differ by the Lorentz factor $\\gamma$.' }
+        { id: 'C', text: 'The two times must be equal because all inertial clocks tick at the same intrinsic rate.', isCorrect: false, explanation: 'Each clock ticks normally in its own rest frame, but when compared between frames, the elapsed coordinate time and proper time differ by the Lorentz factor $\\gamma$.' },
+        { id: 'A', text: 'The moving clock accumulates less proper time, so $\\Delta \\tau = \\Delta t / \\gamma$.', isCorrect: true, explanation: 'Right. A clock moving relative to the unprimed frame is time-dilated, so for the same coordinate-time interval $\\Delta t$, the clock itself records the smaller proper time $\\Delta \\tau = \\Delta t / \\gamma$.' }
       ]
     },
     {
       id: 'length-contraction',
       question: 'Why must the length of a moving rod be measured using two endpoint events that are simultaneous in each frame?',
       options: [
-        { id: 'A', text: 'Because otherwise the rod changes its rest length as it moves.', isCorrect: false, explanation: 'The rod\\\'s rest length is a property of the rod in its own rest frame. The issue in another frame is not that the rod changes physically, but that the endpoint measurements must refer to the same instant in that observer\\\'s frame.' },
         { id: 'B', text: 'Because length is the spatial separation between endpoints at one instant, and simultaneity depends on the frame.', isCorrect: true, explanation: 'Exactly. To define a length, you need both ends at the same time in the measuring frame. Since simultaneity is frame-dependent, different observers can assign different lengths, giving rise to length contraction.' },
+        { id: 'A', text: 'Because otherwise the rod changes its rest length as it moves.', isCorrect: false, explanation: 'The rod\\\'s rest length is a property of the rod in its own rest frame. The issue in another frame is not that the rod changes physically, but that the endpoint measurements must refer to the same instant in that observer\\\'s frame.' },
         { id: 'C', text: 'Because Lorentz contraction only applies when the rod is accelerating.', isCorrect: false, explanation: 'Length contraction is a special-relativistic effect for uniform relative motion. Acceleration is not required for the basic contraction result.' }
       ]
     }

@@ -16,7 +16,7 @@ import { featuredModule } from '../../data/modules';
 
 # Momentum and Energy
 
-Spacetime diagrams tell us how different inertial observers organize events. The next question is dynamical: once an object is moving close to the speed of light, how should we define its momentum and energy? 
+Spacetime diagrams show the geometry of special relativity, and the Lorentz transformations turn that geometry into equations. The next question is dynamical: once an object is moving close to the speed of light, how should we define its momentum and energy?
 
 ## Classical Definitions
 
@@ -269,9 +269,9 @@ So the classical formulas are not wrong. They are the low-speed approximation to
       id: 'momentum-sign',
       question: 'A particle changes from $\\beta = +0.60$ to $\\beta = -0.60$. Which statement is correct?',
       options: [
-        { id: 'A', text: 'Its momentum changes sign, but its total energy and kinetic energy stay the same.', isCorrect: true, explanation: 'Exactly. The sign of $p$ comes from the sign of $\\beta$, so reversing direction flips the momentum. But $\\gamma$ depends on $\\beta^2$, so both $E = \\gamma mc^2$ and $K = (\\gamma - 1)mc^2$ stay unchanged when only the sign of the velocity is reversed.' },
         { id: 'B', text: 'Its momentum and total energy both change sign because the velocity changed sign.', isCorrect: false, explanation: 'Momentum changes sign in one dimension, but total energy does not. The relativistic energy depends on $\\gamma$, and $\\gamma$ stays positive for both $+0.60$ and $-0.60$.' },
-        { id: 'C', text: 'Its momentum stays the same because $\\gamma$ stays the same.', isCorrect: false, explanation: 'Keeping the same $\\gamma$ does not keep the momentum fixed, because $p = \\gamma m v$ still contains the signed velocity. The direction flip changes the sign of $p$.' }
+        { id: 'C', text: 'Its momentum stays the same because $\\gamma$ stays the same.', isCorrect: false, explanation: 'Keeping the same $\\gamma$ does not keep the momentum fixed, because $p = \\gamma m v$ still contains the signed velocity. The direction flip changes the sign of $p$.' },
+        { id: 'A', text: 'Its momentum changes sign, but its total energy and kinetic energy stay the same.', isCorrect: true, explanation: 'Exactly. The sign of $p$ comes from the sign of $\\beta$, so reversing direction flips the momentum. But $\\gamma$ depends on $\\beta^2$, so both $E = \\gamma mc^2$ and $K = (\\gamma - 1)mc^2$ stay unchanged when only the sign of the velocity is reversed.' }
       ]
     },
     {
@@ -287,8 +287,8 @@ So the classical formulas are not wrong. They are the low-speed approximation to
       id: 'classical-limit',
       question: 'Why do the classical formulas work well when $|\\beta| \\ll 1$?',
       options: [
-        { id: 'A', text: 'Because then $\\gamma \\approx 1 + \\tfrac{1}{2}\\beta^2$, which gives $p \\approx mv$ and $K \\approx \\tfrac{1}{2}mv^2$.', isCorrect: true, explanation: 'Exactly. At low speed, the Lorentz factor is only slightly larger than $1$, so the relativistic formulas reduce to the familiar classical ones as an approximation.' },
         { id: 'B', text: 'Because relativity only applies above a fixed speed threshold and turns off below it.', isCorrect: false, explanation: 'Relativity does not switch on or off at a threshold. The same relativistic formulas always apply, but for small $|\\beta|$ they are well approximated by the classical expressions.' },
+        { id: 'A', text: 'Because then $\\gamma \\approx 1 + \\tfrac{1}{2}\\beta^2$, which gives $p \\approx mv$ and $K \\approx \\tfrac{1}{2}mv^2$.', isCorrect: true, explanation: 'Exactly. At low speed, the Lorentz factor is only slightly larger than $1$, so the relativistic formulas reduce to the familiar classical ones as an approximation.' },
         { id: 'C', text: 'Because momentum and energy stop being conserved near the speed of light.', isCorrect: false, explanation: 'Conservation laws still hold at all speeds. What changes near $c$ is the correct formula for the momentum and energy of each particle.' }
       ]
     }

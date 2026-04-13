@@ -93,12 +93,13 @@ where $A$ is the amplitude, $k = 2\pi/\lambda$ is the **wave number**, and $\ome
 Note that the dependent variable $y$ could represent many different things depending on the type of wave. It may be the displacement of a small segment along a vibrating guitar string, the height of a lilypad riding on a water wave, or the local pressure of air at a music concert.  For simplicity, we're starting with 1D waves (i.e. one spatial dimension $$x$$).  A solid understanding of these will allow you to generalize to higher dimensions.
 
 
-As you explore the simulation below, try this sequence:
+As you explore the simulation below, try the following:
 
 1. Keep the wavelength fixed and raise the frequency. Watch how the pattern arrives more often.
-2. Hold the frequency steady and lengthen the wavelength. Notice the crests or compressions spread farther apart.
+2. Hold the frequency constant and increase the wavelength. Notice the crests or compressions spread farther apart.
 3. Switch between transverse and longitudinal modes and compare what the medium itself is doing.
-4. **Careful**: changes to wavelength and frequency affect the wave speed, but it's usually the speed that is constant.
+4. **Careful**: wavelength and frequency affect the wave speed, but it's usually the speed that's constant IRL.
+
 
 <SimulationBlock
   title="Wave Propagation Explorer"
@@ -107,14 +108,10 @@ As you explore the simulation below, try this sequence:
   <WaveSimulator client:only="react" />
 </SimulationBlock>
 
-## Next Steps
-
-- Continue to [Resonance](/oscillations/resonance) to see how coupled oscillators begin to organize wave motion.
-- Continue to [Quantum Foundations](/quantum) for a hidden next module that reuses wavelength and interference ideas in the double-slit experiment.
 
 <ProblemSolvingSection>
   <WorkedExampleCard
-    title="Find Frequency and Wave Speed"
+    title="Frequency and Wave Speed"
     accent="blue"
   >
     #### Problem
@@ -154,7 +151,7 @@ As you explore the simulation below, try this sequence:
   </WorkedExampleCard>
 
   <WorkedExampleCard
-    title="Same Medium, Higher Frequency"
+    title="Constant Wave Speed"
     accent="red"
   >
     #### Problem
@@ -203,9 +200,9 @@ As you explore the simulation below, try this sequence:
       id: 'energy-vs-matter',
       question: 'Which statement best describes what a mechanical wave transports through a medium?',
       options: [
-        { id: 'A', text: 'It transports energy and the disturbance pattern, while the medium typically oscillates around equilibrium.', isCorrect: true, explanation: 'Exactly. In an ordinary wave, neighboring parts of the medium pass the disturbance along. The pattern and energy move, but the material itself usually just vibrates about an equilibrium position.' },
         { id: 'B', text: 'It transports the medium itself in the direction of travel, so each particle keeps moving with the wave.', isCorrect: false, explanation: 'That would describe bulk flow, not the usual picture of wave motion. In a wave, the medium elements usually oscillate locally while the disturbance moves through them.' },
-        { id: 'C', text: 'It cannot transport either energy or information because each particle returns to its starting point.', isCorrect: false, explanation: 'Returning near the starting point does not prevent a wave from carrying energy or information. The disturbance can still propagate from one region to the next.' }
+        { id: 'C', text: 'It cannot transport either energy or information because each particle returns to its starting point.', isCorrect: false, explanation: 'Returning near the starting point does not prevent a wave from carrying energy or information. The disturbance can still propagate from one region to the next.' },
+        { id: 'A', text: 'It transports energy and the disturbance pattern, while the medium typically oscillates around equilibrium.', isCorrect: true, explanation: 'Exactly. In an ordinary wave, neighboring parts of the medium pass the disturbance along. The pattern and energy move, but the material itself usually just vibrates about an equilibrium position.' }
       ]
     },
     {
@@ -221,8 +218,8 @@ As you explore the simulation below, try this sequence:
       id: 'longitudinal-motion',
       question: 'In a longitudinal wave such as sound in air, how do the particles of the medium move?',
       options: [
-        { id: 'A', text: 'They move parallel to the direction the wave travels, creating compressions and rarefactions.', isCorrect: true, explanation: 'Exactly. A longitudinal wave is defined by particle motion along the propagation direction, which produces alternating dense and sparse regions.' },
         { id: 'B', text: 'They move perpendicular to the direction of travel, making crests and troughs like a string wave.', isCorrect: false, explanation: 'Perpendicular particle motion describes a transverse wave, not a longitudinal one.' },
+        { id: 'A', text: 'They move parallel to the direction the wave travels, creating compressions and rarefactions.', isCorrect: true, explanation: 'Exactly. A longitudinal wave is defined by particle motion along the propagation direction, which produces alternating dense and sparse regions.' },
         { id: 'C', text: 'They remain motionless while only the energy moves.', isCorrect: false, explanation: 'The particles do move in a longitudinal wave. Their back-and-forth motion is what creates the traveling compressions and rarefactions.' }
       ]
     }

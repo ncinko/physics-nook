@@ -21,7 +21,12 @@ const normalizedCurrentPath = normalizePath(currentPath);
       </p>
 
       <section id="module-path" class="mt-4 border-t border-theme-grid pt-4">
-        <div class="grid gap-3 lg:grid-cols-3">
+        <div
+          class:list={[
+            'grid gap-3',
+            module.pages.length >= 4 ? 'lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-3',
+          ]}
+        >
           {module.pages.map((page, index) => {
             const isCurrent = normalizePath(page.href) === normalizedCurrentPath;
             const linkHref = isCurrent ? '#page-content' : page.href;

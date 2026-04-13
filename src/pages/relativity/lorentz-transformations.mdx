@@ -1,0 +1,419 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SpacetimeDiagram from '../../components/simulations/SpacetimeDiagram.jsx';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { featuredModule } from '../../data/modules';
+
+<ModuleHero module={featuredModule} currentPath="/relativity/lorentz-transformations" />
+
+<div id="page-content"></div>
+
+# Lorentz Transformations
+
+Spacetime diagrams show that different inertial observers tilt their notions of space and time rather than sharing one universal clock. The Lorentz transformations turn that geometry into algebra. They tell us exactly how the coordinates $(x, t)$ used in one frame relate to $(x', t')$ used in another when the second frame moves at constant velocity $v$ along the shared $x$-axis.
+
+## Why Galilean Time Fails
+
+The concept of universal, absolute time would suggest that moving frames differ only by a shifted position coordinate:
+
+$$
+x' = x - vt,
+\qquad
+t' = t,
+$$
+
+but this cannot be correct if all inertial observers measure the same light speed. The takeaway is that **time cannot remain unchanged**: the corrected transformation has to mix $x$ and $t$.
+
+<DerivationPanel
+  title="Show the contradiction with a light ray"
+>
+  A light pulse emitted from the origin satisfies
+
+  $$
+  x = ct
+  $$
+
+  in the unprimed frame. Under the Galilean assumption,
+
+  $$
+  x' = x - vt = ct - vt = (c-v)t,
+  \qquad
+  t' = t.
+  $$
+
+  Therefore the moving observer would infer
+
+  $$
+  \frac{x'}{t'} = c-v,
+  $$
+
+  not $c$.
+</DerivationPanel>
+
+## Linear Transformations
+
+Inertial frames should map straight worldlines to straight worldlines, so the coordinate change is linear.   If the two frames are aligned at the origin ($x = x' = 0$ at $t = t' = 0$), then we can show
+
+$$
+x' = A(x-vt).
+$$
+
+<DerivationPanel
+  title="Reduce the general linear form"
+  prompt="Use the worldline of the moving origin to constrain the coefficients."
+>
+  Start from the most general linear transformation:
+
+  $$
+  x' = Ax + Bt,
+  \qquad
+  t' = Dx + Et.
+  $$
+
+  The primed origin moves with speed $v$ in the unprimed frame, so its worldline is
+
+  $$
+  x = vt.
+  $$
+
+  Every event on that worldline must satisfy $x' = 0$, so
+
+  $$
+  0 = A(vt) + Bt = (Av + B)t.
+  $$
+
+  Because this must hold for every $t$,
+
+  $$
+  B = -Av.
+  $$
+</DerivationPanel>
+
+## Constancy of $$c$$
+
+If we assume the speed of light is constant in all frames, a flash emitted from the shared origin.  Both right-moving and left-moving light rays still satisfy speed $c$ after the transformation.
+
+That requirement forces the time transformation to be
+
+$$
+t' = A\left(t - \frac{vx}{c^2}\right).
+$$
+
+This is one of the central results: **the transformed time depends on position**. That is why simultaneity is not universal.
+
+<DerivationPanel
+  title="Solve for the time-mixing term"
+>
+  Keep the time transformation in the form
+
+  $$
+  t' = Dx + Et
+  $$
+
+  for the moment. For a right-moving light ray,
+
+  $$
+  x = ct,
+  \qquad
+  x' = ct'.
+  $$
+
+  Using $x' = A(x-vt)$ gives
+
+  $$
+  A(c-v)t = c(Dct + Et),
+  $$
+
+  so
+
+  $$
+  A(c-v) = c^2D + cE.
+  $$
+
+  For a left-moving light ray,
+
+  $$
+  x = -ct,
+  \qquad
+  x' = -ct'.
+  $$
+
+  Then
+
+  $$
+  A(-c-v)t = -c\bigl(D(-c)t + Et\bigr),
+  $$
+
+  which simplifies to
+
+  $$
+  -A(c+v) = c^2D - cE.
+  $$
+
+  Add the two equations:
+
+  $$
+  -2Av = 2c^2D
+  \quad \Longrightarrow \quad
+  D = -\frac{Av}{c^2}.
+  $$
+
+  Subtract the second from the first:
+
+  $$
+  2Ac = 2cE
+  \quad \Longrightarrow \quad
+  E = A.
+  $$
+</DerivationPanel>
+
+## No Inertial Frame Is Preferred
+
+If we assume there is nothing special about any particular frame of reference, the inverse transformation must have the same form as the forward one, except that the relative velocity changes from $v$ to $-v$.
+
+That symmetry fixes the remaining scale factor:
+
+$$
+A = \frac{1}{\sqrt{1-v^2/c^2}} = \gamma.
+$$
+
+<DerivationPanel
+  title="Determine the overall scale factor"
+  prompt="Apply the inverse transformation and require it to undo the forward one for every event."
+>
+  At this stage we know
+
+  $$
+  x' = A(x-vt),
+  \qquad
+  t' = A\left(t - \frac{vx}{c^2}\right).
+  $$
+
+  The inverse must therefore be
+
+  $$
+  x = A(x'+vt'),
+  \qquad
+  t = A\left(t' + \frac{vx'}{c^2}\right).
+  $$
+
+  Substitute the forward expressions into the inverse formula for $x$:
+
+  $$
+  x = A\left[A(x-vt) + vA\left(t - \frac{vx}{c^2}\right)\right].
+  $$
+
+  The middle terms cancel, leaving
+
+  $$
+  x = A^2 x\left(1 - \frac{v^2}{c^2}\right).
+  $$
+
+  Because this must hold for every $x$,
+
+  $$
+  A^2\left(1 - \frac{v^2}{c^2}\right) = 1.
+  $$
+
+  Choose the positive root so the transformation becomes the identity at $v = 0$.
+</DerivationPanel>
+
+## The Lorentz Transformations
+
+Altogether, we have the standard Lorentz transformations:
+
+$$
+x' = \gamma(x-vt),
+\qquad
+t' = \gamma\left(t - \frac{vx}{c^2}\right),
+$$
+
+with
+
+$$
+\gamma = \frac{1}{\sqrt{1-v^2/c^2}}.
+$$
+
+The inverse relations are
+
+$$
+x = \gamma(x'+vt'),
+\qquad
+t = \gamma\left(t' + \frac{vx'}{c^2}\right).
+$$
+
+For motion entirely along the $x$-direction, the transverse coordinates do not change:
+
+$$
+y' = y,
+\qquad
+z' = z.
+$$
+
+
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Event Coordinates"
+    accent="blue"
+  >
+    #### Problem
+
+    Frame $S'$ moves to the right with $\beta = 0.60$ relative to frame $S$. An event occurs at
+
+    $$
+    x = 600\,\text{m},
+    \qquad
+    t = 4.0\,\mu\text{s}
+    $$
+
+    in $S$. Find $x'$ and $t'$.
+
+    #### Given
+
+    - $\beta = 0.60$
+    - $x = 600\,\text{m}$
+    - $t = 4.0\,\mu\text{s}$
+
+    #### Use
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-\beta^2}} = \frac{1}{\sqrt{1-0.60^2}} = 1.25,
+    $$
+
+    $$
+    x' = \gamma(x-vt),
+    \qquad
+    t' = \gamma\left(t - \frac{vx}{c^2}\right).
+    $$
+
+    #### Solve
+
+    Since $v = 0.60c = 1.8 \times 10^8\,\text{m/s}$,
+
+    $$
+    vt = (1.8 \times 10^8)(4.0 \times 10^{-6}) = 720\,\text{m}.
+    $$
+
+    Therefore
+
+    $$
+    x' = 1.25(600 - 720)\,\text{m} = -150\,\text{m}.
+    $$
+
+    For the time coordinate,
+
+    $$
+    \frac{vx}{c^2} = \frac{(0.60c)(600\,\text{m})}{c^2}
+    = 0.60\frac{600}{3.0 \times 10^8}\,\text{s}
+    = 1.2\,\mu\text{s}.
+    $$
+
+    So
+
+    $$
+    t' = 1.25(4.0 - 1.2)\,\mu\text{s}
+    = 3.5\,\mu\text{s}.
+    $$
+
+    #### Check
+
+    The negative value of $x'$ means the event lies slightly behind the primed origin when the primed observer assigns the time $3.5\,\mu\text{s}$. The transformed time is not equal to $t$, which is exactly what the Lorentz transformation predicts.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Testing Simultaneity"
+    accent="red"
+  >
+    #### Problem
+
+    In frame $S$, two flashes occur simultaneously at $t = 0$. Flash $A$ happens at $x_A = 0$ and flash $B$ happens at $x_B = 300\,\text{m}$. Frame $S'$ moves to the right with $\beta = 0.80$. Are the flashes simultaneous in $S'$?
+
+    #### Given
+
+    - $\Delta t = 0$
+    - $\Delta x = x_B - x_A = 300\,\text{m}$
+    - $\beta = 0.80$
+
+    #### Use
+
+    For event differences,
+
+    $$
+    \Delta t' = \gamma\left(\Delta t - \frac{v \Delta x}{c^2}\right).
+    $$
+
+    Since
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-0.80^2}} = \frac{5}{3},
+    $$
+
+    we have
+
+    $$
+    \Delta t' = -\gamma \frac{v \Delta x}{c^2}.
+    $$
+
+    #### Solve
+
+    First note that
+
+    $$
+    \frac{\Delta x}{c} = \frac{300\,\text{m}}{3.0 \times 10^8\,\text{m/s}} = 1.0\,\mu\text{s}.
+    $$
+
+    Therefore
+
+    $$
+    \Delta t'
+    = -\left(\frac{5}{3}\right)(0.80)(1.0\,\mu\text{s})
+    = -1.33\,\mu\text{s}.
+    $$
+
+    #### Check
+
+    The flashes are not simultaneous in $S'$. Because $\Delta t' < 0$, the flash at the larger $x$-coordinate occurs earlier in the moving frame. This is the algebraic form of the tilted simultaneity lines seen on a spacetime diagram.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Lorentz Transformations Checkpoint"
+  questions={[
+    {
+      id: 'why-time-mixes',
+      question: 'Why does the Lorentz derivation force the transformed time $t\'$ to depend on position $x$?',
+      options: [
+        { id: 'A', text: 'Because both right-moving and left-moving light rays must still satisfy speed $c$ in the moving frame, which cannot happen if time is unchanged.', isCorrect: true, explanation: 'Exactly. If we kept $t\' = t$, then a light ray with $x = ct$ would transform to speed $c-v$. Enforcing the same light speed in every inertial frame forces a term proportional to $x$ to appear in the time transformation.' },
+        { id: 'B', text: 'Because space and time coordinates are always numerically equal in relativity.', isCorrect: false, explanation: 'The coordinates are not generally equal. What relativity says is that the transformation between frames mixes them in a way that preserves the light speed and the spacetime interval.' },
+        { id: 'C', text: 'Because only accelerating observers are allowed to define simultaneity.', isCorrect: false, explanation: 'In special relativity we are comparing inertial frames, not accelerating ones. The position dependence of $t\'$ comes from light-speed invariance, not from acceleration.' }
+      ]
+    },
+    {
+      id: 'moving-origin',
+      question: 'What physical fact lets us rewrite the spatial transformation as $x\' = A(x-vt)$ before using any light-ray arguments?',
+      options: [
+        { id: 'B', text: 'The primed origin follows the worldline $x = vt$ in the unprimed frame, and every event on that worldline must satisfy $x\' = 0$.', isCorrect: true, explanation: 'Right. The moving origin of $S\'$ is a direct geometric constraint. Plugging $x = vt$ into the most general linear form forces the coefficient relation $B = -Av$.' },
+        { id: 'A', text: 'The invariant interval already tells us $A = \\gamma$, so the form is known immediately.', isCorrect: false, explanation: 'The interval statement comes later. Before determining the overall factor, the moving-origin condition only fixes the combination $x-vt$.' },
+        { id: 'C', text: 'Lengths are contracted equally in all directions, so the $vt$ term must appear.', isCorrect: false, explanation: 'Length contraction is a consequence of the Lorentz transformation, not the starting point of the derivation. The immediate input here is the worldline of the moving origin.' }
+      ]
+    },
+    {
+      id: 'simultaneity-sign',
+      question: 'Suppose $v > 0$ and two events satisfy $\\Delta t = 0$ with $\\Delta x > 0$ in frame $S$. What does the Lorentz transformation predict for $\\Delta t\'$?',
+      options: [
+        { id: 'C', text: 'It stays zero, because simultaneity is preserved between inertial frames.', isCorrect: false, explanation: 'Simultaneity is not preserved in special relativity. The whole point of the $-v\\Delta x/c^2$ term is to show that separated simultaneous events in one frame are generally not simultaneous in another.' },
+        { id: 'A', text: 'It is negative: $\\Delta t\' = -\\gamma v\\Delta x/c^2 < 0$, so the event at larger $x$ happens earlier in $S\'.', isCorrect: true, explanation: 'Exactly. With $\\Delta t = 0$, the transformation reduces to $\\Delta t\' = -\\gamma v\\Delta x/c^2$. For positive $v$ and positive $\\Delta x$, that quantity is negative.' },
+        { id: 'B', text: 'It is positive, because the moving frame always sees the farther event later.', isCorrect: false, explanation: 'There is no rule that the farther event must look later. The sign follows directly from the transformation, and here it comes out negative.' }
+      ]
+    }
+  ]}
+/>

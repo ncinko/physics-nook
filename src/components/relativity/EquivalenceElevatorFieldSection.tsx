@@ -56,7 +56,7 @@ const CAB_PENDULUM_RADIUS = 12;
 const PENDULUM_UNSTABLE_ALIGNMENT = -0.965;
 const PENDULUM_NUDGE_OFFSET = 3.2;
 const PENDULUM_NUDGE_SPEED = 0.9;
-const PHOTON_SPEED = 268;
+const PHOTON_SPEED = 536;
 const PHOTON_MAX_DURATION = 1.8;
 const PHOTON_SHOT_INTERVAL = 2.45;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);

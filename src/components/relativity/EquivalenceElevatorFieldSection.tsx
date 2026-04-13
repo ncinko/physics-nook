@@ -7,6 +7,19 @@ interface TreeApple extends SpinningBody { id: string; homeX: number; homeY: num
 interface BranchSeg { x1: number; y1: number; x2: number; y2: number; width: number; tone: 'base' | 'shadow'; }
 interface LeafSprite { x: number; y: number; length: number; width: number; rotate: number; color: string; layer: 'back' | 'front'; }
 interface AppleSlotMeta { id: string; x: number; y: number; attachX: number; attachY: number; tilt: number; scaleX: number; scaleY: number; }
+interface PhotonTrailPoint { x: number; y: number; }
+interface PhotonPulse {
+  active: boolean;
+  cooldown: number;
+  flightTime: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  trail: PhotonTrailPoint[];
+  trailFade: number;
+  receiverGlow: number;
+}
 type DragTarget = 'swing' | 'treeApple' | 'cabApple' | 'slider' | 'pendulum' | null;
 interface DragState { active: boolean; pointerId: number | null; target: DragTarget; appleId: string | null; lastPoint: { x: number; y: number }; lastAt: number; }
 
@@ -32,6 +45,10 @@ const CABIN = { x: RIGHT.x + 78, y: RIGHT.y + 18, width: 212, height: 284 };
 const INTERIOR = { x: CABIN.x + 16, y: CABIN.y + 16, width: CABIN.width - 32, height: CABIN.height - 32 };
 const SLIDER = { x: CABIN.x + CABIN.width + 28, y: CABIN.y + 26, height: CABIN.height - 52, thumbR: 10, hitW: 40 };
 const CAB_APPLE_HOME = { x: INTERIOR.x + 38, y: INTERIOR.y + 40 };
+const LASER = { x: INTERIOR.x, y: INTERIOR.y + INTERIOR.height * 0.72, width: 26, height: 10 };
+const LASER_NOZZLE = { x: LASER.x + LASER.width - 2, y: LASER.y + LASER.height * 0.5 };
+const LASER_TARGET_X = INTERIOR.x + INTERIOR.width - 16;
+const LASER_RECEIVER = { x: LASER_TARGET_X + 2, y: LASER.y, width: 10, height: LASER.height };
 const CAB_PENDULUM_LENGTH = 94;
 const CAB_PENDULUM_REST = { x: INTERIOR.x + INTERIOR.width * 0.5, y: INTERIOR.y + INTERIOR.height * 0.5 };
 const CAB_PENDULUM_ANCHOR = { x: CAB_PENDULUM_REST.x, y: CAB_PENDULUM_REST.y - CAB_PENDULUM_LENGTH };
@@ -39,6 +56,9 @@ const CAB_PENDULUM_RADIUS = 12;
 const PENDULUM_UNSTABLE_ALIGNMENT = -0.965;
 const PENDULUM_NUDGE_OFFSET = 3.2;
 const PENDULUM_NUDGE_SPEED = 0.9;
+const PHOTON_SPEED = 268;
+const PHOTON_MAX_DURATION = 1.8;
+const PHOTON_SHOT_INTERVAL = 2.45;
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
 const mulberry32 = (seed: number) => {
@@ -243,6 +263,18 @@ const CLOUDS = [
 
 const emptyDrag = (): DragState => ({ active: false, pointerId: null, target: null, appleId: null, lastPoint: { x: 0, y: 0 }, lastAt: 0 });
 const makeTreeApples = (): TreeApple[] => APPLE_SLOTS.map((slot) => ({ id: slot.id, homeX: slot.x, homeY: slot.y, x: slot.x, y: slot.y, vx: 0, vy: 0, angle: 0, spin: 0, status: 'attached' }));
+const makePhotonPulse = (): PhotonPulse => ({
+  active: false,
+  cooldown: 0.8,
+  flightTime: 0,
+  x: LASER_NOZZLE.x,
+  y: LASER_NOZZLE.y,
+  vx: PHOTON_SPEED,
+  vy: 0,
+  trail: [],
+  trailFade: 0,
+  receiverGlow: 0,
+});
 const norm = (x: number, y: number) => { const m = Math.hypot(x, y) || 1; return { x: x / m, y: y / m, m }; };
 const sceneVelocity = (body: MovingPoint) => ({ x: body.vx * PHYSICS_SCALE, y: body.vy * PHYSICS_SCALE });
 const dragVelocity = (delta: number, elapsed: number, maxPxPerSec: number) => clamp(delta / Math.max(elapsed, 0.001), -maxPxPerSec, maxPxPerSec) / PHYSICS_SCALE;
@@ -472,6 +504,7 @@ export default function EquivalenceElevatorFieldSection({ children }: Props) {
   const treeApplesRef = useRef<TreeApple[]>(makeTreeApples());
   const cabAppleRef = useRef<SpinningBody>({ x: CAB_APPLE_HOME.x, y: CAB_APPLE_HOME.y, vx: 0, vy: 0, angle: 0, spin: 0 });
   const cabPendulumRef = useRef<MovingPoint>({ x: CAB_PENDULUM_REST.x, y: CAB_PENDULUM_REST.y, vx: 0, vy: 0 });
+  const photonRef = useRef<PhotonPulse>(makePhotonPulse());
   const lastNonZeroAccelSignRef = useRef(Math.sign(START_ACCEL_Y) || -1);
   const pendulumNudgeBiasRef = useRef(1);
   const dragRef = useRef<DragState>(emptyDrag());
@@ -520,8 +553,46 @@ export default function EquivalenceElevatorFieldSection({ children }: Props) {
       last = time;
       const target = dragRef.current.active ? dragRef.current.target : null;
       const field = apparentField(accelRef.current);
+      const minimalAcceleration = Math.abs(accelRef.current) < ZERO_SNAP;
       phaseRef.current = (phaseRef.current + dt * (2.2 + (Math.abs(accelRef.current) / ACCEL_LIMIT) * 3.4)) % (Math.PI * 2);
       cloudDriftRef.current = (cloudDriftRef.current + dt) % 1000;
+      const photon = photonRef.current;
+
+      photon.receiverGlow = Math.max(0, photon.receiverGlow - dt * 1.75);
+      if (photon.active) {
+        photon.flightTime += dt;
+        photon.vy += field.y * dt * PHYSICS_SCALE;
+        photon.x += photon.vx * dt;
+        photon.y += photon.vy * dt;
+        if (photon.x > LASER_TARGET_X) photon.x = LASER_TARGET_X;
+        photon.trail.push({ x: photon.x, y: photon.y });
+        if (photon.trail.length > 40) photon.trail.shift();
+        const outOfBounds =
+          photon.x >= LASER_TARGET_X ||
+          photon.y <= INTERIOR.y + 14 ||
+          photon.y >= INTERIOR.y + INTERIOR.height - 14 ||
+          photon.flightTime >= PHOTON_MAX_DURATION;
+        if (outOfBounds) {
+          photon.active = false;
+          photon.cooldown = PHOTON_SHOT_INTERVAL;
+          photon.trailFade = 1;
+          photon.receiverGlow =
+            minimalAcceleration && photon.x >= LASER_TARGET_X - 4 ? 1 : photon.receiverGlow;
+        }
+      } else {
+        photon.cooldown -= dt;
+        photon.trailFade = Math.max(0, photon.trailFade - dt * 0.78);
+        if (photon.cooldown <= 0) {
+          photon.active = true;
+          photon.flightTime = 0;
+          photon.x = LASER_NOZZLE.x;
+          photon.y = LASER_NOZZLE.y;
+          photon.vx = PHOTON_SPEED;
+          photon.vy = 0;
+          photon.trail = [{ x: LASER_NOZZLE.x, y: LASER_NOZZLE.y }];
+          photon.trailFade = 1;
+        }
+      }
 
       if (target !== 'swing') {
         const swing = swingRef.current;
@@ -744,6 +815,13 @@ export default function EquivalenceElevatorFieldSection({ children }: Props) {
   const cloudDrift = cloudDriftRef.current;
   const skyTime = cloudDriftRef.current;
   const cabPendulum = cabPendulumRef.current;
+  const photon = photonRef.current;
+  const photonTrace = photon.trail.length > 1
+    ? photon.trail.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ')
+    : '';
+  const photonTraceOpacity = photon.active ? 0.9 : photon.trailFade * 0.7;
+  const photonGlow = photon.active ? 1 : 0;
+  const receiverGlow = photon.receiverGlow;
 
   const cloudX = (baseX: number, speed: number) => {
     const span = LEFT.width + 120;
@@ -880,6 +958,14 @@ export default function EquivalenceElevatorFieldSection({ children }: Props) {
               <circle cx={MOON.x} cy={MOON.y} r={MOON.r} fill="white" />
               <circle cx={MOON.cutX} cy={MOON.cutY} r={MOON.cutR} fill="black" />
             </mask>
+            <clipPath id="equiv-elevator-light-clip">
+              <rect x={INTERIOR.x} y={INTERIOR.y} width={INTERIOR.width} height={INTERIOR.height} rx="26" />
+            </clipPath>
+            <linearGradient id="equiv-photon-trace" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="rgba(239,68,68,0)" />
+              <stop offset="38%" stopColor="rgba(248,113,113,0.48)" />
+              <stop offset="100%" stopColor="rgba(220,38,38,0.94)" />
+            </linearGradient>
           </defs>
 
           <rect x={LEFT.x} y={LEFT.y} width={LEFT.width} height={LEFT.height} rx="30" fill={darkMode ? 'url(#equiv-orchard-sky-night)' : 'url(#equiv-orchard-sky)'} stroke="rgba(148,163,184,0.24)" />
@@ -1020,6 +1106,59 @@ export default function EquivalenceElevatorFieldSection({ children }: Props) {
           )}
           <rect x={CABIN.x} y={CABIN.y} width={CABIN.width} height={CABIN.height} rx="34" fill="rgba(255,255,255,0.92)" stroke="rgba(148,163,184,0.48)" strokeWidth="1.8" />
           <rect x={INTERIOR.x} y={INTERIOR.y} width={INTERIOR.width} height={INTERIOR.height} rx="26" fill="rgba(248,250,252,0.92)" stroke="rgba(148,163,184,0.24)" strokeWidth="1.2" />
+          <g clipPath="url(#equiv-elevator-light-clip)">
+            {photonTrace && (
+              <>
+                <path
+                  d={photonTrace}
+                  fill="none"
+                  stroke="rgba(248,113,113,0.18)"
+                  strokeWidth="7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={photonTraceOpacity}
+                />
+                <path
+                  d={photonTrace}
+                  fill="none"
+                  stroke="url(#equiv-photon-trace)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity={photonTraceOpacity}
+                />
+              </>
+            )}
+            {photon.active && (
+              <g opacity={photonGlow}>
+                <circle cx={photon.x} cy={photon.y} r="6.8" fill="rgba(125,211,252,0.2)" />
+                <circle cx={photon.x} cy={photon.y} r="3.1" fill="rgba(253,224,71,0.96)" />
+                <circle cx={photon.x} cy={photon.y} r="1.4" fill="rgba(255,255,255,0.98)" />
+              </g>
+            )}
+          </g>
+          <g>
+            <rect x={LASER.x} y={LASER.y} width={LASER.width} height={LASER.height} rx="4" fill="rgba(30,41,59,0.9)" />
+            <rect x={LASER.x + 3} y={LASER.y + 2} width={LASER.width - 7} height={LASER.height - 4} rx="3" fill="rgba(100,116,139,0.78)" />
+            <circle cx={LASER_NOZZLE.x} cy={LASER_NOZZLE.y} r="3.6" fill="rgba(251,113,133,0.34)" />
+            <circle cx={LASER_NOZZLE.x} cy={LASER_NOZZLE.y} r="1.8" fill="rgba(251,113,133,0.96)" />
+            <rect x={LASER_RECEIVER.x} y={LASER_RECEIVER.y} width={LASER_RECEIVER.width} height={LASER_RECEIVER.height} rx="4" fill="rgba(30,41,59,0.86)" />
+            <rect x={LASER_RECEIVER.x + 2} y={LASER_RECEIVER.y + 2} width={LASER_RECEIVER.width - 4} height={LASER_RECEIVER.height - 4} rx="2" fill="rgba(148,163,184,0.7)" />
+            <circle
+              cx={LASER_RECEIVER.x + LASER_RECEIVER.width * 0.5}
+              cy={LASER_NOZZLE.y}
+              r={4.2 + receiverGlow * 5.2}
+              fill="rgba(125,211,252,0.18)"
+              opacity={0.14 + receiverGlow * 0.48}
+            />
+            <circle
+              cx={LASER_RECEIVER.x + LASER_RECEIVER.width * 0.5}
+              cy={LASER_NOZZLE.y}
+              r="1.8"
+              fill="rgba(125,211,252,0.9)"
+              opacity={0.45 + receiverGlow * 0.55}
+            />
+          </g>
           <line x1={CAB_PENDULUM_ANCHOR.x} y1={CAB_PENDULUM_ANCHOR.y} x2={cabPendulum.x} y2={cabPendulum.y} stroke="rgba(15,23,42,0.34)" strokeWidth="2.4" />
           <circle cx={CAB_PENDULUM_ANCHOR.x} cy={CAB_PENDULUM_ANCHOR.y} r="4.5" fill="rgba(15,23,42,0.26)" />
           <circle cx={cabPendulum.x} cy={cabPendulum.y} r={CAB_PENDULUM_RADIUS + 5} fill="rgba(13,148,136,0.08)" />

@@ -70,7 +70,9 @@ $$
 
 The collection of coefficients $g_{\mu \nu}(x)$ is the metric (the notation above implies summation over indices $\mu$ and $\nu$, so 16 coefficients for a 4D spacetime). In flat spacetime those coefficients are constant. Near matter and energy they change with location, and in the full theory Einstein's equations determine them from the local mass-energy distribution.
 
-Outside a nonrotating spherical mass, one important example is the Schwarzschild metric:
+It's worth seeing one important example written out fully.   The Schwarzschild metric describes spacetime near a spherical mass $M$ (with no charge or angular momentum).  Written in spherical coordinates $(r,\theta,\phi)$, the spacetime interval according to a distant observer is
+
+
 
 $$
 ds^2 = \left(1 - \frac{2GM}{rc^2}\right)c^2dt^2 - \frac{dr^2}{1 - \frac{2GM}{rc^2}} - r^2d\theta^2 - r^2\sin^2\theta\,d\phi^2.
@@ -78,7 +80,11 @@ $$
 
 Note that the coefficient of $c^2dt^2$ is no longer just $1$; it depends on the distance $r$ from the gravitating body.
 
-Once the metric is known, it tells you how to measure tiny intervals and decide what counts as "straight ahead" from one moment to the next. A freely falling object follows a **geodesic**: the straightest possible worldline according to that metric.
+
+With a metric like this, we can now measure tiny intervals in the geometry of spacetime. This ultimately allows us to determine the geodesics, i.e. the worldlines of freely falling objects.  At this point, we are fully in the land of differential geometry which requires the use of calculus and tensors.  This is a rich subject and worth learning/reading about at some point in your life.
+
+At this point, it's probably better to focus on some of the interesting consequences of GR.  Below, you can read about gravitational time dilation and the deflection of light.
+
 
 <WorkedExampleCard
   title="Geodesic Equation"
@@ -117,6 +123,7 @@ Once the metric is known, it tells you how to measure tiny intervals and decide 
 
   Each coordinate changes linearly with $\tau$, which is just uniform straight-line motion.
 </WorkedExampleCard>
+
 
 
 
@@ -159,7 +166,7 @@ $$
 \approx 86399.999940\,\text{s}.
 $$
 
-That is about $6.0 \times 10^{-5}\,\text{s} = 60\,\mu\text{s}$ less than a clock very far from Earth. The effect is tiny here, but it is real: gravity changes the metric, and the metric changes how clocks accumulate time.
+That is about $6.0 \times 10^{-5}\,\text{s} = 60\,\mu\text{s}$ less than a clock very far from Earth. The effect is tiny here, but it is real: gravity (the warping of spacetime by Earth) changes the metric, and the metric changes how clocks accumulate time.
 
 <WorkedExampleCard
   title="Weak-Field Light Deflection"

@@ -7,6 +7,7 @@ import RelativisticMomentumEnergyExplorer from '../../components/simulations/Rel
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import { featuredModule } from '../../data/modules';
 
@@ -51,15 +52,49 @@ When $|v|$ is small compared with $c$, we have $|\beta| \ll 1$ and $\gamma \appr
 With these, the expression for **relativistic momentum** is
 
 $$
-p = \gamma mv = \gamma mc\beta.
+p = \gamma mv 
 $$
 
-Dividing by $mc$ gives a compact normalized form:
 
-$$
-\frac{p}{mc} = \gamma \beta.
-$$
 
+<DerivationPanel
+  title="Why does momentum pick up a gamma factor?"
+>
+  In classical mechanics, momentum is mass times velocity measured per unit coordinate time:
+
+  $$
+  p_{\text{classical}} = m\frac{dx}{dt}.
+  $$
+
+  In relativity, different observers do not agree on the same coordinate-time interval $dt$, so it is more natural to build the formula from the particle's **proper time** $d\tau$. Time dilation give the relationship between these two time intervals:
+
+  $$
+  d\tau = \frac{dt}{\gamma}
+  \qquad \Longrightarrow \qquad
+  \frac{dt}{d\tau} = \gamma.
+  $$
+
+  A clean relativistic generalization is then
+
+  $$
+  p = m\frac{dx}{d\tau}.
+  $$
+
+Rewriting that in terms of the ordinary velocity $v = dx/dt$:
+
+  $$
+  p = m\frac{dx}{dt}\frac{dt}{d\tau}
+  = mv\gamma.
+  $$
+
+  This also passes the two checks we want. At low speed, $\gamma \approx 1$, so
+
+  $$
+  p \approx mv.
+  $$
+
+  And as $|v| \to c$, the factor $\gamma$ grows without bound, so (when applying a force) the momentum keeps increasing instead of allowing a massive particle to reach or exceed the speed of light.
+</DerivationPanel>
 
 ## Energy
 
@@ -81,15 +116,70 @@ $$
 K = E - E_0 = (\gamma - 1)mc^2.
 $$
 
-In normalized form,
-
-$$
-\frac{E}{mc^2} = \gamma,
-\qquad
-\frac{K}{mc^2} = \gamma - 1.
-$$
 
 This makes an important distinction clear: rest energy is present even at $v = 0$, while kinetic energy is the extra energy associated with motion.
+
+<DerivationPanel
+  title="How do we derive the relativistic energy formula?"
+  accent="red"
+>
+  In one dimension, the incremental work done on a particle is
+
+  $$
+  dK = F\,dx.
+  $$
+
+  Since $F = dp/dt$ and $v = dx/dt$,
+
+  $$
+  dK = \frac{dp}{dt}\,dx = v\,dp.
+  $$
+
+  Now substitute the relativistic momentum $p = \gamma mv$:
+
+  $$
+  dp = m\,d(\gamma v).
+  $$
+
+  Differentiate $\gamma v$ with respect to $v$:
+
+  $$
+  \frac{d}{dv}(\gamma v)
+  = \gamma + v\frac{d\gamma}{dv}
+  = \gamma + \gamma^3\frac{v^2}{c^2}
+  = \gamma^3.
+  $$
+
+  Therefore
+
+  $$
+  dp = m\gamma^3\,dv,
+  \qquad
+  dK = mv\gamma^3\,dv.
+  $$
+
+We can show that 
+
+  $$
+  \frac{d\gamma}{dv} = \gamma^3\frac{v}{c^2},
+  $$
+
+  so the last expression becomes
+
+  $$
+  dK = mc^2\,d\gamma.
+  $$
+
+  Integrating from rest ($\gamma = 1$) to speed $v$ gives
+
+  $$
+  K = mc^2 \int_1^\gamma d\gamma
+  = (\gamma - 1)mc^2.
+  $$
+
+  We interpret this kinetic energy as some total energy $\gamma m c^2$ minus a baseline **rest energy** $mc^2$.
+
+</DerivationPanel>
 
 ## Energy-momentum Relation
 
@@ -122,37 +212,15 @@ $$
 E^2 - p^2c^2 = m^2 c^4.
 $$
 
-So the invariant relation is
+This invariant relation is often written as
 
 $$
 E^2 = p^2c^2 + m^2 c^4.
 $$
 
-This is the energy-momentum connection for a massive particle in one dimension.
+Not only is this true for massive particles, but it happens to work for massless particles as well.  For example, the energy of a photon can be written as $E = pc$.  This immediately begs the question: **how do we define the momentum carried by a photon?**  Classical electromagnetic waves carry energy and momentum, but the answer ultimately requires quantum mechanics if you want a massless particle theory of light.
 
-## Recovering the Classical Limit
 
-For small $|\beta|$, the Lorentz factor can be approximated by
-
-$$
-\gamma \approx 1 + \frac{1}{2}\beta^2.
-$$
-
-Then the momentum becomes
-
-$$
-p = \gamma mv \approx mv,
-$$
-
-because the correction to $\gamma$ is tiny. For kinetic energy,
-
-$$
-K = (\gamma - 1)mc^2
-\approx \frac{1}{2}\beta^2 mc^2
-= \frac{1}{2}mv^2.
-$$
-
-So the classical formulas are not wrong. They are the low-speed approximation to the relativistic ones.
 
 
 

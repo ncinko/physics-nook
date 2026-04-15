@@ -329,6 +329,127 @@ $$
   </WorkedExampleCard>
 
   <WorkedExampleCard
+    title="Time Dilation"
+    accent="red"
+  >
+    #### Problem
+
+    A clock is fixed inside a spacecraft moving with $\beta = 0.90$ relative to Earth. Between two ticks, the spacecraft frame measures
+
+    $$
+    \Delta x' = 0,
+    \qquad
+    \Delta t' = 12\,\mu\text{s}.
+    $$
+
+    How much time $\Delta t$ passes in the Earth frame?
+
+    #### Given
+
+    - $\beta = 0.90$
+    - $\Delta x' = 0$
+    - $\Delta t' = 12\,\mu\text{s}$
+
+    #### Use
+
+    For event differences, the inverse Lorentz transformation gives
+
+    $$
+    \Delta t = \gamma\left(\Delta t' + \frac{v \Delta x'}{c^2}\right).
+    $$
+
+    Since the clock is at rest in $S'$,
+
+    $$
+    \Delta x' = 0
+    \quad \Longrightarrow \quad
+    \Delta t = \gamma \Delta t'.
+    $$
+
+    Also,
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-\beta^2}}
+    = \frac{1}{\sqrt{1-0.90^2}}
+    \approx 2.29.
+    $$
+
+    #### Solve
+
+    Therefore
+
+    $$
+    \Delta t = (2.29)(12\,\mu\text{s})
+    \approx 27.5\,\mu\text{s}.
+    $$
+
+    #### Check
+
+    Earth records more elapsed time than the clock riding with the spacecraft. This effect is known as time dilation: the moving clock accumulates less proper time between the same two events.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Length Contraction"
+    accent="blue"
+  >
+    #### Problem
+
+    A cargo pod is at rest in frame $S'$, where its proper length is
+
+    $$
+    L_0 = \Delta x' = 18.0\,\text{m}.
+    $$
+
+    The pod moves past a station with $\beta = 0.80$. What length $L = \Delta x$ does the station measure?
+
+    #### Given
+
+    - $\beta = 0.80$
+    - $\Delta x' = 18.0\,\text{m}$
+    - $\Delta t = 0$ in the station frame
+
+    #### Use
+
+    The station must record both ends of the pod at the same time in its frame (this is the definition of length), so use the spatial transformation for event differences:
+
+    $$
+    \Delta x' = \gamma(\Delta x - v\Delta t).
+    $$
+
+    Because the station measures the endpoints simultaneously,
+
+    $$
+    \Delta t = 0
+    \quad \Longrightarrow \quad
+    \Delta x' = \gamma \Delta x.
+    $$
+
+    Thus
+
+    $$
+    \Delta x = \frac{\Delta x'}{\gamma} = \frac{L_0}{\gamma}.
+    $$
+
+    With
+
+    $$
+    \gamma = \frac{1}{\sqrt{1-0.80^2}} = \frac{5}{3},
+    $$
+
+    we can solve for the contracted length.
+
+    #### Solve
+
+    $$
+    L = \Delta x = \frac{18.0\,\text{m}}{5/3} = 10.8\,\text{m}.
+    $$
+
+    #### Check
+
+    The moving length is shorter than the proper length; this effect is known as length contraction.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
     title="Testing Simultaneity"
     accent="red"
   >

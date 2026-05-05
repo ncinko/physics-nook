@@ -4,21 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#00080f" />
-    <title>Ocean Queen</title>
+    <title>Manatee Royale</title>
   </head>
   <body>
     <main class="game-shell">
-      <canvas id="gameCanvas" aria-label="Ocean Queen game view"></canvas>
+      <canvas id="gameCanvas" aria-label="Manatee Royale game view"></canvas>
 
       <header class="topbar">
-        <div class="brand-lockup">
-          <span class="brand-mark" aria-hidden="true"></span>
-          <div class="brand-copy">
-            <strong>Ocean Queen</strong>
-            <span id="endpointText">ws://localhost:8788</span>
-          </div>
-        </div>
-
         <div class="connection-pill" data-state="offline" id="connectionPill">
           <span class="status-dot" aria-hidden="true"></span>
           <span id="statusText">Offline</span>
@@ -30,13 +22,13 @@
           <div class="menu-heading">
             <span class="brand-mark" aria-hidden="true"></span>
             <div>
-              <h1>Ocean Queen</h1>
+              <h1>Manatee Royale</h1>
               <p>Choose one of three open lobbies.</p>
             </div>
           </div>
           <label class="alias-field">
             <span>Alias</span>
-            <input id="nameInput" name="name" autocomplete="nickname" maxlength="18" placeholder="Player" />
+            <input id="nameInput" name="name" autocomplete="nickname" maxlength="3" placeholder="TAG" />
           </label>
           <div id="lobbyCards" class="lobby-cards" aria-live="polite"></div>
         </div>

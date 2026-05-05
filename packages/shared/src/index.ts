@@ -241,6 +241,18 @@ export type ClashEvent = {
   y: number;
 };
 
+export type JumpEvent = {
+  x: number;
+  y: number;
+  team: Team;
+};
+
+export type DeathEvent = {
+  x: number;
+  y: number;
+  team: Team;
+};
+
 export type RoomSnapshot = {
   roomCode: string;
   name: string;
@@ -283,6 +295,8 @@ export type WorldSnapshot = {
   clamshells: ClamShellSnapshot[];
   upgradeGates: UpgradeGate[];
   clashEvents: ClashEvent[];
+  jumpEvents: JumpEvent[];
+  deathEvents: DeathEvent[];
   winner: WinnerState;
   roundEndsAt: number | null;
 };
@@ -384,8 +398,8 @@ const SCORE_SLOTS: ScoreSlot[] = [
 ];
 
 export const GAME_MAP: GameMap = {
-  id: 'ocean-queen',
-  name: 'Ocean Queen',
+  id: 'manatee-royale',
+  name: 'Manatee Royale',
   version: 3,
   width: GAME_CONFIG.arena.width,
   height: GAME_CONFIG.arena.height,
@@ -481,12 +495,14 @@ export const normalizeRoomCode = (value?: string): string => {
 };
 
 export const sanitizePlayerName = (value: unknown, fallback = 'Player'): string => {
+  const safeFallback = fallback.trim().replace(/\s+/g, '').slice(0, 3) || 'PLY';
+
   if (typeof value !== 'string') {
-    return fallback;
+    return safeFallback;
   }
 
-  const name = value.trim().replace(/\s+/g, ' ').slice(0, 18);
-  return name || fallback;
+  const name = value.trim().replace(/\s+/g, '').slice(0, 3);
+  return name || safeFallback;
 };
 
 export const getTeamForSlot = (slot: number): Team => (slot < GAME_CONFIG.maxPlayers / 2 ? 'blue' : 'red');

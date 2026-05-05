@@ -32,6 +32,17 @@ import type {
 
 type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
 
+type Particle = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+};
+
 const INPUT_FLUSH_MS = 1000 / 30;
 const PING_INTERVAL_MS = 2000;
 const CANVAS_BASE_WIDTH = GAME_CONFIG.arena.width;
@@ -42,12 +53,12 @@ const MANATEE_WIDTH = GAME_MAP.snail.width;
 const MANATEE_HEIGHT = GAME_MAP.snail.height;
 const MAX_LIVES = GAME_CONFIG.player.queenLives;
 const MAX_PEARLS = GAME_CONFIG.objective.berriesToWin;
+const PLAYER_NAME_MAX_LENGTH = 3;
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement | null;
 const statusText = document.getElementById('statusText');
 const connectionPill = document.getElementById('connectionPill');
-const endpointText = document.getElementById('endpointText');
 const playerCount = document.getElementById('playerCount');
 const menuOverlay = document.getElementById('menuOverlay');
 const lobbyOverlay = document.getElementById('lobbyOverlay');
@@ -66,7 +77,6 @@ if (
   !nameInput ||
   !statusText ||
   !connectionPill ||
-  !endpointText ||
   !playerCount ||
   !menuOverlay ||
   !lobbyOverlay ||
@@ -106,7 +116,8 @@ let connectionState: ConnectionState = 'offline';
 let frameCount = 0;
 
 const clashFx: { x: number; y: number; framesLeft: number; lifeFrames: number }[] = [];
-const backgroundBubbles = Array.from({ length: 100 }, (_, index) => ({
+const particles: Particle[] = [];
+const backgroundBubbles = Array.from({ length: 140 }, (_, index) => ({
   x: (index * 251) % CANVAS_BASE_WIDTH,
   y: (index * 397) % CANVAS_BASE_HEIGHT,
   speed: 0.5 + (index % 7) * 0.25,
@@ -139,17 +150,31 @@ const getDefaultWsUrl = (): string => {
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
 
-const hexToRgba = (hex: string, alpha: number): string => {
-  const clean = hex.replace('#', '');
-  const r = Number.parseInt(clean.slice(0, 2), 16);
-  const g = Number.parseInt(clean.slice(2, 4), 16);
-  const b = Number.parseInt(clean.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
+const sanitizeAlias = (value: string): string =>
+  value
+    .trim()
+    .replace(/\s+/g, '')
+    .slice(0, PLAYER_NAME_MAX_LENGTH);
 
 const teamColor = (team: Team): string => TEAM_COLORS[team];
 const teamDarkColor = (team: Team): string => TEAM_DARK_COLORS[team];
 const teamBaseColor = (team: Team): string => TEAM_BASE_COLORS[team];
+
+const createParticles = (x: number, y: number, color: string, count: number, speed: number): void => {
+  for (let i = 0; i < count; i += 1) {
+    const life = 30 + Math.random() * 30;
+    particles.push({
+      x,
+      y,
+      vx: (Math.random() - 0.5) * speed,
+      vy: (Math.random() - 0.5) * speed - 1,
+      life,
+      maxLife: life,
+      color,
+      size: 3 + Math.random() * 5,
+    });
+  }
+};
 
 const roleLabel = (role?: PlayerRole): string => {
   if (role === 'queen') return 'QUEEN';
@@ -165,6 +190,11 @@ const victoryLabel = (reason: NonNullable<WorldSnapshot['winner']>['reason']): s
 
 const getLocalRoomPlayer = (): RoomPlayer | null =>
   localPlayerId && room ? (room.players.find((player) => player.id === localPlayerId) ?? null) : null;
+
+const formatRoomPingLabel = (roomName = room?.name): string => {
+  if (!roomName) return latencyMs !== null ? `Lobby ${latencyMs} ms` : 'Choose lobby';
+  return latencyMs !== null ? `${roomName} ${latencyMs} ms` : roomName;
+};
 
 const setConnectionState = (state: ConnectionState, label?: string): void => {
   connectionState = state;
@@ -302,13 +332,13 @@ const handleJoined = (message: Extract<ServerToClientMessage, { type: 'joined' }
   room = message.room;
   latestSnapshot = message.snapshot;
   pendingJoin = null;
-  setConnectionState('online', message.room.name);
+  setConnectionState('online', formatRoomPingLabel(message.room.name));
   renderLobby();
 };
 
 const handleRoomUpdate = (message: Extract<ServerToClientMessage, { type: 'room' }>): void => {
   room = message.room;
-  setConnectionState('online', message.room.name);
+  setConnectionState('online', formatRoomPingLabel(message.room.name));
   renderLobby();
 };
 
@@ -316,6 +346,13 @@ const handleSnapshot = (message: WorldSnapshot): void => {
   latestSnapshot = message;
   for (const event of message.clashEvents ?? []) {
     clashFx.push({ x: event.x, y: event.y, framesLeft: 18, lifeFrames: 18 });
+  }
+  for (const event of message.jumpEvents ?? []) {
+    createParticles(event.x, event.y, '#d9fbff', 5, 3.4);
+  }
+  for (const event of message.deathEvents ?? []) {
+    createParticles(event.x, event.y, teamColor(event.team), 32, 9);
+    createParticles(event.x, event.y, '#fff4b8', 12, 7);
   }
   if (room && room.roomCode === message.roomCode && room.phase !== message.phase) {
     room = { ...room, phase: message.phase, winner: message.winner, scoreScreenEndsAt: message.roundEndsAt };
@@ -357,7 +394,7 @@ const handleSocketMessage = (event: MessageEvent): void => {
   if (message.type === 'pong') {
     latencyMs = Math.max(0, Math.round(performance.now() - message.clientTime));
     if (connectionState === 'online' && room) {
-      setConnectionState('online', `Room ${room.roomCode} ${latencyMs} ms`);
+      setConnectionState('online', formatRoomPingLabel(room.name));
     }
     return;
   }
@@ -369,7 +406,6 @@ const handleSocketMessage = (event: MessageEvent): void => {
 
 const connect = (): void => {
   const wsUrl = getDefaultWsUrl();
-  endpointText.textContent = wsUrl.replace(/^wss?:\/\//, '');
 
   if (socket && socket.readyState !== WebSocket.CLOSED) return;
 
@@ -415,7 +451,8 @@ const connect = (): void => {
 };
 
 const joinLobby = (roomCode: LobbyCode): void => {
-  const name = nameInput.value.trim();
+  const name = sanitizeAlias(nameInput.value);
+  nameInput.value = name;
   localStorage.setItem('physics-nook-game-name', name);
   localStorage.setItem('physics-nook-game-room', roomCode);
   pendingJoin = roomCode;
@@ -478,6 +515,13 @@ document.addEventListener('keyup', (event) => {
 });
 
 window.addEventListener('blur', resetInput);
+
+nameInput.addEventListener('input', () => {
+  const sanitized = sanitizeAlias(nameInput.value);
+  if (nameInput.value !== sanitized) {
+    nameInput.value = sanitized;
+  }
+});
 
 document.querySelectorAll<HTMLButtonElement>('[data-control]').forEach((button) => {
   const action = button.dataset.control as keyof InputState;
@@ -622,11 +666,13 @@ const drawBackground = (): void => {
 
   drawBackgroundDecorations();
 
-  context.fillStyle = 'rgba(255, 255, 255, 0.15)';
   for (const bubble of backgroundBubbles) {
     const y = (bubble.y - frameCount * bubble.speed + CANVAS_BASE_HEIGHT + 20) % (CANVAS_BASE_HEIGHT + 40) - 20;
     const x = bubble.x + Math.sin(frameCount * 0.02 + bubble.phase) * 6;
+    context.fillStyle = 'rgba(217, 251, 255, 0.36)';
     context.fillRect(x, y, bubble.size, bubble.size);
+    context.fillStyle = 'rgba(255, 255, 255, 0.55)';
+    context.fillRect(x + 1, y + 1, Math.max(1, bubble.size - 3), Math.max(1, bubble.size - 3));
   }
 
   context.fillStyle = '#c2b280';
@@ -662,11 +708,6 @@ const drawBase = (base: GameBase, score: number): void => {
 
   context.fillStyle = teamColor(base.team);
   context.fillRect(base.x, base.y + base.height - 10, base.width, 10);
-  drawWorldText(base.team.toUpperCase(), base.x + base.width / 2, base.y + base.height + 30, {
-    size: 22,
-    color: teamColor(base.team),
-    align: 'center',
-  });
 };
 
 const drawGateIcon = (gate: UpgradeGate): void => {
@@ -684,9 +725,27 @@ const drawGateIcon = (gate: UpgradeGate): void => {
     context.fillRect(-11, 8, 22, 5);
     context.fillRect(-2, -25, 4, 8);
   } else {
-    context.fillRect(-4, -20, 12, 22);
-    context.fillRect(-16, -2, 18, 8);
-    context.fillRect(-8, 6, 12, 22);
+    context.fillStyle = '#241700';
+    context.fillRect(-1, -29, 16, 10);
+    context.fillRect(-10, -21, 16, 10);
+    context.fillRect(-19, -13, 24, 10);
+    context.fillRect(-3, -5, 16, 10);
+    context.fillRect(-12, 3, 16, 10);
+    context.fillRect(-21, 11, 16, 10);
+    context.fillRect(-29, 19, 14, 9);
+
+    context.fillStyle = '#ffe766';
+    context.fillRect(-4, -32, 16, 10);
+    context.fillRect(-13, -24, 16, 10);
+    context.fillRect(-22, -16, 24, 10);
+    context.fillRect(-6, -8, 16, 10);
+    context.fillRect(-15, 0, 16, 10);
+    context.fillRect(-24, 8, 16, 10);
+    context.fillRect(-32, 16, 14, 9);
+
+    context.fillStyle = '#ffffff';
+    context.fillRect(2, -32, 5, 8);
+    context.fillRect(-7, -24, 5, 8);
   }
 
   context.restore();
@@ -943,26 +1002,16 @@ const drawOctopus = (player: PlayerSnapshot): void => {
 };
 
 const drawPlayerName = (player: PlayerSnapshot): void => {
-  const local = player.id === localPlayerId;
   const cx = player.x + PLAYER_WIDTH / 2;
   const y = player.y - (player.role === 'queen' ? 48 : 38);
-  const label = `${player.name} ${roleLabel(player.role)}`;
+  const label = player.name.slice(0, PLAYER_NAME_MAX_LENGTH);
 
-  context.font = '700 16px "Courier New", monospace';
-  const width = Math.min(220, context.measureText(label).width + 22);
-  drawRoundRect(cx - width / 2, y - 18, width, 26, 4);
-  context.fillStyle = local ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 9, 20, 0.78)';
-  context.fill();
-  context.strokeStyle = local ? '#ffffff' : hexToRgba(teamColor(player.team), 0.55);
-  context.lineWidth = 2;
-  context.stroke();
-  drawWorldText(label, cx, y - 5, {
+  drawWorldText(label, cx, y, {
     size: 15,
-    color: local ? '#000914' : '#ffffff',
+    color: '#ffffff',
     align: 'center',
     baseline: 'middle',
-    maxWidth: width - 12,
-    stroke: !local,
+    maxWidth: 56,
   });
 };
 
@@ -1036,6 +1085,35 @@ const drawPlayers = (snapshot: WorldSnapshot): void => {
   }
 };
 
+const drawParticles = (): void => {
+  context.save();
+  for (let i = particles.length - 1; i >= 0; i -= 1) {
+    const particle = particles[i];
+    const alpha = Math.max(0, particle.life / particle.maxLife);
+
+    context.globalAlpha = alpha;
+    context.fillStyle = particle.color;
+    context.fillRect(Math.round(particle.x), Math.round(particle.y), Math.round(particle.size), Math.round(particle.size));
+
+    if (particle.size > 4) {
+      context.globalAlpha = alpha * 0.62;
+      context.fillStyle = '#ffffff';
+      context.fillRect(Math.round(particle.x + 1), Math.round(particle.y + 1), Math.max(1, Math.floor(particle.size / 2)), Math.max(1, Math.floor(particle.size / 2)));
+    }
+
+    particle.x += particle.vx;
+    particle.y += particle.vy;
+    particle.vx *= 0.98;
+    particle.vy -= 0.02;
+    particle.life -= 1;
+
+    if (particle.life <= 0) {
+      particles.splice(i, 1);
+    }
+  }
+  context.restore();
+};
+
 const drawClashFx = (): void => {
   for (let i = clashFx.length - 1; i >= 0; i -= 1) {
     const fx = clashFx[i];
@@ -1076,29 +1154,15 @@ const drawHud = (snapshot: WorldSnapshot): void => {
     drawCrown(CANVAS_BASE_WIDTH - 72 - i * 45, 30, !redQueen || i >= redQueen.lives, TEAM_COLORS.red);
   }
 
-  drawWorldText(`BLUE ${snapshot.scores.blue}/${MAX_PEARLS}`, 40, 92, {
+  drawWorldText(`${snapshot.scores.blue}/${MAX_PEARLS}`, 40, 92, {
     size: 24,
     color: TEAM_COLORS.blue,
     align: 'left',
   });
-  drawWorldText(`RED ${snapshot.scores.red}/${MAX_PEARLS}`, CANVAS_BASE_WIDTH - 40, 92, {
+  drawWorldText(`${snapshot.scores.red}/${MAX_PEARLS}`, CANVAS_BASE_WIDTH - 40, 92, {
     size: 24,
     color: TEAM_COLORS.red,
     align: 'right',
-  });
-
-  const barW = 360;
-  const barX = CANVAS_BASE_WIDTH / 2 - barW / 2;
-  const barY = 40;
-  const pct = (snapshot.snail.x - GAME_MAP.snail.blueGoalX) / (GAME_MAP.snail.redGoalX - GAME_MAP.snail.blueGoalX);
-  context.fillStyle = 'rgba(0, 9, 20, 0.78)';
-  context.fillRect(barX, barY, barW, 12);
-  context.fillStyle = '#00d4c8';
-  context.fillRect(barX + clamp01(pct) * barW - 6, barY - 4, 12, 20);
-  drawWorldText('MANATEE', CANVAS_BASE_WIDTH / 2, barY + 38, {
-    size: 18,
-    color: '#cfeeff',
-    align: 'center',
   });
 };
 
@@ -1157,6 +1221,7 @@ const drawArena = (snapshot: WorldSnapshot | null): void => {
     if (snapshot.phase === 'score') {
       drawScoreBanner(snapshot);
     }
+    drawParticles();
   }
 };
 
@@ -1187,7 +1252,7 @@ const drawWorld = (): void => {
     context.font = '800 18px "Courier New", monospace';
     context.textAlign = 'center';
     context.textBaseline = 'middle';
-    context.fillText('Choose a lobby to enter Ocean Queen', cssWidth / 2, cssHeight / 2);
+    context.fillText('Choose a lobby to enter Manatee Royale', cssWidth / 2, cssHeight / 2);
   }
 };
 
@@ -1223,8 +1288,7 @@ const animationFrame = (time: number): void => {
 };
 
 const hydrateSavedInputs = (): void => {
-  nameInput.value = localStorage.getItem('physics-nook-game-name') ?? '';
-  endpointText.textContent = getDefaultWsUrl().replace(/^wss?:\/\//, '');
+  nameInput.value = sanitizeAlias(localStorage.getItem('physics-nook-game-name') ?? '');
 };
 
 hydrateSavedInputs();

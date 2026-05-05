@@ -62,13 +62,10 @@ input:focus-visible {
 
 .topbar {
   position: absolute;
-  top: 16px;
   right: 16px;
-  left: 16px;
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 12px;
-  align-items: start;
+  bottom: 16px;
+  z-index: 5;
+  display: block;
   pointer-events: none;
 }
 
@@ -162,23 +159,30 @@ input:focus-visible {
 
 .connection-pill {
   display: inline-flex;
-  min-width: 136px;
-  max-width: 220px;
-  gap: 8px;
+  min-width: 0;
+  max-width: 180px;
+  gap: 6px;
   align-items: center;
   justify-content: center;
-  padding: 13px 14px;
+  padding: 9px 10px;
   color: #f7f3e8;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   font-weight: 750;
   line-height: 1;
 }
 
 .status-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
   border-radius: 999px;
   background: #8f9485;
+}
+
+#statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .connection-pill[data-state="connecting"] .status-dot {
@@ -200,7 +204,7 @@ input:focus-visible {
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 92px 16px 24px;
+  padding: 24px 16px;
   pointer-events: none;
 }
 
@@ -481,13 +485,13 @@ input:focus-visible {
   body[data-phase="playing"] .touch-controls {
     display: grid;
   }
+
+  body[data-phase="playing"] .topbar {
+    bottom: 90px;
+  }
 }
 
 @media (max-width: 980px) {
-  .topbar {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
   .lobby-cards {
     grid-template-columns: 1fr;
   }
@@ -499,10 +503,8 @@ input:focus-visible {
   }
 
   .topbar {
-    top: 10px;
     right: 10px;
-    left: 10px;
-    grid-template-columns: minmax(0, 1fr);
+    bottom: 12px;
   }
 
   .brand-lockup,
@@ -514,15 +516,14 @@ input:focus-visible {
   }
 
   .connection-pill {
-    justify-self: start;
-    min-width: 128px;
-    padding: 10px 12px;
+    max-width: 154px;
+    padding: 8px 9px;
   }
 
   .menu-overlay,
   .lobby-overlay,
   .score-overlay {
-    padding: 154px 10px 86px;
+    padding: 28px 10px 86px;
   }
 
   .lobby-header,

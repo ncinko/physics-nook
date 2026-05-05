@@ -27,9 +27,11 @@ import type {
   ClientJoinMessage,
   ClientPingMessage,
   ClientToServerMessage,
+  DeathEvent,
   Facing,
   HiveCell,
   InputState,
+  JumpEvent,
   LobbyCode,
   LobbyPhase,
   LobbySummary,
@@ -90,6 +92,8 @@ type GameRoom = {
   scoreScreenEndsAt: number | null;
   roundStartedAt: number;
   clashEvents: ClashEvent[];
+  jumpEvents: JumpEvent[];
+  deathEvents: DeathEvent[];
   tick: number;
   createdAt: number;
   lastSnapshotTick: number;
@@ -148,6 +152,8 @@ const createGameRoom = (roomCode: LobbyCode): GameRoom => ({
   scoreScreenEndsAt: null,
   roundStartedAt: Date.now(),
   clashEvents: [],
+  jumpEvents: [],
+  deathEvents: [],
   tick: 0,
   createdAt: Date.now(),
   lastSnapshotTick: 0,
@@ -356,6 +362,8 @@ const makeSnapshot = (room: GameRoom, consumeEvents = false): WorldSnapshot => (
   clamshells: [...room.clamshells.values()].map(({ respawnTimer: _respawnTimer, ...clam }) => ({ ...clam })),
   upgradeGates: [...room.upgradeGates.values()].map((gate) => ({ ...gate })),
   clashEvents: consumeEvents ? room.clashEvents.splice(0) : [],
+  jumpEvents: consumeEvents ? room.jumpEvents.splice(0) : [],
+  deathEvents: consumeEvents ? room.deathEvents.splice(0) : [],
   winner: room.winner ? { ...room.winner } : null,
   roundEndsAt: room.scoreScreenEndsAt,
 });
@@ -377,6 +385,8 @@ const resetMatchState = (room: GameRoom): void => {
   room.scoreScreenEndsAt = null;
   room.roundStartedAt = Date.now();
   room.clashEvents = [];
+  room.jumpEvents = [];
+  room.deathEvents = [];
   room.nextPearlId = 1;
 };
 
@@ -553,7 +563,7 @@ const handleJoin = (client: ClientConnection, message: ClientJoinMessage): void 
   }
 
   const id = randomUUID();
-  const name = sanitizePlayerName(message.name, `Player ${slot + 1}`);
+  const name = sanitizePlayerName(message.name, `P${slot + 1}`);
   const player = createPlayer(slot, id, name);
 
   client.id = id;
@@ -745,6 +755,12 @@ const killPlayer = (
 ): void => {
   if (!victim.alive || (!ignoreInvincible && victim.invincibleUntil > now) || (killerTeam !== null && victim.team === killerTeam)) return;
 
+  room.deathEvents.push({
+    x: victim.x + GAME_CONFIG.player.width / 2,
+    y: victim.y + GAME_CONFIG.player.height / 2,
+    team: victim.team,
+  });
+
   releaseBerry(victim);
   if (room.snail.riderId === victim.id) room.snail.riderId = null;
   if (room.snail.eatingTargetId === victim.id) room.snail.eatingTargetId = null;
@@ -796,6 +812,7 @@ const simulatePlayer = (room: GameRoom, player: PlayerSnapshot, client: ClientCo
   const jumpPressed = client.input.jump;
   const jumpJustPressed = jumpPressed && !previousJump;
   const onGround = checkGround(room, player);
+  let jumped = false;
 
   if (onGround) meta.canDoubleJump = true;
 
@@ -817,17 +834,29 @@ const simulatePlayer = (room: GameRoom, player: PlayerSnapshot, client: ClientCo
       if (!room.snail.eatingTargetId) {
         room.snail.riderId = null;
         player.vy = -GAME_CONFIG.player.jumpVelocity;
+        jumped = true;
       }
     } else if (player.role === 'warrior' || player.role === 'queen') {
       player.vy = -GAME_CONFIG.player.flapVelocity;
+      jumped = true;
     } else if (onGround) {
       player.vy = -GAME_CONFIG.player.jumpVelocity;
+      jumped = true;
     } else if (meta.canDoubleJump) {
       player.vy = -(GAME_CONFIG.player.jumpVelocity * 0.7);
       meta.canDoubleJump = false;
+      jumped = true;
     }
   } else if (!jumpPressed && previousJump && player.vy < 0 && player.role === 'worker') {
     player.vy *= 0.4;
+  }
+
+  if (jumped) {
+    room.jumpEvents.push({
+      x: player.x + GAME_CONFIG.player.width / 2,
+      y: player.y + GAME_CONFIG.player.height,
+      team: player.team,
+    });
   }
 
   client.previousInput = cloneInput(client.input);
@@ -1188,7 +1217,7 @@ export const createGameServer = () => {
     }
 
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Ocean Queen.');
+    response.end('Use a WebSocket connection for Manatee Royale.');
   });
 
   const loop = setInterval(() => {
@@ -1261,6 +1290,6 @@ export const createGameServer = () => {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = createGameServer();
   server.listen(PORT, () => {
-    console.log(`Ocean Queen game server listening on ws://localhost:${PORT}`);
+    console.log(`Manatee Royale game server listening on ws://localhost:${PORT}`);
   });
 }

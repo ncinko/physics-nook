@@ -45,6 +45,10 @@ type Particle = {
 
 const INPUT_FLUSH_MS = 1000 / 30;
 const PING_INTERVAL_MS = 2000;
+const SNAPSHOT_BUFFER_MAX = 10;
+const SNAPSHOT_INTERPOLATION_DELAY_MS = Math.round((1000 / GAME_CONFIG.snapshotRate) * 1.6);
+const MAX_EXTRAPOLATION_MS = Math.round(1000 / GAME_CONFIG.snapshotRate);
+const SNAPSHOT_TELEPORT_DISTANCE = 180;
 const CANVAS_BASE_WIDTH = GAME_CONFIG.arena.width;
 const CANVAS_BASE_HEIGHT = GAME_CONFIG.arena.height;
 const PLAYER_WIDTH = GAME_CONFIG.player.width;
@@ -106,6 +110,8 @@ let socket: WebSocket | null = null;
 let localPlayerId: string | null = null;
 let room: RoomSnapshot | null = null;
 let latestSnapshot: WorldSnapshot | null = null;
+let snapshotBuffer: WorldSnapshot[] = [];
+let serverClockOffsetMs: number | null = null;
 let lobbySummaries: LobbySummary[] = [];
 let pendingJoin: LobbyCode | null = null;
 let inputSeq = 0;
@@ -114,6 +120,8 @@ let lastInputFlush = 0;
 let lastPingAt = 0;
 let connectionState: ConnectionState = 'offline';
 let frameCount = 0;
+let frameDelta = 1;
+let lastFrameAt = 0;
 
 const clashFx: { x: number; y: number; framesLeft: number; lifeFrames: number }[] = [];
 const particles: Particle[] = [];
@@ -149,6 +157,171 @@ const getDefaultWsUrl = (): string => {
 };
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+const lerp = (from: number, to: number, amount: number): number => from + (to - from) * amount;
+const lerpPosition = (from: number, to: number, amount: number): number =>
+  Math.abs(to - from) > SNAPSHOT_TELEPORT_DISTANCE ? to : lerp(from, to, amount);
+
+const cloneSnapshot = (snapshot: WorldSnapshot): WorldSnapshot => ({
+  ...snapshot,
+  players: snapshot.players.map((player) => ({ ...player })),
+  berries: snapshot.berries.map((berry) => ({ ...berry })),
+  scores: { ...snapshot.scores },
+  queenKills: { ...snapshot.queenKills },
+  snail: { ...snapshot.snail },
+  hiveCells: snapshot.hiveCells.map((cell) => ({ ...cell })),
+  clamshells: snapshot.clamshells.map((clam) => ({ ...clam })),
+  upgradeGates: snapshot.upgradeGates.map((gate) => ({ ...gate })),
+  clashEvents: [],
+  jumpEvents: [],
+  deathEvents: [],
+  winner: snapshot.winner ? { ...snapshot.winner } : null,
+});
+
+const interpolatePlayer = (from: PlayerSnapshot, to: PlayerSnapshot, amount: number): PlayerSnapshot => {
+  const snap =
+    from.alive !== to.alive ||
+    from.beingEaten !== to.beingEaten ||
+    from.role !== to.role ||
+    from.team !== to.team ||
+    from.slot !== to.slot ||
+    Math.abs(to.x - from.x) > SNAPSHOT_TELEPORT_DISTANCE ||
+    Math.abs(to.y - from.y) > SNAPSHOT_TELEPORT_DISTANCE;
+
+  return {
+    ...to,
+    x: snap ? to.x : lerp(from.x, to.x, amount),
+    y: snap ? to.y : lerp(from.y, to.y, amount),
+    vx: snap ? to.vx : lerp(from.vx, to.vx, amount),
+    vy: snap ? to.vy : lerp(from.vy, to.vy, amount),
+    upgradeProgress: snap ? to.upgradeProgress : lerp(from.upgradeProgress, to.upgradeProgress, amount),
+  };
+};
+
+const interpolateBerry = (from: BerrySnapshot, to: BerrySnapshot, amount: number): BerrySnapshot => {
+  const snap =
+    from.carriedBy !== to.carriedBy ||
+    from.depositedTeam !== to.depositedTeam ||
+    Math.abs(to.x - from.x) > SNAPSHOT_TELEPORT_DISTANCE ||
+    Math.abs(to.y - from.y) > SNAPSHOT_TELEPORT_DISTANCE;
+
+  return {
+    ...to,
+    x: snap ? to.x : lerp(from.x, to.x, amount),
+    y: snap ? to.y : lerp(from.y, to.y, amount),
+  };
+};
+
+const interpolateSnapshot = (from: WorldSnapshot, to: WorldSnapshot, amount: number): WorldSnapshot => {
+  if (from.roomCode !== to.roomCode || from.phase !== to.phase) {
+    return cloneSnapshot(to);
+  }
+
+  const playersById = new Map(from.players.map((player) => [player.id, player]));
+  const berriesById = new Map(from.berries.map((berry) => [berry.id, berry]));
+
+  return {
+    ...to,
+    tick: Math.round(lerp(from.tick, to.tick, amount)),
+    serverTime: lerp(from.serverTime, to.serverTime, amount),
+    timeElapsed: lerp(from.timeElapsed, to.timeElapsed, amount),
+    players: to.players.map((player) => {
+      const previous = playersById.get(player.id);
+      return previous ? interpolatePlayer(previous, player, amount) : { ...player };
+    }),
+    berries: to.berries.map((berry) => {
+      const previous = berriesById.get(berry.id);
+      return previous ? interpolateBerry(previous, berry, amount) : { ...berry };
+    }),
+    scores: { ...to.scores },
+    queenKills: { ...to.queenKills },
+    snail: {
+      ...to.snail,
+      x: lerpPosition(from.snail.x, to.snail.x, amount),
+      y: lerpPosition(from.snail.y, to.snail.y, amount),
+    },
+    hiveCells: to.hiveCells.map((cell) => ({ ...cell })),
+    clamshells: to.clamshells.map((clam) => ({ ...clam })),
+    upgradeGates: to.upgradeGates.map((gate) => ({ ...gate })),
+    clashEvents: [],
+    jumpEvents: [],
+    deathEvents: [],
+    winner: to.winner ? { ...to.winner } : null,
+  };
+};
+
+const updateServerClockOffset = (snapshot: WorldSnapshot, receivedAt = performance.now()): void => {
+  const nextOffset = snapshot.serverTime - receivedAt;
+  serverClockOffsetMs = serverClockOffsetMs === null ? nextOffset : serverClockOffsetMs * 0.9 + nextOffset * 0.1;
+};
+
+const clearSnapshotState = (): void => {
+  latestSnapshot = null;
+  snapshotBuffer = [];
+  serverClockOffsetMs = null;
+};
+
+const resetSnapshotState = (snapshot: WorldSnapshot): void => {
+  latestSnapshot = snapshot;
+  snapshotBuffer = [snapshot];
+  serverClockOffsetMs = null;
+  updateServerClockOffset(snapshot);
+};
+
+const queueSnapshot = (snapshot: WorldSnapshot): void => {
+  latestSnapshot = snapshot;
+  updateServerClockOffset(snapshot);
+
+  const last = snapshotBuffer.at(-1);
+  if (!last || last.roomCode !== snapshot.roomCode || snapshot.tick < last.tick) {
+    snapshotBuffer = [snapshot];
+    return;
+  }
+
+  if (last.tick === snapshot.tick) {
+    snapshotBuffer[snapshotBuffer.length - 1] = snapshot;
+  } else {
+    snapshotBuffer.push(snapshot);
+  }
+
+  if (snapshotBuffer.length > SNAPSHOT_BUFFER_MAX) {
+    snapshotBuffer.splice(0, snapshotBuffer.length - SNAPSHOT_BUFFER_MAX);
+  }
+};
+
+const getRenderableSnapshot = (time: number): WorldSnapshot | null => {
+  if (!latestSnapshot) return null;
+  if (snapshotBuffer.length < 2 || serverClockOffsetMs === null) return latestSnapshot;
+
+  const renderServerTime = time + serverClockOffsetMs - SNAPSHOT_INTERPOLATION_DELAY_MS;
+
+  while (snapshotBuffer.length > 2 && snapshotBuffer[1].serverTime <= renderServerTime) {
+    snapshotBuffer.shift();
+  }
+
+  if (renderServerTime <= snapshotBuffer[0].serverTime) {
+    return snapshotBuffer[0];
+  }
+
+  for (let index = 1; index < snapshotBuffer.length; index += 1) {
+    const previous = snapshotBuffer[index - 1];
+    const next = snapshotBuffer[index];
+
+    if (renderServerTime <= next.serverTime) {
+      const span = Math.max(1, next.serverTime - previous.serverTime);
+      return interpolateSnapshot(previous, next, clamp01((renderServerTime - previous.serverTime) / span));
+    }
+  }
+
+  const newest = snapshotBuffer.at(-1);
+  const previous = snapshotBuffer.at(-2);
+  if (!newest || !previous) return latestSnapshot;
+
+  if (newest.phase !== 'playing') return newest;
+
+  const span = Math.max(1, newest.serverTime - previous.serverTime);
+  const overrun = Math.min(MAX_EXTRAPOLATION_MS, Math.max(0, renderServerTime - newest.serverTime));
+  return interpolateSnapshot(previous, newest, 1 + overrun / span);
+};
 
 const sanitizeAlias = (value: string): string =>
   value
@@ -330,7 +503,7 @@ const renderScoreOverlay = (): void => {
 const handleJoined = (message: Extract<ServerToClientMessage, { type: 'joined' }>): void => {
   localPlayerId = message.you;
   room = message.room;
-  latestSnapshot = message.snapshot;
+  resetSnapshotState(message.snapshot);
   pendingJoin = null;
   setConnectionState('online', formatRoomPingLabel(message.room.name));
   renderLobby();
@@ -343,7 +516,7 @@ const handleRoomUpdate = (message: Extract<ServerToClientMessage, { type: 'room'
 };
 
 const handleSnapshot = (message: WorldSnapshot): void => {
-  latestSnapshot = message;
+  queueSnapshot(message);
   for (const event of message.clashEvents ?? []) {
     clashFx.push({ x: event.x, y: event.y, framesLeft: 18, lifeFrames: 18 });
   }
@@ -435,7 +608,7 @@ const connect = (): void => {
     setConnectionState('offline', 'Offline');
     localPlayerId = null;
     room = null;
-    latestSnapshot = null;
+    clearSnapshotState();
     socket = null;
     setUiPhase();
     renderLobby();
@@ -552,7 +725,7 @@ leaveButton.addEventListener('click', () => {
   sendMessage({ type: 'leaveLobby' });
   localPlayerId = null;
   room = null;
-  latestSnapshot = null;
+  clearSnapshotState();
   setConnectionState(socket?.readyState === WebSocket.OPEN ? 'online' : 'offline', socket?.readyState === WebSocket.OPEN ? 'Choose lobby' : 'Offline');
   setUiPhase();
   renderLobbyCards();
@@ -941,7 +1114,7 @@ const drawDroppedPearl = (pearl: BerrySnapshot): void => {
   drawPearl(pearl.x, pearl.y, 20);
 };
 
-const drawWorker = (player: PlayerSnapshot): void => {
+const drawWorker = (player: PlayerSnapshot, snapshot: WorldSnapshot): void => {
   const color = teamColor(player.team);
   const dark = teamDarkColor(player.team);
   const time = frameCount / 9;
@@ -953,7 +1126,7 @@ const drawWorker = (player: PlayerSnapshot): void => {
   context.fillStyle = '#111111';
   context.fillRect(6, -6, 6, 6);
 
-  const ridingManatee = latestSnapshot?.snail.riderId === player.id;
+  const ridingManatee = snapshot.snail.riderId === player.id;
   const offset = ridingManatee ? Math.sin(time) * 4 : Math.sin(time + player.x) * 4;
   context.fillStyle = dark;
   context.fillRect(-14 + offset, 6, 6, 14);
@@ -1051,7 +1224,7 @@ const drawPlayer = (player: PlayerSnapshot, snapshot: WorldSnapshot): void => {
   if (player.role === 'warrior' || player.role === 'queen') {
     drawOctopus(player);
   } else {
-    drawWorker(player);
+    drawWorker(player, snapshot);
   }
 
   if (player.carriedBerryId) {
@@ -1101,11 +1274,11 @@ const drawParticles = (): void => {
       context.fillRect(Math.round(particle.x + 1), Math.round(particle.y + 1), Math.max(1, Math.floor(particle.size / 2)), Math.max(1, Math.floor(particle.size / 2)));
     }
 
-    particle.x += particle.vx;
-    particle.y += particle.vy;
-    particle.vx *= 0.98;
-    particle.vy -= 0.02;
-    particle.life -= 1;
+    particle.x += particle.vx * frameDelta;
+    particle.y += particle.vy * frameDelta;
+    particle.vx *= Math.pow(0.98, frameDelta);
+    particle.vy -= 0.02 * frameDelta;
+    particle.life -= frameDelta;
 
     if (particle.life <= 0) {
       particles.splice(i, 1);
@@ -1138,7 +1311,7 @@ const drawClashFx = (): void => {
     context.lineTo(fx.x, fx.y + radius * 1.6);
     context.stroke();
 
-    fx.framesLeft -= 1;
+    fx.framesLeft -= frameDelta;
     if (fx.framesLeft <= 0) clashFx.splice(i, 1);
   }
 };
@@ -1225,7 +1398,8 @@ const drawArena = (snapshot: WorldSnapshot | null): void => {
   }
 };
 
-const drawWorld = (): void => {
+const drawWorld = (time: number): void => {
+  const renderSnapshot = getRenderableSnapshot(time);
   const cssWidth = canvas.clientWidth;
   const cssHeight = canvas.clientHeight;
   const scale = Math.min(cssWidth / CANVAS_BASE_WIDTH, cssHeight / CANVAS_BASE_HEIGHT);
@@ -1241,10 +1415,10 @@ const drawWorld = (): void => {
   context.save();
   context.translate(offsetX, offsetY);
   context.scale(scale, scale);
-  drawArena(latestSnapshot);
+  drawArena(renderSnapshot);
   context.restore();
 
-  if (!latestSnapshot && !room) {
+  if (!renderSnapshot && !room) {
     context.fillStyle = 'rgba(0, 9, 20, 0.78)';
     drawRoundRect(cssWidth / 2 - 210, cssHeight / 2 - 42, 420, 84, 8);
     context.fill();
@@ -1269,7 +1443,9 @@ const resizeCanvas = (): void => {
 };
 
 const animationFrame = (time: number): void => {
-  frameCount += 1;
+  frameDelta = lastFrameAt > 0 ? Math.min(2, Math.max(0.25, (time - lastFrameAt) / (1000 / 60))) : 1;
+  lastFrameAt = time;
+  frameCount += frameDelta;
   resizeCanvas();
   renderScoreOverlay();
 
@@ -1283,7 +1459,7 @@ const animationFrame = (time: number): void => {
     lastPingAt = time;
   }
 
-  drawWorld();
+  drawWorld(time);
   window.requestAnimationFrame(animationFrame);
 };
 

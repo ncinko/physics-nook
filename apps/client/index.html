@@ -20,14 +20,13 @@
       <section id="menuOverlay" class="menu-overlay">
         <div class="menu-panel">
           <div class="menu-heading">
-            <span class="brand-mark" aria-hidden="true"></span>
-            <div>
+            <div class="menu-title">
               <h1>Manatee Royale</h1>
-              <p>Choose one of three open lobbies.</p>
             </div>
+            <canvas id="menuManatee" class="menu-manatee" width="150" height="82" aria-hidden="true"></canvas>
           </div>
           <label class="alias-field">
-            <span>Alias</span>
+            <span>Name</span>
             <input id="nameInput" name="name" autocomplete="nickname" maxlength="3" placeholder="TAG" />
           </label>
           <div id="lobbyCards" class="lobby-cards" aria-live="polite"></div>

@@ -93,21 +93,6 @@ input:focus-visible {
   padding: 10px 12px;
 }
 
-.brand-mark {
-  display: block;
-  width: 34px;
-  height: 34px;
-  border: 3px solid #00a8ff;
-  border-radius: 8px;
-  background:
-    linear-gradient(90deg, transparent 42%, #00080f 42% 58%, transparent 58%),
-    linear-gradient(180deg, #00a8ff 0 48%, #ff4757 48% 100%);
-  background-size: 100% 100%;
-  box-shadow:
-    0 0 14px rgba(0, 168, 255, 0.26),
-    0 0 18px rgba(255, 71, 87, 0.22);
-}
-
 .brand-copy {
   display: grid;
   min-width: 0;
@@ -224,9 +209,34 @@ input:focus-visible {
 
 .menu-heading {
   display: flex;
-  gap: 14px;
   align-items: center;
+  justify-content: space-between;
+  gap: 18px;
   margin-bottom: 16px;
+}
+
+.menu-title {
+  min-width: 0;
+}
+
+.menu-manatee {
+  display: block;
+  flex: 0 0 auto;
+  width: 150px;
+  height: 82px;
+  image-rendering: pixelated;
+  animation: menu-manatee-bob 1.8s ease-in-out infinite;
+}
+
+@keyframes menu-manatee-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 .menu-heading h1,

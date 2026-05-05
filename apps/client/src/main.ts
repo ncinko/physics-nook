@@ -60,6 +60,7 @@ const MAX_PEARLS = GAME_CONFIG.objective.berriesToWin;
 const PLAYER_NAME_MAX_LENGTH = 3;
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
+const menuManatee = document.getElementById('menuManatee') as HTMLCanvasElement | null;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement | null;
 const statusText = document.getElementById('statusText');
 const connectionPill = document.getElementById('connectionPill');
@@ -78,6 +79,7 @@ const scoreCountdown = document.getElementById('scoreCountdown');
 
 if (
   !canvas ||
+  !menuManatee ||
   !nameInput ||
   !statusText ||
   !connectionPill ||
@@ -102,7 +104,13 @@ if (!context) {
   throw new Error('Canvas 2D is unavailable.');
 }
 
+const menuManateeContext = menuManatee.getContext('2d');
+if (!menuManateeContext) {
+  throw new Error('Menu manatee canvas 2D is unavailable.');
+}
+
 context.imageSmoothingEnabled = false;
+menuManateeContext.imageSmoothingEnabled = false;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const input: InputState = { ...DEFAULT_INPUT };
@@ -157,6 +165,7 @@ const getDefaultWsUrl = (): string => {
 };
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+const positiveModulo = (value: number, divisor: number): number => ((value % divisor) + divisor) % divisor;
 const lerp = (from: number, to: number, amount: number): number => from + (to - from) * amount;
 const lerpPosition = (from: number, to: number, amount: number): number =>
   Math.abs(to - from) > SNAPSHOT_TELEPORT_DISTANCE ? to : lerp(from, to, amount);
@@ -397,7 +406,7 @@ const setUiPhase = (): void => {
 const lobbyStatusText = (summary: LobbySummary): string => {
   if (summary.phase === 'playing') return `${summary.playerCount}/${summary.maxPlayers} playing`;
   if (summary.phase === 'score') return 'score screen';
-  if (!summary.hasBlueQueen || !summary.hasRedQueen) return `${summary.playerCount}/${summary.maxPlayers} waiting for queens`;
+  if (!summary.hasBlueQueen || !summary.hasRedQueen) return `${summary.playerCount}/${summary.maxPlayers} waiting`;
   return `${summary.readyCount}/${summary.playerCount || 1} ready`;
 };
 
@@ -425,7 +434,7 @@ const renderLobbyCards = (): void => {
     button.disabled = connectionState !== 'online' || summary.phase !== 'lobby' || summary.playerCount >= summary.maxPlayers;
     button.innerHTML = `
       <strong>${summary.name}</strong>
-      <span>${summary.phase}</span>
+      ${summary.phase === 'lobby' ? '' : `<span>${summary.phase}</span>`}
       <small>${lobbyStatusText(summary)}</small>
     `;
     button.addEventListener('click', () => joinLobby(roomCode));
@@ -840,7 +849,7 @@ const drawBackground = (): void => {
   drawBackgroundDecorations();
 
   for (const bubble of backgroundBubbles) {
-    const y = (bubble.y - frameCount * bubble.speed + CANVAS_BASE_HEIGHT + 20) % (CANVAS_BASE_HEIGHT + 40) - 20;
+    const y = positiveModulo(bubble.y - frameCount * bubble.speed + CANVAS_BASE_HEIGHT + 20, CANVAS_BASE_HEIGHT + 40) - 20;
     const x = bubble.x + Math.sin(frameCount * 0.02 + bubble.phase) * 6;
     context.fillStyle = 'rgba(217, 251, 255, 0.36)';
     context.fillRect(x, y, bubble.size, bubble.size);
@@ -1070,6 +1079,44 @@ const drawFlag = (baseX: number, poleY: number, color: string, flip: boolean): v
   }
 };
 
+const drawManateeSprite = (renderContext: CanvasRenderingContext2D, eatingTargetId: string | null = null): void => {
+  renderContext.fillStyle = '#89a397';
+  renderContext.fillRect(-45, -15, 90, 30);
+  renderContext.fillRect(-35, -20, 75, 5);
+  renderContext.fillRect(45, -5, 10, 20);
+  renderContext.fillRect(-55, 0, 16, 25);
+  renderContext.fillRect(-60, 10, 5, 15);
+
+  renderContext.fillStyle = '#5a6e60';
+  renderContext.fillRect(-25, -20, 15, 5);
+  renderContext.fillRect(-15, -15, 10, 5);
+  renderContext.fillRect(0, -15, 8, 5);
+  renderContext.fillRect(5, -10, 5, 5);
+  renderContext.fillRect(-35, -10, 8, 5);
+  renderContext.fillRect(15, 15, 12, 22);
+  renderContext.fillRect(42, 5, 4, 10);
+  renderContext.fillRect(46, 10, 12, 4);
+
+  renderContext.fillStyle = '#111111';
+  renderContext.fillRect(35, -5, 4, 4);
+
+  if (eatingTargetId) {
+    renderContext.fillStyle = '#89a397';
+    const jawDrop = Math.sin(frameCount / 5) * 4 + 4;
+    renderContext.fillRect(45, 15 + jawDrop, 10, 8);
+  }
+};
+
+const drawMenuManatee = (): void => {
+  menuManateeContext.clearRect(0, 0, menuManatee.width, menuManatee.height);
+  menuManateeContext.save();
+  menuManateeContext.translate(82, 40);
+  menuManateeContext.scale(1.25, 1.25);
+  menuManateeContext.scale(-1, 1);
+  drawManateeSprite(menuManateeContext);
+  menuManateeContext.restore();
+};
+
 const drawManatee = (snapshot: WorldSnapshot | null): void => {
   const snail = snapshot?.snail ?? { x: GAME_MAP.snail.startX, y: GAME_MAP.snail.y, facing: -1, eatingTargetId: null };
   const baseY = GAME_MAP.snail.y;
@@ -1081,31 +1128,7 @@ const drawManatee = (snapshot: WorldSnapshot | null): void => {
   context.translate(snail.x + MANATEE_WIDTH / 2, snail.y + MANATEE_HEIGHT / 2);
   if (snail.facing < 0) context.scale(-1, 1);
 
-  context.fillStyle = '#89a397';
-  context.fillRect(-45, -15, 90, 30);
-  context.fillRect(-35, -20, 75, 5);
-  context.fillRect(45, -5, 10, 20);
-  context.fillRect(-55, 0, 16, 25);
-  context.fillRect(-60, 10, 5, 15);
-
-  context.fillStyle = '#5a6e60';
-  context.fillRect(-25, -20, 15, 5);
-  context.fillRect(-15, -15, 10, 5);
-  context.fillRect(0, -15, 8, 5);
-  context.fillRect(5, -10, 5, 5);
-  context.fillRect(-35, -10, 8, 5);
-  context.fillRect(15, 15, 12, 22);
-  context.fillRect(42, 5, 4, 10);
-  context.fillRect(46, 10, 12, 4);
-
-  context.fillStyle = '#111111';
-  context.fillRect(35, -5, 4, 4);
-
-  if (snail.eatingTargetId) {
-    context.fillStyle = '#89a397';
-    const jawDrop = Math.sin(frameCount / 5) * 4 + 4;
-    context.fillRect(45, 15 + jawDrop, 10, 8);
-  }
+  drawManateeSprite(context, snail.eatingTargetId);
 
   context.restore();
 };
@@ -1415,6 +1438,9 @@ const drawWorld = (time: number): void => {
   context.save();
   context.translate(offsetX, offsetY);
   context.scale(scale, scale);
+  context.beginPath();
+  context.rect(0, 0, CANVAS_BASE_WIDTH, CANVAS_BASE_HEIGHT);
+  context.clip();
   drawArena(renderSnapshot);
   context.restore();
 
@@ -1468,6 +1494,7 @@ const hydrateSavedInputs = (): void => {
 };
 
 hydrateSavedInputs();
+drawMenuManatee();
 renderLobbyCards();
 renderLobby();
 setConnectionState('offline', 'Offline');

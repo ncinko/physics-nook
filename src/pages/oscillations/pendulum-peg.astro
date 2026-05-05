@@ -1,0 +1,13 @@
+---
+import PendulumPegGame from '../../components/oscillations/PendulumPegGame';
+import ImmersiveLayout from '../../layouts/ImmersiveLayout.astro';
+---
+
+<ImmersiveLayout
+  title="Pendulum Peg Challenge"
+  description="A hidden pendulum game about timing, wrapping, cutting, and projectile landing."
+  canonicalPath="/oscillations/pendulum-peg"
+  noindex={true}
+>
+  <PendulumPegGame client:load />
+</ImmersiveLayout>

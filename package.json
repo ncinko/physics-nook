@@ -9,7 +9,10 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "realtime": "node server/realtime.mjs",
+    "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
+    "test:oscillations": "node --experimental-strip-types tests/oscillations/run-tests.ts"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.0",

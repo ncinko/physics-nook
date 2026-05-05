@@ -1,0 +1,196 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import ParticleSpeedTemperatureExplorer from '../../components/simulations/ParticleSpeedTemperatureExplorer.jsx';
+import { thermodynamicsPath } from '../../data/modules';
+
+<ModuleHero module={thermodynamicsPath} currentPath="/thermodynamics" />
+
+<div id="page-content"></div>
+
+# Thermodynamics Foundations
+
+Thermodynamics is the physics of energy when many microscopic pieces are involved. A single molecule has a position and velocity. A cup of gas has far too many molecules to track one by one, so we describe it using macroscopic quantities: temperature, pressure, volume, and internal energy.
+
+The move is not a retreat from mechanics. It is a change in viewpoint. Instead of predicting every microscopic detail, we ask which large-scale properties are stable, measurable, and useful.
+
+## Systems and Surroundings
+
+A **system** is the part of the universe we choose to study. Everything outside it is the **surroundings**. The boundary between them can be real, like the walls of a container, or imaginary, like a drawn surface around a region of air.
+
+Thermodynamic systems are often classified by what can cross that boundary:
+
+- An **open system** can exchange matter and energy with its surroundings.
+- A **closed system** can exchange energy but not matter.
+- An **isolated system** exchanges neither matter nor energy.
+
+The classification is a modeling choice. A sealed metal can of gas is closed if we care about the gas molecules staying inside, but it is not isolated if heat can flow through the metal wall.
+
+## State Variables
+
+A thermodynamic **state** is described by variables that do not depend on the detailed path used to reach that state. Common state variables include
+
+$$
+P,\quad V,\quad T,\quad U.
+$$
+
+Here $P$ is pressure, $V$ is volume, $T$ is temperature, and $U$ is internal energy. For a simple ideal gas, these variables are connected by the ideal gas law,
+
+$$
+PV = nRT,
+$$
+
+where $n$ is the number of moles and $R$ is the gas constant.
+
+## Thermal Equilibrium and Temperature
+
+Two systems are in **thermal equilibrium** when they can exchange energy as heat, but no net heat flow occurs. Temperature is the state variable that tells us the direction of spontaneous heat flow: energy flows as heat from higher temperature to lower temperature until thermal equilibrium is reached.
+
+Microscopically, temperature is not the speed of one molecule. It is a distribution-level quantity. In a gas at one temperature, some particles are slow, some are fast, and a few are very fast. Raising the temperature shifts the whole speed distribution upward.
+
+For an ideal monatomic gas, the average translational kinetic energy per particle is
+
+$$
+\langle K \rangle = \frac{3}{2}k_B T.
+$$
+
+The angle brackets mean an average over many particles, and $k_B$ is Boltzmann's constant.
+
+<SimulationBlock
+  title="Particle Speed and Temperature"
+  description="Change temperature and particle mass to see temperature as a property of a speed distribution."
+>
+  <ParticleSpeedTemperatureExplorer client:only="react" />
+</SimulationBlock>
+
+## Internal Energy
+
+The **internal energy** $U$ is the total microscopic energy stored inside the system: translational kinetic energy, rotational and vibrational energy, molecular binding energy, and other microscopic contributions. It is not the same as the kinetic energy of the whole object moving through space.
+
+For an ideal monatomic gas, there is no intermolecular potential energy in the model, so internal energy depends only on temperature:
+
+$$
+U = \frac{3}{2}nRT.
+$$
+
+That simplicity is special to the ideal-gas model, but it gives a clean starting point: temperature tracks average microscopic energy, and internal energy tracks the total microscopic store.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Convert Temperature Scales"
+    accent="blue"
+  >
+    #### Problem
+
+    A laboratory gas sample is at $25^\circ\text{C}$. Convert this temperature to kelvin and Fahrenheit.
+
+    #### Given
+
+    - $T_C = 25^\circ\text{C}$
+
+    #### Use
+
+    $$
+    T_K = T_C + 273.15,
+    \qquad
+    T_F = \frac{9}{5}T_C + 32.
+    $$
+
+    #### Solve
+
+    $$
+    T_K = 25 + 273.15 = 298.15\,\text{K}.
+    $$
+
+    $$
+    T_F = \frac{9}{5}(25) + 32 = 45 + 32 = 77^\circ\text{F}.
+    $$
+
+    #### Check
+
+    Room temperature should be near $300\,\text{K}$ and near $77^\circ\text{F}$, so both conversions are reasonable.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Compare Average Kinetic Energies"
+    accent="red"
+  >
+    #### Problem
+
+    Compare the average translational kinetic energy per molecule for an ideal gas at $300\,\text{K}$ and $600\,\text{K}$.
+
+    #### Given
+
+    - $T_1 = 300\,\text{K}$
+    - $T_2 = 600\,\text{K}$
+
+    #### Use
+
+    $$
+    \langle K \rangle = \frac{3}{2}k_B T.
+    $$
+
+    Since $k_B$ and $\frac{3}{2}$ are the same in both cases,
+
+    $$
+    \frac{\langle K_2 \rangle}{\langle K_1 \rangle}
+    =
+    \frac{T_2}{T_1}.
+    $$
+
+    #### Solve
+
+    $$
+    \frac{\langle K_2 \rangle}{\langle K_1 \rangle}
+    =
+    \frac{600}{300}
+    = 2.
+    $$
+
+    The average translational kinetic energy per molecule is twice as large at $600\,\text{K}$ as it is at $300\,\text{K}$.
+
+    #### Check
+
+    Kelvin temperature is proportional to average translational kinetic energy in this model, so doubling the kelvin temperature doubles that average energy.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Thermodynamics Foundations Checkpoint"
+  questions={[
+    {
+      id: 'system-boundary',
+      question: 'A sealed metal can of gas is heated from the outside. Which description fits best if no gas escapes?',
+      options: [
+        { id: 'B', text: 'It is an open system because heat crosses the boundary.', isCorrect: false, explanation: 'Open systems exchange matter. Here energy can cross the boundary as heat, but the gas molecules do not leave.' },
+        { id: 'A', text: 'It is a closed system because energy can cross the boundary but matter cannot.', isCorrect: true, explanation: 'Exactly. The metal wall allows thermal energy transfer while keeping the gas inside.' },
+        { id: 'C', text: 'It is isolated because the can has a real physical wall.', isCorrect: false, explanation: 'A physical wall does not automatically make a system isolated. If heat can pass through the wall, energy is still exchanged with the surroundings.' }
+      ]
+    },
+    {
+      id: 'temperature-distribution',
+      question: 'Why is temperature better understood as a distribution-level quantity than as the speed of one molecule?',
+      options: [
+        { id: 'A', text: 'Because molecules in the same gas have many different speeds, while temperature tracks the average kinetic-energy scale.', isCorrect: true, explanation: 'Right. At one temperature there is a whole distribution of speeds. Temperature is connected to an average over that distribution, not to one molecule having a special speed.' },
+        { id: 'B', text: 'Because every molecule in thermal equilibrium has exactly the same speed.', isCorrect: false, explanation: 'Thermal equilibrium still has a range of molecular speeds. The stable quantity is the distribution, not identical particle motion.' },
+        { id: 'C', text: 'Because temperature is unrelated to microscopic motion.', isCorrect: false, explanation: 'Temperature is deeply related to microscopic energy. The key is that it refers to statistical behavior across many particles.' }
+      ]
+    },
+    {
+      id: 'internal-energy',
+      question: 'For an ideal monatomic gas, what happens to internal energy when the kelvin temperature increases?',
+      options: [
+        { id: 'C', text: 'It decreases because the particles spread out more.', isCorrect: false, explanation: 'In the ideal monatomic model, internal energy depends only on temperature, not directly on how spread out the gas is.' },
+        { id: 'B', text: 'It stays fixed because internal energy is a state variable.', isCorrect: false, explanation: 'State variables can change from one state to another. Being a state variable means the value depends on the state, not on the path used to reach it.' },
+        { id: 'A', text: 'It increases because $U = \\frac{3}{2}nRT$ for this model.', isCorrect: true, explanation: 'Exactly. For an ideal monatomic gas, raising $T$ raises the total microscopic kinetic-energy store.' }
+      ]
+    }
+  ]}
+/>

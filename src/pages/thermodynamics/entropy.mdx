@@ -1,0 +1,178 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import TwoChamberMicrostateExplorer from '../../components/simulations/TwoChamberMicrostateExplorer.jsx';
+import { thermodynamicsPath } from '../../data/modules';
+
+<ModuleHero module={thermodynamicsPath} currentPath="/thermodynamics/entropy" />
+
+<div id="page-content"></div>
+
+# Entropy and the Second Law
+
+The first law says energy is conserved. The second law asks a different question: which energy-conserving changes actually happen on their own?
+
+A warm object can heat a cool object, but a cool object does not spontaneously get colder while making a warm object warmer. Gas released into a room spreads out, but room-temperature air does not spontaneously gather into one corner. The second law explains this one-way character using entropy.
+
+## Macrostates and Microstates
+
+A **macrostate** is a large-scale description: all particles in the left half, half on each side, a certain pressure, a certain total energy. A **microstate** is a detailed microscopic arrangement compatible with that description.
+
+Many different microstates can share the same macrostate. For example, if $N$ particles can each be in the left or right half of a box, the macrostate with $n_L$ particles on the left has multiplicity
+
+$$
+\Omega(n_L) = \binom{N}{n_L}.
+$$
+
+The balanced macrostate usually has the largest multiplicity because there are many ways to choose which particles are on each side.
+
+## Boltzmann Entropy
+
+Boltzmann connected entropy to multiplicity:
+
+$$
+S = k_B \ln \Omega.
+$$
+
+The logarithm matters because it makes entropy additive for independent systems. If system A has $\Omega_A$ microstates and system B has $\Omega_B$ microstates, the combined system has $\Omega_A\Omega_B$ microstates, so
+
+$$
+S_{\text{total}} = k_B \ln(\Omega_A\Omega_B)
+= k_B\ln\Omega_A + k_B\ln\Omega_B.
+$$
+
+Entropy is not a magic substance and not merely a synonym for messiness. It counts, in logarithmic form, how many microscopic arrangements fit the macroscopic facts we are tracking.
+
+<SimulationBlock
+  title="Two-Chamber Microstate Explorer"
+  description="Compare macrostates by counting how many left-right particle arrangements each one allows."
+>
+  <TwoChamberMicrostateExplorer client:only="react" />
+</SimulationBlock>
+
+## The Second Law as Statistical Tendency
+
+For an isolated system, the second law says entropy tends to increase:
+
+$$
+\Delta S_{\text{isolated}} \ge 0.
+$$
+
+The word "tends" is doing real work. Microscopic physics may allow a wildly unlikely decrease in entropy, but for macroscopic systems the number of higher-multiplicity states is so enormous that entropy-decreasing fluctuations are effectively never observed.
+
+So the second law is not best remembered as "things get disordered." A sharper version is: isolated systems overwhelmingly evolve toward macrostates with larger multiplicity.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Entropy Change from a Multiplicity Ratio"
+    accent="blue"
+  >
+    #### Problem
+
+    A system changes from a macrostate with multiplicity $\Omega_i = 10^4$ to one with multiplicity $\Omega_f = 10^9$. Find the entropy change.
+
+    #### Given
+
+    - $\Omega_i = 10^4$
+    - $\Omega_f = 10^9$
+
+    #### Use
+
+    $$
+    \Delta S = k_B \ln\!\left(\frac{\Omega_f}{\Omega_i}\right).
+    $$
+
+    #### Solve
+
+    $$
+    \frac{\Omega_f}{\Omega_i} = \frac{10^9}{10^4} = 10^5.
+    $$
+
+    $$
+    \Delta S = k_B \ln(10^5)
+    = 5k_B\ln 10
+    \approx 11.5k_B.
+    $$
+
+    #### Check
+
+    The final macrostate has many more compatible microstates, so the entropy change is positive.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Spontaneous or Unlikely?"
+    accent="red"
+  >
+    #### Problem
+
+    In an isolated box, $12$ gas particles start with all particles on the left side. They are then allowed to move between the left and right halves. Compare the multiplicity of the all-left macrostate with the six-left, six-right macrostate.
+
+    #### Given
+
+    - $N = 12$
+    - all-left macrostate: $n_L = 12$
+    - balanced macrostate: $n_L = 6$
+
+    #### Use
+
+    $$
+    \Omega(n_L) = \binom{N}{n_L}.
+    $$
+
+    #### Solve
+
+    $$
+    \Omega(12) = \binom{12}{12} = 1.
+    $$
+
+    $$
+    \Omega(6) = \binom{12}{6} = 924.
+    $$
+
+    The balanced macrostate has $924$ times as many compatible microstates.
+
+    #### Check
+
+    Even for only $12$ particles, the balanced arrangement is already much more likely. For macroscopic particle counts, the imbalance becomes overwhelmingly unlikely.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Entropy Checkpoint"
+  questions={[
+    {
+      id: 'macro-micro',
+      question: 'What is the difference between a macrostate and a microstate?',
+      options: [
+        { id: 'A', text: 'A macrostate is a coarse description, while a microstate is one detailed microscopic arrangement compatible with it.', isCorrect: true, explanation: 'Exactly. A macrostate may specify quantities like particle counts, energy, or pressure; a microstate specifies the detailed microscopic configuration.' },
+        { id: 'B', text: 'A macrostate applies only to large objects, while a microstate applies only to small objects.', isCorrect: false, explanation: 'The distinction is about level of description, not object size alone. A many-particle system can be described at both levels.' },
+        { id: 'C', text: 'A macrostate violates mechanics, while a microstate obeys mechanics.', isCorrect: false, explanation: 'Both descriptions can be consistent with mechanics. The macrostate simply leaves out many microscopic details.' }
+      ]
+    },
+    {
+      id: 'entropy-multiplicity',
+      question: 'If a final macrostate has greater multiplicity than the initial macrostate, what does $S = k_B \\ln \\Omega$ imply?',
+      options: [
+        { id: 'C', text: 'The entropy must decrease because logarithms shrink numbers.', isCorrect: false, explanation: 'The natural logarithm increases as its input increases. Larger $\\Omega$ means larger entropy.' },
+        { id: 'A', text: 'The entropy is larger for the final macrostate.', isCorrect: true, explanation: 'Right. Entropy grows with the logarithm of multiplicity, so greater multiplicity corresponds to greater entropy.' },
+        { id: 'B', text: 'The entropy is undefined because multiplicity is not energy.', isCorrect: false, explanation: 'Boltzmann entropy is explicitly defined through multiplicity. It is not the same variable as energy, but it is a valid thermodynamic state function.' }
+      ]
+    },
+    {
+      id: 'second-law-statistical',
+      question: 'Why is entropy increase better described as a statistical tendency than as a vague slogan about disorder?',
+      options: [
+        { id: 'B', text: 'Because entropy never has a mathematical definition.', isCorrect: false, explanation: 'Entropy does have precise definitions, including $S = k_B \\ln \\Omega$ in this setting.' },
+        { id: 'C', text: 'Because low-multiplicity states are impossible under microscopic physics.', isCorrect: false, explanation: 'Low-multiplicity states are not generally impossible. They are just extraordinarily unlikely for macroscopic systems.' },
+        { id: 'A', text: 'Because systems overwhelmingly move toward macrostates with many more compatible microstates.', isCorrect: true, explanation: 'Exactly. The second law reflects the enormous statistical advantage of high-multiplicity macrostates.' }
+      ]
+    }
+  ]}
+/>

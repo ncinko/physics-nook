@@ -32,6 +32,14 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
     noindex: true,
   },
+  {
+    title: 'Pendulum Peg Challenge',
+    description:
+      'A hidden pendulum game about timing, wrapping a string around a peg, and cutting for the closest landing.',
+    canonicalPath: '/oscillations/pendulum-peg',
+    image: '/social/physics-nook-card.svg',
+    noindex: true,
+  },
 ];
 
 export const buildDocumentTitle = (pageMeta: PageMeta) =>

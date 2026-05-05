@@ -52,6 +52,14 @@ const hiddenNavItems: NavItem[] = [
     match: 'prefix',
     description: 'Immersive wave playground kept out of the primary navigation.',
   },
+  {
+    label: 'Pendulum Peg Challenge',
+    href: '/oscillations/pendulum-peg',
+    section: 'hidden',
+    visibility: 'hidden',
+    match: 'prefix',
+    description: 'Hidden pendulum timing game kept out of the primary navigation.',
+  },
 ];
 
 export const navItems: NavItem[] = [

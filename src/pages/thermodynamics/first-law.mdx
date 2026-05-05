@@ -1,0 +1,194 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import GasPistonEnergyLedger from '../../components/simulations/GasPistonEnergyLedger.jsx';
+import { thermodynamicsPath } from '../../data/modules';
+
+<ModuleHero module={thermodynamicsPath} currentPath="/thermodynamics/first-law" />
+
+<div id="page-content"></div>
+
+# Heat, Work, and the First Law
+
+The foundations page treated internal energy as a property of the system's state. The next question is how that internal energy changes. Thermodynamics organizes those changes using two forms of energy transfer: **heat** and **work**.
+
+Heat and work are not substances stored inside the system. They describe energy crossing the system boundary. Once the energy is inside, it contributes to the system's internal energy or leaves again through another transfer.
+
+## Heat as Energy Transfer
+
+Energy transferred because of a temperature difference is **heat**, written $Q$. In this path, we use the convention
+
+- $Q > 0$ when heat is added to the system
+- $Q < 0$ when heat leaves the system
+
+Heat flow continues spontaneously from higher temperature to lower temperature until thermal equilibrium is reached.
+
+## Work Done By the System
+
+Work is energy transferred when a macroscopic force acts through a displacement. A gas pushing a piston is the classic thermodynamic example. This path uses one consistent sign convention:
+
+$$
+W = \text{work done by the system}.
+$$
+
+So expansion work is positive: the gas pushes the surroundings and gives energy away. Compression work is negative: the surroundings push on the gas and energy enters the system through work.
+
+At constant external pressure, the boundary work is
+
+$$
+W = P\Delta V.
+$$
+
+If the volume increases, $\Delta V > 0$ and $W > 0$. If the volume decreases, $\Delta V < 0$ and $W < 0$.
+
+## The First Law
+
+The first law is energy conservation applied to a thermodynamic system:
+
+$$
+\Delta U = Q - W.
+$$
+
+This equation says the system's internal energy increases when heat is added and decreases when the system does work on the surroundings. With our convention, subtracting a negative work during compression correctly increases the internal energy.
+
+<SimulationBlock
+  title="Gas Piston Energy Ledger"
+  description="Adjust heat, pressure, and volume change while tracking Q, W, and Delta U."
+>
+  <GasPistonEnergyLedger client:only="react" />
+</SimulationBlock>
+
+## Common Processes
+
+Some process labels make the first-law bookkeeping faster:
+
+- **Constant volume:** $\Delta V = 0$, so $W = 0$ and $\Delta U = Q$.
+- **Expansion at constant pressure:** $W = P\Delta V > 0$, so part of the added heat can leave as work.
+- **Compression:** $\Delta V < 0$, so $W < 0$ and the work term increases $U$ because $\Delta U = Q - W$.
+
+The same energy conservation law covers all of them. The main danger is mixing sign conventions halfway through a problem.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Constant-Volume Heating"
+    accent="blue"
+  >
+    #### Problem
+
+    A sealed rigid container of gas receives $Q = 450\,\text{J}$ of heat. The container does not change volume. Find $W$ and $\Delta U$.
+
+    #### Given
+
+    - $Q = +450\,\text{J}$
+    - $\Delta V = 0$
+
+    #### Use
+
+    At constant volume,
+
+    $$
+    W = P\Delta V = 0.
+    $$
+
+    The first law is
+
+    $$
+    \Delta U = Q - W.
+    $$
+
+    #### Solve
+
+    $$
+    \Delta U = 450 - 0 = 450\,\text{J}.
+    $$
+
+    The internal energy increases by $450\,\text{J}$.
+
+    #### Check
+
+    Since the container is rigid, the gas does no expansion work. All the heat added stays in the gas as increased internal energy.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Expansion Work at Constant Pressure"
+    accent="red"
+  >
+    #### Problem
+
+    A gas expands at constant pressure $P = 120\,\text{kPa}$ from $2.0\,\text{L}$ to $5.0\,\text{L}$ while absorbing $Q = 620\,\text{J}$ of heat. Find the work done by the gas and the change in internal energy.
+
+    #### Given
+
+    - $P = 120\,\text{kPa}$
+    - $\Delta V = 5.0 - 2.0 = 3.0\,\text{L}$
+    - $Q = +620\,\text{J}$
+
+    #### Use
+
+    Because $1\,\text{kPa}\cdot\text{L} = 1\,\text{J}$,
+
+    $$
+    W = P\Delta V.
+    $$
+
+    Then use
+
+    $$
+    \Delta U = Q - W.
+    $$
+
+    #### Solve
+
+    $$
+    W = (120)(3.0) = 360\,\text{J}.
+    $$
+
+    $$
+    \Delta U = 620 - 360 = 260\,\text{J}.
+    $$
+
+    #### Check
+
+    The gas absorbed $620\,\text{J}$, but $360\,\text{J}$ left as expansion work. The remaining $260\,\text{J}$ increased internal energy.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="First Law Checkpoint"
+  questions={[
+    {
+      id: 'work-convention',
+      question: 'In this path, $W$ means work done by the system. What is the sign of $W$ when a gas is compressed?',
+      options: [
+        { id: 'B', text: 'Positive, because energy enters the gas.', isCorrect: false, explanation: 'Energy does enter the gas during compression, but with this convention $W$ tracks work done by the system. During compression, the surroundings do work on the gas, so $W$ is negative.' },
+        { id: 'A', text: 'Negative, because the surroundings do work on the gas rather than the gas doing work on the surroundings.', isCorrect: true, explanation: 'Exactly. Compression corresponds to $\\Delta V < 0$, so $W = P\\Delta V$ is negative.' },
+        { id: 'C', text: 'Zero, because compression is not a thermodynamic process.', isCorrect: false, explanation: 'Compression is a thermodynamic process. It usually involves work crossing the system boundary.' }
+      ]
+    },
+    {
+      id: 'constant-volume',
+      question: 'A gas is heated in a rigid tank. Which first-law statement is correct?',
+      options: [
+        { id: 'C', text: '$\\Delta U = -Q$ because heat always leaves during heating.', isCorrect: false, explanation: 'Heating means heat is added to the system, so $Q$ is positive in this convention.' },
+        { id: 'A', text: '$\\Delta U = Q$ because $W = 0$ at constant volume.', isCorrect: true, explanation: 'Right. A rigid tank has $\\Delta V = 0$, so boundary work is zero and all the heat added changes internal energy.' },
+        { id: 'B', text: '$\\Delta U = -W$ because heat is not energy.', isCorrect: false, explanation: 'Heat is energy transfer caused by temperature difference. If heat crosses the boundary, it appears as $Q$ in the first law.' }
+      ]
+    },
+    {
+      id: 'expansion-ledger',
+      question: 'A gas absorbs $500\\,\\text{J}$ of heat and does $200\\,\\text{J}$ of work on its surroundings. What is $\\Delta U$?',
+      options: [
+        { id: 'A', text: '$+300\\,\\text{J}$', isCorrect: true, explanation: 'Correct. With $W$ as work done by the system, $\\Delta U = Q - W = 500 - 200 = 300\\,\\text{J}$.' },
+        { id: 'B', text: '$+700\\,\\text{J}$', isCorrect: false, explanation: 'That would add work done by the system to the internal energy. Expansion work is energy leaving the system, so it is subtracted.' },
+        { id: 'C', text: '$-300\\,\\text{J}$', isCorrect: false, explanation: 'The system still gains energy overall because the added heat is larger than the expansion work.' }
+      ]
+    }
+  ]}
+/>

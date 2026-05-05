@@ -2,6 +2,8 @@ import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type ReactNo
 
 interface Props {
   children: ReactNode;
+  secretLinkHref?: string;
+  secretLinkLabel?: string;
 }
 
 type PendulumPhysicsMode = 'rigid' | 'string';
@@ -412,7 +414,11 @@ const drawString = (
   traceSmoothString(context, stringPoints);
 };
 
-export default function PendulumFieldSection({ children }: Props) {
+export default function PendulumFieldSection({
+  children,
+  secretLinkHref,
+  secretLinkLabel = 'Open pendulum peg challenge',
+}: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const textColumnRef = useRef<HTMLDivElement | null>(null);
@@ -827,6 +833,22 @@ export default function PendulumFieldSection({ children }: Props) {
         className="pointer-events-none absolute left-0 w-full opacity-[0.58]"
         aria-hidden="true"
       />
+      {secretLinkHref ? (
+        <a
+          href={secretLinkHref}
+          className="absolute right-0 bottom-0 z-20 flex h-14 w-14 items-center justify-center border-t border-l border-[color-mix(in_srgb,var(--grid-line)_82%,transparent)] bg-[linear-gradient(225deg,color-mix(in_srgb,var(--surface-elevated)_80%,transparent),color-mix(in_srgb,var(--bg-primary)_14%,transparent))] text-[color:var(--text-muted)] opacity-70 shadow-[-10px_-10px_32px_-24px_rgba(15,118,110,0.55)] transition-all duration-200 hover:text-[var(--accent-blue)] hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] sm:h-16 sm:w-16"
+          aria-label={secretLinkLabel}
+          title={secretLinkLabel}
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="sr-only">{secretLinkLabel}</span>
+          <span aria-hidden="true" className="h-2.5 w-2.5 rounded-[2px] border border-current" />
+        </a>
+      ) : null}
       <div className="relative z-10 mx-auto w-full max-w-4xl px-4 py-6">
         <div
           ref={textColumnRef}

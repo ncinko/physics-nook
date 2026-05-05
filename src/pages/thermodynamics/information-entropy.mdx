@@ -1,0 +1,194 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import BitErasureThermalCostCalculator from '../../components/simulations/BitErasureThermalCostCalculator.jsx';
+import { thermodynamicsPath } from '../../data/modules';
+
+<ModuleHero module={thermodynamicsPath} currentPath="/thermodynamics/information-entropy" />
+
+<div id="page-content"></div>
+
+# Information and Entropy
+
+Entropy began as a thermodynamic idea, but it keeps reappearing anywhere we reason about hidden possibilities. A macrostate leaves out microscopic details. Information tells us how many possibilities remain.
+
+That connection is not just poetic. It becomes quantitative when we compare Boltzmann entropy, Shannon entropy, and the physical cost of erasing information.
+
+## Missing Microstate Information
+
+Boltzmann entropy,
+
+$$
+S = k_B \ln \Omega,
+$$
+
+grows when more microstates are compatible with the same macrostate. If all $\Omega$ microstates are equally plausible, identifying the actual microstate would require more information when $\Omega$ is larger.
+
+In bits, the amount of information needed to distinguish $\Omega$ equally likely possibilities is
+
+$$
+I = \log_2 \Omega.
+$$
+
+The logarithm base changes the unit. Natural logarithms pair naturally with thermodynamic entropy; base-$2$ logarithms measure information in bits.
+
+## Shannon Entropy
+
+Shannon entropy measures uncertainty in a probability distribution:
+
+$$
+H = -\sum_i p_i \log_2 p_i.
+$$
+
+If a fair bit has $p_0 = p_1 = 1/2$, then
+
+$$
+H = -\frac{1}{2}\log_2\frac{1}{2}
+    -\frac{1}{2}\log_2\frac{1}{2}
+  = 1\,\text{bit}.
+$$
+
+If the bit is already known, for example $p_0 = 1$ and $p_1 = 0$, its Shannon entropy is $0$ bits. There is no missing logical information about which state it is in.
+
+## Erasure Has a Thermal Cost
+
+Erasing a bit means resetting it to a standard state, such as $0$, regardless of whether it started as $0$ or $1$. That operation compresses two possible logical states into one. If done reversibly as well as physics allows, the minimum energy dissipated to a thermal environment at temperature $T$ is Landauer's bound:
+
+$$
+E_{\min} = k_B T \ln 2.
+$$
+
+For $N$ erased bits,
+
+$$
+E_{\min} = N k_B T \ln 2.
+$$
+
+Real devices usually dissipate much more than this limit, but the bound is important because it says information processing is not floating above thermodynamics. Logical operations can have physical consequences.
+
+<SimulationBlock
+  title="Bit Erasure Thermal Cost"
+  description="Calculate Landauer's minimum erasure cost for different temperatures and bit counts."
+>
+  <BitErasureThermalCostCalculator client:only="react" />
+</SimulationBlock>
+
+## Where This Leads
+
+The entropy-information bridge points far beyond introductory thermodynamics:
+
+- **Black holes:** black-hole entropy suggests that horizon area counts hidden microscopic possibilities.
+- **Quantum information:** entanglement entropy measures how much information about a subsystem is inaccessible when viewed alone.
+- **Modern statistical physics:** entropy remains central because it links microscopic dynamics, macroscopic irreversibility, and what observers can know.
+
+Entropy survives across so many areas because it is not only about heat. It is about the structure of possibilities.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Minimum Energy to Erase One Bit"
+    accent="blue"
+  >
+    #### Problem
+
+    Find the Landauer minimum energy to erase one bit at room temperature, $T = 300\,\text{K}$.
+
+    #### Given
+
+    - $N = 1$
+    - $T = 300\,\text{K}$
+    - $k_B = 1.38 \times 10^{-23}\,\text{J/K}$
+
+    #### Use
+
+    $$
+    E_{\min} = k_B T \ln 2.
+    $$
+
+    #### Solve
+
+    $$
+    E_{\min}
+    =
+    (1.38 \times 10^{-23})(300)(0.693)
+    \approx 2.87 \times 10^{-21}\,\text{J}.
+    $$
+
+    #### Check
+
+    The value is tiny for one bit, which is why Landauer's bound is usually discussed as a lower limit rather than the dominant energy cost in ordinary computers.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Compare Erasure Cost for Many Bits"
+    accent="red"
+  >
+    #### Problem
+
+    Estimate the minimum energy to erase $10^9$ bits at $300\,\text{K}$. Use the one-bit result $E_1 \approx 2.87 \times 10^{-21}\,\text{J}$.
+
+    #### Given
+
+    - $N = 10^9$
+    - $E_1 \approx 2.87 \times 10^{-21}\,\text{J}$
+
+    #### Use
+
+    $$
+    E_N = N E_1.
+    $$
+
+    #### Solve
+
+    $$
+    E_N
+    =
+    (10^9)(2.87 \times 10^{-21})
+    =
+    2.87 \times 10^{-12}\,\text{J}.
+    $$
+
+    #### Check
+
+    The cost scales linearly with the number of erased bits. A billion bits is a lot of information, but the thermodynamic lower bound is still very small on everyday energy scales.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Information Entropy Checkpoint"
+  questions={[
+    {
+      id: 'shannon-fair-bit',
+      question: 'What is the Shannon entropy of a fair bit with $p_0 = p_1 = 1/2$?',
+      options: [
+        { id: 'A', text: '$1$ bit', isCorrect: true, explanation: 'Correct. A fair bit has two equally likely states, so it carries one bit of uncertainty.' },
+        { id: 'B', text: '$0$ bits', isCorrect: false, explanation: 'Zero bits would mean the state is already known with certainty.' },
+        { id: 'C', text: '$2$ bits', isCorrect: false, explanation: 'Two bits would distinguish four equally likely possibilities, not two.' }
+      ]
+    },
+    {
+      id: 'landauer-temperature',
+      question: 'According to Landauer\\\'s principle, what happens to the minimum erasure cost per bit when temperature increases?',
+      options: [
+        { id: 'B', text: 'It decreases because warmer systems already have more entropy.', isCorrect: false, explanation: 'The bound is proportional to $T$, so a warmer thermal environment raises the minimum heat cost per erased bit.' },
+        { id: 'A', text: 'It increases in proportion to $T$.', isCorrect: true, explanation: 'Right. $E_{\\min} = k_B T \\ln 2$, so doubling the temperature doubles the minimum per-bit erasure cost.' },
+        { id: 'C', text: 'It stays fixed because $\\ln 2$ is constant.', isCorrect: false, explanation: '$\\ln 2$ is constant, but $T$ is not. The product $k_B T \\ln 2$ changes with temperature.' }
+      ]
+    },
+    {
+      id: 'information-physical',
+      question: 'Why does bit erasure connect information to thermodynamics?',
+      options: [
+        { id: 'C', text: 'Because all information is stored only in hot gases.', isCorrect: false, explanation: 'Information can be stored in many physical systems. The point is that logical state changes must be implemented physically.' },
+        { id: 'B', text: 'Because erasure creates energy from nothing.', isCorrect: false, explanation: 'Landauer\\\'s principle does not create energy. It sets a minimum dissipated energy cost for a logically irreversible operation.' },
+        { id: 'A', text: 'Because resetting unknown logical states reduces logical possibilities and requires entropy to be exported to the environment.', isCorrect: true, explanation: 'Exactly. Erasure maps multiple possible inputs to one output, so the missing logical entropy must be balanced by physical entropy production elsewhere.' }
+      ]
+    }
+  ]}
+/>

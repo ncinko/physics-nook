@@ -829,13 +829,146 @@ const drawPearl = (x: number, y: number, size = 20): void => {
   context.fillRect(x + Math.floor(size * 0.2), y + Math.floor(size * 0.2), highlight, highlight);
 };
 
+const fillPixelRect = (x: number, y: number, width: number, height: number): void => {
+  context.fillRect(Math.round(x), Math.round(y), Math.round(width), Math.round(height));
+};
+
+const drawPixelBoulder = (x: number, y: number, unit: number, widthUnits: number, rows: number[]): void => {
+  context.fillStyle = 'rgba(14, 23, 64, 0.36)';
+  for (let row = 0; row < rows.length; row += 1) {
+    const rowWidth = rows[row];
+    const rowX = x - (rowWidth * unit) / 2;
+    const rowY = y - (row + 1) * unit;
+    fillPixelRect(rowX, rowY, rowWidth * unit, unit);
+  }
+
+  context.fillStyle = 'rgba(10, 17, 52, 0.18)';
+  fillPixelRect(x - (widthUnits * unit) / 2, y - unit, widthUnits * unit, unit);
+};
+
+const drawCoralBlock = (
+  x: number,
+  y: number,
+  unit: number,
+  flip: number,
+  offsetX: number,
+  offsetY: number,
+  width: number,
+  height: number,
+): void => {
+  const blockX = flip > 0 ? x + offsetX * unit : x - (offsetX + width) * unit;
+  fillPixelRect(blockX, y + offsetY * unit, width * unit, height * unit);
+};
+
+const coralVariants = [
+  [
+    { x: -1, y: -2, w: 4, h: 2 },
+    { x: 0, y: -8, w: 2, h: 6 },
+    { x: 1, y: -12, w: 2, h: 4 },
+    { x: -4, y: -6, w: 4, h: 2 },
+    { x: -5, y: -9, w: 2, h: 3 },
+    { x: -7, y: -11, w: 3, h: 2 },
+    { x: 2, y: -8, w: 5, h: 2 },
+    { x: 6, y: -11, w: 2, h: 3 },
+    { x: 7, y: -13, w: 3, h: 2 },
+  ],
+  [
+    { x: -1, y: -2, w: 4, h: 2 },
+    { x: 0, y: -9, w: 2, h: 8 },
+    { x: -3, y: -11, w: 5, h: 3 },
+    { x: -5, y: -15, w: 3, h: 5 },
+    { x: -8, y: -17, w: 5, h: 3 },
+    { x: 1, y: -7, w: 5, h: 3 },
+    { x: 5, y: -10, w: 3, h: 5 },
+    { x: 6, y: -14, w: 5, h: 3 },
+    { x: 8, y: -17, w: 3, h: 4 },
+  ],
+  [
+    { x: -2, y: -2, w: 5, h: 2 },
+    { x: 0, y: -7, w: 2, h: 6 },
+    { x: 1, y: -11, w: 2, h: 4 },
+    { x: -5, y: -7, w: 6, h: 3 },
+    { x: -7, y: -10, w: 3, h: 4 },
+    { x: -9, y: -12, w: 4, h: 3 },
+    { x: 1, y: -10, w: 6, h: 3 },
+    { x: 6, y: -13, w: 3, h: 4 },
+    { x: 7, y: -16, w: 5, h: 3 },
+    { x: 10, y: -18, w: 3, h: 4 },
+  ],
+] as const;
+
+const drawBranchingCoral = (x: number, y: number, unit: number, variant: 0 | 1 | 2, flip = 1): void => {
+  context.fillStyle = 'rgba(12, 20, 66, 0.5)';
+  for (const block of coralVariants[variant]) {
+    drawCoralBlock(x, y, unit, flip, block.x, block.y, block.w, block.h);
+  }
+
+  context.fillStyle = 'rgba(8, 15, 48, 0.18)';
+  drawCoralBlock(x, y, unit, flip, -1, -3, 4, 1);
+  drawCoralBlock(x, y, unit, flip, 0, -8, 1, 6);
+};
+
+const drawSeaweedStrand = (x: number, y: number, unit: number, segments: number, phase: number): void => {
+  let previousWave = 0;
+  for (let segment = 0; segment < segments; segment += 1) {
+    const lift = segment / Math.max(1, segments - 1);
+    const targetWave = Math.round(Math.sin(frameCount * 0.055 + phase + segment * 0.65) * lift);
+    const wave = Math.max(previousWave - 1, Math.min(previousWave + 1, targetWave));
+    const width = segment > segments - 3 ? 1 : 2;
+    const segmentX = x + wave * unit;
+    const segmentY = y - (segment + 1) * unit;
+    fillPixelRect(segmentX, segmentY, width * unit, unit * 2);
+    previousWave = wave;
+  }
+};
+
+const drawSeaweed = (x: number, y: number, unit: number, phase: number): void => {
+  context.fillStyle = 'rgba(9, 31, 62, 0.42)';
+  drawSeaweedStrand(x, y, unit, 11, phase);
+  drawSeaweedStrand(x - unit * 3, y + unit, unit, 8, phase + 1.7);
+  drawSeaweedStrand(x + unit * 3, y, unit, 9, phase + 3.1);
+
+  context.fillStyle = 'rgba(7, 19, 48, 0.18)';
+  fillPixelRect(x - unit * 4, y - unit, unit * 8, unit);
+};
+
 const drawBackgroundDecorations = (): void => {
-  context.fillStyle = 'rgba(60, 40, 100, 0.4)';
-  for (let i = 0; i < CANVAS_BASE_WIDTH; i += 180) {
-    const h = 40 + Math.sin(i) * 60;
-    context.fillRect(i + 40, 1000 - h, 20, h);
-    context.fillRect(i + 30, 1000 - h + 20, 40, 10);
-    context.fillRect(i + 45, 1000 - h - 10, 10, 10);
+  drawPixelBoulder(112, 1018, 12, 10, [10, 9, 7, 5]);
+  drawPixelBoulder(500, 1018, 14, 13, [13, 12, 10, 7, 4]);
+  drawPixelBoulder(910, 1018, 11, 11, [11, 10, 7, 5]);
+  drawPixelBoulder(1228, 1018, 13, 12, [12, 11, 8, 6, 3]);
+  drawPixelBoulder(1575, 1018, 10, 10, [10, 9, 6, 4]);
+
+  drawBranchingCoral(235, 1018, 6, 0);
+  drawBranchingCoral(1090, 1018, 6, 2);
+  drawBranchingCoral(1450, 1018, 5, 0, -1);
+  drawSeaweed(390, 1018, 6, 0.4);
+  drawSeaweed(1290, 1018, 5, 2.6);
+};
+
+const drawSandyFloor = (): void => {
+  const floorTop = 1020;
+  const sandBase = '#c2b280';
+  context.fillStyle = sandBase;
+  context.fillRect(0, floorTop, CANVAS_BASE_WIDTH, 60);
+
+  let ridgeHeight = 8;
+  const ridgeStepWidth = 18;
+  const ridgeDeltas = [4, -2, 6, -5, 3, -4, 2, 5, -6, 3, -1, 4, -3, 2, -5, 6];
+  for (let x = 0; x < CANVAS_BASE_WIDTH; x += ridgeStepWidth) {
+    const ridgeIndex = x / ridgeStepWidth;
+    ridgeHeight = Math.max(3, Math.min(18, ridgeHeight + ridgeDeltas[ridgeIndex % ridgeDeltas.length]));
+    context.fillStyle = sandBase;
+    fillPixelRect(x, floorTop - ridgeHeight, ridgeStepWidth, ridgeHeight);
+  }
+
+  const speckShades = ['#d0bd86', '#b29d6d', '#ccb982'];
+  for (let index = 0; index < 95; index += 1) {
+    const x = (index * 83 + index * index * 17) % CANVAS_BASE_WIDTH;
+    const y = floorTop + 3 + ((index * 47 + index * index * 5) % 54);
+    const size = index % 4 === 0 ? 3 : 2;
+    context.fillStyle = speckShades[index % speckShades.length];
+    fillPixelRect(x, y, size, size);
   }
 };
 
@@ -857,13 +990,7 @@ const drawBackground = (): void => {
     context.fillRect(x + 1, y + 1, Math.max(1, bubble.size - 3), Math.max(1, bubble.size - 3));
   }
 
-  context.fillStyle = '#c2b280';
-  context.fillRect(0, 1020, CANVAS_BASE_WIDTH, 60);
-  for (let i = 0; i < CANVAS_BASE_WIDTH; i += 120) {
-    context.beginPath();
-    context.ellipse(i + 60, 1030, 80, 20, 0, 0, Math.PI, true);
-    context.fill();
-  }
+  drawSandyFloor();
 };
 
 const drawBase = (base: GameBase, score: number): void => {
@@ -898,15 +1025,24 @@ const drawGateIcon = (gate: UpgradeGate): void => {
   context.fillStyle = '#ffffff';
 
   if (gate.type === 'warrior') {
+    const drawSword = (shade: string, blade: string): void => {
+      context.fillStyle = shade;
+      context.fillRect(-1, -18, 6, 38);
+      context.fillRect(-9, 10, 22, 5);
+      context.fillRect(0, -23, 4, 8);
+
+      context.fillStyle = blade;
+      context.fillRect(-3, -20, 6, 38);
+      context.fillRect(-11, 8, 22, 5);
+      context.fillRect(-2, -25, 4, 8);
+    };
+
     context.rotate(-0.55);
-    context.fillRect(-3, -20, 6, 38);
-    context.fillRect(-11, 8, 22, 5);
-    context.fillRect(-2, -25, 4, 8);
+    drawSword('#5d6874', '#cbd5df');
     context.rotate(1.1);
-    context.fillRect(-3, -20, 6, 38);
-    context.fillRect(-11, 8, 22, 5);
-    context.fillRect(-2, -25, 4, 8);
+    drawSword('#8c96a3', '#ffffff');
   } else {
+    context.scale(0.82, 0.82);
     context.fillStyle = '#241700';
     context.fillRect(-1, -29, 16, 10);
     context.fillRect(-10, -21, 16, 10);
@@ -1016,13 +1152,13 @@ const drawClamshell = (clam: WorldSnapshot['clamshells'][number] | GameMap['clam
   }
 
   context.fillStyle = innerFlesh;
-  context.fillRect(6, -2, 38, 18);
+  context.fillRect(8, 2, 34, 14);
   for (const s of topScallops) {
-    context.fillRect(s.x + 1, s.y + 6, 6, 6);
+    context.fillRect(s.x + 2, s.y + 9, 4, 4);
   }
 
   context.fillStyle = innerShadow;
-  context.fillRect(6, 6, 38, 10);
+  context.fillRect(8, 8, 34, 8);
 
   if (pearlsInside > 0) {
     const startX = 25 - ((pearlsInside * 13 - 3) / 2);
@@ -1032,14 +1168,14 @@ const drawClamshell = (clam: WorldSnapshot['clamshells'][number] | GameMap['clam
   }
 
   context.fillStyle = shellOutline;
-  context.fillRect(4, 16, 42, 8);
+  context.fillRect(2, 16, 46, 8);
   for (const s of botScallops) {
     context.fillRect(s.x, 16, 8, s.y - 16);
     context.fillRect(s.x + 1, s.y, 6, 2);
   }
 
   context.fillStyle = shellBase;
-  context.fillRect(6, 18, 38, 4);
+  context.fillRect(4, 18, 42, 4);
   for (const s of botScallops) {
     context.fillRect(s.x + 1, 18, 6, s.y - 20);
     context.fillRect(s.x + 2, s.y - 2, 4, 2);
@@ -1051,7 +1187,7 @@ const drawClamshell = (clam: WorldSnapshot['clamshells'][number] | GameMap['clam
   }
 
   context.fillStyle = shellLip;
-  context.fillRect(5, 16, 40, 2);
+  context.fillRect(3, 16, 44, 2);
   for (const s of botScallops) {
     context.fillRect(s.x + 2, 14, 4, 2);
   }

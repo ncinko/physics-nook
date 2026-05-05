@@ -1,0 +1,403 @@
+:root {
+  color: #f7f3e8;
+  background: #11120f;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+button:focus-visible,
+input:focus-visible {
+  outline: 3px solid #e9c46a;
+  outline-offset: 2px;
+}
+
+.game-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-height: 540px;
+  background: #11120f;
+}
+
+#gameCanvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.topbar {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  left: 16px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(360px, auto) auto;
+  gap: 12px;
+  align-items: start;
+  pointer-events: none;
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.brand-lockup,
+.join-panel,
+.connection-pill,
+.roster-panel {
+  border: 1px solid rgba(247, 243, 232, 0.16);
+  border-radius: 8px;
+  background: rgba(17, 18, 15, 0.84);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.brand-lockup {
+  display: flex;
+  min-width: 0;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+}
+
+.brand-mark {
+  display: block;
+  width: 34px;
+  height: 34px;
+  border: 3px solid #f5b642;
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, transparent 43%, #11120f 43% 57%, transparent 57%),
+    linear-gradient(#2a9df4 0 0);
+  background-size: 100% 100%;
+}
+
+.brand-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.brand-copy strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 1rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brand-copy span {
+  overflow: hidden;
+  color: #c8d8d1;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.join-panel {
+  display: grid;
+  grid-template-columns: 104px 150px minmax(76px, auto);
+  gap: 8px;
+  align-items: end;
+  padding: 8px;
+}
+
+.join-panel label {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.join-panel label span {
+  color: #d5ddc8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.join-panel input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  border: 1px solid rgba(247, 243, 232, 0.2);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.join-panel button {
+  height: 38px;
+  border-radius: 6px;
+  color: #11120f;
+  font-weight: 800;
+  background: #f5b642;
+}
+
+.connection-pill {
+  display: inline-flex;
+  min-width: 136px;
+  max-width: 220px;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  padding: 13px 14px;
+  color: #f7f3e8;
+  font-size: 0.88rem;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #8f9485;
+}
+
+.connection-pill[data-state="connecting"] .status-dot {
+  background: #e9c46a;
+}
+
+.connection-pill[data-state="online"] .status-dot {
+  background: #06d6a0;
+}
+
+.connection-pill[data-state="error"] .status-dot {
+  background: #ef476f;
+}
+
+.roster-panel {
+  position: absolute;
+  top: 88px;
+  right: 16px;
+  width: min(274px, calc(100vw - 32px));
+  max-height: calc(100vh - 128px);
+  padding: 10px;
+  overflow: auto;
+}
+
+.roster-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 2px 9px;
+  color: #f7f3e8;
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.roster-heading strong {
+  color: #e9c46a;
+}
+
+#rosterList {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.roster-slot {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 46px;
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid rgba(247, 243, 232, 0.11);
+  border-radius: 7px;
+  padding: 5px 7px;
+  color: #f7f3e8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.roster-slot.is-open {
+  color: #9aa79e;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.roster-slot.is-local {
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.roster-slot.team-gold {
+  box-shadow: inset 3px 0 #f5b642;
+}
+
+.roster-slot.team-blue {
+  box-shadow: inset 3px 0 #2a9df4;
+}
+
+.slot-badge {
+  display: inline-grid;
+  width: 28px;
+  height: 24px;
+  place-items: center;
+  border-radius: 5px;
+  color: #11120f;
+  font-size: 0.72rem;
+  font-weight: 900;
+  background: #d5ddc8;
+}
+
+.slot-name {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 720;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-team {
+  overflow: hidden;
+  color: #c8d8d1;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: right;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.touch-controls {
+  position: absolute;
+  right: 16px;
+  bottom: 18px;
+  left: 16px;
+  display: none;
+  grid-template-columns: 76px 76px minmax(112px, 152px);
+  gap: 10px;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.touch-controls button {
+  height: 58px;
+  border: 1px solid rgba(247, 243, 232, 0.18);
+  border-radius: 8px;
+  color: #ffffff;
+  font-size: 1.05rem;
+  font-weight: 900;
+  background: rgba(17, 18, 15, 0.84);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.touch-controls button[data-control="jump"] {
+  color: #11120f;
+  background: #06d6a0;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .touch-controls {
+    display: grid;
+  }
+}
+
+@media (max-width: 980px) {
+  .topbar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .join-panel {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .roster-panel {
+    top: 148px;
+  }
+}
+
+@media (max-width: 640px) {
+  .game-shell {
+    min-height: 620px;
+  }
+
+  .topbar {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .brand-lockup,
+  .join-panel,
+  .connection-pill,
+  .roster-panel {
+    border-radius: 7px;
+  }
+
+  .join-panel {
+    width: 100%;
+    grid-template-columns: minmax(78px, 0.8fr) minmax(112px, 1fr) 74px;
+  }
+
+  .connection-pill {
+    justify-self: start;
+    min-width: 128px;
+    padding: 10px 12px;
+  }
+
+  .roster-panel {
+    top: auto;
+    right: 10px;
+    bottom: 92px;
+    left: 10px;
+    width: auto;
+    max-height: 218px;
+  }
+
+  .touch-controls {
+    right: 10px;
+    bottom: 12px;
+    left: 10px;
+    grid-template-columns: 64px 64px minmax(96px, 134px);
+  }
+
+  .touch-controls button {
+    height: 54px;
+  }
+}

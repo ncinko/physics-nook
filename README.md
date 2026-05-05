@@ -1,46 +1,71 @@
-# Astro Starter Kit: Basics
+# Physics Nook
 
-```sh
-npm create astro@latest -- --template basics
-```
+Physics Nook is currently an Astro learning site plus an early browser-based multiplayer arcade platformer prototype.
 
-> 🧑‍🚀 **Seasoned astronaut?** Delete this file. Have fun!
-
-## 🚀 Project Structure
-
-Inside of your Astro project, you'll see the following folders and files:
+## Project Layout
 
 ```text
-/
-├── public/
-│   └── favicon.svg
-├── src
-│   ├── assets
-│   │   └── astro.svg
-│   ├── components
-│   │   └── Welcome.astro
-│   ├── layouts
-│   │   └── Layout.astro
-│   └── pages
-│       └── index.astro
-└── package.json
+apps/
+  client/          Vite + TypeScript canvas game client
+  server/          Node + TypeScript authoritative WebSocket game server
+packages/
+  shared/          Shared game protocol, constants, and map data
+server/            Existing coaster realtime room server
+src/               Astro site pages, layouts, and simulations
+tests/             Node strip-types test runners for physics modules
 ```
 
-To learn more about the folder structure of an Astro project, refer to [our guide on project structure](https://docs.astro.build/en/basics/project-structure/).
+## Game Prototype Milestone
 
-## 🧞 Commands
+The first game milestone is a minimal 10-player lobby and movement prototype inspired by Killer Queen:
 
-All commands are run from the root of the project, from a terminal:
+- Room/lobby support with a maximum of 10 connected players.
+- Server-owned player slots, movement, gravity, platform collisions, and snapshots.
+- Browser client that sends input only and renders authoritative snapshots.
+- Shared TypeScript message types, constants, player config, and map data.
+- Static client build intended for Cloudflare Pages at `game.physicsnook.com`.
+- Separate game server intended for `ws.physicsnook.com`.
 
-| Command                   | Action                                           |
-| :------------------------ | :----------------------------------------------- |
-| `npm install`             | Installs dependencies                            |
-| `npm run dev`             | Starts local dev server at `localhost:4321`      |
-| `npm run build`           | Build your production site to `./dist/`          |
-| `npm run preview`         | Preview your build locally, before deploying     |
-| `npm run astro ...`       | Run CLI commands like `astro add`, `astro check` |
-| `npm run astro -- --help` | Get help using the Astro CLI                     |
+The prototype does not yet include objectives, combat, deaths, bots, matchmaking, persistence, or win conditions.
 
-## 👀 Want to learn more?
+## Commands
 
-Feel free to check [our documentation](https://docs.astro.build) or jump into our [Discord server](https://astro.build/chat).
+Run the existing Astro site:
+
+```sh
+npm run dev
+npm run build
+npm run preview
+```
+
+Run the game server:
+
+```sh
+npm run game:server
+```
+
+Run the game client in development:
+
+```sh
+npm run game:dev
+```
+
+Build the game client for static hosting:
+
+```sh
+npm run game:build
+```
+
+The local game client defaults to `ws://localhost:8788`. In production over HTTPS it defaults to `wss://ws.physicsnook.com`. Override with `VITE_GAME_WS_URL` or `PUBLIC_GAME_WS_URL` when needed.
+
+## Deployment Notes
+
+Cloudflare Pages can build the game client with:
+
+```sh
+npm run game:build
+```
+
+Use `apps/client/dist` as the Pages output directory for `game.physicsnook.com`.
+
+Host the authoritative server separately and expose it as `wss://ws.physicsnook.com`. The server process listens on `GAME_WS_PORT`, then `PORT`, then `8788`.

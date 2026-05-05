@@ -6,25 +6,43 @@ import {
   DEFAULT_INPUT,
   GAME_CONFIG,
   GAME_MAP,
+  LOBBY_CODES,
+  TEAM_COLORS,
   clamp,
   createRoomSnapshot,
   getColorForSlot,
+  getLobbyName,
+  getRoleForSlot,
   getSpawnForSlot,
   getTeamForSlot,
+  isLobbyCode,
   normalizeRoomCode,
   sanitizePlayerName,
 } from '../../../packages/shared/src/index.ts';
 import type {
+  BerrySnapshot,
+  ClamShellSnapshot,
+  ClashEvent,
   ClientInputMessage,
   ClientJoinMessage,
   ClientPingMessage,
   ClientToServerMessage,
+  Facing,
+  HiveCell,
   InputState,
+  LobbyCode,
+  LobbyPhase,
+  LobbySummary,
   Platform,
   PlayerId,
   PlayerSnapshot,
   RoomPlayer,
+  ScoreState,
   ServerToClientMessage,
+  SnailSnapshot,
+  Team,
+  UpgradeGate,
+  WinnerState,
   WorldSnapshot,
 } from '../../../packages/shared/src/index.ts';
 
@@ -39,71 +57,185 @@ type ClientConnection = {
   buffer: Buffer;
   closed: boolean;
   id: PlayerId;
-  roomCode: string | null;
+  roomCode: LobbyCode | null;
   input: InputState;
   previousInput: InputState;
   lastInputSeq: number;
   lastMessageAt: number;
 };
 
+type PlayerMeta = {
+  canDoubleJump: boolean;
+};
+
+type DroppedPearl = BerrySnapshot & {
+  vx: number;
+  vy: number;
+};
+
 type GameRoom = {
-  roomCode: string;
+  roomCode: LobbyCode;
+  phase: LobbyPhase;
   clients: Map<PlayerId, ClientConnection>;
   players: Map<PlayerId, PlayerSnapshot>;
+  playerMeta: Map<PlayerId, PlayerMeta>;
+  droppedPearls: Map<string, DroppedPearl>;
+  clamshells: Map<string, ClamShellSnapshot & { respawnTimer: number }>;
+  scores: ScoreState;
+  queenKills: ScoreState;
+  snail: SnailSnapshot;
+  snailEatTimer: number;
+  upgradeGates: Map<string, UpgradeGate>;
+  winner: WinnerState;
+  scoreScreenEndsAt: number | null;
+  roundStartedAt: number;
+  clashEvents: ClashEvent[];
   tick: number;
   createdAt: number;
   lastSnapshotTick: number;
+  nextPearlId: number;
 };
 
-const rooms = new Map<string, GameRoom>();
+const connections = new Set<ClientConnection>();
 
 const cloneInput = (input: InputState): InputState => ({
   left: Boolean(input.left),
   right: Boolean(input.right),
   jump: Boolean(input.jump),
+  down: Boolean(input.down),
 });
+
+const freshScores = (): ScoreState => ({ blue: 0, red: 0 });
+
+const makeInitialClams = (): GameRoom['clamshells'] =>
+  new Map(
+    GAME_MAP.clamShells.map((clam) => [
+      clam.id,
+      {
+        ...clam,
+        pearlsInside: 3,
+        respawnTimer: 0,
+      },
+    ]),
+  );
+
+const makeInitialGates = (): Map<string, UpgradeGate> =>
+  new Map(GAME_MAP.upgradeGates.map((gate) => [gate.id, { ...gate }]));
+
+const makeInitialSnail = (): SnailSnapshot => ({
+  x: GAME_MAP.snail.startX,
+  y: GAME_MAP.snail.y,
+  riderId: null,
+  eatingTargetId: null,
+  direction: 0,
+  facing: -1,
+});
+
+const createGameRoom = (roomCode: LobbyCode): GameRoom => ({
+  roomCode,
+  phase: 'lobby',
+  clients: new Map(),
+  players: new Map(),
+  playerMeta: new Map(),
+  droppedPearls: new Map(),
+  clamshells: makeInitialClams(),
+  scores: freshScores(),
+  queenKills: freshScores(),
+  snail: makeInitialSnail(),
+  snailEatTimer: 0,
+  upgradeGates: makeInitialGates(),
+  winner: null,
+  scoreScreenEndsAt: null,
+  roundStartedAt: Date.now(),
+  clashEvents: [],
+  tick: 0,
+  createdAt: Date.now(),
+  lastSnapshotTick: 0,
+  nextPearlId: 1,
+});
+
+const rooms = new Map<LobbyCode, GameRoom>(LOBBY_CODES.map((roomCode) => [roomCode, createGameRoom(roomCode)]));
+
+const opposingTeam = (team: Team): Team => (team === 'blue' ? 'red' : 'blue');
 
 const getRoomPlayers = (room: GameRoom): RoomPlayer[] =>
   [...room.players.values()]
     .sort((a, b) => a.slot - b.slot)
-    .map(({ id, name, slot, team, color, connected }) => ({ id, name, slot, team, color, connected }));
+    .map(({ id, name, slot, team, role, ready, color, connected }) => ({
+      id,
+      name,
+      slot,
+      team,
+      role,
+      ready,
+      color,
+      connected,
+    }));
 
-const getRoom = (roomCode: string): GameRoom => {
-  const normalizedRoomCode = normalizeRoomCode(roomCode);
-  const existing = rooms.get(normalizedRoomCode);
+const hasQueen = (room: GameRoom, team: Team): boolean =>
+  [...room.players.values()].some((player) => player.team === team && player.role === 'queen');
 
-  if (existing) {
-    return existing;
-  }
+const readyCount = (room: GameRoom): number => [...room.players.values()].filter((player) => player.ready).length;
 
-  const room: GameRoom = {
-    roomCode: normalizedRoomCode,
-    clients: new Map(),
-    players: new Map(),
-    tick: 0,
-    createdAt: Date.now(),
-    lastSnapshotTick: 0,
-  };
-  rooms.set(normalizedRoomCode, room);
-  return room;
-};
+const canStart = (room: GameRoom): boolean =>
+  room.phase === 'lobby' &&
+  room.players.size > 0 &&
+  readyCount(room) === room.players.size &&
+  hasQueen(room, 'blue') &&
+  hasQueen(room, 'red');
 
-const getFirstOpenSlot = (room: GameRoom): number | null => {
-  const usedSlots = new Set([...room.players.values()].map((player) => player.slot));
+const makeLobbySummary = (room: GameRoom): LobbySummary => ({
+  roomCode: room.roomCode,
+  name: getLobbyName(room.roomCode),
+  phase: room.phase,
+  playerCount: room.players.size,
+  maxPlayers: GAME_CONFIG.maxPlayers,
+  readyCount: readyCount(room),
+  hasBlueQueen: hasQueen(room, 'blue'),
+  hasRedQueen: hasQueen(room, 'red'),
+  winner: room.winner ? { ...room.winner } : null,
+  scoreScreenEndsAt: room.scoreScreenEndsAt,
+});
 
-  for (let slot = 0; slot < GAME_CONFIG.maxPlayers; slot += 1) {
-    if (!usedSlots.has(slot)) {
-      return slot;
+const makeLobbyList = (): ServerToClientMessage => ({
+  type: 'lobbies',
+  lobbies: [...rooms.values()].map(makeLobbySummary),
+});
+
+const makeHiveCells = (scores: ScoreState): HiveCell[] => {
+  const cells: HiveCell[] = [];
+
+  for (const base of GAME_MAP.bases) {
+    for (let i = 0; i < base.slots.length; i += 1) {
+      const slot = base.slots[i];
+      cells.push({
+        id: `${base.team}-cell-${i}`,
+        team: base.team,
+        x: base.x + slot.x - 12,
+        y: base.y + slot.y - 12,
+        width: 24,
+        height: 24,
+        filled: i < scores[base.team],
+      });
     }
   }
 
-  return null;
+  return cells;
 };
 
+const roomSnapshot = (room: GameRoom) =>
+  createRoomSnapshot(
+    room.roomCode,
+    getRoomPlayers(room),
+    room.phase,
+    canStart(room),
+    readyCount(room),
+    room.winner ? { ...room.winner } : null,
+    room.scoreScreenEndsAt,
+  );
+
 const sendFrame = (socket: import('node:net').Socket, payload: ServerToClientMessage | string): void => {
-  if (socket.destroyed) {
-    return;
-  }
+  if (socket.destroyed) return;
 
   const data = Buffer.from(typeof payload === 'string' ? payload : JSON.stringify(payload));
   let header: Buffer;
@@ -132,10 +264,7 @@ const sendClose = (socket: import('node:net').Socket): void => {
 };
 
 const sendPongFrame = (socket: import('node:net').Socket, payload: Buffer): void => {
-  if (payload.length > 125 || socket.destroyed) {
-    return;
-  }
-
+  if (payload.length > 125 || socket.destroyed) return;
   socket.write(Buffer.concat([Buffer.from([0x8a, payload.length]), payload]));
 };
 
@@ -170,13 +299,8 @@ const parseFrames = (client: ClientConnection, chunk: Buffer): string[] => {
     }
 
     const maskOffset = offset;
-    if (masked) {
-      offset += 4;
-    }
-
-    if (client.buffer.length < offset + length) {
-      break;
-    }
+    if (masked) offset += 4;
+    if (client.buffer.length < offset + length) break;
 
     let payload = client.buffer.subarray(offset, offset + length);
     if (masked) {
@@ -209,91 +333,228 @@ const broadcast = (room: GameRoom, message: ServerToClientMessage): void => {
   room.clients.forEach((client) => sendFrame(client.socket, message));
 };
 
-const makeSnapshot = (room: GameRoom): WorldSnapshot => ({
+const broadcastLobbyList = (): void => {
+  const message = makeLobbyList();
+  connections.forEach((client) => sendFrame(client.socket, message));
+};
+
+const makeSnapshot = (room: GameRoom, consumeEvents = false): WorldSnapshot => ({
   type: 'snapshot',
   roomCode: room.roomCode,
   tick: room.tick,
   serverTime: Date.now(),
+  phase: room.phase,
+  timeElapsed: Math.max(0, (Date.now() - room.roundStartedAt) / 1000),
   players: [...room.players.values()]
     .sort((a, b) => a.slot - b.slot)
     .map((player) => ({ ...player })),
+  berries: [...room.droppedPearls.values()].map(({ vx: _vx, vy: _vy, ...pearl }) => ({ ...pearl })),
+  scores: { ...room.scores },
+  queenKills: { ...room.queenKills },
+  snail: { ...room.snail },
+  hiveCells: makeHiveCells(room.scores),
+  clamshells: [...room.clamshells.values()].map(({ respawnTimer: _respawnTimer, ...clam }) => ({ ...clam })),
+  upgradeGates: [...room.upgradeGates.values()].map((gate) => ({ ...gate })),
+  clashEvents: consumeEvents ? room.clashEvents.splice(0) : [],
+  winner: room.winner ? { ...room.winner } : null,
+  roundEndsAt: room.scoreScreenEndsAt,
 });
 
 const broadcastRoom = (room: GameRoom): void => {
-  broadcast(room, {
-    type: 'room',
-    room: createRoomSnapshot(room.roomCode, getRoomPlayers(room)),
-  });
+  broadcast(room, { type: 'room', room: roomSnapshot(room) });
+  broadcastLobbyList();
 };
 
-const removeClient = (client: ClientConnection): void => {
-  if (!client.roomCode || !client.id) {
-    return;
+const resetMatchState = (room: GameRoom): void => {
+  room.droppedPearls = new Map();
+  room.clamshells = makeInitialClams();
+  room.scores = freshScores();
+  room.queenKills = freshScores();
+  room.snail = makeInitialSnail();
+  room.snailEatTimer = 0;
+  room.upgradeGates = makeInitialGates();
+  room.winner = null;
+  room.scoreScreenEndsAt = null;
+  room.roundStartedAt = Date.now();
+  room.clashEvents = [];
+  room.nextPearlId = 1;
+};
+
+const releaseBerry = (player: PlayerSnapshot): void => {
+  player.carriedBerryId = null;
+};
+
+const placeAtSpawn = (player: PlayerSnapshot): void => {
+  const spawn = getSpawnForSlot(player.slot);
+  player.x = spawn.x;
+  player.y = spawn.y;
+  player.vx = 0;
+  player.vy = 0;
+  player.facing = player.team === 'blue' ? 1 : -1;
+  player.isGrounded = false;
+  player.alive = true;
+  player.beingEaten = false;
+  player.carriedBerryId = null;
+  player.speedBoost = false;
+  player.upgradeProgress = 0;
+  player.upgradeGateId = null;
+  player.invincibleUntil = Date.now() + GAME_CONFIG.player.invincibleMs;
+  player.respawnsAt = null;
+};
+
+const applySlotToPlayer = (player: PlayerSnapshot, slot: number): void => {
+  player.slot = slot;
+  player.team = getTeamForSlot(slot);
+  player.role = getRoleForSlot(slot);
+  player.color = TEAM_COLORS[player.team];
+  player.lives = GAME_CONFIG.player.queenLives;
+  placeAtSpawn(player);
+};
+
+const respawnPlayer = (player: PlayerSnapshot): void => {
+  placeAtSpawn(player);
+  if (player.role !== 'queen') {
+    player.role = 'worker';
   }
+};
+
+const removeClientFromRoom = (client: ClientConnection, broadcastChanges = true): void => {
+  if (!client.roomCode || !client.id) return;
 
   const room = rooms.get(client.roomCode);
-  if (!room) {
-    return;
+  if (!room) return;
+
+  const player = room.players.get(client.id);
+  if (player) {
+    releaseBerry(player);
   }
+  if (room.snail.riderId === client.id) room.snail.riderId = null;
+  if (room.snail.eatingTargetId === client.id) room.snail.eatingTargetId = null;
 
   room.clients.delete(client.id);
   room.players.delete(client.id);
-  broadcastRoom(room);
-
-  if (room.clients.size === 0) {
-    rooms.delete(room.roomCode);
-  }
-
+  room.playerMeta.delete(client.id);
   client.roomCode = null;
   client.id = '';
+  client.input = { ...DEFAULT_INPUT };
+  client.previousInput = { ...DEFAULT_INPUT };
+
+  if (room.players.size === 0 && room.phase !== 'lobby') {
+    room.phase = 'lobby';
+    resetMatchState(room);
+  }
+
+  if (broadcastChanges) {
+    broadcastRoom(room);
+  }
 };
 
 const isInputState = (value: unknown): value is InputState => {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-
+  if (!value || typeof value !== 'object') return false;
   const input = value as Record<string, unknown>;
-  return typeof input.left === 'boolean' && typeof input.right === 'boolean' && typeof input.jump === 'boolean';
+  return (
+    typeof input.left === 'boolean' &&
+    typeof input.right === 'boolean' &&
+    typeof input.jump === 'boolean' &&
+    (typeof input.down === 'boolean' || input.down === undefined)
+  );
 };
 
 const sendError = (client: ClientConnection, message: string): void => {
   sendFrame(client.socket, { type: 'error', message });
 };
 
-const handleJoin = (client: ClientConnection, message: ClientJoinMessage): void => {
-  if (client.roomCode) {
-    removeClient(client);
-  }
-
-  const room = getRoom(message.roomCode ?? 'ARENA');
-  const slot = getFirstOpenSlot(room);
-
-  if (slot === null) {
-    sendError(client, `Room ${room.roomCode} is full.`);
-    sendClose(client.socket);
-    return;
-  }
-
+const createPlayer = (slot: number, id: PlayerId, name: string): PlayerSnapshot => {
   const spawn = getSpawnForSlot(slot);
-  const id = randomUUID();
-  const name = sanitizePlayerName(message.name, `Player ${slot + 1}`);
   const team = getTeamForSlot(slot);
-  const player: PlayerSnapshot = {
+  const role = getRoleForSlot(slot);
+
+  return {
     id,
     name,
     slot,
     team,
-    color: getColorForSlot(slot),
+    role,
+    ready: false,
+    color: TEAM_COLORS[team],
     connected: true,
     x: spawn.x,
     y: spawn.y,
     vx: 0,
     vy: 0,
-    facing: team === 'gold' ? 1 : -1,
+    facing: team === 'blue' ? 1 : -1,
     isGrounded: false,
+    alive: true,
+    carriedBerryId: null,
+    speedBoost: false,
+    lives: GAME_CONFIG.player.queenLives,
+    beingEaten: false,
+    upgradeProgress: 0,
+    upgradeGateId: null,
+    invincibleUntil: Date.now() + GAME_CONFIG.player.invincibleMs,
+    respawnsAt: null,
     lastInputSeq: 0,
   };
+};
+
+const getFirstOpenSlot = (room: GameRoom): number | null => {
+  const usedSlots = new Set([...room.players.values()].map((player) => player.slot));
+  for (let slot = 0; slot < GAME_CONFIG.maxPlayers; slot += 1) {
+    if (!usedSlots.has(slot)) return slot;
+  }
+  return null;
+};
+
+const startGameIfReady = (room: GameRoom): void => {
+  if (!canStart(room)) return;
+
+  room.phase = 'playing';
+  resetMatchState(room);
+  for (const player of room.players.values()) {
+    player.role = getRoleForSlot(player.slot);
+    player.lives = GAME_CONFIG.player.queenLives;
+    player.ready = true;
+    placeAtSpawn(player);
+    room.playerMeta.set(player.id, { canDoubleJump: false });
+  }
+  broadcastRoom(room);
+  broadcast(room, makeSnapshot(room));
+};
+
+const handleJoin = (client: ClientConnection, message: ClientJoinMessage): void => {
+  const normalized = normalizeRoomCode(message.roomCode ?? 'LOBBY1');
+
+  if (!isLobbyCode(normalized)) {
+    sendError(client, 'Choose one of the three open lobbies.');
+    sendFrame(client.socket, makeLobbyList());
+    return;
+  }
+
+  const room = rooms.get(normalized);
+  if (!room) {
+    sendError(client, 'Lobby is unavailable.');
+    return;
+  }
+
+  if (room.phase !== 'lobby') {
+    sendError(client, `${getLobbyName(room.roomCode)} is in a game. Choose another lobby or wait for the score screen to end.`);
+    sendFrame(client.socket, makeLobbyList());
+    return;
+  }
+
+  if (client.roomCode) {
+    removeClientFromRoom(client);
+  }
+
+  const slot = getFirstOpenSlot(room);
+  if (slot === null) {
+    sendError(client, `${getLobbyName(room.roomCode)} is full.`);
+    return;
+  }
+
+  const id = randomUUID();
+  const name = sanitizePlayerName(message.name, `Player ${slot + 1}`);
+  const player = createPlayer(slot, id, name);
 
   client.id = id;
   client.roomCode = room.roomCode;
@@ -303,37 +564,87 @@ const handleJoin = (client: ClientConnection, message: ClientJoinMessage): void 
   client.lastMessageAt = Date.now();
   room.clients.set(id, client);
   room.players.set(id, player);
+  room.playerMeta.set(id, { canDoubleJump: false });
 
   sendFrame(client.socket, {
     type: 'joined',
     protocolVersion: GAME_CONFIG.protocolVersion,
     you: id,
-    room: createRoomSnapshot(room.roomCode, getRoomPlayers(room)),
+    room: roomSnapshot(room),
     snapshot: makeSnapshot(room),
   });
   broadcastRoom(room);
 };
 
-const handleInput = (client: ClientConnection, message: ClientInputMessage): void => {
+const handleMoveSlot = (client: ClientConnection, requestedSlot: unknown): void => {
   if (!client.roomCode || !client.id) {
-    sendError(client, 'Join a room before sending input.');
+    sendError(client, 'Join a lobby before choosing a slot.');
     return;
   }
 
   const room = rooms.get(client.roomCode);
   const player = room?.players.get(client.id);
+  const slot = Number(requestedSlot);
 
   if (!room || !player) {
-    sendError(client, 'Player is no longer in a room.');
+    sendError(client, 'Player is no longer in a lobby.');
     return;
   }
+
+  if (room.phase !== 'lobby') {
+    sendError(client, 'Slots can only be changed in the lobby.');
+    return;
+  }
+
+  if (!Number.isInteger(slot) || slot < 0 || slot >= GAME_CONFIG.maxPlayers) {
+    sendError(client, 'Invalid slot.');
+    return;
+  }
+
+  const occupied = [...room.players.values()].some((candidate) => candidate.slot === slot && candidate.id !== player.id);
+  if (occupied) {
+    sendError(client, 'That slot is already occupied.');
+    return;
+  }
+
+  applySlotToPlayer(player, slot);
+  player.ready = false;
+  broadcastRoom(room);
+};
+
+const handleSetReady = (client: ClientConnection, ready: unknown): void => {
+  if (!client.roomCode || !client.id) {
+    sendError(client, 'Join a lobby before readying up.');
+    return;
+  }
+
+  const room = rooms.get(client.roomCode);
+  const player = room?.players.get(client.id);
+  if (!room || !player) {
+    sendError(client, 'Player is no longer in a lobby.');
+    return;
+  }
+
+  if (room.phase !== 'lobby') return;
+
+  player.ready = Boolean(ready);
+  broadcastRoom(room);
+  startGameIfReady(room);
+};
+
+const handleInput = (client: ClientConnection, message: ClientInputMessage): void => {
+  if (!client.roomCode || !client.id) return;
+
+  const room = rooms.get(client.roomCode);
+  const player = room?.players.get(client.id);
+  if (!room || !player || room.phase !== 'playing') return;
 
   if (!isInputState(message.input)) {
     sendError(client, 'Invalid input payload.');
     return;
   }
 
-  client.input = cloneInput(message.input);
+  client.input = cloneInput({ ...DEFAULT_INPUT, ...message.input });
   client.lastInputSeq = Number.isFinite(message.seq) ? Math.max(0, Math.floor(message.seq)) : client.lastInputSeq;
   client.lastMessageAt = Date.now();
   player.lastInputSeq = client.lastInputSeq;
@@ -361,148 +672,500 @@ const handleMessage = (client: ClientConnection, raw: string): void => {
 
   if (message.type === 'join') {
     handleJoin(client, message);
-    return;
-  }
-
-  if (message.type === 'input') {
+  } else if (message.type === 'moveSlot') {
+    handleMoveSlot(client, message.slot);
+  } else if (message.type === 'setReady') {
+    handleSetReady(client, message.ready);
+  } else if (message.type === 'leaveLobby') {
+    removeClientFromRoom(client);
+    sendFrame(client.socket, makeLobbyList());
+  } else if (message.type === 'input') {
     handleInput(client, message);
-    return;
-  }
-
-  if (message.type === 'ping') {
+  } else if (message.type === 'ping') {
     handlePing(client, message);
-    return;
+  } else {
+    sendError(client, `Unsupported message type: ${(message as { type: string }).type}`);
   }
-
-  sendError(client, `Unsupported message type: ${(message as { type: string }).type}`);
 };
 
-const moveToward = (value: number, target: number, maxDelta: number): number => {
-  if (value < target) {
-    return Math.min(value + maxDelta, target);
+const playerRect = (player: PlayerSnapshot) => ({
+  x: player.x,
+  y: player.y,
+  width: GAME_CONFIG.player.width,
+  height: GAME_CONFIG.player.height,
+});
+
+const rectsOverlap = (
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+const platformLanding = (player: PlayerSnapshot, platform: Platform): boolean =>
+  player.x + GAME_CONFIG.player.width > platform.x &&
+  player.x < platform.x + platform.width &&
+  player.y + GAME_CONFIG.player.height >= platform.y &&
+  player.y + GAME_CONFIG.player.height - player.vy <= platform.y + 8;
+
+const checkGround = (room: GameRoom, player: PlayerSnapshot): boolean => {
+  for (const platform of GAME_MAP.platforms) {
+    if (
+      player.x + GAME_CONFIG.player.width > platform.x &&
+      player.x < platform.x + platform.width &&
+      Math.abs(player.y + GAME_CONFIG.player.height - platform.y) < 4 &&
+      player.vy >= 0
+    ) {
+      return true;
+    }
   }
-
-  if (value > target) {
-    return Math.max(value - maxDelta, target);
-  }
-
-  return target;
-};
-
-const overlaps = (player: PlayerSnapshot, platform: Platform): boolean => {
-  const halfWidth = GAME_CONFIG.player.width / 2;
-  const halfHeight = GAME_CONFIG.player.height / 2;
 
   return (
-    player.x + halfWidth > platform.x &&
-    player.x - halfWidth < platform.x + platform.width &&
-    player.y + halfHeight > platform.y &&
-    player.y - halfHeight < platform.y + platform.height
+    player.x + GAME_CONFIG.player.width > room.snail.x &&
+    player.x < room.snail.x + GAME_MAP.snail.width &&
+    Math.abs(player.y + GAME_CONFIG.player.height - room.snail.y) < 4 &&
+    player.vy >= 0
   );
 };
 
-const collideHorizontal = (player: PlayerSnapshot, previousX: number, platform: Platform): void => {
-  const halfWidth = GAME_CONFIG.player.width / 2;
-
-  if (player.x > previousX) {
-    player.x = platform.x - halfWidth;
-  } else if (player.x < previousX) {
-    player.x = platform.x + platform.width + halfWidth;
-  }
-
-  player.vx = 0;
+const setWinner = (room: GameRoom, team: Team, reason: NonNullable<WinnerState>['reason']): void => {
+  if (room.winner || room.phase !== 'playing') return;
+  const now = Date.now();
+  room.phase = 'score';
+  room.winner = { team, reason, decidedAt: now };
+  room.scoreScreenEndsAt = now + GAME_CONFIG.objective.scoreScreenMs;
+  broadcastRoom(room);
 };
 
-const collideVertical = (player: PlayerSnapshot, previousY: number, platform: Platform): void => {
-  const halfHeight = GAME_CONFIG.player.height / 2;
+const killPlayer = (
+  room: GameRoom,
+  victim: PlayerSnapshot,
+  killerTeam: Team | null,
+  now: number,
+  queenDeath = true,
+  ignoreInvincible = false,
+): void => {
+  if (!victim.alive || (!ignoreInvincible && victim.invincibleUntil > now) || (killerTeam !== null && victim.team === killerTeam)) return;
 
-  if (player.y > previousY) {
-    player.y = platform.y - halfHeight;
-    player.isGrounded = true;
-  } else if (player.y < previousY) {
-    player.y = platform.y + platform.height + halfHeight;
-  }
+  releaseBerry(victim);
+  if (room.snail.riderId === victim.id) room.snail.riderId = null;
+  if (room.snail.eatingTargetId === victim.id) room.snail.eatingTargetId = null;
 
-  player.vy = 0;
-};
+  victim.alive = false;
+  victim.beingEaten = false;
+  victim.vx = 0;
+  victim.vy = 0;
+  victim.respawnsAt = now + GAME_CONFIG.player.respawnDelayMs;
+  victim.upgradeProgress = 0;
+  victim.upgradeGateId = null;
 
-const resolveAxis = (player: PlayerSnapshot, amount: number, axis: 'x' | 'y'): void => {
-  const previous = player[axis];
-  player[axis] += amount;
-
-  for (const platform of GAME_MAP.platforms) {
-    if (!overlaps(player, platform)) {
-      continue;
+  if (victim.role === 'queen' && queenDeath) {
+    victim.lives -= 1;
+    room.queenKills[victim.team] = GAME_CONFIG.player.queenLives - victim.lives;
+    if (victim.lives <= 0) {
+      setWinner(room, opposingTeam(victim.team), 'military');
     }
-
-    if (axis === 'x') {
-      collideHorizontal(player, previous, platform);
-    } else {
-      collideVertical(player, previous, platform);
-    }
-  }
-};
-
-const respawnPlayer = (player: PlayerSnapshot): void => {
-  const spawn = getSpawnForSlot(player.slot);
-  player.x = spawn.x;
-  player.y = spawn.y;
-  player.vx = 0;
-  player.vy = 0;
-  player.isGrounded = false;
-};
-
-const simulatePlayer = (player: PlayerSnapshot, client: ClientConnection, dt: number): void => {
-  const direction = Number(client.input.right) - Number(client.input.left);
-  const acceleration = player.isGrounded ? GAME_CONFIG.player.groundAcceleration : GAME_CONFIG.player.airAcceleration;
-  const targetVx = direction * GAME_CONFIG.player.maxSpeed;
-
-  if (direction !== 0) {
-    player.vx = moveToward(player.vx, targetVx, acceleration * dt);
-    player.facing = direction > 0 ? 1 : -1;
   } else {
-    const drag = player.isGrounded ? GAME_CONFIG.player.friction : GAME_CONFIG.player.friction * 0.22;
-    player.vx = moveToward(player.vx, 0, drag * dt);
+    victim.role = 'worker';
+    victim.speedBoost = false;
+  }
+};
+
+const simulatePlayer = (room: GameRoom, player: PlayerSnapshot, client: ClientConnection, now: number): void => {
+  const meta = room.playerMeta.get(player.id) ?? { canDoubleJump: false };
+  room.playerMeta.set(player.id, meta);
+
+  if (!player.alive) {
+    if (player.respawnsAt !== null && now >= player.respawnsAt) {
+      respawnPlayer(player);
+    }
+    return;
   }
 
-  if (client.input.jump && !client.previousInput.jump && player.isGrounded) {
-    player.vy = -GAME_CONFIG.player.jumpVelocity;
-    player.isGrounded = false;
+  if (player.beingEaten) {
+    player.vx = 0;
+    player.vy = 0;
+    client.previousInput = cloneInput(client.input);
+    return;
+  }
+
+  if (player.invincibleUntil > 0 && now >= player.invincibleUntil) {
+    player.invincibleUntil = 0;
+  }
+
+  const ridingManatee = room.snail.riderId === player.id;
+  const previousJump = client.previousInput.jump;
+  const jumpPressed = client.input.jump;
+  const jumpJustPressed = jumpPressed && !previousJump;
+  const onGround = checkGround(room, player);
+
+  if (onGround) meta.canDoubleJump = true;
+
+  if (!ridingManatee) {
+    const currentSpeed = player.speedBoost ? GAME_CONFIG.player.maxSpeed * GAME_CONFIG.player.speedBoostMultiplier : GAME_CONFIG.player.maxSpeed;
+    if (client.input.left) {
+      player.vx = -currentSpeed;
+      player.facing = -1;
+    } else if (client.input.right) {
+      player.vx = currentSpeed;
+      player.facing = 1;
+    } else {
+      player.vx = 0;
+    }
+  }
+
+  if (jumpJustPressed) {
+    if (ridingManatee) {
+      if (!room.snail.eatingTargetId) {
+        room.snail.riderId = null;
+        player.vy = -GAME_CONFIG.player.jumpVelocity;
+      }
+    } else if (player.role === 'warrior' || player.role === 'queen') {
+      player.vy = -GAME_CONFIG.player.flapVelocity;
+    } else if (onGround) {
+      player.vy = -GAME_CONFIG.player.jumpVelocity;
+    } else if (meta.canDoubleJump) {
+      player.vy = -(GAME_CONFIG.player.jumpVelocity * 0.7);
+      meta.canDoubleJump = false;
+    }
+  } else if (!jumpPressed && previousJump && player.vy < 0 && player.role === 'worker') {
+    player.vy *= 0.4;
   }
 
   client.previousInput = cloneInput(client.input);
-  player.vy = clamp(
-    player.vy + GAME_CONFIG.player.gravity * dt,
-    -GAME_CONFIG.player.terminalVelocity,
-    GAME_CONFIG.player.terminalVelocity,
-  );
 
-  player.isGrounded = false;
-  resolveAxis(player, player.vx * dt, 'x');
-  resolveAxis(player, player.vy * dt, 'y');
+  if (room.snail.riderId === player.id) {
+    player.y = room.snail.y - GAME_CONFIG.player.height;
+    player.x = room.snail.x + GAME_MAP.snail.width / 2 - GAME_CONFIG.player.width / 2;
+    player.vx = 0;
+    player.vy = 0;
+    meta.canDoubleJump = true;
+    return;
+  }
 
-  player.x = clamp(player.x, GAME_CONFIG.player.width / 2, GAME_MAP.width - GAME_CONFIG.player.width / 2);
+  if (player.role === 'queen' && client.input.down) {
+    player.vy = Math.min(player.vy + GAME_CONFIG.player.gravity * 4, 18);
+  } else {
+    player.vy = Math.min(player.vy + GAME_CONFIG.player.gravity, GAME_CONFIG.player.terminalVelocity);
+  }
 
-  if (player.y > GAME_MAP.height + 240) {
-    respawnPlayer(player);
+  player.x += player.vx;
+  player.y += player.vy;
+
+  if (player.vy > 0) {
+    for (const platform of GAME_MAP.platforms) {
+      if (platformLanding(player, platform)) {
+        player.y = platform.y - GAME_CONFIG.player.height;
+        player.vy = 0;
+        break;
+      }
+    }
+  }
+
+  if (player.x > GAME_MAP.width) player.x = -GAME_CONFIG.player.width;
+  if (player.x + GAME_CONFIG.player.width < 0) player.x = GAME_MAP.width;
+  if (player.y < 0) {
+    player.y = 0;
+    player.vy = 0;
+  }
+
+  player.isGrounded = checkGround(room, player);
+};
+
+const spawnDroppedPearl = (room: GameRoom, x: number, y: number): void => {
+  const id = `drop-${room.nextPearlId++}`;
+  room.droppedPearls.set(id, {
+    id,
+    x,
+    y,
+    spawnX: x,
+    spawnY: y,
+    carriedBy: null,
+    depositedTeam: null,
+    vx: (Math.random() - 0.5) * 6,
+    vy: -6,
+  });
+};
+
+const updateManatee = (room: GameRoom): void => {
+  room.snail.y = GAME_MAP.snail.y + Math.sin(room.tick / 24) * 12;
+
+  const rider = room.snail.riderId ? room.players.get(room.snail.riderId) : null;
+  if (rider) {
+    room.snail.facing = rider.team === 'red' ? 1 : -1;
+  }
+
+  const target = room.snail.eatingTargetId ? room.players.get(room.snail.eatingTargetId) : null;
+  if (target) {
+    room.snailEatTimer -= 1;
+    const mouthX = room.snail.facing > 0 ? room.snail.x + GAME_MAP.snail.width - 15 : room.snail.x - 15;
+    target.x = mouthX;
+    target.y = room.snail.y + 15;
+
+    if (room.snailEatTimer <= 0) {
+      if (target.carriedBerryId) {
+        spawnDroppedPearl(room, mouthX, room.snail.y - 10);
+      }
+      target.carriedBerryId = null;
+      target.beingEaten = false;
+      killPlayer(room, target, null, Date.now(), false, true);
+      room.snail.eatingTargetId = null;
+    }
+    return;
+  }
+
+  if (!rider || !rider.alive || rider.beingEaten || rider.role !== 'worker') {
+    room.snail.riderId = null;
+    room.snail.direction = 0;
+    return;
+  }
+
+  const currentSpeed = rider.speedBoost ? GAME_CONFIG.objective.snailSpeed * 2 : GAME_CONFIG.objective.snailSpeed;
+  room.snail.direction = rider.team === 'blue' ? -1 : 1;
+  room.snail.x += room.snail.direction * currentSpeed;
+  rider.x = room.snail.x + GAME_MAP.snail.width / 2 - GAME_CONFIG.player.width / 2;
+  rider.y = room.snail.y - GAME_CONFIG.player.height;
+  rider.vx = 0;
+  rider.vy = 0;
+
+  if (room.snail.x <= GAME_MAP.snail.blueGoalX) {
+    setWinner(room, 'blue', 'manatee');
+  } else if (room.snail.x + GAME_MAP.snail.width >= GAME_MAP.snail.redGoalX) {
+    setWinner(room, 'red', 'manatee');
   }
 };
 
-const tickRoom = (room: GameRoom): void => {
-  const dt = 1 / GAME_CONFIG.tickRate;
-
-  room.players.forEach((player, playerId) => {
-    const client = room.clients.get(playerId);
-    if (client) {
-      simulatePlayer(player, client, dt);
+const updateClams = (room: GameRoom): void => {
+  for (const clam of room.clamshells.values()) {
+    if (clam.pearlsInside >= 3) continue;
+    clam.respawnTimer -= 1;
+    if (clam.respawnTimer <= 0) {
+      clam.pearlsInside += 1;
+      if (clam.pearlsInside < 3) {
+        clam.respawnTimer = GAME_CONFIG.objective.clamRespawnTicks;
+      }
     }
-  });
+  }
+};
+
+const updateDroppedPearls = (room: GameRoom): void => {
+  for (const pearl of room.droppedPearls.values()) {
+    pearl.vy = Math.min(pearl.vy + GAME_CONFIG.objective.droppedPearlGravity, GAME_CONFIG.player.terminalVelocity);
+    pearl.x += pearl.vx;
+    pearl.y += pearl.vy;
+
+    if (pearl.vy > 0) {
+      for (const platform of GAME_MAP.platforms) {
+        if (
+          pearl.x + 20 > platform.x &&
+          pearl.x < platform.x + platform.width &&
+          pearl.y + 20 >= platform.y &&
+          pearl.y + 20 - pearl.vy <= platform.y + 8
+        ) {
+          pearl.y = platform.y - 20;
+          pearl.vy = 0;
+          pearl.vx *= 0.8;
+          break;
+        }
+      }
+    }
+
+    if (pearl.y > 1020 - 20) {
+      pearl.y = 1020 - 20;
+      pearl.vy = 0;
+      pearl.vx *= 0.8;
+    }
+    if (pearl.x > GAME_MAP.width) pearl.x = -20;
+    if (pearl.x + 20 < 0) pearl.x = GAME_MAP.width;
+  }
+};
+
+const canAttack = (player: PlayerSnapshot): boolean => player.alive && (player.role === 'queen' || player.role === 'warrior');
+
+const processCombat = (room: GameRoom, now: number): void => {
+  const players = [...room.players.values()].filter((player) => player.alive && !player.beingEaten);
+
+  for (let i = 0; i < players.length; i += 1) {
+    for (let j = i + 1; j < players.length; j += 1) {
+      const a = players[i];
+      const b = players[j];
+      if (a.team === b.team || !rectsOverlap(playerRect(a), playerRect(b))) continue;
+
+      const aCombat = canAttack(a);
+      const bCombat = canAttack(b);
+      const aVerticalKill = a.y < b.y - 16 && a.vy > 0;
+      const bVerticalKill = b.y < a.y - 16 && b.vy > 0;
+      const aFrontalKill = (a.facing === 1 && a.x < b.x) || (a.facing === -1 && a.x > b.x);
+      const bFrontalKill = (b.facing === 1 && b.x < a.x) || (b.facing === -1 && b.x > a.x);
+
+      if (aCombat && bCombat) {
+        const aHorizontalKill = a.facing === b.facing && aFrontalKill;
+        const bHorizontalKill = b.facing === a.facing && bFrontalKill;
+        if (aVerticalKill && !bVerticalKill) {
+          killPlayer(room, b, a.team, now);
+          a.vy = -GAME_CONFIG.player.flapVelocity;
+        } else if (bVerticalKill && !aVerticalKill) {
+          killPlayer(room, a, b.team, now);
+          b.vy = -GAME_CONFIG.player.flapVelocity;
+        } else if (aHorizontalKill && !bHorizontalKill) {
+          killPlayer(room, b, a.team, now);
+        } else if (bHorizontalKill && !aHorizontalKill) {
+          killPlayer(room, a, b.team, now);
+        } else {
+          a.vx = a.x < b.x ? -GAME_CONFIG.player.maxSpeed * 2.5 : GAME_CONFIG.player.maxSpeed * 2.5;
+          b.vx = b.x < a.x ? -GAME_CONFIG.player.maxSpeed * 2.5 : GAME_CONFIG.player.maxSpeed * 2.5;
+          a.x += a.vx;
+          b.x += b.vx;
+          room.clashEvents.push({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        }
+      } else if (aCombat) {
+        if (aVerticalKill || aFrontalKill) killPlayer(room, b, a.team, now);
+      } else if (bCombat) {
+        if (bVerticalKill || bFrontalKill) killPlayer(room, a, b.team, now);
+      } else {
+        a.vx = a.x < b.x ? -GAME_CONFIG.player.maxSpeed * 1.5 : GAME_CONFIG.player.maxSpeed * 1.5;
+        b.vx = b.x < a.x ? -GAME_CONFIG.player.maxSpeed * 1.5 : GAME_CONFIG.player.maxSpeed * 1.5;
+        a.x += a.vx;
+        b.x += b.vx;
+      }
+    }
+  }
+};
+
+const processInteractions = (room: GameRoom, now: number): void => {
+  const snailRect = { x: room.snail.x, y: room.snail.y, width: GAME_MAP.snail.width, height: GAME_MAP.snail.height };
+
+  for (const player of room.players.values()) {
+    if (!player.alive || player.beingEaten) continue;
+
+    if (player.role === 'worker' && rectsOverlap(playerRect(player), snailRect)) {
+      if (!room.snail.riderId && player.vy >= 0 && player.y + GAME_CONFIG.player.height < room.snail.y + 24) {
+        room.snail.riderId = player.id;
+      } else if (room.snail.riderId && room.players.get(room.snail.riderId)?.team !== player.team && !room.snail.eatingTargetId) {
+        room.snail.eatingTargetId = player.id;
+        room.snailEatTimer = player.carriedBerryId ? 195 : 165;
+        player.beingEaten = true;
+      }
+    }
+
+    if (player.role === 'worker' && !player.carriedBerryId) {
+      for (const clam of room.clamshells.values()) {
+        if (clam.pearlsInside > 0 && rectsOverlap(playerRect(player), { x: clam.x, y: clam.y, width: 50, height: 30 })) {
+          clam.pearlsInside -= 1;
+          if (clam.respawnTimer <= 0) clam.respawnTimer = GAME_CONFIG.objective.clamRespawnTicks;
+          player.carriedBerryId = 'held';
+          break;
+        }
+      }
+
+      if (!player.carriedBerryId) {
+        for (const [id, pearl] of room.droppedPearls.entries()) {
+          if (rectsOverlap(playerRect(player), { x: pearl.x, y: pearl.y, width: 20, height: 20 })) {
+            player.carriedBerryId = 'held';
+            room.droppedPearls.delete(id);
+            break;
+          }
+        }
+      }
+    }
+
+    let touchingGate = false;
+    for (const gate of room.upgradeGates.values()) {
+      if (!rectsOverlap(playerRect(player), { x: gate.x, y: gate.y, width: gate.width, height: gate.height })) continue;
+
+      if (player.role === 'worker' && player.carriedBerryId && gate.ownerTeam === player.team) {
+        touchingGate = true;
+        if (Math.abs(player.vx) < 0.1) {
+          player.upgradeProgress += 1;
+          player.upgradeGateId = gate.id;
+          if (player.upgradeProgress >= GAME_CONFIG.objective.upgradeTicks) {
+            player.carriedBerryId = null;
+            if (gate.type === 'warrior') {
+              player.role = 'warrior';
+              player.speedBoost = false;
+            } else {
+              player.role = 'worker';
+              player.speedBoost = true;
+            }
+            player.upgradeProgress = 0;
+            player.upgradeGateId = null;
+          }
+        } else {
+          player.upgradeProgress = 0;
+          player.upgradeGateId = null;
+        }
+      } else if (player.role === 'queen' && gate.ownerTeam !== player.team) {
+        touchingGate = true;
+        if (Math.abs(player.vx) < 0.1) {
+          player.upgradeProgress += 1;
+          player.upgradeGateId = gate.id;
+          if (player.upgradeProgress >= GAME_CONFIG.objective.upgradeTicks) {
+            gate.ownerTeam = player.team;
+            player.upgradeProgress = 0;
+            player.upgradeGateId = null;
+          }
+        } else {
+          player.upgradeProgress = 0;
+          player.upgradeGateId = null;
+        }
+      }
+    }
+    if (!touchingGate) {
+      player.upgradeProgress = 0;
+      player.upgradeGateId = null;
+    }
+
+    if (player.carriedBerryId) {
+      for (const base of GAME_MAP.bases) {
+        if (base.team === player.team && rectsOverlap(playerRect(player), { x: base.x, y: base.y, width: base.width, height: base.height })) {
+          player.carriedBerryId = null;
+          room.scores[player.team] += 1;
+          if (room.scores[player.team] >= GAME_CONFIG.objective.berriesToWin) {
+            setWinner(room, player.team, 'economic');
+          }
+        }
+      }
+    }
+  }
+
+  processCombat(room, now);
+};
+
+const returnToLobby = (room: GameRoom): void => {
+  room.phase = 'lobby';
+  resetMatchState(room);
+  for (const player of room.players.values()) {
+    player.ready = false;
+    player.role = getRoleForSlot(player.slot);
+    player.lives = GAME_CONFIG.player.queenLives;
+    placeAtSpawn(player);
+  }
+  broadcastRoom(room);
+  broadcast(room, makeSnapshot(room));
+};
+
+const tickRoom = (room: GameRoom): void => {
+  const now = Date.now();
+
+  if (room.phase === 'score') {
+    if (room.scoreScreenEndsAt !== null && now >= room.scoreScreenEndsAt) {
+      returnToLobby(room);
+      return;
+    }
+  } else if (room.phase === 'playing') {
+    room.players.forEach((player, playerId) => {
+      const client = room.clients.get(playerId);
+      if (client) simulatePlayer(room, player, client, now);
+    });
+    updateManatee(room);
+    updateClams(room);
+    updateDroppedPearls(room);
+    processInteractions(room, now);
+  }
 
   room.tick += 1;
 
-  if (room.tick - room.lastSnapshotTick >= SNAPSHOT_INTERVAL_TICKS) {
+  if (room.phase !== 'lobby' && room.tick - room.lastSnapshotTick >= SNAPSHOT_INTERVAL_TICKS) {
     room.lastSnapshotTick = room.tick;
-    broadcast(room, makeSnapshot(room));
+    broadcast(room, makeSnapshot(room, true));
   }
 };
 
@@ -513,12 +1176,19 @@ export const createGameServer = () => {
     if (request.url === '/health') {
       const players = [...rooms.values()].reduce((total, room) => total + room.players.size, 0);
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ ok: true, rooms: rooms.size, players }));
+      response.end(
+        JSON.stringify({
+          ok: true,
+          lobbies: [...rooms.values()].map(makeLobbySummary),
+          rooms: rooms.size,
+          players,
+        }),
+      );
       return;
     }
 
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Physics Nook Arena.');
+    response.end('Use a WebSocket connection for Ocean Queen.');
   });
 
   const loop = setInterval(() => {
@@ -560,6 +1230,9 @@ export const createGameServer = () => {
         lastMessageAt: Date.now(),
       };
 
+      connections.add(client);
+      sendFrame(socket, makeLobbyList());
+
       socket.on('data', (chunk) => {
         try {
           parseFrames(client, chunk).forEach((message) => handleMessage(client, message));
@@ -569,8 +1242,14 @@ export const createGameServer = () => {
         }
       });
 
-      socket.on('close', () => removeClient(client));
-      socket.on('error', () => removeClient(client));
+      socket.on('close', () => {
+        removeClientFromRoom(client);
+        connections.delete(client);
+      });
+      socket.on('error', () => {
+        removeClientFromRoom(client);
+        connections.delete(client);
+      });
     } catch {
       socket.destroy();
     }
@@ -582,6 +1261,6 @@ export const createGameServer = () => {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const server = createGameServer();
   server.listen(PORT, () => {
-    console.log(`Physics Nook game server listening on ws://localhost:${PORT}`);
+    console.log(`Ocean Queen game server listening on ws://localhost:${PORT}`);
   });
 }

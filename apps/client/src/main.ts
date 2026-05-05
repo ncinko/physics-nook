@@ -4,34 +4,82 @@ import {
   DEFAULT_INPUT,
   GAME_CONFIG,
   GAME_MAP,
-  normalizeRoomCode,
+  LOBBY_CODES,
+  LOBBY_NAMES,
+  TEAM_BASE_COLORS,
+  TEAM_COLORS,
+  TEAM_DARK_COLORS,
+  getRoleForSlot,
+  getTeamForSlot,
 } from '../../../packages/shared/src/index.ts';
 import type {
+  BerrySnapshot,
   ClientToServerMessage,
+  GameBase,
   GameMap,
   InputState,
+  LobbyCode,
+  LobbySummary,
+  PlayerRole,
   PlayerSnapshot,
   RoomPlayer,
   RoomSnapshot,
   ServerToClientMessage,
   Team,
+  UpgradeGate,
   WorldSnapshot,
 } from '../../../packages/shared/src/index.ts';
 
 type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
 
+const INPUT_FLUSH_MS = 1000 / 30;
+const PING_INTERVAL_MS = 2000;
+const CANVAS_BASE_WIDTH = GAME_CONFIG.arena.width;
+const CANVAS_BASE_HEIGHT = GAME_CONFIG.arena.height;
+const PLAYER_WIDTH = GAME_CONFIG.player.width;
+const PLAYER_HEIGHT = GAME_CONFIG.player.height;
+const MANATEE_WIDTH = GAME_MAP.snail.width;
+const MANATEE_HEIGHT = GAME_MAP.snail.height;
+const MAX_LIVES = GAME_CONFIG.player.queenLives;
+const MAX_PEARLS = GAME_CONFIG.objective.berriesToWin;
+
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
-const joinForm = document.getElementById('joinForm') as HTMLFormElement | null;
-const roomInput = document.getElementById('roomInput') as HTMLInputElement | null;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement | null;
-const joinButton = document.getElementById('joinButton') as HTMLButtonElement | null;
 const statusText = document.getElementById('statusText');
 const connectionPill = document.getElementById('connectionPill');
 const endpointText = document.getElementById('endpointText');
-const rosterList = document.getElementById('rosterList');
 const playerCount = document.getElementById('playerCount');
+const menuOverlay = document.getElementById('menuOverlay');
+const lobbyOverlay = document.getElementById('lobbyOverlay');
+const lobbyCards = document.getElementById('lobbyCards');
+const lobbyName = document.getElementById('lobbyName');
+const lobbyStatus = document.getElementById('lobbyStatus');
+const readyButton = document.getElementById('readyButton') as HTMLButtonElement | null;
+const leaveButton = document.getElementById('leaveButton') as HTMLButtonElement | null;
+const scoreOverlay = document.getElementById('scoreOverlay');
+const scoreTitle = document.getElementById('scoreTitle');
+const scoreStats = document.getElementById('scoreStats');
+const scoreCountdown = document.getElementById('scoreCountdown');
 
-if (!canvas || !joinForm || !roomInput || !nameInput || !joinButton || !statusText || !connectionPill || !endpointText || !rosterList || !playerCount) {
+if (
+  !canvas ||
+  !nameInput ||
+  !statusText ||
+  !connectionPill ||
+  !endpointText ||
+  !playerCount ||
+  !menuOverlay ||
+  !lobbyOverlay ||
+  !lobbyCards ||
+  !lobbyName ||
+  !lobbyStatus ||
+  !readyButton ||
+  !leaveButton ||
+  !scoreOverlay ||
+  !scoreTitle ||
+  !scoreStats ||
+  !scoreCountdown
+) {
   throw new Error('Game client markup is missing required elements.');
 }
 
@@ -40,20 +88,31 @@ if (!context) {
   throw new Error('Canvas 2D is unavailable.');
 }
 
+context.imageSmoothingEnabled = false;
+
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const input: InputState = { ...DEFAULT_INPUT };
 let socket: WebSocket | null = null;
 let localPlayerId: string | null = null;
 let room: RoomSnapshot | null = null;
 let latestSnapshot: WorldSnapshot | null = null;
+let lobbySummaries: LobbySummary[] = [];
+let pendingJoin: LobbyCode | null = null;
 let inputSeq = 0;
 let latencyMs: number | null = null;
 let lastInputFlush = 0;
 let lastPingAt = 0;
 let connectionState: ConnectionState = 'offline';
+let frameCount = 0;
 
-const INPUT_FLUSH_MS = 1000 / 30;
-const PING_INTERVAL_MS = 2000;
+const clashFx: { x: number; y: number; framesLeft: number; lifeFrames: number }[] = [];
+const backgroundBubbles = Array.from({ length: 100 }, (_, index) => ({
+  x: (index * 251) % CANVAS_BASE_WIDTH,
+  y: (index * 397) % CANVAS_BASE_HEIGHT,
+  speed: 0.5 + (index % 7) * 0.25,
+  size: 2 + (index % 6),
+  phase: index * 0.63,
+}));
 
 const getConfiguredWsUrl = (): string | null => {
   const configured = env.VITE_GAME_WS_URL ?? env.PUBLIC_GAME_WS_URL;
@@ -62,9 +121,7 @@ const getConfiguredWsUrl = (): string | null => {
 
 const getDefaultWsUrl = (): string => {
   const configured = getConfiguredWsUrl();
-  if (configured) {
-    return configured;
-  }
+  if (configured) return configured;
 
   const localHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
   const host = window.location.hostname || 'localhost';
@@ -80,6 +137,35 @@ const getDefaultWsUrl = (): string => {
   return `ws://${host}:8788`;
 };
 
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+const hexToRgba = (hex: string, alpha: number): string => {
+  const clean = hex.replace('#', '');
+  const r = Number.parseInt(clean.slice(0, 2), 16);
+  const g = Number.parseInt(clean.slice(2, 4), 16);
+  const b = Number.parseInt(clean.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+const teamColor = (team: Team): string => TEAM_COLORS[team];
+const teamDarkColor = (team: Team): string => TEAM_DARK_COLORS[team];
+const teamBaseColor = (team: Team): string => TEAM_BASE_COLORS[team];
+
+const roleLabel = (role?: PlayerRole): string => {
+  if (role === 'queen') return 'QUEEN';
+  if (role === 'warrior') return 'WARRIOR';
+  return 'WORKER';
+};
+
+const victoryLabel = (reason: NonNullable<WorldSnapshot['winner']>['reason']): string => {
+  if (reason === 'economic') return 'Economic Victory';
+  if (reason === 'manatee') return 'Manatee Victory';
+  return 'Military Victory';
+};
+
+const getLocalRoomPlayer = (): RoomPlayer | null =>
+  localPlayerId && room ? (room.players.find((player) => player.id === localPlayerId) ?? null) : null;
+
 const setConnectionState = (state: ConnectionState, label?: string): void => {
   connectionState = state;
   connectionPill.dataset.state = state;
@@ -87,67 +173,154 @@ const setConnectionState = (state: ConnectionState, label?: string): void => {
 };
 
 const sendMessage = (message: ClientToServerMessage): void => {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
-
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify(message));
 };
 
 const sendInput = (): void => {
-  if (!localPlayerId || connectionState !== 'online') {
-    return;
-  }
-
+  if (!localPlayerId || connectionState !== 'online' || latestSnapshot?.phase !== 'playing') return;
   inputSeq += 1;
   sendMessage({ type: 'input', seq: inputSeq, input: { ...input } });
 };
 
-const renderRoster = (): void => {
-  const players = room?.players ?? [];
-  rosterList.replaceChildren();
+const setUiPhase = (): void => {
+  const phase = room?.phase ?? latestSnapshot?.phase ?? 'menu';
+  document.body.dataset.phase = phase;
+  menuOverlay.hidden = Boolean(room);
+  lobbyOverlay.hidden = !room || room.phase !== 'lobby';
+  scoreOverlay.hidden = !(room?.phase === 'score' || latestSnapshot?.phase === 'score');
+};
+
+const lobbyStatusText = (summary: LobbySummary): string => {
+  if (summary.phase === 'playing') return `${summary.playerCount}/${summary.maxPlayers} playing`;
+  if (summary.phase === 'score') return 'score screen';
+  if (!summary.hasBlueQueen || !summary.hasRedQueen) return `${summary.playerCount}/${summary.maxPlayers} waiting for queens`;
+  return `${summary.readyCount}/${summary.playerCount || 1} ready`;
+};
+
+const renderLobbyCards = (): void => {
+  lobbyCards.replaceChildren();
+
+  for (const roomCode of LOBBY_CODES) {
+    const summary =
+      lobbySummaries.find((candidate) => candidate.roomCode === roomCode) ??
+      ({
+        roomCode,
+        name: LOBBY_NAMES[roomCode],
+        phase: 'lobby',
+        playerCount: 0,
+        maxPlayers: GAME_CONFIG.maxPlayers,
+        readyCount: 0,
+        hasBlueQueen: false,
+        hasRedQueen: false,
+        winner: null,
+        scoreScreenEndsAt: null,
+      } satisfies LobbySummary);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'lobby-card';
+    button.disabled = connectionState !== 'online' || summary.phase !== 'lobby' || summary.playerCount >= summary.maxPlayers;
+    button.innerHTML = `
+      <strong>${summary.name}</strong>
+      <span>${summary.phase}</span>
+      <small>${lobbyStatusText(summary)}</small>
+    `;
+    button.addEventListener('click', () => joinLobby(roomCode));
+    lobbyCards.append(button);
+  }
+};
+
+const renderLobby = (): void => {
+  setUiPhase();
+
+  if (!room) {
+    playerCount.textContent = '0/10';
+    return;
+  }
+
+  const players = room.players;
   playerCount.textContent = `${players.length}/${GAME_CONFIG.maxPlayers}`;
+  lobbyName.textContent = room.name;
+
+  const local = getLocalRoomPlayer();
+  const hasBlueQueen = players.some((player) => player.team === 'blue' && player.role === 'queen');
+  const hasRedQueen = players.some((player) => player.team === 'red' && player.role === 'queen');
+  const readyCount = players.filter((player) => player.ready).length;
+
+  if (!hasBlueQueen || !hasRedQueen) {
+    lobbyStatus.textContent = 'Both queen slots must be filled before the game can begin.';
+  } else {
+    lobbyStatus.textContent = `${readyCount}/${players.length} ready. The round starts automatically when everyone is ready.`;
+  }
+
+  readyButton.textContent = local?.ready ? 'Unready' : 'Ready';
+  readyButton.classList.toggle('is-ready', Boolean(local?.ready));
+  readyButton.disabled = !local;
 
   for (let slot = 0; slot < GAME_CONFIG.maxPlayers; slot += 1) {
     const player = players.find((candidate) => candidate.slot === slot);
-    const item = document.createElement('li');
-    item.className = `roster-slot ${player ? `team-${player.team}` : 'is-open'}${player?.id === localPlayerId ? ' is-local' : ''}`;
+    const button = document.querySelector<HTMLButtonElement>(`[data-slot="${slot}"]`);
+    if (!button) continue;
 
-    const slotBadge = document.createElement('span');
-    slotBadge.className = 'slot-badge';
-    slotBadge.textContent = String(slot + 1).padStart(2, '0');
-    item.append(slotBadge);
+    const team = getTeamForSlot(slot);
+    const role = getRoleForSlot(slot);
+    button.className = `${player ? `team-${team}` : 'is-open'}${player?.id === localPlayerId ? ' is-local' : ''}`;
+    button.disabled = Boolean(player && player.id !== localPlayerId);
+    button.replaceChildren();
+
+    const roleSpan = document.createElement('span');
+    roleSpan.className = 'slot-role';
+    roleSpan.textContent = roleLabel(role);
+    button.append(roleSpan);
 
     const name = document.createElement('span');
     name.className = 'slot-name';
     name.textContent = player?.name ?? 'Open';
-    item.append(name);
+    button.append(name);
 
-    const team = document.createElement('span');
-    team.className = 'slot-team';
-    team.textContent = player ? player.team : '';
-    item.append(team);
-
-    rosterList.append(item);
+    const state = document.createElement('span');
+    state.className = `slot-state${player?.ready ? ' is-ready' : ''}`;
+    state.textContent = player ? (player.ready ? 'READY' : 'WAIT') : 'OPEN';
+    button.append(state);
   }
+};
+
+const renderScoreOverlay = (): void => {
+  const winner = room?.winner ?? latestSnapshot?.winner;
+  const endsAt = room?.scoreScreenEndsAt ?? latestSnapshot?.roundEndsAt ?? null;
+
+  if (!winner || (room?.phase !== 'score' && latestSnapshot?.phase !== 'score')) return;
+
+  const secondsLeft = endsAt ? Math.max(0, Math.ceil((endsAt - Date.now()) / 1000)) : 20;
+  scoreTitle.textContent = `${winner.team.toUpperCase()} WINS`;
+  scoreStats.textContent = `Pearls ${latestSnapshot?.scores.blue ?? 0}-${latestSnapshot?.scores.red ?? 0} | Queen falls ${latestSnapshot?.queenKills.blue ?? 0}-${latestSnapshot?.queenKills.red ?? 0} | ${victoryLabel(winner.reason)}`;
+  scoreCountdown.textContent = `Returning to lobby in ${secondsLeft}s`;
 };
 
 const handleJoined = (message: Extract<ServerToClientMessage, { type: 'joined' }>): void => {
   localPlayerId = message.you;
   room = message.room;
   latestSnapshot = message.snapshot;
-  setConnectionState('online', `Room ${message.room.roomCode}`);
-  joinButton.disabled = false;
-  renderRoster();
+  pendingJoin = null;
+  setConnectionState('online', message.room.name);
+  renderLobby();
 };
 
 const handleRoomUpdate = (message: Extract<ServerToClientMessage, { type: 'room' }>): void => {
   room = message.room;
-  renderRoster();
+  setConnectionState('online', message.room.name);
+  renderLobby();
 };
 
 const handleSnapshot = (message: WorldSnapshot): void => {
   latestSnapshot = message;
+  for (const event of message.clashEvents ?? []) {
+    clashFx.push({ x: event.x, y: event.y, framesLeft: 18, lifeFrames: 18 });
+  }
+  if (room && room.roomCode === message.roomCode && room.phase !== message.phase) {
+    room = { ...room, phase: message.phase, winner: message.winner, scoreScreenEndsAt: message.roundEndsAt };
+  }
+  setUiPhase();
 };
 
 const handleSocketMessage = (event: MessageEvent): void => {
@@ -162,6 +335,12 @@ const handleSocketMessage = (event: MessageEvent): void => {
 
   if (message.type === 'joined') {
     handleJoined(message);
+    return;
+  }
+
+  if (message.type === 'lobbies') {
+    lobbySummaries = message.lobbies;
+    renderLobbyCards();
     return;
   }
 
@@ -189,67 +368,74 @@ const handleSocketMessage = (event: MessageEvent): void => {
 };
 
 const connect = (): void => {
-  const roomCode = normalizeRoomCode(roomInput.value);
-  const name = nameInput.value.trim();
   const wsUrl = getDefaultWsUrl();
-
-  roomInput.value = roomCode;
-  localStorage.setItem('physics-nook-game-room', roomCode);
-  localStorage.setItem('physics-nook-game-name', name);
   endpointText.textContent = wsUrl.replace(/^wss?:\/\//, '');
 
-  if (socket && socket.readyState !== WebSocket.CLOSED) {
-    socket.close(1000, 'Rejoining');
-  }
+  if (socket && socket.readyState !== WebSocket.CLOSED) return;
 
   setConnectionState('connecting', 'Connecting');
-  joinButton.disabled = true;
-  room = null;
-  latestSnapshot = null;
-  localPlayerId = null;
-  renderRoster();
+  renderLobbyCards();
 
   const nextSocket = new WebSocket(wsUrl);
   socket = nextSocket;
 
   nextSocket.addEventListener('open', () => {
-    if (socket !== nextSocket) {
-      return;
-    }
+    if (socket !== nextSocket) return;
 
     setConnectionState('connecting', 'Joining');
-    sendMessage({ type: 'join', roomCode, name });
+    if (pendingJoin) {
+      joinLobby(pendingJoin);
+    } else {
+      setConnectionState('online', 'Choose lobby');
+      renderLobbyCards();
+    }
   });
 
   nextSocket.addEventListener('message', handleSocketMessage);
 
   nextSocket.addEventListener('close', () => {
-    if (socket !== nextSocket) {
-      return;
-    }
+    if (socket !== nextSocket) return;
 
     setConnectionState('offline', 'Offline');
-    joinButton.disabled = false;
     localPlayerId = null;
+    room = null;
+    latestSnapshot = null;
     socket = null;
-    renderRoster();
+    setUiPhase();
+    renderLobby();
+    renderLobbyCards();
   });
 
   nextSocket.addEventListener('error', () => {
-    if (socket !== nextSocket) {
-      return;
-    }
+    if (socket !== nextSocket) return;
 
     setConnectionState('error', 'Socket error');
-    joinButton.disabled = false;
+    renderLobbyCards();
   });
 };
 
-const setInput = (action: keyof InputState, pressed: boolean): void => {
-  if (input[action] === pressed) {
+const joinLobby = (roomCode: LobbyCode): void => {
+  const name = nameInput.value.trim();
+  localStorage.setItem('physics-nook-game-name', name);
+  localStorage.setItem('physics-nook-game-room', roomCode);
+  pendingJoin = roomCode;
+
+  if (!socket || socket.readyState === WebSocket.CLOSED) {
+    connect();
     return;
   }
 
+  if (socket.readyState !== WebSocket.OPEN) {
+    setConnectionState('connecting', 'Connecting');
+    return;
+  }
+
+  setConnectionState('connecting', `Joining ${LOBBY_NAMES[roomCode]}`);
+  sendMessage({ type: 'join', roomCode, name });
+};
+
+const setInput = (action: keyof InputState, pressed: boolean): void => {
+  if (input[action] === pressed) return;
   input[action] = pressed;
   sendInput();
 };
@@ -264,23 +450,20 @@ const resetInput = (): void => {
     }
   }
 
-  if (changed) {
-    sendInput();
-  }
+  if (changed) sendInput();
 };
 
 const actionForKey = (event: KeyboardEvent): keyof InputState | null => {
   if (event.code === 'ArrowLeft' || event.code === 'KeyA') return 'left';
   if (event.code === 'ArrowRight' || event.code === 'KeyD') return 'right';
   if (event.code === 'ArrowUp' || event.code === 'KeyW' || event.code === 'Space') return 'jump';
+  if (event.code === 'ArrowDown' || event.code === 'KeyS') return 'down';
   return null;
 };
 
 document.addEventListener('keydown', (event) => {
   const action = actionForKey(event);
-  if (!action) {
-    return;
-  }
+  if (!action) return;
 
   event.preventDefault();
   setInput(action, true);
@@ -288,9 +471,7 @@ document.addEventListener('keydown', (event) => {
 
 document.addEventListener('keyup', (event) => {
   const action = actionForKey(event);
-  if (!action) {
-    return;
-  }
+  if (!action) return;
 
   event.preventDefault();
   setInput(action, false);
@@ -317,162 +498,697 @@ document.querySelectorAll<HTMLButtonElement>('[data-control]').forEach((button) 
   button.addEventListener('lostpointercapture', () => setInput(action, false));
 });
 
-joinForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  connect();
+readyButton.addEventListener('click', () => {
+  const local = getLocalRoomPlayer();
+  if (!local) return;
+  sendMessage({ type: 'setReady', ready: !local.ready });
+});
+
+leaveButton.addEventListener('click', () => {
+  sendMessage({ type: 'leaveLobby' });
+  localPlayerId = null;
+  room = null;
+  latestSnapshot = null;
+  setConnectionState(socket?.readyState === WebSocket.OPEN ? 'online' : 'offline', socket?.readyState === WebSocket.OPEN ? 'Choose lobby' : 'Offline');
+  setUiPhase();
+  renderLobbyCards();
+});
+
+document.querySelectorAll<HTMLButtonElement>('[data-slot]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const slot = Number(button.dataset.slot);
+    if (Number.isInteger(slot)) {
+      sendMessage({ type: 'moveSlot', slot });
+    }
+  });
 });
 
 const drawRoundRect = (x: number, y: number, width: number, height: number, radius: number): void => {
+  const r = Math.min(radius, width / 2, height / 2);
   context.beginPath();
-  context.moveTo(x + radius, y);
-  context.arcTo(x + width, y, x + width, y + height, radius);
-  context.arcTo(x + width, y + height, x, y + height, radius);
-  context.arcTo(x, y + height, x, y, radius);
-  context.arcTo(x, y, x + width, y, radius);
+  context.moveTo(x + r, y);
+  context.arcTo(x + width, y, x + width, y + height, r);
+  context.arcTo(x + width, y + height, x, y + height, r);
+  context.arcTo(x, y + height, x, y, r);
+  context.arcTo(x, y, x + width, y, r);
   context.closePath();
 };
 
+const drawWorldText = (
+  text: string,
+  x: number,
+  y: number,
+  options: {
+    size?: number;
+    color?: string;
+    align?: CanvasTextAlign;
+    baseline?: CanvasTextBaseline;
+    weight?: string;
+    maxWidth?: number;
+    stroke?: boolean;
+  } = {},
+): void => {
+  context.font = `${options.weight ?? '700'} ${options.size ?? 24}px "Courier New", monospace`;
+  context.textAlign = options.align ?? 'left';
+  context.textBaseline = options.baseline ?? 'alphabetic';
+  if (options.stroke ?? true) {
+    context.strokeStyle = '#000914';
+    context.lineWidth = Math.max(3, Math.round((options.size ?? 24) / 7));
+    context.strokeText(text, x, y, options.maxWidth);
+  }
+  context.fillStyle = options.color ?? '#ffffff';
+  context.fillText(text, x, y, options.maxWidth);
+};
+
+const drawCrown = (x: number, y: number, isLost: boolean, accent = '#ff4757'): void => {
+  context.save();
+  context.translate(x, y);
+  if (isLost) context.globalAlpha = 0.4;
+
+  context.fillStyle = '#ffd700';
+  context.fillRect(4, 16, 24, 8);
+  context.fillRect(2, 8, 6, 8);
+  context.fillRect(13, 10, 6, 6);
+  context.fillRect(24, 8, 6, 8);
+
+  context.fillStyle = accent;
+  context.fillRect(0, 4, 8, 6);
+  context.fillRect(12, 6, 8, 6);
+  context.fillRect(24, 4, 8, 6);
+
+  if (isLost) {
+    context.globalAlpha = 1;
+    context.strokeStyle = '#ff4757';
+    context.lineWidth = 6;
+    context.lineCap = 'round';
+    context.beginPath();
+    context.moveTo(-4, -2);
+    context.lineTo(36, 28);
+    context.moveTo(36, -2);
+    context.lineTo(-4, 28);
+    context.stroke();
+  }
+  context.restore();
+};
+
+const drawPearl = (x: number, y: number, size = 20): void => {
+  const shadow = Math.max(2, Math.floor(size * 0.2));
+  const highlight = Math.max(4, Math.floor(size * 0.4));
+  context.fillStyle = '#dfe6e9';
+  context.fillRect(x, y, size, size);
+  context.fillStyle = '#b2bec3';
+  context.fillRect(x, y + size - shadow, size, shadow);
+  context.fillRect(x + size - shadow, y, shadow, size);
+  context.fillStyle = '#ffffff';
+  context.fillRect(x + Math.floor(size * 0.2), y + Math.floor(size * 0.2), highlight, highlight);
+};
+
+const drawBackgroundDecorations = (): void => {
+  context.fillStyle = 'rgba(60, 40, 100, 0.4)';
+  for (let i = 0; i < CANVAS_BASE_WIDTH; i += 180) {
+    const h = 40 + Math.sin(i) * 60;
+    context.fillRect(i + 40, 1000 - h, 20, h);
+    context.fillRect(i + 30, 1000 - h + 20, 40, 10);
+    context.fillRect(i + 45, 1000 - h - 10, 10, 10);
+  }
+};
+
+const drawBackground = (): void => {
+  const bgGrad = context.createLinearGradient(0, 0, 0, CANVAS_BASE_HEIGHT);
+  bgGrad.addColorStop(0, '#1c456b');
+  bgGrad.addColorStop(1, '#2a6592');
+  context.fillStyle = bgGrad;
+  context.fillRect(0, 0, CANVAS_BASE_WIDTH, CANVAS_BASE_HEIGHT);
+
+  drawBackgroundDecorations();
+
+  context.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  for (const bubble of backgroundBubbles) {
+    const y = (bubble.y - frameCount * bubble.speed + CANVAS_BASE_HEIGHT + 20) % (CANVAS_BASE_HEIGHT + 40) - 20;
+    const x = bubble.x + Math.sin(frameCount * 0.02 + bubble.phase) * 6;
+    context.fillRect(x, y, bubble.size, bubble.size);
+  }
+
+  context.fillStyle = '#c2b280';
+  context.fillRect(0, 1020, CANVAS_BASE_WIDTH, 60);
+  for (let i = 0; i < CANVAS_BASE_WIDTH; i += 120) {
+    context.beginPath();
+    context.ellipse(i + 60, 1030, 80, 20, 0, 0, Math.PI, true);
+    context.fill();
+  }
+};
+
+const drawBase = (base: GameBase, score: number): void => {
+  context.fillStyle = teamBaseColor(base.team);
+  context.fillRect(base.x, base.y, base.width, base.height);
+
+  for (let index = 0; index < base.slots.length; index += 1) {
+    const slot = base.slots[index];
+    const slotX = base.x + slot.x;
+    const slotY = base.y + slot.y;
+    const px = slotX - 12;
+    const py = slotY - 12;
+
+    context.fillStyle = '#050a12';
+    context.fillRect(px, py, 24, 24);
+    context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    context.fillRect(px, py, 24, 4);
+    context.fillRect(px, py, 4, 24);
+
+    if (index < score) {
+      drawPearl(slotX - 10, slotY - 10, 20);
+    }
+  }
+
+  context.fillStyle = teamColor(base.team);
+  context.fillRect(base.x, base.y + base.height - 10, base.width, 10);
+  drawWorldText(base.team.toUpperCase(), base.x + base.width / 2, base.y + base.height + 30, {
+    size: 22,
+    color: teamColor(base.team),
+    align: 'center',
+  });
+};
+
+const drawGateIcon = (gate: UpgradeGate): void => {
+  context.save();
+  context.translate(gate.x + gate.width / 2, gate.y - 24);
+  context.fillStyle = '#ffffff';
+
+  if (gate.type === 'warrior') {
+    context.rotate(-0.55);
+    context.fillRect(-3, -20, 6, 38);
+    context.fillRect(-11, 8, 22, 5);
+    context.fillRect(-2, -25, 4, 8);
+    context.rotate(1.1);
+    context.fillRect(-3, -20, 6, 38);
+    context.fillRect(-11, 8, 22, 5);
+    context.fillRect(-2, -25, 4, 8);
+  } else {
+    context.fillRect(-4, -20, 12, 22);
+    context.fillRect(-16, -2, 18, 8);
+    context.fillRect(-8, 6, 12, 22);
+  }
+
+  context.restore();
+};
+
+const drawGate = (gate: UpgradeGate): void => {
+  const color = gate.ownerTeam ? teamColor(gate.ownerTeam) : '#9aa4ad';
+  context.fillStyle = '#111111';
+  context.fillRect(gate.x + 10, gate.y + 20, gate.width - 20, gate.height - 20);
+
+  context.fillStyle = color;
+  const time = frameCount / 12;
+  for (let i = 0; i < 5; i += 1) {
+    const wave = Math.sin(time + i) * 6;
+    context.fillRect(gate.x + 10 + i * 12 + wave, gate.y + 10, 8, gate.height - 10);
+  }
+
+  context.strokeStyle = color;
+  context.lineWidth = 4;
+  context.strokeRect(gate.x, gate.y, gate.width, gate.height);
+  drawGateIcon(gate);
+};
+
 const drawPlatform = (platform: GameMap['platforms'][number]): void => {
-  context.fillStyle = platform.kind === 'floor' ? '#2d2419' : '#4a3520';
-  context.strokeStyle = platform.kind === 'floor' ? '#6c4d2b' : '#a06d2e';
-  context.lineWidth = platform.kind === 'floor' ? 4 : 3;
-  drawRoundRect(platform.x, platform.y, platform.width, platform.height, platform.kind === 'floor' ? 0 : 7);
-  context.fill();
-  context.stroke();
+  context.fillStyle = '#b85f8c';
+  context.fillRect(platform.x, platform.y, platform.width, platform.height);
 
-  context.fillStyle = platform.kind === 'floor' ? '#8f6b35' : '#d59b3a';
-  context.fillRect(platform.x, platform.y, platform.width, Math.min(5, platform.height));
-};
-
-const drawArena = (map: GameMap): void => {
-  context.fillStyle = '#151711';
-  context.fillRect(0, 0, map.width, map.height);
-
-  context.fillStyle = '#1f3328';
-  context.fillRect(0, 0, map.width, 190);
-  context.fillStyle = '#1a2a31';
-  context.fillRect(0, 190, map.width, 210);
-  context.fillStyle = '#211f18';
-  context.fillRect(0, 400, map.width, map.height - 400);
-
-  context.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-  context.lineWidth = 1;
-  for (let x = 80; x < map.width; x += 80) {
-    context.beginPath();
-    context.moveTo(x, 0);
-    context.lineTo(x, map.height);
-    context.stroke();
-  }
-  for (let y = 80; y < map.height; y += 80) {
-    context.beginPath();
-    context.moveTo(0, y);
-    context.lineTo(map.width, y);
-    context.stroke();
+  context.fillStyle = '#9b4a72';
+  for (let i = 0; i < platform.width; i += 24) {
+    if (i % 48 === 0) context.fillRect(platform.x + i, platform.y + 12, 12, 12);
   }
 
-  context.strokeStyle = 'rgba(245, 182, 66, 0.55)';
-  context.setLineDash([12, 14]);
-  context.beginPath();
-  context.moveTo(map.width / 2, 54);
-  context.lineTo(map.width / 2, map.height - 76);
-  context.stroke();
-  context.setLineDash([]);
-
-  context.fillStyle = 'rgba(245, 182, 66, 0.14)';
-  context.fillRect(92, 472, 300, 170);
-  context.fillStyle = 'rgba(42, 157, 244, 0.14)';
-  context.fillRect(map.width - 392, 472, 300, 170);
-
-  for (const platform of map.platforms) {
-    drawPlatform(platform);
+  context.fillStyle = '#39c488';
+  context.fillRect(platform.x, platform.y, platform.width, 8);
+  for (let i = 10; i < platform.width - 10; i += 30) {
+    context.fillRect(platform.x + i, platform.y - 4, 8, 4);
   }
 };
 
-const drawNameplate = (player: PlayerSnapshot): void => {
-  const label = player.name;
-  context.font = '15px Inter, ui-sans-serif, system-ui, sans-serif';
-  const width = Math.min(140, context.measureText(label).width + 18);
-  const x = -width / 2;
-  const y = -GAME_CONFIG.player.height / 2 - 27;
-
-  context.fillStyle = player.id === localPlayerId ? 'rgba(255, 255, 255, 0.92)' : 'rgba(17, 18, 15, 0.78)';
-  drawRoundRect(x, y, width, 20, 8);
-  context.fill();
-  context.fillStyle = player.id === localPlayerId ? '#11120f' : '#f7f3e8';
-  context.textAlign = 'center';
-  context.textBaseline = 'middle';
-  context.fillText(label, 0, y + 10, width - 12);
-};
-
-const teamAccent = (team: Team): string => (team === 'gold' ? '#f5b642' : '#2a9df4');
-
-const drawPlayer = (player: PlayerSnapshot): void => {
-  const width = GAME_CONFIG.player.width;
-  const height = GAME_CONFIG.player.height;
+const drawClamshell = (clam: WorldSnapshot['clamshells'][number] | GameMap['clamShells'][number]): void => {
+  const pearlsInside = 'pearlsInside' in clam ? clam.pearlsInside : 3;
 
   context.save();
-  context.translate(player.x, player.y);
+  context.translate(clam.x, clam.y);
+
+  const shellBase = '#e1b16a';
+  const shellDark = '#c68d45';
+  const shellOutline = '#432918';
+  const innerFlesh = '#e84e56';
+  const innerShadow = '#b8323a';
+  const shellLip = '#f5d596';
+
+  const topScallops = [
+    { x: 4, y: -12 },
+    { x: 13, y: -16 },
+    { x: 22, y: -18 },
+    { x: 31, y: -16 },
+    { x: 40, y: -12 },
+  ];
+
+  const botScallops = [
+    { x: 4, y: 24 },
+    { x: 13, y: 28 },
+    { x: 22, y: 30 },
+    { x: 31, y: 28 },
+    { x: 40, y: 24 },
+  ];
+
+  context.fillStyle = shellOutline;
+  context.fillRect(4, -8, 42, 24);
+  for (const s of topScallops) {
+    context.fillRect(s.x, s.y, 8, 10);
+    context.fillRect(s.x + 1, s.y - 2, 6, 2);
+  }
+
+  context.fillStyle = shellBase;
+  context.fillRect(6, -6, 38, 22);
+  for (const s of topScallops) {
+    context.fillRect(s.x + 1, s.y + 2, 6, 10);
+    context.fillRect(s.x + 2, s.y, 4, 2);
+  }
+
+  context.fillStyle = shellDark;
+  for (const s of topScallops) {
+    context.fillRect(s.x + 3, s.y + 2, 2, -s.y + 14);
+  }
+
+  context.fillStyle = innerFlesh;
+  context.fillRect(6, -2, 38, 18);
+  for (const s of topScallops) {
+    context.fillRect(s.x + 1, s.y + 6, 6, 6);
+  }
+
+  context.fillStyle = innerShadow;
+  context.fillRect(6, 6, 38, 10);
+
+  if (pearlsInside > 0) {
+    const startX = 25 - ((pearlsInside * 13 - 3) / 2);
+    for (let i = 0; i < pearlsInside; i += 1) {
+      drawPearl(Math.floor(startX + i * 13), 8, 10);
+    }
+  }
+
+  context.fillStyle = shellOutline;
+  context.fillRect(4, 16, 42, 8);
+  for (const s of botScallops) {
+    context.fillRect(s.x, 16, 8, s.y - 16);
+    context.fillRect(s.x + 1, s.y, 6, 2);
+  }
+
+  context.fillStyle = shellBase;
+  context.fillRect(6, 18, 38, 4);
+  for (const s of botScallops) {
+    context.fillRect(s.x + 1, 18, 6, s.y - 20);
+    context.fillRect(s.x + 2, s.y - 2, 4, 2);
+  }
+
+  context.fillStyle = shellDark;
+  for (const s of botScallops) {
+    context.fillRect(s.x + 3, 18, 2, s.y - 20);
+  }
+
+  context.fillStyle = shellLip;
+  context.fillRect(5, 16, 40, 2);
+  for (const s of botScallops) {
+    context.fillRect(s.x + 2, 14, 4, 2);
+  }
+
+  context.restore();
+};
+
+const drawFlag = (baseX: number, poleY: number, color: string, flip: boolean): void => {
+  context.fillStyle = '#7f8fa6';
+  context.fillRect(baseX, poleY, 8, 140);
+  context.fillStyle = color;
+  context.fillRect(baseX - 4, poleY - 6, 16, 8);
+
+  const startX = flip ? baseX - 60 : baseX + 8;
+  const startY = poleY + 10;
+  const sq = 10;
+  const time = frameCount / 12;
+
+  for (let r = 0; r < 4; r += 1) {
+    for (let c = 0; c < 6; c += 1) {
+      context.fillStyle = (r + c) % 2 === 0 ? '#f5f6fa' : '#2f3640';
+      const wave = Math.sin(time + c) * 4;
+      context.fillRect(startX + c * sq, startY + r * sq + wave, sq, sq + 1);
+    }
+  }
+};
+
+const drawManatee = (snapshot: WorldSnapshot | null): void => {
+  const snail = snapshot?.snail ?? { x: GAME_MAP.snail.startX, y: GAME_MAP.snail.y, facing: -1, eatingTargetId: null };
+  const baseY = GAME_MAP.snail.y;
+
+  drawFlag(120, baseY - 80, TEAM_COLORS.blue, true);
+  drawFlag(CANVAS_BASE_WIDTH - 128, baseY - 80, TEAM_COLORS.red, false);
+
+  context.save();
+  context.translate(snail.x + MANATEE_WIDTH / 2, snail.y + MANATEE_HEIGHT / 2);
+  if (snail.facing < 0) context.scale(-1, 1);
+
+  context.fillStyle = '#89a397';
+  context.fillRect(-45, -15, 90, 30);
+  context.fillRect(-35, -20, 75, 5);
+  context.fillRect(45, -5, 10, 20);
+  context.fillRect(-55, 0, 16, 25);
+  context.fillRect(-60, 10, 5, 15);
+
+  context.fillStyle = '#5a6e60';
+  context.fillRect(-25, -20, 15, 5);
+  context.fillRect(-15, -15, 10, 5);
+  context.fillRect(0, -15, 8, 5);
+  context.fillRect(5, -10, 5, 5);
+  context.fillRect(-35, -10, 8, 5);
+  context.fillRect(15, 15, 12, 22);
+  context.fillRect(42, 5, 4, 10);
+  context.fillRect(46, 10, 12, 4);
+
+  context.fillStyle = '#111111';
+  context.fillRect(35, -5, 4, 4);
+
+  if (snail.eatingTargetId) {
+    context.fillStyle = '#89a397';
+    const jawDrop = Math.sin(frameCount / 5) * 4 + 4;
+    context.fillRect(45, 15 + jawDrop, 10, 8);
+  }
+
+  context.restore();
+};
+
+const drawDroppedPearl = (pearl: BerrySnapshot): void => {
+  drawPearl(pearl.x, pearl.y, 20);
+};
+
+const drawWorker = (player: PlayerSnapshot): void => {
+  const color = teamColor(player.team);
+  const dark = teamDarkColor(player.team);
+  const time = frameCount / 9;
+
+  context.fillStyle = color;
+  context.fillRect(-12, -16, 24, 6);
+  context.fillRect(-16, -10, 32, 16);
+
+  context.fillStyle = '#111111';
+  context.fillRect(6, -6, 6, 6);
+
+  const ridingManatee = latestSnapshot?.snail.riderId === player.id;
+  const offset = ridingManatee ? Math.sin(time) * 4 : Math.sin(time + player.x) * 4;
+  context.fillStyle = dark;
+  context.fillRect(-14 + offset, 6, 6, 14);
+  context.fillRect(-4 - offset, 6, 6, 18);
+  context.fillRect(6 + offset, 6, 6, 14);
+  context.fillRect(12 - offset, 6, 6, 16);
+};
+
+const drawOctopus = (player: PlayerSnapshot): void => {
+  const color = teamColor(player.team);
+  const dark = teamDarkColor(player.team);
+  const time = frameCount / 9;
+
+  context.fillStyle = dark;
+  context.fillRect(-18, -22, 36, 26);
+  context.fillStyle = color;
+  context.fillRect(-16, -20, 32, 22);
+  context.fillRect(-20, -2, 40, 12);
+
+  context.fillStyle = '#ffffff';
+  context.fillRect(4, -12, 10, 8);
+  context.fillStyle = '#000000';
+  context.fillRect(6, -10, 6, 6);
+
+  const tentacleOffset = Math.sin(time * 2) * 3;
+  context.fillStyle = color;
+  context.fillRect(-18, 10, 8, 10 + tentacleOffset);
+  context.fillRect(-6, 10, 8, 14 - tentacleOffset);
+  context.fillRect(6, 10, 8, 12 + tentacleOffset);
+  context.fillRect(16, 10, 8, 10 - tentacleOffset);
+
+  context.fillStyle = '#ffd700';
+  context.fillRect(12, -2, 42, 6);
+  context.fillRect(48, -16, 6, 32);
+  context.fillRect(54, -18, 10, 6);
+  context.fillRect(54, -4, 14, 6);
+  context.fillRect(54, 10, 10, 6);
+
+  if (player.role === 'queen') {
+    context.fillStyle = '#ffd700';
+    context.fillRect(-8, -26, 16, 4);
+    context.fillRect(-12, -30, 4, 8);
+    context.fillRect(-2, -30, 4, 4);
+    context.fillRect(8, -30, 4, 8);
+  }
+};
+
+const drawPlayerName = (player: PlayerSnapshot): void => {
+  const local = player.id === localPlayerId;
+  const cx = player.x + PLAYER_WIDTH / 2;
+  const y = player.y - (player.role === 'queen' ? 48 : 38);
+  const label = `${player.name} ${roleLabel(player.role)}`;
+
+  context.font = '700 16px "Courier New", monospace';
+  const width = Math.min(220, context.measureText(label).width + 22);
+  drawRoundRect(cx - width / 2, y - 18, width, 26, 4);
+  context.fillStyle = local ? 'rgba(255, 255, 255, 0.9)' : 'rgba(0, 9, 20, 0.78)';
+  context.fill();
+  context.strokeStyle = local ? '#ffffff' : hexToRgba(teamColor(player.team), 0.55);
+  context.lineWidth = 2;
+  context.stroke();
+  drawWorldText(label, cx, y - 5, {
+    size: 15,
+    color: local ? '#000914' : '#ffffff',
+    align: 'center',
+    baseline: 'middle',
+    maxWidth: width - 12,
+    stroke: !local,
+  });
+};
+
+const drawUpgradeProgress = (player: PlayerSnapshot): void => {
+  if (player.upgradeProgress <= 0) return;
+
+  const barW = 40;
+  const barH = 8;
+  const xPos = player.x + PLAYER_WIDTH / 2 - barW / 2;
+  const yPos = player.y - 18;
+  context.fillStyle = 'rgba(0, 0, 0, 0.8)';
+  context.fillRect(xPos - 2, yPos - 2, barW + 4, barH + 4);
+  context.fillStyle = teamColor(player.team);
+  context.fillRect(xPos, yPos, barW * clamp01(player.upgradeProgress / GAME_CONFIG.objective.upgradeTicks), barH);
+};
+
+const drawPlayer = (player: PlayerSnapshot, snapshot: WorldSnapshot): void => {
+  if (!player.alive) return;
+  if (player.invincibleUntil > snapshot.serverTime && Math.floor(frameCount / 6) % 2 === 0) return;
+
+  context.save();
+  if (player.beingEaten) {
+    context.translate(player.x + PLAYER_WIDTH / 2 + (Math.random() * 6 - 3), player.y + PLAYER_HEIGHT / 2 + (Math.random() * 6 - 3));
+  } else {
+    context.translate(player.x + PLAYER_WIDTH / 2, player.y + PLAYER_HEIGHT / 2);
+  }
+
+  if (player.speedBoost && !player.beingEaten) {
+    context.fillStyle = 'rgba(255, 255, 100, 0.2)';
+    context.beginPath();
+    context.arc(0, 0, 24, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  if (player.facing < 0) context.scale(-1, 1);
+
+  if (player.role === 'warrior' || player.role === 'queen') {
+    drawOctopus(player);
+  } else {
+    drawWorker(player);
+  }
+
+  if (player.carriedBerryId) {
+    context.fillStyle = '#ffffff';
+    context.fillRect(-8, -PLAYER_HEIGHT / 2 - 20, 16, 16);
+    context.fillStyle = '#bce6ff';
+    context.fillRect(-4, -PLAYER_HEIGHT / 2 - 18, 6, 6);
+  }
+
+  context.restore();
 
   if (player.id === localPlayerId) {
     context.strokeStyle = '#ffffff';
-    context.lineWidth = 4;
-    context.beginPath();
-    context.ellipse(0, 4, width * 0.85, height * 0.68, 0, 0, Math.PI * 2);
-    context.stroke();
+    context.lineWidth = 3;
+    context.strokeRect(player.x - 4, player.y - 4, PLAYER_WIDTH + 8, PLAYER_HEIGHT + 8);
   }
 
-  context.fillStyle = player.team === 'gold' ? 'rgba(245, 182, 66, 0.24)' : 'rgba(42, 157, 244, 0.24)';
-  context.beginPath();
-  context.ellipse(-width * 0.42, -height * 0.1, width * 0.45, height * 0.24, -0.55, 0, Math.PI * 2);
-  context.ellipse(width * 0.42, -height * 0.1, width * 0.45, height * 0.24, 0.55, 0, Math.PI * 2);
-  context.fill();
+  drawUpgradeProgress(player);
+  drawPlayerName(player);
+};
 
-  context.scale(player.facing, 1);
-  context.fillStyle = player.color;
-  drawRoundRect(-width / 2, -height / 2, width, height, 9);
-  context.fill();
+const drawPlayers = (snapshot: WorldSnapshot): void => {
+  const players = [...snapshot.players].sort((a, b) => {
+    if (a.id === localPlayerId) return 1;
+    if (b.id === localPlayerId) return -1;
+    return a.y - b.y;
+  });
 
-  context.fillStyle = '#11120f';
-  drawRoundRect(-width / 2 + 6, -height / 2 + 8, width - 12, 13, 6);
-  context.fill();
+  for (const player of players) {
+    drawPlayer(player, snapshot);
+  }
+};
 
-  context.fillStyle = '#f7f3e8';
-  context.fillRect(4, -height / 2 + 12, 7, 4);
+const drawClashFx = (): void => {
+  for (let i = clashFx.length - 1; i >= 0; i -= 1) {
+    const fx = clashFx[i];
+    const age = 1 - fx.framesLeft / fx.lifeFrames;
+    const radius = 8 + age * 28;
+    const alpha = 1 - age;
 
-  context.fillStyle = teamAccent(player.team);
-  context.fillRect(-width / 2 + 5, height / 2 - 12, width - 10, 5);
+    context.fillStyle = `rgba(255, 238, 187, ${0.25 * alpha})`;
+    context.beginPath();
+    context.arc(fx.x, fx.y, radius * 1.4, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = `rgba(255, 255, 255, ${0.85 * alpha})`;
+    context.beginPath();
+    context.arc(fx.x, fx.y, Math.max(2, radius * 0.35), 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = `rgba(255, 242, 168, ${0.9 * alpha})`;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(fx.x - radius * 1.6, fx.y);
+    context.lineTo(fx.x + radius * 1.6, fx.y);
+    context.moveTo(fx.x, fx.y - radius * 1.6);
+    context.lineTo(fx.x, fx.y + radius * 1.6);
+    context.stroke();
 
-  context.restore();
+    fx.framesLeft -= 1;
+    if (fx.framesLeft <= 0) clashFx.splice(i, 1);
+  }
+};
 
-  context.save();
-  context.translate(player.x, player.y);
-  drawNameplate(player);
-  context.restore();
+const drawHud = (snapshot: WorldSnapshot): void => {
+  const blueQueen = snapshot.players.find((player) => player.team === 'blue' && player.role === 'queen');
+  const redQueen = snapshot.players.find((player) => player.team === 'red' && player.role === 'queen');
+
+  for (let i = 0; i < MAX_LIVES; i += 1) {
+    drawCrown(40 + i * 45, 30, !blueQueen || i >= blueQueen.lives, TEAM_COLORS.blue);
+  }
+  for (let i = 0; i < MAX_LIVES; i += 1) {
+    drawCrown(CANVAS_BASE_WIDTH - 72 - i * 45, 30, !redQueen || i >= redQueen.lives, TEAM_COLORS.red);
+  }
+
+  drawWorldText(`BLUE ${snapshot.scores.blue}/${MAX_PEARLS}`, 40, 92, {
+    size: 24,
+    color: TEAM_COLORS.blue,
+    align: 'left',
+  });
+  drawWorldText(`RED ${snapshot.scores.red}/${MAX_PEARLS}`, CANVAS_BASE_WIDTH - 40, 92, {
+    size: 24,
+    color: TEAM_COLORS.red,
+    align: 'right',
+  });
+
+  const barW = 360;
+  const barX = CANVAS_BASE_WIDTH / 2 - barW / 2;
+  const barY = 40;
+  const pct = (snapshot.snail.x - GAME_MAP.snail.blueGoalX) / (GAME_MAP.snail.redGoalX - GAME_MAP.snail.blueGoalX);
+  context.fillStyle = 'rgba(0, 9, 20, 0.78)';
+  context.fillRect(barX, barY, barW, 12);
+  context.fillStyle = '#00d4c8';
+  context.fillRect(barX + clamp01(pct) * barW - 6, barY - 4, 12, 20);
+  drawWorldText('MANATEE', CANVAS_BASE_WIDTH / 2, barY + 38, {
+    size: 18,
+    color: '#cfeeff',
+    align: 'center',
+  });
+};
+
+const drawScoreBanner = (snapshot: WorldSnapshot): void => {
+  if (!snapshot.winner) return;
+
+  const title = `${snapshot.winner.team.toUpperCase()} WINS!`;
+  const subtitle = victoryLabel(snapshot.winner.reason);
+  context.fillStyle = 'rgba(0, 9, 20, 0.82)';
+  context.fillRect(0, 0, CANVAS_BASE_WIDTH, CANVAS_BASE_HEIGHT);
+  drawWorldText(title, CANVAS_BASE_WIDTH / 2, CANVAS_BASE_HEIGHT / 2 - 36, {
+    size: 72,
+    color: teamColor(snapshot.winner.team),
+    align: 'center',
+    weight: '900',
+  });
+  drawWorldText(subtitle, CANVAS_BASE_WIDTH / 2, CANVAS_BASE_HEIGHT / 2 + 24, {
+    size: 34,
+    color: '#48dbfb',
+    align: 'center',
+    weight: '800',
+  });
+};
+
+const drawArena = (snapshot: WorldSnapshot | null): void => {
+  drawBackground();
+
+  const scores = snapshot?.scores ?? { blue: 0, red: 0 };
+  for (const base of GAME_MAP.bases) {
+    drawBase(base, scores[base.team]);
+  }
+
+  const gates = snapshot?.upgradeGates ?? GAME_MAP.upgradeGates;
+  for (const gate of gates) {
+    drawGate(gate);
+  }
+
+  for (const platform of GAME_MAP.platforms) {
+    drawPlatform(platform);
+  }
+
+  drawManatee(snapshot);
+
+  const clams = snapshot?.clamshells ?? GAME_MAP.clamShells;
+  for (const clam of clams) {
+    drawClamshell(clam);
+  }
+
+  if (snapshot) {
+    for (const pearl of snapshot.berries) {
+      drawDroppedPearl(pearl);
+    }
+    drawPlayers(snapshot);
+    drawClashFx();
+    drawHud(snapshot);
+    if (snapshot.phase === 'score') {
+      drawScoreBanner(snapshot);
+    }
+  }
 };
 
 const drawWorld = (): void => {
-  const map = room?.map ?? GAME_MAP;
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
-  const scale = Math.min(width / map.width, height / map.height);
-  const worldWidth = map.width * scale;
-  const worldHeight = map.height * scale;
-  const offsetX = (width - worldWidth) / 2;
-  const offsetY = (height - worldHeight) / 2;
+  const cssWidth = canvas.clientWidth;
+  const cssHeight = canvas.clientHeight;
+  const scale = Math.min(cssWidth / CANVAS_BASE_WIDTH, cssHeight / CANVAS_BASE_HEIGHT);
+  const worldWidth = CANVAS_BASE_WIDTH * scale;
+  const worldHeight = CANVAS_BASE_HEIGHT * scale;
+  const offsetX = (cssWidth - worldWidth) / 2;
+  const offsetY = (cssHeight - worldHeight) / 2;
 
-  context.fillStyle = '#0e100d';
-  context.fillRect(0, 0, width, height);
+  context.imageSmoothingEnabled = false;
+  context.fillStyle = '#000914';
+  context.fillRect(0, 0, cssWidth, cssHeight);
+
   context.save();
   context.translate(offsetX, offsetY);
   context.scale(scale, scale);
-  drawArena(map);
-
-  const players = latestSnapshot?.players ?? [];
-  for (const player of players) {
-    drawPlayer(player);
-  }
-
+  drawArena(latestSnapshot);
   context.restore();
+
+  if (!latestSnapshot && !room) {
+    context.fillStyle = 'rgba(0, 9, 20, 0.78)';
+    drawRoundRect(cssWidth / 2 - 210, cssHeight / 2 - 42, 420, 84, 8);
+    context.fill();
+    context.fillStyle = '#dceffc';
+    context.font = '800 18px "Courier New", monospace';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText('Choose a lobby to enter Ocean Queen', cssWidth / 2, cssHeight / 2);
+  }
 };
 
 const resizeCanvas = (): void => {
@@ -488,7 +1204,9 @@ const resizeCanvas = (): void => {
 };
 
 const animationFrame = (time: number): void => {
+  frameCount += 1;
   resizeCanvas();
+  renderScoreOverlay();
 
   if (time - lastInputFlush >= INPUT_FLUSH_MS) {
     sendInput();
@@ -505,12 +1223,13 @@ const animationFrame = (time: number): void => {
 };
 
 const hydrateSavedInputs = (): void => {
-  roomInput.value = normalizeRoomCode(localStorage.getItem('physics-nook-game-room') ?? roomInput.value);
   nameInput.value = localStorage.getItem('physics-nook-game-name') ?? '';
   endpointText.textContent = getDefaultWsUrl().replace(/^wss?:\/\//, '');
 };
 
 hydrateSavedInputs();
-renderRoster();
+renderLobbyCards();
+renderLobby();
 setConnectionState('offline', 'Offline');
+connect();
 window.requestAnimationFrame(animationFrame);

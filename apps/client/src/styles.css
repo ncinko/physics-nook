@@ -1,6 +1,6 @@
 :root {
   color: #f7f3e8;
-  background: #11120f;
+  background: #00080f;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
@@ -39,7 +39,7 @@ button:disabled {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid #e9c46a;
+  outline: 3px solid #66ffcc;
   outline-offset: 2px;
 }
 
@@ -48,7 +48,7 @@ input:focus-visible {
   width: 100vw;
   height: 100vh;
   min-height: 540px;
-  background: #11120f;
+  background: #00080f;
 }
 
 #gameCanvas {
@@ -66,7 +66,7 @@ input:focus-visible {
   right: 16px;
   left: 16px;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(360px, auto) auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   gap: 12px;
   align-items: start;
   pointer-events: none;
@@ -77,12 +77,13 @@ input:focus-visible {
 }
 
 .brand-lockup,
-.join-panel,
 .connection-pill,
-.roster-panel {
+.menu-panel,
+.lobby-panel,
+.score-panel {
   border: 1px solid rgba(247, 243, 232, 0.16);
   border-radius: 8px;
-  background: rgba(17, 18, 15, 0.84);
+  background: rgba(0, 8, 15, 0.84);
   box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
   backdrop-filter: blur(10px);
 }
@@ -99,12 +100,15 @@ input:focus-visible {
   display: block;
   width: 34px;
   height: 34px;
-  border: 3px solid #f5b642;
+  border: 3px solid #00a8ff;
   border-radius: 8px;
   background:
-    linear-gradient(90deg, transparent 43%, #11120f 43% 57%, transparent 57%),
-    linear-gradient(#2a9df4 0 0);
+    linear-gradient(90deg, transparent 42%, #00080f 42% 58%, transparent 58%),
+    linear-gradient(180deg, #00a8ff 0 48%, #ff4757 48% 100%);
   background-size: 100% 100%;
+  box-shadow:
+    0 0 14px rgba(0, 168, 255, 0.26),
+    0 0 18px rgba(255, 71, 87, 0.22);
 }
 
 .brand-copy {
@@ -124,36 +128,28 @@ input:focus-visible {
 
 .brand-copy span {
   overflow: hidden;
-  color: #c8d8d1;
+  color: #cfeeff;
   font-size: 0.78rem;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.join-panel {
+.alias-field {
   display: grid;
-  grid-template-columns: 104px 150px minmax(76px, auto);
-  gap: 8px;
-  align-items: end;
-  padding: 8px;
-}
-
-.join-panel label {
-  display: grid;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
 }
 
-.join-panel label span {
-  color: #d5ddc8;
+.alias-field span {
+  color: #cfeeff;
   font-size: 0.68rem;
   font-weight: 700;
   line-height: 1;
   text-transform: uppercase;
 }
 
-.join-panel input {
+.alias-field input {
   width: 100%;
   min-width: 0;
   height: 38px;
@@ -161,15 +157,7 @@ input:focus-visible {
   border-radius: 6px;
   padding: 0 10px;
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.join-panel button {
-  height: 38px;
-  border-radius: 6px;
-  color: #11120f;
-  font-weight: 800;
-  background: #f5b642;
+  background: rgba(207, 238, 255, 0.08);
 }
 
 .connection-pill {
@@ -194,90 +182,226 @@ input:focus-visible {
 }
 
 .connection-pill[data-state="connecting"] .status-dot {
-  background: #e9c46a;
+  background: #ffd700;
 }
 
 .connection-pill[data-state="online"] .status-dot {
-  background: #06d6a0;
+  background: #66ffcc;
 }
 
 .connection-pill[data-state="error"] .status-dot {
   background: #ef476f;
 }
 
-.roster-panel {
+.menu-overlay,
+.lobby-overlay,
+.score-overlay {
   position: absolute;
-  top: 88px;
-  right: 16px;
-  width: min(274px, calc(100vw - 32px));
-  max-height: calc(100vh - 128px);
-  padding: 10px;
-  overflow: auto;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 92px 16px 24px;
+  pointer-events: none;
 }
 
-.roster-heading {
+.menu-overlay[hidden],
+.lobby-overlay[hidden],
+.score-overlay[hidden] {
+  display: none;
+}
+
+.menu-panel,
+.lobby-panel,
+.score-panel {
+  width: min(860px, 100%);
+  padding: 18px;
+  pointer-events: auto;
+}
+
+.menu-heading {
   display: flex;
+  gap: 14px;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 2px 9px;
-  color: #f7f3e8;
-  font-size: 0.8rem;
+  margin-bottom: 16px;
+}
+
+.menu-heading h1,
+.lobby-header h2,
+.score-panel h2 {
+  margin: 0;
+  color: #ffffff;
+  line-height: 1.1;
+}
+
+.menu-heading p,
+.lobby-header p,
+.score-panel p {
+  margin: 4px 0 0;
+  color: #cfeeff;
+  line-height: 1.35;
+}
+
+.lobby-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.lobby-card {
+  display: grid;
+  min-height: 124px;
+  gap: 8px;
+  align-content: start;
+  border: 1px solid rgba(207, 238, 255, 0.16);
+  border-radius: 8px;
+  padding: 13px;
+  color: #f7fbff;
+  text-align: left;
+  background: rgba(207, 238, 255, 0.07);
+}
+
+.lobby-card:not(:disabled):hover {
+  border-color: rgba(102, 255, 204, 0.72);
+  background: rgba(102, 255, 204, 0.12);
+}
+
+.lobby-card:disabled {
+  cursor: not-allowed;
+}
+
+.lobby-card strong {
+  font-size: 1.08rem;
+}
+
+.lobby-card span {
+  color: #cfeeff;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
 }
 
-.roster-heading strong {
-  color: #e9c46a;
+.lobby-header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
 
-#rosterList {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+.player-count {
+  display: inline-block;
+  margin-bottom: 4px;
+  color: #66ffcc;
+  font-size: 0.8rem;
+  font-weight: 900;
 }
 
-.roster-slot {
+.lobby-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ghost-button,
+.ready-button,
+.team-slots button {
+  border-radius: 7px;
+  font-weight: 850;
+}
+
+.ghost-button,
+.ready-button {
+  min-width: 92px;
+  height: 40px;
+  padding: 0 14px;
+}
+
+.ghost-button {
+  color: #f7fbff;
+  background: rgba(207, 238, 255, 0.1);
+}
+
+.ready-button {
+  color: #001015;
+  background: #66ffcc;
+}
+
+.ready-button.is-ready {
+  color: #001015;
+  background: #ffd700;
+}
+
+.slot-board {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) 46px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.team-slots {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(207, 238, 255, 0.13);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(0, 8, 15, 0.38);
+}
+
+.team-slots h3 {
+  margin: 0 0 3px;
+  color: #ffffff;
+  font-size: 0.92rem;
+  text-transform: uppercase;
+}
+
+.team-blue h3 {
+  color: #00a8ff;
+}
+
+.team-red h3 {
+  color: #ff4757;
+}
+
+.team-slots button {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 72px;
   gap: 8px;
   align-items: center;
-  min-height: 34px;
+  min-height: 46px;
   border: 1px solid rgba(247, 243, 232, 0.11);
   border-radius: 7px;
-  padding: 5px 7px;
+  padding: 8px 9px;
   color: #f7f3e8;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(207, 238, 255, 0.06);
+  text-align: left;
 }
 
-.roster-slot.is-open {
-  color: #9aa79e;
-  background: rgba(255, 255, 255, 0.035);
+.team-slots button.is-open {
+  color: #8fa8b4;
+  background: rgba(207, 238, 255, 0.035);
 }
 
-.roster-slot.is-local {
+.team-slots button.is-local {
   border-color: rgba(255, 255, 255, 0.65);
 }
 
-.roster-slot.team-gold {
-  box-shadow: inset 3px 0 #f5b642;
+.team-slots button.team-blue {
+  box-shadow: inset 3px 0 #00a8ff;
 }
 
-.roster-slot.team-blue {
-  box-shadow: inset 3px 0 #2a9df4;
+.team-slots button.team-red {
+  box-shadow: inset 3px 0 #ff4757;
 }
 
-.slot-badge {
-  display: inline-grid;
-  width: 28px;
-  height: 24px;
-  place-items: center;
-  border-radius: 5px;
-  color: #11120f;
-  font-size: 0.72rem;
+.team-slots button:not(:disabled):hover {
+  border-color: rgba(102, 255, 204, 0.65);
+  background: rgba(102, 255, 204, 0.1);
+}
+
+.slot-role {
+  color: #cfeeff;
+  font-size: 0.76rem;
   font-weight: 900;
-  background: #d5ddc8;
+  text-transform: uppercase;
 }
 
 .slot-name {
@@ -288,9 +412,9 @@ input:focus-visible {
   white-space: nowrap;
 }
 
-.slot-team {
+.slot-state {
   overflow: hidden;
-  color: #c8d8d1;
+  color: #cfeeff;
   font-size: 0.7rem;
   font-weight: 800;
   text-align: right;
@@ -299,13 +423,37 @@ input:focus-visible {
   white-space: nowrap;
 }
 
+.slot-state.is-ready {
+  color: #66ffcc;
+}
+
+.score-overlay {
+  background: rgba(0, 8, 15, 0.3);
+}
+
+.score-panel {
+  width: min(520px, 100%);
+  text-align: center;
+}
+
+.score-panel h2 {
+  font-size: 2rem;
+}
+
+.score-panel strong {
+  display: block;
+  margin-top: 12px;
+  color: #66ffcc;
+  font-size: 1rem;
+}
+
 .touch-controls {
   position: absolute;
   right: 16px;
   bottom: 18px;
   left: 16px;
   display: none;
-  grid-template-columns: 76px 76px minmax(112px, 152px);
+  grid-template-columns: 76px 76px minmax(112px, 152px) 76px;
   gap: 10px;
   justify-content: center;
   pointer-events: none;
@@ -318,19 +466,19 @@ input:focus-visible {
   color: #ffffff;
   font-size: 1.05rem;
   font-weight: 900;
-  background: rgba(17, 18, 15, 0.84);
+  background: rgba(0, 8, 15, 0.84);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.26);
   pointer-events: auto;
   touch-action: none;
 }
 
 .touch-controls button[data-control="jump"] {
-  color: #11120f;
-  background: #06d6a0;
+  color: #001015;
+  background: #66ffcc;
 }
 
 @media (hover: none), (pointer: coarse) {
-  .touch-controls {
+  body[data-phase="playing"] .touch-controls {
     display: grid;
   }
 }
@@ -340,14 +488,8 @@ input:focus-visible {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  .join-panel {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    justify-self: start;
-  }
-
-  .roster-panel {
-    top: 148px;
+  .lobby-cards {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -364,15 +506,11 @@ input:focus-visible {
   }
 
   .brand-lockup,
-  .join-panel,
   .connection-pill,
-  .roster-panel {
+  .menu-panel,
+  .lobby-panel,
+  .score-panel {
     border-radius: 7px;
-  }
-
-  .join-panel {
-    width: 100%;
-    grid-template-columns: minmax(78px, 0.8fr) minmax(112px, 1fr) 74px;
   }
 
   .connection-pill {
@@ -381,20 +519,35 @@ input:focus-visible {
     padding: 10px 12px;
   }
 
-  .roster-panel {
-    top: auto;
-    right: 10px;
-    bottom: 92px;
-    left: 10px;
-    width: auto;
-    max-height: 218px;
+  .menu-overlay,
+  .lobby-overlay,
+  .score-overlay {
+    padding: 154px 10px 86px;
+  }
+
+  .lobby-header,
+  .slot-board {
+    grid-template-columns: 1fr;
+  }
+
+  .lobby-header {
+    align-items: stretch;
+  }
+
+  .lobby-actions {
+    width: 100%;
+  }
+
+  .ghost-button,
+  .ready-button {
+    flex: 1;
   }
 
   .touch-controls {
     right: 10px;
     bottom: 12px;
     left: 10px;
-    grid-template-columns: 64px 64px minmax(96px, 134px);
+    grid-template-columns: 54px 54px minmax(86px, 116px) 54px;
   }
 
   .touch-controls button {

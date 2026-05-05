@@ -3,33 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#11120f" />
-    <title>Physics Nook Arena</title>
+    <meta name="theme-color" content="#00080f" />
+    <title>Ocean Queen</title>
   </head>
   <body>
     <main class="game-shell">
-      <canvas id="gameCanvas" aria-label="Physics Nook Arena game view"></canvas>
+      <canvas id="gameCanvas" aria-label="Ocean Queen game view"></canvas>
 
       <header class="topbar">
         <div class="brand-lockup">
           <span class="brand-mark" aria-hidden="true"></span>
           <div class="brand-copy">
-            <strong>Physics Nook Arena</strong>
+            <strong>Ocean Queen</strong>
             <span id="endpointText">ws://localhost:8788</span>
           </div>
         </div>
-
-        <form id="joinForm" class="join-panel">
-          <label>
-            <span>Room</span>
-            <input id="roomInput" name="room" autocomplete="off" maxlength="6" value="ARENA" />
-          </label>
-          <label>
-            <span>Alias</span>
-            <input id="nameInput" name="name" autocomplete="nickname" maxlength="18" placeholder="Player" />
-          </label>
-          <button id="joinButton" type="submit">Join</button>
-        </form>
 
         <div class="connection-pill" data-state="offline" id="connectionPill">
           <span class="status-dot" aria-hidden="true"></span>
@@ -37,18 +25,70 @@
         </div>
       </header>
 
-      <aside class="roster-panel" aria-live="polite">
-        <div class="roster-heading">
-          <span>Roster</span>
-          <strong id="playerCount">0/10</strong>
+      <section id="menuOverlay" class="menu-overlay">
+        <div class="menu-panel">
+          <div class="menu-heading">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <div>
+              <h1>Ocean Queen</h1>
+              <p>Choose one of three open lobbies.</p>
+            </div>
+          </div>
+          <label class="alias-field">
+            <span>Alias</span>
+            <input id="nameInput" name="name" autocomplete="nickname" maxlength="18" placeholder="Player" />
+          </label>
+          <div id="lobbyCards" class="lobby-cards" aria-live="polite"></div>
         </div>
-        <ol id="rosterList"></ol>
-      </aside>
+      </section>
+
+      <section id="lobbyOverlay" class="lobby-overlay" hidden>
+        <div class="lobby-panel">
+          <header class="lobby-header">
+            <div>
+              <span id="playerCount" class="player-count">0/10</span>
+              <h2 id="lobbyName">Lobby</h2>
+              <p id="lobbyStatus">Choose a slot and ready up.</p>
+            </div>
+            <div class="lobby-actions">
+              <button id="leaveButton" type="button" class="ghost-button">Leave</button>
+              <button id="readyButton" type="button" class="ready-button">Ready</button>
+            </div>
+          </header>
+          <div class="slot-board">
+            <div class="team-slots team-blue">
+              <h3>Blue</h3>
+              <button type="button" data-slot="0"></button>
+              <button type="button" data-slot="1"></button>
+              <button type="button" data-slot="2"></button>
+              <button type="button" data-slot="3"></button>
+              <button type="button" data-slot="4"></button>
+            </div>
+            <div class="team-slots team-red">
+              <h3>Red</h3>
+              <button type="button" data-slot="5"></button>
+              <button type="button" data-slot="6"></button>
+              <button type="button" data-slot="7"></button>
+              <button type="button" data-slot="8"></button>
+              <button type="button" data-slot="9"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scoreOverlay" class="score-overlay" hidden>
+        <div class="score-panel">
+          <h2 id="scoreTitle">Round Complete</h2>
+          <p id="scoreStats"></p>
+          <strong id="scoreCountdown"></strong>
+        </div>
+      </section>
 
       <nav class="touch-controls" aria-label="Movement controls">
         <button type="button" data-control="left" aria-label="Move left">&lt;</button>
         <button type="button" data-control="right" aria-label="Move right">&gt;</button>
         <button type="button" data-control="jump" aria-label="Jump">JUMP</button>
+        <button type="button" data-control="down" aria-label="Drop down">DROP</button>
       </nav>
     </main>
 

@@ -35,6 +35,8 @@ export const GAME_CONFIG = {
   },
 } as const;
 
+export const PLAYER_NAME_MAX_LENGTH = 8;
+
 export const LOBBY_CODES = ['LOBBY1', 'LOBBY2', 'LOBBY3'] as const;
 
 export const LOBBY_NAMES: Record<(typeof LOBBY_CODES)[number], string> = {
@@ -495,13 +497,13 @@ export const normalizeRoomCode = (value?: string): string => {
 };
 
 export const sanitizePlayerName = (value: unknown, fallback = 'Player'): string => {
-  const safeFallback = fallback.trim().replace(/\s+/g, '').slice(0, 3) || 'PLY';
+  const safeFallback = fallback.trim().replace(/\s+/g, '').slice(0, PLAYER_NAME_MAX_LENGTH) || 'PLY';
 
   if (typeof value !== 'string') {
     return safeFallback;
   }
 
-  const name = value.trim().replace(/\s+/g, '').slice(0, 3);
+  const name = value.trim().replace(/\s+/g, '').slice(0, PLAYER_NAME_MAX_LENGTH);
   return name || safeFallback;
 };
 

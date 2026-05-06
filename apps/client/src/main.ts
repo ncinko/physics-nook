@@ -6,6 +6,7 @@ import {
   GAME_MAP,
   LOBBY_CODES,
   LOBBY_NAMES,
+  PLAYER_NAME_MAX_LENGTH,
   TEAM_BASE_COLORS,
   TEAM_COLORS,
   TEAM_DARK_COLORS,
@@ -22,6 +23,7 @@ import type {
   LobbySummary,
   PlayerRole,
   PlayerSnapshot,
+  Rect,
   RoomPlayer,
   RoomSnapshot,
   ServerToClientMessage,
@@ -43,6 +45,39 @@ type Particle = {
   size: number;
 };
 
+type PracticeGoalId =
+  | 'worker-jump'
+  | 'worker-hold-jump'
+  | 'worker-double-jump'
+  | 'worker-pickup-pearl'
+  | 'worker-deliver-pearl'
+  | 'queen-jump-repeatedly'
+  | 'queen-dive-down'
+  | 'queen-attack-behind'
+  | 'queen-attack-above';
+
+type PracticeGoal = {
+  id: PracticeGoalId;
+  role: 'worker' | 'queen';
+  label: string;
+};
+
+type PracticeState = {
+  active: boolean;
+  goalIndex: number;
+  snapshot: WorldSnapshot;
+  player: PlayerSnapshot;
+  enemy: PlayerSnapshot | null;
+  previousInput: InputState;
+  canDoubleJump: boolean;
+  jumpHoldFrames: number;
+  jumpStartY: number | null;
+  feedback: string;
+  completed: Record<PracticeGoalId, boolean>;
+  repeatedQueenJumps: number;
+  autoAdvanceAt: number | null;
+};
+
 const INPUT_FLUSH_MS = 1000 / 30;
 const PING_INTERVAL_MS = 2000;
 const SNAPSHOT_BUFFER_MAX = 10;
@@ -57,11 +92,21 @@ const MANATEE_WIDTH = GAME_MAP.snail.width;
 const MANATEE_HEIGHT = GAME_MAP.snail.height;
 const MAX_LIVES = GAME_CONFIG.player.queenLives;
 const MAX_PEARLS = GAME_CONFIG.objective.berriesToWin;
-const PLAYER_NAME_MAX_LENGTH = 3;
+const PRACTICE_PLAYER_ID = 'practice-player';
+const PRACTICE_ENEMY_ID = 'practice-enemy';
+const PRACTICE_ROOM_CODE = 'PRACTICE';
+const PRACTICE_ADVANCE_DELAY_MS = 700;
 
 const canvas = document.getElementById('gameCanvas') as HTMLCanvasElement | null;
+const menuQueen = document.getElementById('menuQueen') as HTMLCanvasElement | null;
 const menuManatee = document.getElementById('menuManatee') as HTMLCanvasElement | null;
 const nameInput = document.getElementById('nameInput') as HTMLInputElement | null;
+const howToButton = document.getElementById('howToButton') as HTMLButtonElement | null;
+const practiceButton = document.getElementById('practiceButton') as HTMLButtonElement | null;
+const howToPanel = document.getElementById('howToPanel') as HTMLDivElement | null;
+const howToDefeat = document.getElementById('howToDefeat') as HTMLCanvasElement | null;
+const howToPearls = document.getElementById('howToPearls') as HTMLCanvasElement | null;
+const howToRide = document.getElementById('howToRide') as HTMLCanvasElement | null;
 const statusText = document.getElementById('statusText');
 const connectionPill = document.getElementById('connectionPill');
 const playerCount = document.getElementById('playerCount');
@@ -76,11 +121,23 @@ const scoreOverlay = document.getElementById('scoreOverlay');
 const scoreTitle = document.getElementById('scoreTitle');
 const scoreStats = document.getElementById('scoreStats');
 const scoreCountdown = document.getElementById('scoreCountdown');
+const practiceOverlay = document.getElementById('practiceOverlay');
+const practicePhase = document.getElementById('practicePhase');
+const practiceGoal = document.getElementById('practiceGoal');
+const practiceFeedback = document.getElementById('practiceFeedback');
+const practiceLeaveButton = document.getElementById('practiceLeaveButton') as HTMLButtonElement | null;
 
 if (
   !canvas ||
+  !menuQueen ||
   !menuManatee ||
   !nameInput ||
+  !howToButton ||
+  !practiceButton ||
+  !howToPanel ||
+  !howToDefeat ||
+  !howToPearls ||
+  !howToRide ||
   !statusText ||
   !connectionPill ||
   !playerCount ||
@@ -94,7 +151,12 @@ if (
   !scoreOverlay ||
   !scoreTitle ||
   !scoreStats ||
-  !scoreCountdown
+  !scoreCountdown ||
+  !practiceOverlay ||
+  !practicePhase ||
+  !practiceGoal ||
+  !practiceFeedback ||
+  !practiceLeaveButton
 ) {
   throw new Error('Game client markup is missing required elements.');
 }
@@ -104,13 +166,29 @@ if (!context) {
   throw new Error('Canvas 2D is unavailable.');
 }
 
+const menuQueenContext = menuQueen.getContext('2d');
+if (!menuQueenContext) {
+  throw new Error('Menu queen canvas 2D is unavailable.');
+}
+
 const menuManateeContext = menuManatee.getContext('2d');
 if (!menuManateeContext) {
   throw new Error('Menu manatee canvas 2D is unavailable.');
 }
 
+const howToDefeatContext = howToDefeat.getContext('2d');
+const howToPearlsContext = howToPearls.getContext('2d');
+const howToRideContext = howToRide.getContext('2d');
+if (!howToDefeatContext || !howToPearlsContext || !howToRideContext) {
+  throw new Error('How to play canvas 2D is unavailable.');
+}
+
 context.imageSmoothingEnabled = false;
+menuQueenContext.imageSmoothingEnabled = false;
 menuManateeContext.imageSmoothingEnabled = false;
+howToDefeatContext.imageSmoothingEnabled = false;
+howToPearlsContext.imageSmoothingEnabled = false;
+howToRideContext.imageSmoothingEnabled = false;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const input: InputState = { ...DEFAULT_INPUT };
@@ -130,6 +208,19 @@ let connectionState: ConnectionState = 'offline';
 let frameCount = 0;
 let frameDelta = 1;
 let lastFrameAt = 0;
+let practiceState: PracticeState | null = null;
+
+const practiceGoals: PracticeGoal[] = [
+  { id: 'worker-jump', role: 'worker', label: 'jump' },
+  { id: 'worker-hold-jump', role: 'worker', label: 'hold to jump higher' },
+  { id: 'worker-double-jump', role: 'worker', label: 'double jump' },
+  { id: 'worker-pickup-pearl', role: 'worker', label: 'pick up pearl' },
+  { id: 'worker-deliver-pearl', role: 'worker', label: 'deliver pearl' },
+  { id: 'queen-jump-repeatedly', role: 'queen', label: 'jump repeatedly' },
+  { id: 'queen-dive-down', role: 'queen', label: 'dive down' },
+  { id: 'queen-attack-behind', role: 'queen', label: 'attack from behind' },
+  { id: 'queen-attack-above', role: 'queen', label: 'attack from above' },
+];
 
 const clashFx: { x: number; y: number; framesLeft: number; lifeFrames: number }[] = [];
 const particles: Particle[] = [];
@@ -390,17 +481,19 @@ const sendMessage = (message: ClientToServerMessage): void => {
 };
 
 const sendInput = (): void => {
+  if (practiceState?.active) return;
   if (!localPlayerId || connectionState !== 'online' || latestSnapshot?.phase !== 'playing') return;
   inputSeq += 1;
   sendMessage({ type: 'input', seq: inputSeq, input: { ...input } });
 };
 
 const setUiPhase = (): void => {
-  const phase = room?.phase ?? latestSnapshot?.phase ?? 'menu';
+  const phase = practiceState?.active ? 'playing' : (room?.phase ?? latestSnapshot?.phase ?? 'menu');
   document.body.dataset.phase = phase;
-  menuOverlay.hidden = Boolean(room);
-  lobbyOverlay.hidden = !room || room.phase !== 'lobby';
-  scoreOverlay.hidden = !(room?.phase === 'score' || latestSnapshot?.phase === 'score');
+  menuOverlay.hidden = Boolean(room || practiceState?.active);
+  lobbyOverlay.hidden = !room || room.phase !== 'lobby' || Boolean(practiceState?.active);
+  scoreOverlay.hidden = Boolean(practiceState?.active) || !(room?.phase === 'score' || latestSnapshot?.phase === 'score');
+  practiceOverlay.hidden = !practiceState?.active;
 };
 
 const lobbyStatusText = (summary: LobbySummary): string => {
@@ -614,10 +707,14 @@ const connect = (): void => {
   nextSocket.addEventListener('close', () => {
     if (socket !== nextSocket) return;
 
-    setConnectionState('offline', 'Offline');
-    localPlayerId = null;
-    room = null;
-    clearSnapshotState();
+    if (practiceState?.active) {
+      setConnectionState('online', 'Practice');
+    } else {
+      setConnectionState('offline', 'Offline');
+      localPlayerId = null;
+      room = null;
+      clearSnapshotState();
+    }
     socket = null;
     setUiPhase();
     renderLobby();
@@ -672,6 +769,12 @@ const resetInput = (): void => {
   if (changed) sendInput();
 };
 
+const isEditableTarget = (target: EventTarget | null): boolean =>
+  target instanceof HTMLInputElement ||
+  target instanceof HTMLTextAreaElement ||
+  target instanceof HTMLSelectElement ||
+  (target instanceof HTMLElement && target.isContentEditable);
+
 const actionForKey = (event: KeyboardEvent): keyof InputState | null => {
   if (event.code === 'ArrowLeft' || event.code === 'KeyA') return 'left';
   if (event.code === 'ArrowRight' || event.code === 'KeyD') return 'right';
@@ -681,6 +784,8 @@ const actionForKey = (event: KeyboardEvent): keyof InputState | null => {
 };
 
 document.addEventListener('keydown', (event) => {
+  if (isEditableTarget(event.target)) return;
+
   const action = actionForKey(event);
   if (!action) return;
 
@@ -689,6 +794,8 @@ document.addEventListener('keydown', (event) => {
 });
 
 document.addEventListener('keyup', (event) => {
+  if (isEditableTarget(event.target)) return;
+
   const action = actionForKey(event);
   if (!action) return;
 
@@ -704,6 +811,447 @@ nameInput.addEventListener('input', () => {
     nameInput.value = sanitized;
   }
 });
+
+howToButton.addEventListener('click', () => {
+  const isOpening = howToPanel.hidden;
+  howToPanel.hidden = !isOpening;
+  howToButton.setAttribute('aria-expanded', String(isOpening));
+});
+
+const makePracticeProgress = (): Record<PracticeGoalId, boolean> => ({
+  'worker-jump': false,
+  'worker-hold-jump': false,
+  'worker-double-jump': false,
+  'worker-pickup-pearl': false,
+  'worker-deliver-pearl': false,
+  'queen-jump-repeatedly': false,
+  'queen-dive-down': false,
+  'queen-attack-behind': false,
+  'queen-attack-above': false,
+});
+
+const makePracticePlayer = (role: PlayerRole, team: Team, x: number, y: number, id = PRACTICE_PLAYER_ID): PlayerSnapshot => ({
+  id,
+  name: id === PRACTICE_PLAYER_ID ? (role === 'queen' ? 'Queen' : 'Worker') : 'Target',
+  slot: team === 'blue' ? 1 : 6,
+  team,
+  role,
+  ready: true,
+  color: teamColor(team),
+  connected: true,
+  x,
+  y,
+  vx: 0,
+  vy: 0,
+  facing: 1,
+  isGrounded: false,
+  alive: true,
+  carriedBerryId: null,
+  speedBoost: false,
+  lives: MAX_LIVES,
+  beingEaten: false,
+  upgradeProgress: 0,
+  upgradeGateId: null,
+  invincibleUntil: 0,
+  respawnsAt: null,
+  lastInputSeq: 0,
+});
+
+const makePracticeClams = (centerPearls: number): WorldSnapshot['clamshells'] =>
+  GAME_MAP.clamShells.map((clam) => ({
+    ...clam,
+    pearlsInside: clam.id === 'clam-center' ? centerPearls : 0,
+  }));
+
+const makePracticeSnapshot = (
+  player: PlayerSnapshot,
+  enemy: PlayerSnapshot | null,
+  centerPearls: number,
+  blueScore = 0,
+): WorldSnapshot => ({
+  type: 'snapshot',
+  roomCode: PRACTICE_ROOM_CODE,
+  tick: 0,
+  serverTime: performance.now(),
+  phase: 'playing',
+  timeElapsed: 0,
+  players: enemy ? [player, enemy] : [player],
+  berries: [],
+  scores: { blue: blueScore, red: 0 },
+  queenKills: { blue: 0, red: 0 },
+  snail: {
+    x: GAME_MAP.snail.startX,
+    y: GAME_MAP.snail.y,
+    riderId: null,
+    eatingTargetId: null,
+    direction: 0,
+    facing: -1,
+  },
+  hiveCells: [],
+  clamshells: makePracticeClams(centerPearls),
+  upgradeGates: GAME_MAP.upgradeGates.map((gate) => ({ ...gate })),
+  clashEvents: [],
+  jumpEvents: [],
+  deathEvents: [],
+  winner: null,
+  roundEndsAt: null,
+});
+
+const getPracticeGoal = (): PracticeGoal | null =>
+  practiceState ? (practiceGoals[practiceState.goalIndex] ?? null) : null;
+
+const syncPracticeSnapshot = (state: PracticeState): void => {
+  state.snapshot.tick += 1;
+  state.snapshot.serverTime = performance.now();
+  state.snapshot.timeElapsed += frameDelta / 60;
+  state.snapshot.players = state.enemy ? [state.player, state.enemy] : [state.player];
+  state.snapshot.snail.y = GAME_MAP.snail.y + Math.sin(frameCount / 24) * 12;
+  latestSnapshot = state.snapshot;
+  snapshotBuffer = [state.snapshot];
+  serverClockOffsetMs = null;
+};
+
+const updatePracticePanel = (): void => {
+  const state = practiceState;
+  if (!state) return;
+
+  const goal = getPracticeGoal();
+  if (!goal) {
+    practicePhase.textContent = 'Complete';
+    practiceGoal.textContent = 'Practice complete';
+    practiceFeedback.textContent = 'All goals complete.';
+    return;
+  }
+
+  practicePhase.textContent = `${goal.role} ${state.goalIndex + 1}/${practiceGoals.length}`;
+  practiceGoal.textContent = goal.label;
+  practiceFeedback.textContent = state.feedback;
+};
+
+const setupPracticeGoal = (state: PracticeState): void => {
+  const goal = practiceGoals[state.goalIndex];
+  resetInput();
+  state.previousInput = { ...DEFAULT_INPUT };
+  state.canDoubleJump = true;
+  state.jumpHoldFrames = 0;
+  state.jumpStartY = null;
+  state.repeatedQueenJumps = 0;
+  state.autoAdvanceAt = null;
+  state.feedback = 'Complete the goal to continue.';
+  state.completed[goal.id] = false;
+
+  let player = makePracticePlayer(goal.role, 'blue', 850, 1008);
+  let enemy: PlayerSnapshot | null = null;
+  let centerPearls = 0;
+  let blueScore = 0;
+
+  if (goal.id === 'worker-pickup-pearl') {
+    player = makePracticePlayer('worker', 'blue', 850, 848);
+    centerPearls = 3;
+  } else if (goal.id === 'worker-deliver-pearl') {
+    player = makePracticePlayer('worker', 'blue', 700, 148);
+    player.carriedBerryId = 'held';
+  } else if (goal.id === 'queen-dive-down') {
+    player = makePracticePlayer('queen', 'blue', 900, 488);
+  } else if (goal.id === 'queen-attack-behind') {
+    player = makePracticePlayer('queen', 'blue', 760, 1008);
+    enemy = makePracticePlayer('worker', 'red', 850, 1008, PRACTICE_ENEMY_ID);
+    enemy.facing = 1;
+  } else if (goal.id === 'queen-attack-above') {
+    player = makePracticePlayer('queen', 'blue', 900, 650);
+    enemy = makePracticePlayer('worker', 'red', 900, 848, PRACTICE_ENEMY_ID);
+  }
+
+  state.player = player;
+  state.enemy = enemy;
+  state.snapshot = makePracticeSnapshot(player, enemy, centerPearls, blueScore);
+  syncPracticeSnapshot(state);
+  updatePracticePanel();
+};
+
+const startPractice = (): void => {
+  pendingJoin = null;
+  if (room) {
+    sendMessage({ type: 'leaveLobby' });
+  }
+  room = null;
+  clearSnapshotState();
+  resetInput();
+  howToPanel.hidden = true;
+  howToButton.setAttribute('aria-expanded', 'false');
+
+  const player = makePracticePlayer('worker', 'blue', 850, 1008);
+  const snapshot = makePracticeSnapshot(player, null, 0);
+  practiceState = {
+    active: true,
+    goalIndex: 0,
+    snapshot,
+    player,
+    enemy: null,
+    previousInput: { ...DEFAULT_INPUT },
+    canDoubleJump: true,
+    jumpHoldFrames: 0,
+    jumpStartY: null,
+    feedback: 'Complete the goal to continue.',
+    completed: makePracticeProgress(),
+    repeatedQueenJumps: 0,
+    autoAdvanceAt: null,
+  };
+
+  localPlayerId = PRACTICE_PLAYER_ID;
+  setConnectionState('online', 'Practice');
+  setupPracticeGoal(practiceState);
+  setUiPhase();
+};
+
+const stopPractice = (): void => {
+  practiceState = null;
+  localPlayerId = null;
+  clearSnapshotState();
+  resetInput();
+  setConnectionState(socket?.readyState === WebSocket.OPEN ? 'online' : 'offline', socket?.readyState === WebSocket.OPEN ? 'Choose lobby' : 'Offline');
+  setUiPhase();
+  renderLobbyCards();
+};
+
+const currentPracticeGoalComplete = (state: PracticeState): boolean => {
+  const goal = practiceGoals[state.goalIndex];
+  return goal ? state.completed[goal.id] : false;
+};
+
+const advancePracticeGoal = (): void => {
+  const state = practiceState;
+  if (!state) return;
+
+  if (!currentPracticeGoalComplete(state)) {
+    return;
+  }
+
+  state.autoAdvanceAt = null;
+  state.goalIndex += 1;
+  if (state.goalIndex >= practiceGoals.length) {
+    state.feedback = 'All goals complete.';
+    updatePracticePanel();
+    return;
+  }
+
+  setupPracticeGoal(state);
+};
+
+const practiceRect = (player: PlayerSnapshot): Rect => ({
+  x: player.x,
+  y: player.y,
+  width: PLAYER_WIDTH,
+  height: PLAYER_HEIGHT,
+});
+
+const rectsOverlap = (a: Rect, b: Rect): boolean =>
+  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+const practicePlatformLanding = (
+  player: PlayerSnapshot,
+  platform: GameMap['platforms'][number],
+  previousY: number,
+): boolean =>
+  player.x + PLAYER_WIDTH > platform.x &&
+  player.x < platform.x + platform.width &&
+  player.y + PLAYER_HEIGHT >= platform.y &&
+  previousY + PLAYER_HEIGHT <= platform.y + 8;
+
+const checkPracticeGround = (player: PlayerSnapshot, snapshot: WorldSnapshot): boolean => {
+  for (const platform of GAME_MAP.platforms) {
+    if (
+      player.x + PLAYER_WIDTH > platform.x &&
+      player.x < platform.x + platform.width &&
+      Math.abs(player.y + PLAYER_HEIGHT - platform.y) < 4
+    ) {
+      return true;
+    }
+  }
+
+  const snail = snapshot.snail;
+  return (
+    player.x + PLAYER_WIDTH > snail.x &&
+    player.x < snail.x + GAME_MAP.snail.width &&
+    Math.abs(player.y + PLAYER_HEIGHT - snail.y) < 4
+  );
+};
+
+const completePracticeGoal = (state: PracticeState, id: PracticeGoalId): void => {
+  if (practiceGoals[state.goalIndex]?.id !== id) return;
+  if (state.completed[id]) return;
+
+  state.completed[id] = true;
+  state.feedback = 'Nice.';
+  state.autoAdvanceAt = performance.now() + PRACTICE_ADVANCE_DELAY_MS;
+  updatePracticePanel();
+};
+
+const processPracticeInteractions = (state: PracticeState): void => {
+  const player = state.player;
+
+  if (player.role === 'worker' && !player.carriedBerryId) {
+    for (const clam of state.snapshot.clamshells) {
+      if (clam.pearlsInside > 0 && rectsOverlap(practiceRect(player), { x: clam.x, y: clam.y, width: 50, height: 30 })) {
+        clam.pearlsInside -= 1;
+        player.carriedBerryId = 'held';
+        completePracticeGoal(state, 'worker-pickup-pearl');
+        break;
+      }
+    }
+  }
+
+  if (player.role === 'worker' && player.carriedBerryId) {
+    const blueBase = GAME_MAP.bases.find((base) => base.team === 'blue');
+    if (blueBase && rectsOverlap(practiceRect(player), blueBase)) {
+      player.carriedBerryId = null;
+      state.snapshot.scores.blue += 1;
+      completePracticeGoal(state, 'worker-deliver-pearl');
+    }
+  }
+
+  const enemy = state.enemy;
+  if (!enemy?.alive || !rectsOverlap(practiceRect(player), practiceRect(enemy))) return;
+
+  const attackedFromBehind =
+    player.role === 'queen' &&
+    player.facing === enemy.facing &&
+    ((player.facing === 1 && player.x < enemy.x) || (player.facing === -1 && player.x > enemy.x));
+  const attackedFromAbove = player.role === 'queen' && player.y < enemy.y - 16 && player.vy > 0;
+  const goalId = practiceGoals[state.goalIndex]?.id;
+
+  if (goalId === 'queen-attack-behind' && attackedFromBehind) {
+    enemy.alive = false;
+    clashFx.push({ x: enemy.x + PLAYER_WIDTH / 2, y: enemy.y + PLAYER_HEIGHT / 2, framesLeft: 18, lifeFrames: 18 });
+    completePracticeGoal(state, 'queen-attack-behind');
+  } else if (goalId === 'queen-attack-above' && attackedFromAbove) {
+    enemy.alive = false;
+    player.vy = -GAME_CONFIG.player.flapVelocity;
+    clashFx.push({ x: enemy.x + PLAYER_WIDTH / 2, y: enemy.y + PLAYER_HEIGHT / 2, framesLeft: 18, lifeFrames: 18 });
+    completePracticeGoal(state, 'queen-attack-above');
+  }
+};
+
+const updatePractice = (): void => {
+  const state = practiceState;
+  if (!state?.active) return;
+
+  if (state.autoAdvanceAt !== null && performance.now() >= state.autoAdvanceAt) {
+    advancePracticeGoal();
+    return;
+  }
+
+  const player = state.player;
+  const goal = getPracticeGoal();
+  if (!goal) {
+    syncPracticeSnapshot(state);
+    return;
+  }
+
+  const dt = frameDelta;
+  const onGround = checkPracticeGround(player, state.snapshot);
+  const jumpPressed = input.jump;
+  const jumpJustPressed = jumpPressed && !state.previousInput.jump;
+  const jumpReleased = !jumpPressed && state.previousInput.jump;
+
+  const currentSpeed = player.speedBoost ? GAME_CONFIG.player.maxSpeed * GAME_CONFIG.player.speedBoostMultiplier : GAME_CONFIG.player.maxSpeed;
+  if (input.left) {
+    player.vx = -currentSpeed;
+    player.facing = -1;
+  } else if (input.right) {
+    player.vx = currentSpeed;
+    player.facing = 1;
+  } else {
+    player.vx = 0;
+  }
+
+  if (onGround) {
+    state.canDoubleJump = true;
+  }
+
+  if (jumpJustPressed) {
+    let jumped = false;
+    if (player.role === 'queen') {
+      player.vy = -GAME_CONFIG.player.flapVelocity;
+      jumped = true;
+      state.repeatedQueenJumps += 1;
+      if (state.repeatedQueenJumps >= 3) {
+        completePracticeGoal(state, 'queen-jump-repeatedly');
+      }
+    } else if (onGround) {
+      player.vy = -GAME_CONFIG.player.jumpVelocity;
+      state.jumpHoldFrames = 0;
+      state.jumpStartY = player.y;
+      jumped = true;
+      completePracticeGoal(state, 'worker-jump');
+    } else if (state.canDoubleJump) {
+      player.vy = -(GAME_CONFIG.player.jumpVelocity * 0.7);
+      state.canDoubleJump = false;
+      jumped = true;
+      completePracticeGoal(state, 'worker-double-jump');
+    }
+
+    if (jumped) {
+      state.snapshot.jumpEvents.push({
+        x: player.x + PLAYER_WIDTH / 2,
+        y: player.y + PLAYER_HEIGHT,
+        team: player.team,
+      });
+    }
+  } else if (jumpReleased && player.vy < 0 && player.role === 'worker') {
+    player.vy *= 0.4;
+  }
+
+  if (jumpPressed && player.role === 'worker' && state.jumpStartY !== null && player.vy < 0) {
+    state.jumpHoldFrames += dt;
+    if (state.jumpHoldFrames >= 16 && state.jumpStartY - player.y > 46) {
+      completePracticeGoal(state, 'worker-hold-jump');
+    }
+  }
+
+  if (player.role === 'queen' && input.down && !onGround) {
+    player.vy = Math.min(player.vy + GAME_CONFIG.player.gravity * 4 * dt, 18);
+    if (player.vy > 9) {
+      completePracticeGoal(state, 'queen-dive-down');
+    }
+  } else {
+    player.vy = Math.min(player.vy + GAME_CONFIG.player.gravity * dt, GAME_CONFIG.player.terminalVelocity);
+  }
+
+  const previousY = player.y;
+  player.x += player.vx * dt;
+  player.y += player.vy * dt;
+
+  if (player.vy > 0) {
+    for (const platform of GAME_MAP.platforms) {
+      if (practicePlatformLanding(player, platform, previousY)) {
+        player.y = platform.y - PLAYER_HEIGHT;
+        player.vy = 0;
+        break;
+      }
+    }
+  }
+
+  if (player.x > GAME_MAP.width) player.x = -PLAYER_WIDTH;
+  if (player.x + PLAYER_WIDTH < 0) player.x = GAME_MAP.width;
+  if (player.y < 0) {
+    player.y = 0;
+    player.vy = 0;
+  }
+
+  player.isGrounded = checkPracticeGround(player, state.snapshot);
+  if (player.isGrounded && !jumpPressed) {
+    state.jumpStartY = null;
+  }
+
+  processPracticeInteractions(state);
+  state.previousInput = { ...input };
+  syncPracticeSnapshot(state);
+  updatePracticePanel();
+};
+
+practiceButton.addEventListener('click', startPractice);
+practiceLeaveButton.addEventListener('click', stopPractice);
 
 document.querySelectorAll<HTMLButtonElement>('[data-control]').forEach((button) => {
   const action = button.dataset.control as keyof InputState;
@@ -817,16 +1365,16 @@ const drawCrown = (x: number, y: number, isLost: boolean, accent = '#ff4757'): v
   context.restore();
 };
 
-const drawPearl = (x: number, y: number, size = 20): void => {
+const drawPearl = (x: number, y: number, size = 20, renderContext = context): void => {
   const shadow = Math.max(2, Math.floor(size * 0.2));
   const highlight = Math.max(4, Math.floor(size * 0.4));
-  context.fillStyle = '#dfe6e9';
-  context.fillRect(x, y, size, size);
-  context.fillStyle = '#b2bec3';
-  context.fillRect(x, y + size - shadow, size, shadow);
-  context.fillRect(x + size - shadow, y, shadow, size);
-  context.fillStyle = '#ffffff';
-  context.fillRect(x + Math.floor(size * 0.2), y + Math.floor(size * 0.2), highlight, highlight);
+  renderContext.fillStyle = '#dfe6e9';
+  renderContext.fillRect(x, y, size, size);
+  renderContext.fillStyle = '#b2bec3';
+  renderContext.fillRect(x, y + size - shadow, size, shadow);
+  renderContext.fillRect(x + size - shadow, y, shadow, size);
+  renderContext.fillStyle = '#ffffff';
+  renderContext.fillRect(x + Math.floor(size * 0.2), y + Math.floor(size * 0.2), highlight, highlight);
 };
 
 const fillPixelRect = (x: number, y: number, width: number, height: number): void => {
@@ -1253,6 +1801,125 @@ const drawMenuManatee = (): void => {
   menuManateeContext.restore();
 };
 
+const drawMenuQueen = (): void => {
+  menuQueenContext.clearRect(0, 0, menuQueen.width, menuQueen.height);
+  menuQueenContext.save();
+  menuQueenContext.translate(88, 68 + Math.sin(frameCount / 18) * 2);
+  menuQueenContext.scale(1.55, 1.55);
+  drawOctopusSprite(menuQueenContext, 'red', 'queen');
+  menuQueenContext.restore();
+};
+
+const drawHowToBackdrop = (renderContext: CanvasRenderingContext2D): void => {
+  const { width, height } = renderContext.canvas;
+  renderContext.clearRect(0, 0, width, height);
+  renderContext.fillStyle = 'rgba(28, 69, 107, 0.72)';
+  renderContext.fillRect(0, 0, width, height);
+  renderContext.fillStyle = 'rgba(102, 255, 204, 0.12)';
+  renderContext.fillRect(0, height - 16, width, 16);
+  renderContext.fillStyle = 'rgba(217, 251, 255, 0.32)';
+  for (let index = 0; index < 7; index += 1) {
+    const x = positiveModulo(index * 37 - frameCount * 0.45, width + 10) - 5;
+    const y = 14 + ((index * 17) % 42);
+    renderContext.fillRect(x, y, 4, 4);
+  }
+};
+
+const drawPixelClash = (renderContext: CanvasRenderingContext2D, x: number, y: number): void => {
+  const pulse = 1 + Math.sin(frameCount / 5) * 0.16;
+  renderContext.save();
+  renderContext.translate(x, y);
+  renderContext.scale(pulse, pulse);
+  renderContext.fillStyle = '#fff4b8';
+  renderContext.fillRect(-4, -18, 8, 36);
+  renderContext.fillRect(-18, -4, 36, 8);
+  renderContext.fillStyle = '#ffea66';
+  renderContext.fillRect(-10, -10, 20, 20);
+  renderContext.fillStyle = '#ffffff';
+  renderContext.fillRect(-4, -4, 8, 8);
+  renderContext.restore();
+};
+
+const drawMiniBase = (
+  renderContext: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  team: Team,
+  pearls: number,
+): void => {
+  renderContext.fillStyle = teamBaseColor(team);
+  renderContext.fillRect(x, y, 50, 42);
+  renderContext.fillStyle = teamColor(team);
+  renderContext.fillRect(x, y + 36, 50, 6);
+
+  for (let index = 0; index < 3; index += 1) {
+    const slotX = x + 10 + index * 15;
+    renderContext.fillStyle = '#050a12';
+    renderContext.fillRect(slotX, y + 10, 12, 12);
+    if (index < pearls) {
+      drawPearl(slotX + 1, y + 11, 10, renderContext);
+    }
+  }
+};
+
+const drawHowToDefeat = (): void => {
+  drawHowToBackdrop(howToDefeatContext);
+  howToDefeatContext.save();
+  howToDefeatContext.translate(52, 58);
+  howToDefeatContext.scale(0.95, 0.95);
+  drawOctopusSprite(howToDefeatContext, 'blue', 'warrior');
+  howToDefeatContext.restore();
+
+  howToDefeatContext.save();
+  howToDefeatContext.translate(142, 58);
+  howToDefeatContext.scale(-0.95, 0.95);
+  drawOctopusSprite(howToDefeatContext, 'red', 'queen');
+  howToDefeatContext.restore();
+
+  drawPixelClash(howToDefeatContext, 100, 43);
+};
+
+const drawHowToPearls = (): void => {
+  drawHowToBackdrop(howToPearlsContext);
+  drawMiniBase(howToPearlsContext, 126, 34, 'blue', 2);
+
+  const workerX = 56 + Math.sin(frameCount / 16) * 10;
+  howToPearlsContext.save();
+  howToPearlsContext.translate(workerX, 60);
+  howToPearlsContext.scale(1.12, 1.12);
+  drawWorkerSprite(howToPearlsContext, 'blue', frameCount / 7);
+  howToPearlsContext.restore();
+
+  drawPearl(workerX - 8, 27 + Math.sin(frameCount / 10) * 3, 16, howToPearlsContext);
+};
+
+const drawHowToRide = (): void => {
+  drawHowToBackdrop(howToRideContext);
+
+  howToRideContext.save();
+  howToRideContext.translate(102, 60 + Math.sin(frameCount / 16) * 2);
+  howToRideContext.scale(0.88, 0.88);
+  drawManateeSprite(howToRideContext);
+  howToRideContext.restore();
+
+  howToRideContext.save();
+  howToRideContext.translate(96, 39 + Math.sin(frameCount / 16) * 2);
+  howToRideContext.scale(0.86, 0.86);
+  drawWorkerSprite(howToRideContext, 'blue', 0, true);
+  howToRideContext.restore();
+};
+
+const drawMenuScenes = (): void => {
+  drawMenuQueen();
+  drawMenuManatee();
+
+  if (!howToPanel.hidden) {
+    drawHowToDefeat();
+    drawHowToPearls();
+    drawHowToRide();
+  }
+};
+
 const drawManatee = (snapshot: WorldSnapshot | null): void => {
   const snail = snapshot?.snail ?? { x: GAME_MAP.snail.startX, y: GAME_MAP.snail.y, facing: -1, eatingTargetId: null };
   const baseY = GAME_MAP.snail.y;
@@ -1273,64 +1940,80 @@ const drawDroppedPearl = (pearl: BerrySnapshot): void => {
   drawPearl(pearl.x, pearl.y, 20);
 };
 
-const drawWorker = (player: PlayerSnapshot, snapshot: WorldSnapshot): void => {
-  const color = teamColor(player.team);
-  const dark = teamDarkColor(player.team);
+const drawWorkerSprite = (
+  renderContext: CanvasRenderingContext2D,
+  team: Team,
+  walkSeed = 0,
+  ridingManatee = false,
+): void => {
+  const color = teamColor(team);
+  const dark = teamDarkColor(team);
   const time = frameCount / 9;
 
-  context.fillStyle = color;
-  context.fillRect(-12, -16, 24, 6);
-  context.fillRect(-16, -10, 32, 16);
+  renderContext.fillStyle = color;
+  renderContext.fillRect(-12, -16, 24, 6);
+  renderContext.fillRect(-16, -10, 32, 16);
 
-  context.fillStyle = '#111111';
-  context.fillRect(6, -6, 6, 6);
+  renderContext.fillStyle = '#111111';
+  renderContext.fillRect(6, -6, 6, 6);
 
-  const ridingManatee = snapshot.snail.riderId === player.id;
-  const offset = ridingManatee ? Math.sin(time) * 4 : Math.sin(time + player.x) * 4;
-  context.fillStyle = dark;
-  context.fillRect(-14 + offset, 6, 6, 14);
-  context.fillRect(-4 - offset, 6, 6, 18);
-  context.fillRect(6 + offset, 6, 6, 14);
-  context.fillRect(12 - offset, 6, 6, 16);
+  const offset = ridingManatee ? Math.sin(time) * 4 : Math.sin(time + walkSeed) * 4;
+  renderContext.fillStyle = dark;
+  renderContext.fillRect(-14 + offset, 6, 6, 14);
+  renderContext.fillRect(-4 - offset, 6, 6, 18);
+  renderContext.fillRect(6 + offset, 6, 6, 14);
+  renderContext.fillRect(12 - offset, 6, 6, 16);
+};
+
+const drawWorker = (player: PlayerSnapshot, snapshot: WorldSnapshot): void => {
+  drawWorkerSprite(context, player.team, player.x, snapshot.snail.riderId === player.id);
+};
+
+const drawOctopusSprite = (
+  renderContext: CanvasRenderingContext2D,
+  team: Team,
+  role: PlayerRole,
+): void => {
+  const color = teamColor(team);
+  const dark = teamDarkColor(team);
+  const time = frameCount / 9;
+
+  renderContext.fillStyle = dark;
+  renderContext.fillRect(-18, -22, 36, 26);
+  renderContext.fillStyle = color;
+  renderContext.fillRect(-16, -20, 32, 22);
+  renderContext.fillRect(-20, -2, 40, 12);
+
+  renderContext.fillStyle = '#ffffff';
+  renderContext.fillRect(4, -12, 10, 8);
+  renderContext.fillStyle = '#000000';
+  renderContext.fillRect(6, -10, 6, 6);
+
+  const tentacleOffset = Math.sin(time * 2) * 3;
+  renderContext.fillStyle = color;
+  renderContext.fillRect(-18, 10, 8, 10 + tentacleOffset);
+  renderContext.fillRect(-6, 10, 8, 14 - tentacleOffset);
+  renderContext.fillRect(6, 10, 8, 12 + tentacleOffset);
+  renderContext.fillRect(16, 10, 8, 10 - tentacleOffset);
+
+  renderContext.fillStyle = '#ffd700';
+  renderContext.fillRect(12, -2, 42, 6);
+  renderContext.fillRect(48, -16, 6, 32);
+  renderContext.fillRect(54, -18, 10, 6);
+  renderContext.fillRect(54, -4, 14, 6);
+  renderContext.fillRect(54, 10, 10, 6);
+
+  if (role === 'queen') {
+    renderContext.fillStyle = '#ffd700';
+    renderContext.fillRect(-8, -26, 16, 4);
+    renderContext.fillRect(-12, -30, 4, 8);
+    renderContext.fillRect(-2, -30, 4, 4);
+    renderContext.fillRect(8, -30, 4, 8);
+  }
 };
 
 const drawOctopus = (player: PlayerSnapshot): void => {
-  const color = teamColor(player.team);
-  const dark = teamDarkColor(player.team);
-  const time = frameCount / 9;
-
-  context.fillStyle = dark;
-  context.fillRect(-18, -22, 36, 26);
-  context.fillStyle = color;
-  context.fillRect(-16, -20, 32, 22);
-  context.fillRect(-20, -2, 40, 12);
-
-  context.fillStyle = '#ffffff';
-  context.fillRect(4, -12, 10, 8);
-  context.fillStyle = '#000000';
-  context.fillRect(6, -10, 6, 6);
-
-  const tentacleOffset = Math.sin(time * 2) * 3;
-  context.fillStyle = color;
-  context.fillRect(-18, 10, 8, 10 + tentacleOffset);
-  context.fillRect(-6, 10, 8, 14 - tentacleOffset);
-  context.fillRect(6, 10, 8, 12 + tentacleOffset);
-  context.fillRect(16, 10, 8, 10 - tentacleOffset);
-
-  context.fillStyle = '#ffd700';
-  context.fillRect(12, -2, 42, 6);
-  context.fillRect(48, -16, 6, 32);
-  context.fillRect(54, -18, 10, 6);
-  context.fillRect(54, -4, 14, 6);
-  context.fillRect(54, 10, 10, 6);
-
-  if (player.role === 'queen') {
-    context.fillStyle = '#ffd700';
-    context.fillRect(-8, -26, 16, 4);
-    context.fillRect(-12, -30, 4, 8);
-    context.fillRect(-2, -30, 4, 4);
-    context.fillRect(8, -30, 4, 8);
-  }
+  drawOctopusSprite(context, player.team, player.role);
 };
 
 const drawPlayerName = (player: PlayerSnapshot): void => {
@@ -1343,7 +2026,7 @@ const drawPlayerName = (player: PlayerSnapshot): void => {
     color: '#ffffff',
     align: 'center',
     baseline: 'middle',
-    maxWidth: 56,
+    maxWidth: 88,
   });
 };
 
@@ -1609,6 +2292,8 @@ const animationFrame = (time: number): void => {
   lastFrameAt = time;
   frameCount += frameDelta;
   resizeCanvas();
+  drawMenuScenes();
+  updatePractice();
   renderScoreOverlay();
 
   if (time - lastInputFlush >= INPUT_FLUSH_MS) {
@@ -1630,7 +2315,7 @@ const hydrateSavedInputs = (): void => {
 };
 
 hydrateSavedInputs();
-drawMenuManatee();
+drawMenuScenes();
 renderLobbyCards();
 renderLobby();
 setConnectionState('offline', 'Offline');

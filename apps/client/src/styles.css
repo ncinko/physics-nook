@@ -215,17 +215,35 @@ input:focus-visible {
   margin-bottom: 16px;
 }
 
-.menu-title {
-  min-width: 0;
-}
-
+.menu-queen,
 .menu-manatee {
   display: block;
   flex: 0 0 auto;
+  image-rendering: pixelated;
+}
+
+.menu-queen {
+  width: 220px;
+  height: 118px;
+  max-width: min(52vw, 220px);
+  animation: menu-queen-hover 2.1s ease-in-out infinite;
+}
+
+.menu-manatee {
   width: 150px;
   height: 82px;
-  image-rendering: pixelated;
   animation: menu-manatee-bob 1.8s ease-in-out infinite;
+}
+
+@keyframes menu-queen-hover {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+
+  50% {
+    transform: translateY(-5px) rotate(1deg);
+  }
 }
 
 @keyframes menu-manatee-bob {
@@ -253,6 +271,79 @@ input:focus-visible {
   margin: 4px 0 0;
   color: #cfeeff;
   line-height: 1.35;
+}
+
+.menu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.how-to-button,
+.practice-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border-radius: 7px;
+  padding: 0 14px;
+  color: #001015;
+  font-weight: 850;
+}
+
+.how-to-button {
+  border: 1px solid rgba(102, 255, 204, 0.35);
+  background: #66ffcc;
+}
+
+.how-to-button[aria-expanded="true"] {
+  background: #ffd700;
+}
+
+.practice-button {
+  border: 1px solid rgba(255, 215, 0, 0.34);
+  background: #ffd700;
+}
+
+.how-to-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.how-to-panel[hidden] {
+  display: none;
+}
+
+.how-to-card {
+  display: grid;
+  gap: 6px;
+  align-items: end;
+  justify-items: center;
+  min-width: 0;
+  border: 1px solid rgba(207, 238, 255, 0.16);
+  border-radius: 8px;
+  padding: 10px 8px 11px;
+  background: rgba(207, 238, 255, 0.07);
+}
+
+.how-to-card canvas {
+  display: block;
+  width: min(100%, 196px);
+  height: auto;
+  aspect-ratio: 196 / 92;
+  image-rendering: pixelated;
+}
+
+.how-to-card span {
+  overflow-wrap: anywhere;
+  color: #f7fbff;
+  font-size: 0.76rem;
+  font-weight: 850;
+  line-height: 1.15;
+  text-align: center;
 }
 
 .lobby-cards {
@@ -461,6 +552,59 @@ input:focus-visible {
   font-size: 1rem;
 }
 
+.practice-overlay {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 6;
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.practice-overlay[hidden] {
+  display: none;
+}
+
+.practice-panel {
+  display: grid;
+  gap: 7px;
+  border: 1px solid rgba(247, 243, 232, 0.16);
+  border-radius: 8px;
+  padding: 12px;
+  color: #f7f3e8;
+  background: rgba(0, 8, 15, 0.84);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+
+.practice-panel span {
+  color: #66ffcc;
+  font-size: 0.68rem;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.practice-panel strong {
+  color: #ffffff;
+  font-size: 1.12rem;
+  line-height: 1.1;
+}
+
+.practice-panel p {
+  margin: 0;
+  color: #cfeeff;
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.practice-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+}
+
 .touch-controls {
   position: absolute;
   right: 16px;
@@ -502,7 +646,8 @@ input:focus-visible {
 }
 
 @media (max-width: 980px) {
-  .lobby-cards {
+  .lobby-cards,
+  .how-to-panel {
     grid-template-columns: 1fr;
   }
 }
@@ -536,6 +681,19 @@ input:focus-visible {
     padding: 28px 10px 86px;
   }
 
+  .menu-heading {
+    gap: 10px;
+  }
+
+  .menu-queen {
+    width: 170px;
+  }
+
+  .menu-manatee {
+    width: 118px;
+    height: 65px;
+  }
+
   .lobby-header,
   .slot-board {
     grid-template-columns: 1fr;
@@ -552,6 +710,12 @@ input:focus-visible {
   .ghost-button,
   .ready-button {
     flex: 1;
+  }
+
+  .practice-overlay {
+    top: 10px;
+    left: 10px;
+    max-width: calc(100vw - 20px);
   }
 
   .touch-controls {

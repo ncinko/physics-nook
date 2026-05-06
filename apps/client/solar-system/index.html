@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#02040a" />
+    <title>Solar System | Physics Nook</title>
+  </head>
+  <body>
+    <main class="solar-shell">
+      <div id="solarScene" aria-label="Shared solar system view"></div>
+
+      <header class="solar-topbar">
+        <div class="solar-title">
+          <strong>Solar System</strong>
+          <span id="targetLabel">Earth launch site</span>
+        </div>
+        <div class="connection-pill" data-state="offline" id="connectionPill">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusText">Offline</span>
+        </div>
+      </header>
+
+      <div class="use-chip" id="usePrompt" hidden>Board</div>
+
+      <nav class="touch-controls" aria-label="Movement controls">
+        <div class="touch-cluster">
+          <button type="button" data-control="forward" aria-label="Forward">↑</button>
+          <button type="button" data-control="left" aria-label="Left">←</button>
+          <button type="button" data-control="backward" aria-label="Backward">↓</button>
+          <button type="button" data-control="right" aria-label="Right">→</button>
+        </div>
+        <div class="touch-cluster touch-actions">
+          <button type="button" data-control="boost" aria-label="Boost">◆</button>
+          <button type="button" data-control="jump" aria-label="Jump">↥</button>
+          <button type="button" data-action="use" aria-label="Use">●</button>
+        </div>
+      </nav>
+    </main>
+
+    <script type="module" src="/src/solar-main.ts"></script>
+  </body>
+</html>

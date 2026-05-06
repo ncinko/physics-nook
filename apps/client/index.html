@@ -20,15 +20,33 @@
       <section id="menuOverlay" class="menu-overlay">
         <div class="menu-panel">
           <div class="menu-heading">
-            <div class="menu-title">
-              <h1>Manatee Royale</h1>
-            </div>
+            <canvas id="menuQueen" class="menu-queen" width="220" height="118" aria-hidden="true"></canvas>
             <canvas id="menuManatee" class="menu-manatee" width="150" height="82" aria-hidden="true"></canvas>
           </div>
           <label class="alias-field">
             <span>Name</span>
-            <input id="nameInput" name="name" autocomplete="nickname" maxlength="3" placeholder="TAG" />
+            <input id="nameInput" name="name" autocomplete="nickname" maxlength="8" placeholder="NAME" />
           </label>
+          <div class="menu-actions">
+            <button id="howToButton" type="button" class="how-to-button" aria-expanded="false" aria-controls="howToPanel">
+              How to play
+            </button>
+            <button id="practiceButton" type="button" class="practice-button">Practice</button>
+          </div>
+          <div id="howToPanel" class="how-to-panel" hidden>
+            <article class="how-to-card">
+              <canvas id="howToDefeat" width="196" height="92" aria-hidden="true"></canvas>
+              <span>defeat enemy queen</span>
+            </article>
+            <article class="how-to-card">
+              <canvas id="howToPearls" width="196" height="92" aria-hidden="true"></canvas>
+              <span>deliver pearls</span>
+            </article>
+            <article class="how-to-card">
+              <canvas id="howToRide" width="196" height="92" aria-hidden="true"></canvas>
+              <span>ride the manatee</span>
+            </article>
+          </div>
           <div id="lobbyCards" class="lobby-cards" aria-live="polite"></div>
         </div>
       </section>
@@ -72,6 +90,17 @@
           <h2 id="scoreTitle">Round Complete</h2>
           <p id="scoreStats"></p>
           <strong id="scoreCountdown"></strong>
+        </div>
+      </section>
+
+      <section id="practiceOverlay" class="practice-overlay" hidden>
+        <div class="practice-panel">
+          <span id="practicePhase">Worker</span>
+          <strong id="practiceGoal">jump</strong>
+          <p id="practiceFeedback">Complete the goal to continue.</p>
+          <div class="practice-actions">
+            <button id="practiceLeaveButton" type="button" class="ghost-button">Leave</button>
+          </div>
         </div>
       </section>
 

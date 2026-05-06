@@ -1,0 +1,280 @@
+:root {
+  color: #f8fbff;
+  background: #02040a;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+}
+
+button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible {
+  outline: 3px solid #7dd3fc;
+  outline-offset: 2px;
+}
+
+.solar-shell {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  min-height: 520px;
+  overflow: hidden;
+  background: #02040a;
+}
+
+#solarScene {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+#solarScene:active {
+  cursor: grabbing;
+}
+
+.solar-topbar {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.solar-title,
+.connection-pill,
+.use-chip {
+  border: 1px solid rgba(232, 244, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(2, 4, 10, 0.72);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px);
+}
+
+.solar-title {
+  display: grid;
+  min-width: 0;
+  max-width: min(360px, calc(100vw - 156px));
+  gap: 2px;
+  padding: 10px 12px;
+}
+
+.solar-title strong {
+  overflow: hidden;
+  color: #ffffff;
+  font-size: 0.95rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.solar-title span {
+  overflow: hidden;
+  color: #b7d6ec;
+  font-size: 0.74rem;
+  font-weight: 650;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-pill {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 174px;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 11px;
+  color: #eef8ff;
+  font-size: 0.76rem;
+  font-weight: 760;
+  line-height: 1;
+  pointer-events: auto;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: #7c8794;
+}
+
+#statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection-pill[data-state="connecting"] .status-dot {
+  background: #facc15;
+}
+
+.connection-pill[data-state="online"] .status-dot {
+  background: #7dd3fc;
+}
+
+.connection-pill[data-state="error"] .status-dot {
+  background: #fb7185;
+}
+
+.use-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 116px;
+  z-index: 4;
+  min-width: 86px;
+  transform: translateX(-50%);
+  padding: 9px 13px;
+  color: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 850;
+  line-height: 1;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0;
+  pointer-events: none;
+}
+
+.use-chip[hidden] {
+  display: none;
+}
+
+.touch-controls {
+  position: absolute;
+  inset: auto 14px 14px;
+  z-index: 6;
+  display: none;
+  justify-content: space-between;
+  gap: 14px;
+  pointer-events: none;
+}
+
+.touch-cluster {
+  display: grid;
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: repeat(2, 52px);
+  gap: 7px;
+  pointer-events: auto;
+}
+
+.touch-cluster button {
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(232, 244, 255, 0.16);
+  border-radius: 8px;
+  color: #ffffff;
+  background: rgba(6, 12, 24, 0.68);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.24);
+  font-size: 1.25rem;
+  font-weight: 850;
+  line-height: 1;
+  backdrop-filter: blur(10px);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.touch-cluster button[data-control="forward"] {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.touch-cluster button[data-control="left"] {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.touch-cluster button[data-control="backward"] {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.touch-cluster button[data-control="right"] {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+.touch-actions {
+  grid-template-columns: repeat(3, 52px);
+  grid-template-rows: 52px;
+  align-self: end;
+}
+
+.touch-actions button {
+  grid-row: 1;
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  .touch-controls {
+    display: flex;
+  }
+
+  .solar-shell {
+    min-height: 620px;
+  }
+
+  .solar-topbar {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .solar-title {
+    max-width: calc(100vw - 140px);
+    padding: 9px 10px;
+  }
+
+  .connection-pill {
+    max-width: 128px;
+    padding: 9px;
+  }
+
+  .touch-controls {
+    inset-inline: 10px;
+    gap: 10px;
+  }
+
+  .touch-cluster {
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: repeat(2, 46px);
+    gap: 6px;
+  }
+
+  .touch-cluster button {
+    width: 46px;
+    height: 46px;
+  }
+
+  .touch-actions {
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: 46px;
+  }
+}

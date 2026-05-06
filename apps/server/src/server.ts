@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
-import { pathToFileURL } from 'node:url';
+import { URL, pathToFileURL } from 'node:url';
+
+import { createSolarWorld } from './solar.ts';
 
 import {
   DEFAULT_INPUT,
@@ -1199,6 +1201,7 @@ const tickRoom = (room: GameRoom): void => {
 };
 
 export const createGameServer = () => {
+  const solarWorld = createSolarWorld();
   const server = createServer((request, response) => {
     response.setHeader('access-control-allow-origin', '*');
 
@@ -1216,18 +1219,28 @@ export const createGameServer = () => {
       return;
     }
 
+    if (request.url === '/solar/health') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(solarWorld.health()));
+      return;
+    }
+
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Manatee Royale.');
+    response.end('Use a WebSocket connection for Manatee Royale or Solar System.');
   });
 
   const loop = setInterval(() => {
     rooms.forEach((room) => tickRoom(room));
   }, TICK_INTERVAL_MS);
 
-  server.on('close', () => clearInterval(loop));
+  server.on('close', () => {
+    clearInterval(loop);
+    solarWorld.close();
+  });
 
   server.on('upgrade', (request, socket) => {
     try {
+      const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
       const key = request.headers['sec-websocket-key'];
       if (typeof key !== 'string') {
         socket.destroy();
@@ -1246,6 +1259,11 @@ export const createGameServer = () => {
         ].join('\r\n'),
       );
       socket.setNoDelay(true);
+
+      if (url.pathname === '/solar' || url.pathname === '/solar/') {
+        solarWorld.accept(socket);
+        return;
+      }
 
       const client: ClientConnection = {
         socket,

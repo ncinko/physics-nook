@@ -1,0 +1,304 @@
+export type RippleVec2 = {
+  x: number;
+  y: number;
+};
+
+export type RippleEmitterSnapshot = RippleVec2 & {
+  id: string;
+  amplitude: number;
+  frequency: number;
+  phase: number;
+  radius: number;
+  color: string;
+  enabled: boolean;
+  controlledBy: string | null;
+  updatedAt: number;
+};
+
+export type RippleSplashPayload = RippleVec2 & {
+  strength?: number;
+  radius?: number;
+};
+
+export type RippleSplashEvent = RippleVec2 & {
+  id: string;
+  strength: number;
+  radius: number;
+  createdBy: string;
+  serverTime: number;
+};
+
+export type RippleEmitterPatch = Partial<
+  Pick<RippleEmitterSnapshot, 'x' | 'y' | 'amplitude' | 'frequency' | 'phase' | 'radius' | 'color' | 'enabled'>
+>;
+
+export type RippleSnapshot = {
+  type: 'rippleSnapshot';
+  roomCode: string;
+  serverTime: number;
+  paused: boolean;
+  resetVersion: number;
+  emitters: RippleEmitterSnapshot[];
+  recentSplashes: RippleSplashEvent[];
+  playerCount: number;
+};
+
+export type RippleJoinMessage = {
+  type: 'rippleJoin';
+  name?: string;
+  roomCode?: string;
+};
+
+export type RippleSplashMessage = {
+  type: 'rippleSplash';
+  splash: RippleSplashPayload;
+};
+
+export type RippleEmitterUpdateMessage = {
+  type: 'rippleEmitterUpdate';
+  id: string;
+  patch: RippleEmitterPatch;
+};
+
+export type RippleEmitterReleaseMessage = {
+  type: 'rippleEmitterRelease';
+  id: string;
+};
+
+export type RippleSetPausedMessage = {
+  type: 'rippleSetPaused';
+  paused: boolean;
+};
+
+export type RippleResetMessage = {
+  type: 'rippleReset';
+};
+
+export type RipplePingMessage = {
+  type: 'ping';
+  clientTime: number;
+};
+
+export type RippleClientToServerMessage =
+  | RippleJoinMessage
+  | RippleSplashMessage
+  | RippleEmitterUpdateMessage
+  | RippleEmitterReleaseMessage
+  | RippleSetPausedMessage
+  | RippleResetMessage
+  | RipplePingMessage;
+
+export type RippleJoinedMessage = {
+  type: 'rippleJoined';
+  protocolVersion: number;
+  you: string;
+  snapshot: RippleSnapshot;
+};
+
+export type RipplePresenceMessage = {
+  type: 'ripplePresence';
+  playerCount: number;
+};
+
+export type RippleErrorMessage = {
+  type: 'error';
+  message: string;
+};
+
+export type RipplePongMessage = {
+  type: 'pong';
+  clientTime: number;
+  serverTime: number;
+};
+
+export type RippleServerToClientMessage =
+  | RippleJoinedMessage
+  | RippleSnapshot
+  | RipplePresenceMessage
+  | RippleErrorMessage
+  | RipplePongMessage;
+
+export const RIPPLE_CONFIG = {
+  protocolVersion: 1,
+  defaultRoomCode: 'STUDIO',
+  roomCodeLength: 16,
+  recentSplashLimit: 90,
+  splashRateLimitMs: 38,
+  nameMaxLength: 18,
+  splash: {
+    defaultStrength: 2.2,
+    minStrength: 0.15,
+    maxStrength: 3.2,
+    defaultRadius: 0.055,
+    minRadius: 0.012,
+    maxRadius: 0.12,
+  },
+  emitter: {
+    minAmplitude: 0,
+    maxAmplitude: 2.4,
+    minFrequency: 0.12,
+    maxFrequency: 2.8,
+    minRadius: 0.012,
+    maxRadius: 0.085,
+  },
+} as const;
+
+export const clampRippleNumber = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, value));
+
+export const isFiniteRippleNumber = (value: unknown): value is number =>
+  typeof value === 'number' && Number.isFinite(value);
+
+export const normalizeRippleRoomCode = (value?: string): string => {
+  const normalized = (value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, RIPPLE_CONFIG.roomCodeLength);
+
+  return normalized || RIPPLE_CONFIG.defaultRoomCode;
+};
+
+export const sanitizeRippleName = (value: unknown, fallback = 'Explorer'): string => {
+  if (typeof value !== 'string') return fallback;
+  const name = value
+    .trim()
+    .replace(/[^\w -]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, RIPPLE_CONFIG.nameMaxLength);
+  return name || fallback;
+};
+
+const sanitizeRippleColor = (value: unknown): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return /^#[0-9a-f]{6}$/i.test(trimmed) ? trimmed : null;
+};
+
+export const sanitizeRippleSplash = (payload: unknown): Required<RippleSplashPayload> | null => {
+  if (!payload || typeof payload !== 'object') return null;
+  const candidate = payload as RippleSplashPayload;
+
+  if (!isFiniteRippleNumber(candidate.x) || !isFiniteRippleNumber(candidate.y)) {
+    return null;
+  }
+
+  const strength = isFiniteRippleNumber(candidate.strength)
+    ? candidate.strength
+    : RIPPLE_CONFIG.splash.defaultStrength;
+  const radius = isFiniteRippleNumber(candidate.radius) ? candidate.radius : RIPPLE_CONFIG.splash.defaultRadius;
+
+  return {
+    x: clampRippleNumber(candidate.x, 0, 1),
+    y: clampRippleNumber(candidate.y, 0, 1),
+    strength: clampRippleNumber(strength, RIPPLE_CONFIG.splash.minStrength, RIPPLE_CONFIG.splash.maxStrength),
+    radius: clampRippleNumber(radius, RIPPLE_CONFIG.splash.minRadius, RIPPLE_CONFIG.splash.maxRadius),
+  };
+};
+
+export const sanitizeRippleEmitterPatch = (patch: unknown): RippleEmitterPatch | null => {
+  if (!patch || typeof patch !== 'object') return null;
+  const candidate = patch as RippleEmitterPatch;
+  const sanitized: RippleEmitterPatch = {};
+
+  if ('x' in candidate) {
+    if (!isFiniteRippleNumber(candidate.x)) return null;
+    sanitized.x = clampRippleNumber(candidate.x, 0, 1);
+  }
+
+  if ('y' in candidate) {
+    if (!isFiniteRippleNumber(candidate.y)) return null;
+    sanitized.y = clampRippleNumber(candidate.y, 0, 1);
+  }
+
+  if ('amplitude' in candidate) {
+    if (!isFiniteRippleNumber(candidate.amplitude)) return null;
+    sanitized.amplitude = clampRippleNumber(
+      candidate.amplitude,
+      RIPPLE_CONFIG.emitter.minAmplitude,
+      RIPPLE_CONFIG.emitter.maxAmplitude,
+    );
+  }
+
+  if ('frequency' in candidate) {
+    if (!isFiniteRippleNumber(candidate.frequency)) return null;
+    sanitized.frequency = clampRippleNumber(
+      candidate.frequency,
+      RIPPLE_CONFIG.emitter.minFrequency,
+      RIPPLE_CONFIG.emitter.maxFrequency,
+    );
+  }
+
+  if ('phase' in candidate) {
+    if (!isFiniteRippleNumber(candidate.phase)) return null;
+    sanitized.phase = clampRippleNumber(candidate.phase, -Math.PI * 2, Math.PI * 2);
+  }
+
+  if ('radius' in candidate) {
+    if (!isFiniteRippleNumber(candidate.radius)) return null;
+    sanitized.radius = clampRippleNumber(
+      candidate.radius,
+      RIPPLE_CONFIG.emitter.minRadius,
+      RIPPLE_CONFIG.emitter.maxRadius,
+    );
+  }
+
+  if ('enabled' in candidate) {
+    if (typeof candidate.enabled !== 'boolean') return null;
+    sanitized.enabled = candidate.enabled;
+  }
+
+  if ('color' in candidate) {
+    const color = sanitizeRippleColor(candidate.color);
+    if (!color) return null;
+    sanitized.color = color;
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+};
+
+export const createDefaultRippleEmitters = (updatedAt = 0): RippleEmitterSnapshot[] => [
+  {
+    id: 'cool-left',
+    x: 0.18,
+    y: 0.32,
+    amplitude: 1.05,
+    frequency: 0.72,
+    phase: 0,
+    radius: 0.038,
+    color: '#60a5fa',
+    enabled: true,
+    controlledBy: null,
+    updatedAt,
+  },
+  {
+    id: 'cool-center',
+    x: 0.46,
+    y: 0.36,
+    amplitude: 0.94,
+    frequency: 0.72,
+    phase: 0,
+    radius: 0.034,
+    color: '#22d3ee',
+    enabled: true,
+    controlledBy: null,
+    updatedAt,
+  },
+  {
+    id: 'warm-right',
+    x: 0.78,
+    y: 0.31,
+    amplitude: 1.0,
+    frequency: 0.72,
+    phase: Math.PI,
+    radius: 0.038,
+    color: '#f87171',
+    enabled: true,
+    controlledBy: null,
+    updatedAt,
+  },
+];
+
+export const cloneRippleEmitter = (emitter: RippleEmitterSnapshot): RippleEmitterSnapshot => ({ ...emitter });
+
+export const cloneRippleSplash = (splash: RippleSplashEvent): RippleSplashEvent => ({ ...splash });

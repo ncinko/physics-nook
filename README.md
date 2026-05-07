@@ -50,10 +50,23 @@ Run the game client in development:
 npm run game:dev
 ```
 
+The dedicated multiplayer pages are served from the same Vite client:
+
+```text
+http://localhost:5173/orbitals/
+http://localhost:5173/ripples/
+```
+
 Build the game client for static hosting:
 
 ```sh
 npm run game:build
+```
+
+Run Ripple Tank Studio tests:
+
+```sh
+npm run test:ripple
 ```
 
 The local game client defaults to `ws://localhost:8788`. In production over HTTPS it defaults to `wss://ws.physicsnook.com`. Override with `VITE_GAME_WS_URL` or `PUBLIC_GAME_WS_URL` when needed.

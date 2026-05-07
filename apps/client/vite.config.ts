@@ -5,6 +5,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const mainEntry = fileURLToPath(new URL('./index.html', import.meta.url));
 const orbitalsEntry = fileURLToPath(new URL('./orbitals/index.html', import.meta.url));
+const ripplesEntry = fileURLToPath(new URL('./ripples/index.html', import.meta.url));
 
 export default defineConfig({
   root,
@@ -29,6 +30,7 @@ export default defineConfig({
       input: {
         main: mainEntry,
         orbitals: orbitalsEntry,
+        ripples: ripplesEntry,
       },
     },
   },

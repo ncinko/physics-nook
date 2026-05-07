@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { URL, pathToFileURL } from 'node:url';
 
+import { createRippleWorld } from './ripple.ts';
 import { createSolarWorld } from './solar.ts';
 
 import {
@@ -1201,6 +1202,7 @@ const tickRoom = (room: GameRoom): void => {
 };
 
 export const createGameServer = () => {
+  const rippleWorld = createRippleWorld();
   const solarWorld = createSolarWorld();
   const server = createServer((request, response) => {
     response.setHeader('access-control-allow-origin', '*');
@@ -1225,8 +1227,14 @@ export const createGameServer = () => {
       return;
     }
 
+    if (request.url === '/ripples/health') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(rippleWorld.health()));
+      return;
+    }
+
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Manatee Royale or Orbitals.');
+    response.end('Use a WebSocket connection for Manatee Royale, Orbitals, or Ripple Tank Studio.');
   });
 
   const loop = setInterval(() => {
@@ -1235,6 +1243,7 @@ export const createGameServer = () => {
 
   server.on('close', () => {
     clearInterval(loop);
+    rippleWorld.close();
     solarWorld.close();
   });
 
@@ -1262,6 +1271,11 @@ export const createGameServer = () => {
 
       if (url.pathname === '/solar' || url.pathname === '/solar/') {
         solarWorld.accept(socket);
+        return;
+      }
+
+      if (url.pathname === '/ripples' || url.pathname === '/ripples/') {
+        rippleWorld.accept(socket, url.searchParams.get('room') ?? undefined);
         return;
       }
 

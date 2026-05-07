@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#030712" />
+    <title>Orbitals | Physics Nook</title>
+  </head>
+  <body>
+    <main class="orbit-shell">
+      <canvas id="simCanvas" aria-label="Shared Orbitals gravity sandbox"></canvas>
+
+      <header class="orbit-topbar">
+        <div class="orbit-title">
+          <strong>Orbitals</strong>
+          <span id="viewLabel">0, 0</span>
+        </div>
+
+        <div class="orbit-status">
+          <div class="stat-card">
+            <span>Bodies</span>
+            <strong id="bodyCount">0</strong>
+          </div>
+          <div class="stat-card">
+            <span>Users</span>
+            <strong id="playerCount">0</strong>
+          </div>
+          <div class="connection-pill" data-state="offline" id="connectionPill">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="statusText">Offline</span>
+          </div>
+        </div>
+      </header>
+
+      <nav class="pan-controls" aria-label="Pan controls">
+        <button type="button" data-pan="KeyW" aria-label="Pan up">W</button>
+        <button type="button" data-pan="KeyA" aria-label="Pan left">A</button>
+        <button type="button" data-pan="KeyS" aria-label="Pan down">S</button>
+        <button type="button" data-pan="KeyD" aria-label="Pan right">D</button>
+      </nav>
+    </main>
+
+    <script type="module" src="/src/solar-main.ts"></script>
+  </body>
+</html>

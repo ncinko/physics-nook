@@ -470,6 +470,10 @@ const wavesModule = mustGetModuleBySlug('waves');
 const quantumModule = mustGetModuleBySlug('quantum');
 const thermodynamicsModule = mustGetModuleBySlug('thermodynamics');
 const collisionsModule = mustGetModuleBySlug('collisions');
+const gameSiteUrl =
+  import.meta.env.PUBLIC_GAME_URL ??
+  (import.meta.env.DEV ? 'http://127.0.0.1:5173' : 'https://game.physicsnook.com');
+const orbitalsGameHref = `${gameSiteUrl.replace(/\/$/, '')}/orbitals/`;
 
 export const quantumModuleMeta = quantumModule;
 
@@ -529,12 +533,40 @@ export const momentumPath = {
   pages: [collisionsModule.pages[0]],
 } satisfies ModulePathGroup;
 
+export const gamesPath = {
+  id: 'orbitals-game',
+  href: orbitalsGameHref,
+  navLabel: 'Orbitals',
+  summary:
+    'Shared multiplayer physics sandboxes and experimental game pages.',
+  cardEyebrow: 'Games',
+  navVisibility: 'menu',
+  pages: [
+    {
+      id: 'orbitals',
+      href: orbitalsGameHref,
+      title: 'Orbitals',
+      description:
+        'A shared N-body gravity sandbox where everyone can add masses to one persistent canvas.',
+      seo: {
+        title: 'Orbitals',
+        description:
+          'A shared N-body gravity sandbox where everyone can add masses to one persistent canvas.',
+        canonicalPath: '/orbitals',
+        image: '/social/physics-nook-card.svg',
+        noindex: true,
+      },
+    },
+  ],
+} satisfies ModulePathGroup;
+
 export const exploreModuleGroups = [
   relativityPath,
   wavesAndOscillationsPath,
   quantumPath,
   thermodynamicsPath,
   momentumPath,
+  gamesPath,
 ].filter((group) => group.navVisibility === 'menu');
 
 export const publicPageMeta = [

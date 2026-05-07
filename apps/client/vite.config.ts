@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('.', import.meta.url));
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const mainEntry = fileURLToPath(new URL('./index.html', import.meta.url));
-const solarEntry = fileURLToPath(new URL('./solar-system/index.html', import.meta.url));
+const orbitalsEntry = fileURLToPath(new URL('./orbitals/index.html', import.meta.url));
 
 export default defineConfig({
   root,
@@ -28,7 +28,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: mainEntry,
-        solarSystem: solarEntry,
+        orbitals: orbitalsEntry,
       },
     },
   },

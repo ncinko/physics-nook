@@ -1,113 +1,187 @@
 import './solar-styles.css';
 
-import * as THREE from 'three';
-
 import {
-  DEFAULT_SOLAR_INPUT,
-  SOLAR_BODIES,
-  SOLAR_CONFIG,
-  addVec,
-  distanceVec,
-  getBodyTransforms,
-  getLaunchSite,
-  getNearestBody,
-  getShipSpawnTransform,
-  lerpVec,
-  normalizeVec,
-  projectOnPlane,
-  rotateVectorAroundAxis,
-  scaleVec,
+  ORBITAL_CONFIG,
+  getColorForMass,
+  getRadiusForMass,
 } from '../../../packages/shared/src/solar.ts';
 import type {
-  SolarBodyConfig,
-  SolarBodyId,
+  OrbitAddBodyPayload,
+  OrbitBodySnapshot,
+  OrbitSnapshot,
   SolarClientToServerMessage,
-  SolarInputState,
-  SolarPlayerSnapshot,
   SolarServerToClientMessage,
-  SolarShipSnapshot,
-  SolarSnapshot,
-  Vec3,
+  Vec2,
 } from '../../../packages/shared/src/solar.ts';
 
 type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
 
-type BodyRuntime = {
-  body: SolarBodyConfig;
-  group: THREE.Group;
-  orbitLine: THREE.LineLoop | null;
-};
-
-const SNAPSHOT_BUFFER_MAX = 12;
-const SNAPSHOT_INTERPOLATION_DELAY_MS = Math.round((1000 / SOLAR_CONFIG.snapshotRate) * 1.8);
-const PING_INTERVAL_MS = 2000;
-const INPUT_FLUSH_MS = 1000 / 30;
-const STAR_COUNT = 1200;
-
-const host = document.getElementById('solarScene');
+const canvas = document.getElementById('simCanvas') as HTMLCanvasElement | null;
+const countDisplay = document.getElementById('bodyCount');
+const playerDisplay = document.getElementById('playerCount');
 const connectionPill = document.getElementById('connectionPill');
 const statusText = document.getElementById('statusText');
-const usePrompt = document.getElementById('usePrompt');
-const targetLabel = document.getElementById('targetLabel');
+const viewLabel = document.getElementById('viewLabel');
 
-if (!host || !connectionPill || !statusText || !usePrompt || !targetLabel) {
-  throw new Error('Solar system page markup is missing required elements.');
+if (!canvas || !countDisplay || !playerDisplay || !connectionPill || !statusText || !viewLabel) {
+  throw new Error('Orbitals page markup is missing required elements.');
+}
+
+const ctx = canvas.getContext('2d', { alpha: false });
+if (!ctx) {
+  throw new Error('Could not initialize the Orbitals canvas.');
 }
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
-const scene = new THREE.Scene();
-scene.background = new THREE.Color('#02040a');
-scene.fog = new THREE.FogExp2('#02040a', 0.0016);
-
-const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 1200);
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.domElement.className = 'solar-canvas';
-host.replaceChildren(renderer.domElement);
-
-scene.add(new THREE.AmbientLight('#b9d7ff', 0.32));
-const sunLight = new THREE.PointLight('#fff1bf', 9000, 650, 1.4);
-sunLight.castShadow = true;
-sunLight.shadow.mapSize.set(2048, 2048);
-scene.add(sunLight);
-
 const keyState = new Set<string>();
-const touchState: Partial<Record<keyof SolarInputState, boolean>> = {};
-const bodyRuntimes = new Map<SolarBodyId, BodyRuntime>();
-const avatarGroups = new Map<string, THREE.Group>();
-const bodyGeometry = new THREE.SphereGeometry(1, 72, 36);
-const serverClock = { offsetMs: 0, synced: false };
+const touchPanState = new Set<string>();
+const pointer = {
+  creating: false,
+  id: -1,
+  start: { x: 0, y: 0 },
+  current: { x: 0, y: 0 },
+  holdStartTime: 0,
+};
+
 let socket: WebSocket | null = null;
 let connectionState: ConnectionState = 'offline';
 let localPlayerId: string | null = null;
-let latestSnapshot: SolarSnapshot | null = null;
-let snapshotBuffer: SolarSnapshot[] = [];
-let inputSeq = 0;
-let lastInputFlush = 0;
+let latestSnapshot: OrbitSnapshot | null = null;
+let snapshotBuffer: OrbitSnapshot[] = [];
+const serverClock = { offsetMs: 0, synced: false };
+let width = 1;
+let height = 1;
+let dpr = 1;
+let cameraX = 0;
+let cameraY = 0;
+let zoom = 1;
+let lastFrameTime = performance.now();
 let lastPingAt = 0;
-let cameraYaw = 0;
-let cameraPitch = 0.34;
-let cameraDistance = 13;
-let draggingCamera = false;
-let lastPointerX = 0;
-let lastPointerY = 0;
 
-const toThree = (value: Vec3): THREE.Vector3 => new THREE.Vector3(value.x, value.y, value.z);
-const fromThree = (value: THREE.Vector3): Vec3 => ({ x: value.x, y: value.y, z: value.z });
+const PING_INTERVAL_MS = 2000;
+const SNAPSHOT_BUFFER_MAX = 12;
+const SNAPSHOT_INTERPOLATION_DELAY_MS = Math.round((1000 / ORBITAL_CONFIG.snapshotRate) * 2.2);
+const PAN_SPEED = 520;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2.2;
+const GRID_SIZE = 120;
+const STAR_CELL_SIZE = 520;
+const STARS_PER_CELL = 3;
+
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const seedFromString = (value: string): number =>
-  [...value].reduce((seed, character) => (seed * 31 + character.charCodeAt(0)) >>> 0, 2166136261);
+const lerp = (from: number, to: number, amount: number): number => from + (to - from) * amount;
 
-const seededRandom = (seedStart: number) => {
-  let seed = seedStart >>> 0;
-  return () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0;
-    return seed / 0xffffffff;
+const cloneSnapshot = (snapshot: OrbitSnapshot): OrbitSnapshot => ({
+  ...snapshot,
+  bodies: snapshot.bodies.map((body) => ({ ...body, path: body.path.map((point) => ({ ...point })) })),
+  events: [...snapshot.events],
+});
+
+const makeInterpolatedTrail = (
+  from: OrbitBodySnapshot | undefined,
+  to: OrbitBodySnapshot,
+  current: Vec2,
+  amount: number,
+  tickDelta: number,
+): Vec2[] => {
+  const currentPoint = { x: current.x, y: current.y };
+  if (!from) {
+    return [...to.path.slice(0, Math.max(0, to.path.length - 1)), currentPoint].slice(-ORBITAL_CONFIG.trailLength);
+  }
+
+  const newPointCapacity = Math.min(Math.max(1, tickDelta), to.path.length);
+  const visibleNewPoints = clamp(Math.floor(newPointCapacity * amount), 0, newPointCapacity);
+  const base = from.path.slice(-Math.max(0, ORBITAL_CONFIG.trailLength - visibleNewPoints - 1));
+  const newPoints =
+    visibleNewPoints > 0 ? to.path.slice(-newPointCapacity, -newPointCapacity + visibleNewPoints) : [];
+  return [...base, ...newPoints, currentPoint].slice(-ORBITAL_CONFIG.trailLength);
+};
+
+const interpolateBody = (
+  from: OrbitBodySnapshot | undefined,
+  to: OrbitBodySnapshot,
+  amount: number,
+  tickDelta: number,
+): OrbitBodySnapshot => {
+  if (!from) return { ...to, path: to.path.map((point) => ({ ...point })) };
+  const current = {
+    x: lerp(from.x, to.x, amount),
+    y: lerp(from.y, to.y, amount),
   };
+  return {
+    ...to,
+    x: current.x,
+    y: current.y,
+    vx: lerp(from.vx, to.vx, amount),
+    vy: lerp(from.vy, to.vy, amount),
+    path: makeInterpolatedTrail(from, to, current, amount, tickDelta),
+  };
+};
+
+const interpolateSnapshot = (from: OrbitSnapshot, to: OrbitSnapshot, amount: number): OrbitSnapshot => {
+  const previousBodies = new Map(from.bodies.map((body) => [body.id, body]));
+  const tickDelta = Math.max(1, to.tick - from.tick);
+  return {
+    ...to,
+    serverTime: lerp(from.serverTime, to.serverTime, amount),
+    bodies: to.bodies.map((body) => interpolateBody(previousBodies.get(body.id), body, amount, tickDelta)),
+    events: [],
+  };
+};
+
+const queueSnapshot = (snapshot: OrbitSnapshot): void => {
+  const receivedAt = performance.now();
+  const nextOffset = snapshot.serverTime - receivedAt;
+  serverClock.offsetMs = serverClock.synced ? serverClock.offsetMs * 0.88 + nextOffset * 0.12 : nextOffset;
+  serverClock.synced = true;
+  latestSnapshot = snapshot;
+
+  if (snapshotBuffer.length > 0 && snapshot.serverTime < snapshotBuffer[snapshotBuffer.length - 1].serverTime) {
+    snapshotBuffer = [];
+  }
+
+  snapshotBuffer.push(cloneSnapshot(snapshot));
+  if (snapshotBuffer.length > SNAPSHOT_BUFFER_MAX) {
+    snapshotBuffer.splice(0, snapshotBuffer.length - SNAPSHOT_BUFFER_MAX);
+  }
+};
+
+const getRenderableSnapshot = (time: number): OrbitSnapshot | null => {
+  if (!latestSnapshot) return null;
+  if (snapshotBuffer.length < 2 || !serverClock.synced) return latestSnapshot;
+
+  const renderServerTime = time + serverClock.offsetMs - SNAPSHOT_INTERPOLATION_DELAY_MS;
+  while (snapshotBuffer.length > 2 && snapshotBuffer[1].serverTime <= renderServerTime) {
+    snapshotBuffer.shift();
+  }
+
+  const previous = snapshotBuffer[0];
+  const next = snapshotBuffer[1];
+  if (!previous || !next) return latestSnapshot;
+  if (renderServerTime <= previous.serverTime) return previous;
+  if (renderServerTime >= next.serverTime) return next;
+  const amount = (renderServerTime - previous.serverTime) / Math.max(1, next.serverTime - previous.serverTime);
+  return interpolateSnapshot(previous, next, clamp(amount, 0, 1));
+};
+
+const clampWorldToBoundary = (point: Vec2): Vec2 => {
+  const limit = ORBITAL_CONFIG.world.boundaryLimit;
+  return {
+    x: clamp(point.x, -limit, limit),
+    y: clamp(point.y, -limit, limit),
+  };
+};
+
+const clampCameraToBoundary = (): void => {
+  const limit = ORBITAL_CONFIG.world.boundaryLimit;
+  cameraX = clamp(cameraX, -limit, limit);
+  cameraY = clamp(cameraY, -limit, limit);
+};
+
+const seededUnit = (x: number, y: number, salt: number): number => {
+  const value = Math.sin(x * 127.1 + y * 311.7 + salt * 74.7) * 43758.5453123;
+  return value - Math.floor(value);
 };
 
 const setConnectionState = (state: ConnectionState, label: string): void => {
@@ -147,11 +221,11 @@ const getDefaultWsUrl = (): string => {
 };
 
 const makeExplorerName = (): string => {
-  const stored = localStorage.getItem('physics-nook-solar-name');
+  const stored = localStorage.getItem('physics-nook-orbitals-name');
   if (stored) return stored;
   const suffix = Math.floor(Math.random() * 900 + 100);
   const name = `Explorer ${suffix}`;
-  localStorage.setItem('physics-nook-solar-name', name);
+  localStorage.setItem('physics-nook-orbitals-name', name);
   return name;
 };
 
@@ -160,420 +234,288 @@ const sendMessage = (message: SolarClientToServerMessage): void => {
   socket.send(JSON.stringify(message));
 };
 
-const createPlanetTexture = (body: SolarBodyConfig): THREE.CanvasTexture => {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return new THREE.CanvasTexture(canvas);
-  }
-
-  context.fillStyle = body.color;
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  const random = seededRandom(seedFromString(body.id));
-
-  if (body.id === 'earth') {
-    context.fillStyle = '#38b66b';
-    for (let index = 0; index < 38; index += 1) {
-      const x = random() * canvas.width;
-      const y = random() * canvas.height;
-      const rx = 14 + random() * 42;
-      const ry = 6 + random() * 24;
-      context.beginPath();
-      context.ellipse(x, y, rx, ry, random() * Math.PI, 0, Math.PI * 2);
-      context.fill();
-    }
-    context.fillStyle = 'rgba(255,255,255,0.82)';
-    context.fillRect(0, 0, canvas.width, 12);
-    context.fillRect(0, canvas.height - 16, canvas.width, 16);
-  } else if (body.id === 'giant') {
-    for (let y = 0; y < canvas.height; y += 16) {
-      context.fillStyle = y % 32 === 0 ? '#6db7d6' : '#d6f2ff';
-      context.fillRect(0, y, canvas.width, 12);
-    }
-  } else if (body.id === 'moon') {
-    context.fillStyle = 'rgba(82, 91, 105, 0.38)';
-    for (let index = 0; index < 54; index += 1) {
-      const radius = 2 + random() * 10;
-      context.beginPath();
-      context.arc(random() * canvas.width, random() * canvas.height, radius, 0, Math.PI * 2);
-      context.fill();
-    }
-  } else if (body.id === 'mars' || body.id === 'mercury') {
-    context.fillStyle = 'rgba(46, 20, 18, 0.18)';
-    for (let index = 0; index < 44; index += 1) {
-      context.beginPath();
-      context.ellipse(random() * canvas.width, random() * canvas.height, 10 + random() * 34, 3 + random() * 14, 0, 0, Math.PI * 2);
-      context.fill();
-    }
-  } else if (body.id === 'sun') {
-    const gradient = context.createRadialGradient(256, 128, 10, 256, 128, 250);
-    gradient.addColorStop(0, '#fff6b7');
-    gradient.addColorStop(0.52, body.color);
-    gradient.addColorStop(1, '#ff7a1a');
-    context.fillStyle = gradient;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-  }
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.anisotropy = 4;
-  return texture;
-};
-
-const createOrbitLine = (body: SolarBodyConfig): THREE.LineLoop | null => {
-  if (!body.parentId || body.orbitRadius <= 0) return null;
-  const points: THREE.Vector3[] = [];
-  for (let index = 0; index < 180; index += 1) {
-    const angle = (index / 180) * Math.PI * 2;
-    points.push(new THREE.Vector3(Math.cos(angle) * body.orbitRadius, 0, Math.sin(angle) * body.orbitRadius));
-  }
-  const geometry = new THREE.BufferGeometry().setFromPoints(points);
-  const material = new THREE.LineBasicMaterial({ color: '#37536f', transparent: true, opacity: 0.38 });
-  const line = new THREE.LineLoop(geometry, material);
-  line.rotation.x = THREE.MathUtils.degToRad(body.orbitInclinationDeg);
-  scene.add(line);
-  return line;
-};
-
-const createBodyRuntime = (body: SolarBodyConfig): BodyRuntime => {
-  const group = new THREE.Group();
-  group.name = body.id;
-
-  const material =
-    body.id === 'sun'
-      ? new THREE.MeshBasicMaterial({ map: createPlanetTexture(body), color: '#ffffff' })
-      : new THREE.MeshStandardMaterial({
-          map: createPlanetTexture(body),
-          roughness: 0.86,
-          metalness: 0.02,
-        });
-  const sphere = new THREE.Mesh(bodyGeometry, material);
-  sphere.scale.setScalar(body.radius);
-  sphere.castShadow = body.id !== 'sun';
-  sphere.receiveShadow = body.id !== 'sun';
-  group.add(sphere);
-
-  if (body.atmosphereColor) {
-    const atmosphere = new THREE.Mesh(
-      bodyGeometry,
-      new THREE.MeshBasicMaterial({
-        color: body.atmosphereColor,
-        transparent: true,
-        opacity: body.id === 'earth' ? 0.16 : 0.11,
-        side: THREE.BackSide,
-      }),
-    );
-    atmosphere.scale.setScalar(body.radius * 1.04);
-    group.add(atmosphere);
-  }
-
-  if (body.id === 'sun') {
-    const glow = new THREE.Mesh(
-      bodyGeometry,
-      new THREE.MeshBasicMaterial({ color: '#ffb703', transparent: true, opacity: 0.22, side: THREE.BackSide }),
-    );
-    glow.scale.setScalar(body.radius * 1.35);
-    group.add(glow);
-  }
-
-  scene.add(group);
-  const runtime = { body, group, orbitLine: createOrbitLine(body) };
-  bodyRuntimes.set(body.id, runtime);
-  return runtime;
-};
-
-const createStars = (): void => {
-  const positions = new Float32Array(STAR_COUNT * 3);
-  const colors = new Float32Array(STAR_COUNT * 3);
-  const random = seededRandom(9001);
-
-  for (let index = 0; index < STAR_COUNT; index += 1) {
-    const theta = random() * Math.PI * 2;
-    const phi = Math.acos(2 * random() - 1);
-    const radius = 520 + random() * 320;
-    positions[index * 3] = Math.sin(phi) * Math.cos(theta) * radius;
-    positions[index * 3 + 1] = Math.cos(phi) * radius;
-    positions[index * 3 + 2] = Math.sin(phi) * Math.sin(theta) * radius;
-    const warmth = 0.72 + random() * 0.28;
-    colors[index * 3] = warmth;
-    colors[index * 3 + 1] = 0.82 + random() * 0.18;
-    colors[index * 3 + 2] = 1;
-  }
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  const material = new THREE.PointsMaterial({ size: 1.25, vertexColors: true, transparent: true, opacity: 0.9 });
-  scene.add(new THREE.Points(geometry, material));
-};
-
-const makeAvatarGroup = (color: string): THREE.Group => {
-  const group = new THREE.Group();
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.34, 0.42, SOLAR_CONFIG.player.height * 0.62, 12),
-    new THREE.MeshStandardMaterial({ color, roughness: 0.65 }),
-  );
-  body.position.y = SOLAR_CONFIG.player.height * 0.31;
-  body.castShadow = true;
-  group.add(body);
-
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 18, 12),
-    new THREE.MeshStandardMaterial({ color: '#f5d0a9', roughness: 0.72 }),
-  );
-  head.position.y = SOLAR_CONFIG.player.height * 0.72;
-  head.castShadow = true;
-  group.add(head);
-
-  const visor = new THREE.Mesh(
-    new THREE.BoxGeometry(0.42, 0.12, 0.04),
-    new THREE.MeshStandardMaterial({ color: '#07121f', roughness: 0.32, metalness: 0.1 }),
-  );
-  visor.position.set(0, SOLAR_CONFIG.player.height * 0.72, 0.25);
-  group.add(visor);
-  scene.add(group);
-  return group;
-};
-
-const shipGroup = new THREE.Group();
-const shipMaterial = new THREE.MeshStandardMaterial({ color: '#e5edf6', roughness: 0.42, metalness: 0.16 });
-const shipAccent = new THREE.MeshStandardMaterial({ color: '#f97316', roughness: 0.5 });
-const shipGlass = new THREE.MeshStandardMaterial({ color: '#0ea5e9', roughness: 0.18, metalness: 0.05, emissive: '#082f49' });
-const shipBody = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.15, 3.8), shipMaterial);
-shipBody.castShadow = true;
-shipGroup.add(shipBody);
-const shipNose = new THREE.Mesh(new THREE.ConeGeometry(0.86, 1.35, 24), shipMaterial);
-shipNose.rotation.x = Math.PI / 2;
-shipNose.position.z = 2.55;
-shipNose.castShadow = true;
-shipGroup.add(shipNose);
-const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.52, 24, 14), shipGlass);
-cockpit.scale.set(1, 0.48, 0.72);
-cockpit.position.set(0, 0.52, 0.84);
-shipGroup.add(cockpit);
-for (const side of [-1, 1]) {
-  const wing = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.12, 1.1), shipAccent);
-  wing.position.set(side * 1.16, -0.1, -0.42);
-  wing.rotation.z = side * -0.18;
-  wing.castShadow = true;
-  shipGroup.add(wing);
-}
-scene.add(shipGroup);
-
-const setObjectBasis = (object: THREE.Object3D, position: Vec3, forward: Vec3, up: Vec3): void => {
-  const f = toThree(normalizeVec(forward, { x: 0, y: 0, z: 1 })).normalize();
-  const u = toThree(normalizeVec(up, { x: 0, y: 1, z: 0 })).normalize();
-  const r = new THREE.Vector3().crossVectors(f, u).normalize();
-  if (r.lengthSq() < 1e-8) return;
-  const correctedUp = new THREE.Vector3().crossVectors(r, f).normalize();
-  const matrix = new THREE.Matrix4().makeBasis(r, correctedUp, f);
-  object.position.copy(toThree(position));
-  object.quaternion.setFromRotationMatrix(matrix);
-};
-
-const interpolatePlayer = (from: SolarPlayerSnapshot | undefined, to: SolarPlayerSnapshot, amount: number): SolarPlayerSnapshot => {
-  if (!from || from.mode !== to.mode || from.bodyId !== to.bodyId) return { ...to };
+const screenToWorld = (clientX: number, clientY: number): Vec2 => {
+  const rect = canvas.getBoundingClientRect();
   return {
-    ...to,
-    position: lerpVec(from.position, to.position, amount),
-    velocity: lerpVec(from.velocity, to.velocity, amount),
-    up: normalizeVec(lerpVec(from.up, to.up, amount), to.up),
-    forward: normalizeVec(lerpVec(from.forward, to.forward, amount), to.forward),
+    x: cameraX + (clientX - rect.left - width / 2) / zoom,
+    y: cameraY + (clientY - rect.top - height / 2) / zoom,
   };
 };
 
-const interpolateShip = (from: SolarShipSnapshot, to: SolarShipSnapshot, amount: number): SolarShipSnapshot => ({
-  ...to,
-  position: lerpVec(from.position, to.position, amount),
-  velocity: lerpVec(from.velocity, to.velocity, amount),
-  forward: normalizeVec(lerpVec(from.forward, to.forward, amount), to.forward),
-  up: normalizeVec(lerpVec(from.up, to.up, amount), to.up),
-  right: normalizeVec(lerpVec(from.right, to.right, amount), to.right),
+const worldToScreen = (point: Vec2): Vec2 => ({
+  x: width / 2 + (point.x - cameraX) * zoom,
+  y: height / 2 + (point.y - cameraY) * zoom,
 });
 
-const interpolateSnapshot = (from: SolarSnapshot, to: SolarSnapshot, amount: number): SolarSnapshot => ({
-  ...to,
-  players: to.players.map((player) => interpolatePlayer(from.players.find((candidate) => candidate.id === player.id), player, amount)),
-  ship: interpolateShip(from.ship, to.ship, amount),
-  events: [],
-});
-
-const queueSnapshot = (snapshot: SolarSnapshot): void => {
-  const receivedAt = performance.now();
-  const nextOffset = snapshot.serverTime - receivedAt;
-  serverClock.offsetMs = serverClock.synced ? serverClock.offsetMs * 0.88 + nextOffset * 0.12 : nextOffset;
-  serverClock.synced = true;
-  latestSnapshot = snapshot;
-  if (snapshotBuffer.length > 0 && snapshot.serverTime < snapshotBuffer[snapshotBuffer.length - 1].serverTime) {
-    snapshotBuffer = [];
-  }
-  snapshotBuffer.push(snapshot);
-  if (snapshotBuffer.length > SNAPSHOT_BUFFER_MAX) snapshotBuffer.splice(0, snapshotBuffer.length - SNAPSHOT_BUFFER_MAX);
+const resize = (): void => {
+  const rect = canvas.getBoundingClientRect();
+  width = Math.max(1, rect.width);
+  height = Math.max(1, rect.height);
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
 };
 
-const getRenderableSnapshot = (time: number): SolarSnapshot | null => {
-  if (!latestSnapshot) return null;
-  if (snapshotBuffer.length < 2 || !serverClock.synced) return latestSnapshot;
+const drawGrid = (): void => {
+  const startWorldX = cameraX - width / (2 * zoom);
+  const endWorldX = cameraX + width / (2 * zoom);
+  const startWorldY = cameraY - height / (2 * zoom);
+  const endWorldY = cameraY + height / (2 * zoom);
+  const firstX = Math.floor(startWorldX / GRID_SIZE) * GRID_SIZE;
+  const firstY = Math.floor(startWorldY / GRID_SIZE) * GRID_SIZE;
 
-  const renderServerTime = time + serverClock.offsetMs - SNAPSHOT_INTERPOLATION_DELAY_MS;
-  while (snapshotBuffer.length > 2 && snapshotBuffer[1].serverTime <= renderServerTime) {
-    snapshotBuffer.shift();
+  ctx.save();
+  ctx.lineWidth = 1;
+  for (let x = firstX; x <= endWorldX; x += GRID_SIZE) {
+    const screen = worldToScreen({ x, y: 0 }).x;
+    ctx.beginPath();
+    ctx.moveTo(screen, 0);
+    ctx.lineTo(screen, height);
+    ctx.strokeStyle = x === 0 ? 'rgba(125, 211, 252, 0.22)' : 'rgba(148, 163, 184, 0.08)';
+    ctx.stroke();
   }
-
-  const previous = snapshotBuffer[0];
-  const next = snapshotBuffer[1];
-  if (!previous || !next) return latestSnapshot;
-  if (renderServerTime <= previous.serverTime) return previous;
-  if (renderServerTime >= next.serverTime) return next;
-  const amount = (renderServerTime - previous.serverTime) / Math.max(1, next.serverTime - previous.serverTime);
-  return interpolateSnapshot(previous, next, clamp(amount, 0, 1));
+  for (let y = firstY; y <= endWorldY; y += GRID_SIZE) {
+    const screen = worldToScreen({ x: 0, y }).y;
+    ctx.beginPath();
+    ctx.moveTo(0, screen);
+    ctx.lineTo(width, screen);
+    ctx.strokeStyle = y === 0 ? 'rgba(125, 211, 252, 0.22)' : 'rgba(148, 163, 184, 0.08)';
+    ctx.stroke();
+  }
+  ctx.restore();
 };
 
-const updateBodies = (serverTime: number): void => {
-  const transforms = getBodyTransforms(serverTime);
-  for (const body of SOLAR_BODIES) {
-    const runtime = bodyRuntimes.get(body.id) ?? createBodyRuntime(body);
-    const transform = transforms[body.id];
-    runtime.group.position.copy(toThree(transform.position));
-    runtime.group.rotation.y = transform.rotationAngle;
-    if (body.id === 'sun') {
-      sunLight.position.copy(runtime.group.position);
+const drawStars = (): void => {
+  const startWorldX = cameraX - width / (2 * zoom);
+  const endWorldX = cameraX + width / (2 * zoom);
+  const startWorldY = cameraY - height / (2 * zoom);
+  const endWorldY = cameraY + height / (2 * zoom);
+  const firstCellX = Math.floor(startWorldX / STAR_CELL_SIZE) - 1;
+  const lastCellX = Math.floor(endWorldX / STAR_CELL_SIZE) + 1;
+  const firstCellY = Math.floor(startWorldY / STAR_CELL_SIZE) - 1;
+  const lastCellY = Math.floor(endWorldY / STAR_CELL_SIZE) + 1;
+
+  ctx.save();
+  ctx.fillStyle = '#dbeafe';
+  for (let cellX = firstCellX; cellX <= lastCellX; cellX += 1) {
+    for (let cellY = firstCellY; cellY <= lastCellY; cellY += 1) {
+      for (let starIndex = 0; starIndex < STARS_PER_CELL; starIndex += 1) {
+        const star = {
+          x: (cellX + seededUnit(cellX, cellY, starIndex)) * STAR_CELL_SIZE,
+          y: (cellY + seededUnit(cellX, cellY, starIndex + 9)) * STAR_CELL_SIZE,
+          radius: 0.55 + seededUnit(cellX, cellY, starIndex + 17) * 1.45,
+          alpha: 0.22 + seededUnit(cellX, cellY, starIndex + 31) * 0.42,
+        };
+        const screen = worldToScreen(star);
+        ctx.globalAlpha = star.alpha;
+        ctx.beginPath();
+        ctx.arc(screen.x, screen.y, clamp(star.radius * Math.sqrt(zoom), 0.45, 2.6), 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    if (runtime.orbitLine && body.parentId) {
-      runtime.orbitLine.position.copy(toThree(transforms[body.parentId].position));
-    }
   }
+  ctx.globalAlpha = 1;
+  ctx.restore();
 };
 
-const updateAvatars = (snapshot: SolarSnapshot | null): void => {
-  const activeIds = new Set(snapshot?.players.map((player) => player.id) ?? []);
-  for (const [id, group] of avatarGroups.entries()) {
-    if (!activeIds.has(id)) {
-      scene.remove(group);
-      avatarGroups.delete(id);
-    }
-  }
+const drawBoundary = (): void => {
+  const limit = ORBITAL_CONFIG.world.boundaryLimit;
+  const despawnLimit = limit + ORBITAL_CONFIG.world.despawnMargin;
+  const topLeft = worldToScreen({ x: -limit, y: -limit });
+  const bottomRight = worldToScreen({ x: limit, y: limit });
+  const despawnTopLeft = worldToScreen({ x: -despawnLimit, y: -despawnLimit });
+  const despawnBottomRight = worldToScreen({ x: despawnLimit, y: despawnLimit });
 
-  if (!snapshot) return;
-  for (const player of snapshot.players) {
-    if (player.id === localPlayerId && player.mode === 'ship') {
-      const localAvatar = avatarGroups.get(player.id);
-      if (localAvatar) localAvatar.visible = false;
-      continue;
-    }
-    const group = avatarGroups.get(player.id) ?? makeAvatarGroup(player.color);
-    group.visible = true;
-    avatarGroups.set(player.id, group);
-    setObjectBasis(group, player.position, player.forward, player.up);
-  }
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(125, 211, 252, 0.62)';
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.setLineDash([10, 10]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(248, 113, 113, 0.24)';
+  ctx.strokeRect(
+    despawnTopLeft.x,
+    despawnTopLeft.y,
+    despawnBottomRight.x - despawnTopLeft.x,
+    despawnBottomRight.y - despawnTopLeft.y,
+  );
+  ctx.restore();
 };
 
-const updateShip = (snapshot: SolarSnapshot | null): void => {
-  const serverTime = snapshot?.serverTime ?? performance.now() + serverClock.offsetMs;
-  const ship = snapshot?.ship ?? getShipSpawnTransform(serverTime);
-  setObjectBasis(shipGroup, ship.position, ship.forward, ship.up);
-};
+const drawBodyTrail = (body: OrbitBodySnapshot): void => {
+  if (body.path.length < 2) return;
 
-const readInput = (): SolarInputState => {
-  const has = (code: string) => keyState.has(code);
-  return {
-    forward: has('KeyW') || has('ArrowUp') || Boolean(touchState.forward),
-    backward: has('KeyS') || Boolean(touchState.backward),
-    left: has('KeyA') || Boolean(touchState.left),
-    right: has('KeyD') || Boolean(touchState.right),
-    jump: has('Space') || Boolean(touchState.jump),
-    sprint: has('ShiftLeft') || has('ShiftRight') || Boolean(touchState.boost),
-    boost: has('ShiftLeft') || has('ShiftRight') || Boolean(touchState.boost),
-    ascend: has('Space') || Boolean(touchState.jump),
-    descend: has('ControlLeft') || has('ControlRight'),
-    yawLeft: has('ArrowLeft'),
-    yawRight: has('ArrowRight'),
-    pitchUp: has('KeyI'),
-    pitchDown: has('KeyK'),
-    rollLeft: has('KeyQ'),
-    rollRight: has('KeyR'),
-  };
-};
+  const points = body.path
+    .map(worldToScreen)
+    .filter((point, index, allPoints) => {
+      if (index === 0) return true;
+      const previous = allPoints[index - 1];
+      return Math.hypot(point.x - previous.x, point.y - previous.y) > 0.35;
+    });
+  if (points.length < 2) return;
 
-const sendInput = (): void => {
-  if (connectionState !== 'online') return;
-  const cameraForward = new THREE.Vector3();
-  camera.getWorldDirection(cameraForward);
-  const cameraRight = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
-  sendMessage({
-    type: 'solarInput',
-    seq: ++inputSeq,
-    input: readInput(),
-    cameraForward: fromThree(cameraForward),
-    cameraRight: fromThree(cameraRight),
-  });
-};
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.lineWidth = Math.max(1, body.radius * 0.28 * zoom);
 
-const updateCamera = (snapshot: SolarSnapshot | null, serverTime: number): void => {
-  const localPlayer = snapshot?.players.find((player) => player.id === localPlayerId) ?? null;
-  const targetShip = snapshot?.ship ?? null;
-  let targetPosition: Vec3;
-  let targetForward: Vec3;
-  let targetUp: Vec3;
-  let desiredDistance: number;
-
-  if (localPlayer) {
-    targetPosition = localPlayer.mode === 'ship' && targetShip ? targetShip.position : localPlayer.position;
-    targetForward = localPlayer.mode === 'ship' && targetShip ? targetShip.forward : localPlayer.forward;
-    targetUp = localPlayer.mode === 'ship' && targetShip ? targetShip.up : localPlayer.up;
-    desiredDistance = localPlayer.mode === 'ship' ? 18 : 12.5;
-    const nearest = getNearestBody(targetPosition, serverTime);
-    targetLabel.textContent = localPlayer.mode === 'ship' ? 'Starter ship' : `${nearest.body.name} surface`;
-  } else {
-    const launch = getLaunchSite(serverTime);
-    targetPosition = launch.position;
-    targetForward = launch.forward;
-    targetUp = launch.up;
-    desiredDistance = 18;
-    targetLabel.textContent = 'Earth launch site';
-  }
-
-  cameraDistance += (desiredDistance - cameraDistance) * 0.08;
-  const up = normalizeVec(targetUp);
-  const baseForward = normalizeVec(projectOnPlane(targetForward, up), targetForward);
-  const viewForward = normalizeVec(rotateVectorAroundAxis(baseForward, up, cameraYaw), baseForward);
-  const back = scaleVec(viewForward, -Math.cos(cameraPitch) * cameraDistance);
-  const lift = scaleVec(up, Math.sin(cameraPitch) * cameraDistance + 2.2);
-  const desiredPosition = addVec(addVec(targetPosition, back), lift);
-
-  camera.position.lerp(toThree(desiredPosition), 0.22);
-  camera.up.copy(toThree(up));
-  camera.lookAt(toThree(addVec(addVec(targetPosition, scaleVec(up, 1.35)), scaleVec(viewForward, 1.4))));
-};
-
-const updateUsePrompt = (snapshot: SolarSnapshot | null): void => {
-  if (!snapshot || !localPlayerId) {
-    usePrompt.hidden = true;
+  if (points.length === 2) {
+    ctx.globalAlpha = 0.58;
+    ctx.strokeStyle = body.color;
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    ctx.lineTo(points[1].x, points[1].y);
+    ctx.stroke();
+    ctx.restore();
     return;
   }
 
-  const localPlayer = snapshot.players.find((player) => player.id === localPlayerId);
-  if (!localPlayer) {
-    usePrompt.hidden = true;
+  for (let index = 1; index < points.length; index += 1) {
+    const previous = points[index - 1];
+    const current = points[index];
+    const next = points[index + 1];
+    const from =
+      index === 1
+        ? previous
+        : {
+            x: (previous.x + current.x) / 2,
+            y: (previous.y + current.y) / 2,
+          };
+    const to =
+      next && index < points.length - 1
+        ? {
+            x: (current.x + next.x) / 2,
+            y: (current.y + next.y) / 2,
+          }
+        : current;
+
+    ctx.globalAlpha = (index / (points.length - 1)) * 0.58;
+    ctx.strokeStyle = body.color;
+    ctx.beginPath();
+    ctx.moveTo(from.x, from.y);
+    ctx.quadraticCurveTo(current.x, current.y, to.x, to.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+};
+
+const drawBody = (body: OrbitBodySnapshot): void => {
+  const screen = worldToScreen(body);
+  const radius = Math.max(2, body.radius * zoom);
+  if (screen.x < -radius * 4 || screen.x > width + radius * 4 || screen.y < -radius * 4 || screen.y > height + radius * 4) {
     return;
   }
 
-  if (snapshot.ship.pilotId === localPlayerId) {
-    usePrompt.textContent = 'Exit';
-    usePrompt.hidden = false;
-    return;
+  ctx.save();
+  ctx.shadowBlur = Math.min(42, radius * 1.8);
+  ctx.shadowColor = body.color;
+  ctx.fillStyle = body.color;
+  ctx.beginPath();
+  ctx.arc(screen.x, screen.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.36)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+};
+
+const getPreviewMass = (): number => {
+  const timeHeld = Date.now() - pointer.holdStartTime;
+  return Math.min(
+    ORBITAL_CONFIG.creation.baseMass + timeHeld * ORBITAL_CONFIG.creation.massGrowthRate,
+    ORBITAL_CONFIG.creation.maxMass,
+  );
+};
+
+const drawCreationPreview = (): void => {
+  if (!pointer.creating) return;
+
+  const mass = getPreviewMass();
+  const radius = getRadiusForMass(mass) * zoom;
+  const color = getColorForMass(mass);
+  const start = worldToScreen(pointer.start);
+  const current = worldToScreen(pointer.current);
+
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.setLineDash([7, 7]);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+  ctx.lineTo(current.x, current.y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = color;
+  ctx.shadowBlur = Math.min(48, radius * 2);
+  ctx.shadowColor = color;
+  ctx.beginPath();
+  ctx.arc(start.x, start.y, Math.max(2, radius), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.arc(start.x, start.y, Math.max(7, radius + 4), 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+};
+
+const updateCameraPan = (dtSeconds: number): void => {
+  const has = (code: string) => keyState.has(code) || touchPanState.has(code);
+  let dx = 0;
+  let dy = 0;
+  if (has('KeyA') || has('ArrowLeft')) dx -= 1;
+  if (has('KeyD') || has('ArrowRight')) dx += 1;
+  if (has('KeyW') || has('ArrowUp')) dy -= 1;
+  if (has('KeyS') || has('ArrowDown')) dy += 1;
+
+  if (dx === 0 && dy === 0) return;
+  const length = Math.hypot(dx, dy) || 1;
+  const speed = PAN_SPEED / zoom;
+  cameraX += (dx / length) * speed * dtSeconds;
+  cameraY += (dy / length) * speed * dtSeconds;
+  clampCameraToBoundary();
+};
+
+const updateUi = (): void => {
+  const bodies = latestSnapshot?.bodies.length ?? 0;
+  const players = latestSnapshot?.playerCount ?? (connectionState === 'online' ? 1 : 0);
+  countDisplay.textContent = `${bodies}/${ORBITAL_CONFIG.maxBodies}`;
+  playerDisplay.textContent = players.toString();
+  viewLabel.textContent = `${Math.round(cameraX)}, ${Math.round(cameraY)}`;
+};
+
+const render = (time: number): void => {
+  const dtSeconds = Math.min(0.05, Math.max(0.001, (time - lastFrameTime) / 1000));
+  lastFrameTime = time;
+  updateCameraPan(dtSeconds);
+
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#030712';
+  ctx.fillRect(0, 0, width, height);
+
+  drawStars();
+  drawGrid();
+  drawBoundary();
+
+  const renderSnapshot = getRenderableSnapshot(time);
+  const bodies = renderSnapshot?.bodies ?? [];
+  for (const body of bodies) drawBodyTrail(body);
+  for (const body of bodies) drawBody(body);
+  drawCreationPreview();
+  updateUi();
+
+  if (socket?.readyState === WebSocket.OPEN && time - lastPingAt >= PING_INTERVAL_MS) {
+    sendMessage({ type: 'ping', clientTime: time });
+    lastPingAt = time;
   }
 
-  const canBoard =
-    localPlayer.mode === 'surface' &&
-    snapshot.ship.pilotId === null &&
-    distanceVec(localPlayer.position, snapshot.ship.position) <= SOLAR_CONFIG.ship.boardRadius;
-  usePrompt.textContent = 'Board';
-  usePrompt.hidden = !canBoard;
+  window.requestAnimationFrame(render);
 };
 
 const handleSocketMessage = (event: MessageEvent): void => {
@@ -594,6 +536,13 @@ const handleSocketMessage = (event: MessageEvent): void => {
 
   if (message.type === 'solarSnapshot') {
     queueSnapshot(message);
+    return;
+  }
+
+  if (message.type === 'solarPresence') {
+    if (latestSnapshot) {
+      latestSnapshot = { ...latestSnapshot, playerCount: message.playerCount };
+    }
     return;
   }
 
@@ -631,6 +580,7 @@ const connect = (): void => {
     localPlayerId = null;
     latestSnapshot = null;
     snapshotBuffer = [];
+    serverClock.synced = false;
     window.setTimeout(connect, 1400);
   });
 
@@ -640,60 +590,69 @@ const connect = (): void => {
   });
 };
 
-const resize = (): void => {
-  const width = Math.max(host.clientWidth, 320);
-  const height = Math.max(host.clientHeight, 320);
-  camera.aspect = width / height;
-  camera.updateProjectionMatrix();
-  renderer.setSize(width, height, false);
-};
-
 const handlePointerDown = (event: PointerEvent): void => {
-  if (event.button !== 0) return;
-  draggingCamera = true;
-  lastPointerX = event.clientX;
-  lastPointerY = event.clientY;
-  renderer.domElement.setPointerCapture?.(event.pointerId);
+  if (event.button !== 0 || connectionState !== 'online') return;
+  event.preventDefault();
+  pointer.creating = true;
+  pointer.id = event.pointerId;
+  pointer.start = clampWorldToBoundary(screenToWorld(event.clientX, event.clientY));
+  pointer.current = { ...pointer.start };
+  pointer.holdStartTime = Date.now();
+  canvas.setPointerCapture?.(event.pointerId);
 };
 
 const handlePointerMove = (event: PointerEvent): void => {
-  if (!draggingCamera) return;
-  const dx = event.clientX - lastPointerX;
-  const dy = event.clientY - lastPointerY;
-  lastPointerX = event.clientX;
-  lastPointerY = event.clientY;
-  cameraYaw -= dx * 0.0048;
-  cameraPitch = clamp(cameraPitch + dy * 0.0038, -0.18, 1.15);
+  if (!pointer.creating || event.pointerId !== pointer.id) return;
+  event.preventDefault();
+  pointer.current = screenToWorld(event.clientX, event.clientY);
 };
 
-const handlePointerUp = (event: PointerEvent): void => {
-  draggingCamera = false;
-  if (renderer.domElement.hasPointerCapture?.(event.pointerId)) {
-    renderer.domElement.releasePointerCapture(event.pointerId);
+const finishCreation = (event: PointerEvent): void => {
+  if (!pointer.creating || event.pointerId !== pointer.id) return;
+  event.preventDefault();
+  pointer.current = screenToWorld(event.clientX, event.clientY);
+  pointer.creating = false;
+
+  if (canvas.hasPointerCapture?.(event.pointerId)) {
+    canvas.releasePointerCapture(event.pointerId);
   }
+
+  const body: OrbitAddBodyPayload = {
+    x: pointer.start.x,
+    y: pointer.start.y,
+    vx: (pointer.current.x - pointer.start.x) * ORBITAL_CONFIG.creation.velocityScale,
+    vy: (pointer.current.y - pointer.start.y) * ORBITAL_CONFIG.creation.velocityScale,
+    mass: getPreviewMass(),
+  };
+  sendMessage({ type: 'solarAddBody', body });
 };
 
-renderer.domElement.addEventListener('pointerdown', handlePointerDown);
-renderer.domElement.addEventListener('pointermove', handlePointerMove);
-renderer.domElement.addEventListener('pointerup', handlePointerUp);
-renderer.domElement.addEventListener('pointerleave', handlePointerUp);
-renderer.domElement.addEventListener(
+canvas.addEventListener('pointerdown', handlePointerDown);
+canvas.addEventListener('pointermove', handlePointerMove);
+canvas.addEventListener('pointerup', finishCreation);
+canvas.addEventListener('pointercancel', (event) => {
+  pointer.creating = false;
+  if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+});
+canvas.addEventListener(
   'wheel',
   (event) => {
     event.preventDefault();
-    cameraDistance = clamp(cameraDistance * (event.deltaY > 0 ? 1.08 : 0.92), 7, 42);
+    const before = screenToWorld(event.clientX, event.clientY);
+    zoom = clamp(zoom * (event.deltaY > 0 ? 0.92 : 1.08), MIN_ZOOM, MAX_ZOOM);
+    const after = screenToWorld(event.clientX, event.clientY);
+    cameraX += before.x - after.x;
+    cameraY += before.y - after.y;
+    clampCameraToBoundary();
   },
   { passive: false },
 );
 
 document.addEventListener('keydown', (event) => {
-  if (event.repeat && event.code === 'KeyE') return;
-  if (event.code === 'KeyE') {
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
     event.preventDefault();
-    sendMessage({ type: 'solarUse' });
-    return;
+    keyState.add(event.code);
   }
-  keyState.add(event.code);
 });
 
 document.addEventListener('keyup', (event) => {
@@ -702,22 +661,15 @@ document.addEventListener('keyup', (event) => {
 
 window.addEventListener('blur', () => {
   keyState.clear();
-  for (const key of Object.keys(touchState) as (keyof SolarInputState)[]) {
-    touchState[key] = false;
-  }
+  touchPanState.clear();
 });
 
-document.querySelectorAll<HTMLButtonElement>('[data-control]').forEach((button) => {
-  const control = button.dataset.control as keyof SolarInputState | undefined;
-  if (!control) return;
+document.querySelectorAll<HTMLButtonElement>('[data-pan]').forEach((button) => {
+  const code = button.dataset.pan;
+  if (!code) return;
   const setPressed = (pressed: boolean) => {
-    touchState[control] = pressed;
-    if (control === 'boost') {
-      touchState.sprint = pressed;
-    }
-    if (control === 'jump') {
-      touchState.ascend = pressed;
-    }
+    if (pressed) touchPanState.add(code);
+    else touchPanState.delete(code);
   };
   button.addEventListener('pointerdown', (event) => {
     event.preventDefault();
@@ -733,40 +685,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-control]').forEach((button) 
   button.addEventListener('pointerleave', () => setPressed(false));
 });
 
-document.querySelectorAll<HTMLButtonElement>('[data-action="use"]').forEach((button) => {
-  button.addEventListener('click', () => sendMessage({ type: 'solarUse' }));
-});
-
-const resizeObserver = new ResizeObserver(resize);
-resizeObserver.observe(host);
+window.addEventListener('resize', resize);
 resize();
-createStars();
-SOLAR_BODIES.forEach(createBodyRuntime);
-
-const animate = (time: number): void => {
-  const serverTime = serverClock.synced ? time + serverClock.offsetMs : Date.now();
-  const renderSnapshot = getRenderableSnapshot(time);
-
-  updateBodies(serverTime);
-  updateAvatars(renderSnapshot);
-  updateShip(renderSnapshot);
-  updateCamera(renderSnapshot, serverTime);
-  updateUsePrompt(renderSnapshot);
-
-  if (time - lastInputFlush >= INPUT_FLUSH_MS) {
-    sendInput();
-    lastInputFlush = time;
-  }
-
-  if (socket?.readyState === WebSocket.OPEN && time - lastPingAt >= PING_INTERVAL_MS) {
-    sendMessage({ type: 'ping', clientTime: time });
-    lastPingAt = time;
-  }
-
-  renderer.render(scene, camera);
-  window.requestAnimationFrame(animate);
-};
-
 setConnectionState('offline', 'Offline');
 connect();
-window.requestAnimationFrame(animate);
+window.requestAnimationFrame(render);

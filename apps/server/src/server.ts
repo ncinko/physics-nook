@@ -1226,7 +1226,7 @@ export const createGameServer = () => {
     }
 
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Manatee Royale or Solar System.');
+    response.end('Use a WebSocket connection for Manatee Royale or Orbitals.');
   });
 
   const loop = setInterval(() => {

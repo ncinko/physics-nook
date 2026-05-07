@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { createGameServer } from '../../apps/server/src/server.ts';
+import { ORBITAL_CONFIG } from '../../packages/shared/src/solar.ts';
 
 const listen = (server: ReturnType<typeof createGameServer>) =>
   new Promise<number>((resolve) => {
@@ -96,74 +97,68 @@ test('root websocket still serves Manatee Royale lobby summaries', async () => {
   });
 });
 
-test('solar websocket spawns players near each other and keeps one ship pilot', async () => {
+test('orbitals websocket shares body additions across users and rejects global clear', async () => {
   await withServer(async (port) => {
     const first = await connectWebSocket(`ws://127.0.0.1:${port}/solar`);
     const second = await connectWebSocket(`ws://127.0.0.1:${port}/solar`);
 
     try {
       sendJson(first, { type: 'solarJoin', name: 'Ada' });
-      sendJson(second, { type: 'solarJoin', name: 'Ben' });
 
       const firstJoined = await waitForMessage<{
         type: string;
         you: string;
-        snapshot: { players: Array<{ id: string; position: { x: number; y: number; z: number } }> };
+        snapshot: { bodies: unknown[]; playerCount: number };
       }>(first, (message) => message.type === 'solarJoined');
-      const secondJoined = await waitForMessage<{
+
+      const firstPresence = waitForMessage<{ type: string; playerCount: number }>(
+        first,
+        (message) => message.type === 'solarPresence' && message.playerCount === 2,
+      );
+      const secondJoined = waitForMessage<{ type: string }>(second, (message) => message.type === 'solarJoined');
+      sendJson(second, { type: 'solarJoin', name: 'Ben' });
+      await secondJoined;
+      await firstPresence;
+
+      assert.ok(firstJoined.you);
+      assert.equal(firstJoined.snapshot.bodies.length, 2);
+
+      const addedMessage = waitForMessage<{
         type: string;
-        you: string;
-        snapshot: { players: Array<{ id: string; position: { x: number; y: number; z: number } }> };
-      }>(second, (message) => message.type === 'solarJoined');
-
-      const firstPlayer = firstJoined.snapshot.players.find((player) => player.id === firstJoined.you);
-      const secondPlayer = secondJoined.snapshot.players.find((player) => player.id === secondJoined.you);
-      assert.ok(firstPlayer);
-      assert.ok(secondPlayer);
-      const spawnDistance = Math.hypot(
-        firstPlayer.position.x - secondPlayer.position.x,
-        firstPlayer.position.y - secondPlayer.position.y,
-        firstPlayer.position.z - secondPlayer.position.z,
-      );
-      assert.ok(spawnDistance < 6);
-
-      sendJson(first, { type: 'solarUse' });
-      const piloted = await waitForMessage<{ type: string; ship: { pilotId: string | null } }>(
-        first,
-        (message) => message.type === 'solarSnapshot' && message.ship.pilotId === firstJoined.you,
-      );
-      assert.equal(piloted.ship.pilotId, firstJoined.you);
-
-      sendJson(second, { type: 'solarUse' });
-      sendJson(second, {
-        type: 'solarInput',
-        seq: 1,
-        input: {
-          forward: true,
-          backward: false,
-          left: false,
-          right: false,
-          jump: false,
-          sprint: false,
-          boost: true,
-          ascend: false,
-          descend: false,
-          yawLeft: false,
-          yawRight: false,
-          pitchUp: false,
-          pitchDown: false,
-          rollLeft: false,
-          rollRight: false,
-        },
+        bodies: Array<{ mass: number; x: number; y: number }>;
+      }>(second, (message) => message.type === 'solarSnapshot' && message.bodies.some((body) => body.mass === 240));
+      sendJson(first, {
+        type: 'solarAddBody',
+        body: { x: 120, y: -40, vx: 0.8, vy: -1.2, mass: 240 },
       });
-      const afterSecondUse = await waitForMessage<{ type: string; ship: { pilotId: string | null } }>(
-        first,
-        (message) => message.type === 'solarSnapshot',
+      const added = await addedMessage;
+
+      const sharedBody = added.bodies.find((body) => body.mass === 240);
+      assert.ok(sharedBody);
+      assert.ok(Math.abs(sharedBody.x - 120) < 8);
+      assert.ok(Math.abs(sharedBody.y + 40) < 8);
+
+      sendJson(second, { type: 'solarClear' });
+      const clearRejected = await waitForMessage<{ type: string; message: string }>(
+        second,
+        (message) => message.type === 'error' && message.message.includes('Unsupported orbitals message'),
       );
-      assert.equal(afterSecondUse.ship.pilotId, firstJoined.you);
+      assert.match(clearRejected.message, /solarClear/);
     } finally {
       first.close();
       second.close();
     }
+  });
+});
+
+test('orbitals health reports the simplified shared world', async () => {
+  await withServer(async (port) => {
+    const response = await fetch(`http://127.0.0.1:${port}/solar/health`);
+    const health = (await response.json()) as { ok: boolean; mode: string; bodies: number };
+
+    assert.equal(health.ok, true);
+    assert.equal(health.mode, 'orbitals');
+    assert.equal(health.bodies, 2);
+    assert.equal(ORBITAL_CONFIG.protocolVersion, 2);
   });
 });

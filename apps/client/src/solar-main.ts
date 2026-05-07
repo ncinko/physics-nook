@@ -73,7 +73,8 @@ const MAX_ZOOM = 2.2;
 const GRID_SIZE = 120;
 const STAR_CELL_SIZE = 520;
 const STARS_PER_CELL = 3;
-const TRAIL_POINT_MIN_SCREEN_DISTANCE = 1.2;
+const TRAIL_POINT_MIN_WORLD_DISTANCE = 0.75;
+const TRAIL_LIVE_ENDPOINT_MIN_WORLD_DISTANCE = 0.05;
 const TRAIL_RESET_WORLD_DISTANCE = 420;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
@@ -235,12 +236,6 @@ const worldToScreen = (point: Vec2): Vec2 => ({
 
 const distanceWorld = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
 
-const distanceScreen = (a: Vec2, b: Vec2): number => {
-  const from = worldToScreen(a);
-  const to = worldToScreen(b);
-  return Math.hypot(from.x - to.x, from.y - to.y);
-};
-
 const resize = (): void => {
   const rect = canvas.getBoundingClientRect();
   width = Math.max(1, rect.width);
@@ -348,21 +343,24 @@ const withClientTrail = (body: OrbitBodySnapshot, time: number): OrbitBodySnapsh
     const shouldReset = previous && distanceWorld(previous, currentPoint) > TRAIL_RESET_WORLD_DISTANCE;
     if (shouldReset) {
       trail.points = [currentPoint];
-    } else if (!previous || distanceScreen(previous, currentPoint) >= TRAIL_POINT_MIN_SCREEN_DISTANCE) {
+    } else if (!previous || distanceWorld(previous, currentPoint) >= TRAIL_POINT_MIN_WORLD_DISTANCE) {
       trail.points.push(currentPoint);
       if (trail.points.length > ORBITAL_CONFIG.trailLength) {
         trail.points.splice(0, trail.points.length - ORBITAL_CONFIG.trailLength);
       }
-    } else if (previous) {
-      previous.x = currentPoint.x;
-      previous.y = currentPoint.y;
     }
     trail.lastUpdatedAt = time;
   }
 
+  const lastPoint = trail.points[trail.points.length - 1];
+  const path =
+    lastPoint && distanceWorld(lastPoint, currentPoint) >= TRAIL_LIVE_ENDPOINT_MIN_WORLD_DISTANCE
+      ? [...trail.points, currentPoint]
+      : trail.points;
+
   return {
     ...body,
-    path: trail.points,
+    path,
   };
 };
 

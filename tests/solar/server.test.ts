@@ -108,7 +108,7 @@ test('orbitals websocket shares body additions across users and rejects global c
       const firstJoined = await waitForMessage<{
         type: string;
         you: string;
-        snapshot: { bodies: unknown[]; playerCount: number };
+        snapshot: { bodies: Array<{ path: unknown[] }>; playerCount: number };
       }>(first, (message) => message.type === 'solarJoined');
 
       const firstPresence = waitForMessage<{ type: string; playerCount: number }>(
@@ -122,10 +122,11 @@ test('orbitals websocket shares body additions across users and rejects global c
 
       assert.ok(firstJoined.you);
       assert.equal(firstJoined.snapshot.bodies.length, 2);
+      assert.ok(firstJoined.snapshot.bodies.every((body) => body.path.length === 0));
 
       const addedMessage = waitForMessage<{
         type: string;
-        bodies: Array<{ mass: number; x: number; y: number }>;
+        bodies: Array<{ mass: number; x: number; y: number; path: unknown[] }>;
       }>(second, (message) => message.type === 'solarSnapshot' && message.bodies.some((body) => body.mass === 240));
       sendJson(first, {
         type: 'solarAddBody',
@@ -137,6 +138,7 @@ test('orbitals websocket shares body additions across users and rejects global c
       assert.ok(sharedBody);
       assert.ok(Math.abs(sharedBody.x - 120) < 8);
       assert.ok(Math.abs(sharedBody.y + 40) < 8);
+      assert.ok(added.bodies.every((body) => body.path.length === 0));
 
       sendJson(second, { type: 'solarClear' });
       const clearRejected = await waitForMessage<{ type: string; message: string }>(

@@ -42,7 +42,7 @@ const sanitizeName = (value: unknown, fallback: string): string => {
 
 const cloneBody = (body: OrbitBodySnapshot): OrbitBodySnapshot => ({
   ...body,
-  path: body.path.map((point) => ({ ...point })),
+  path: [],
 });
 
 const sendFrame = (socket: import('node:net').Socket, payload: SolarServerToClientMessage | string): void => {

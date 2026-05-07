@@ -43,6 +43,11 @@ const pointer = {
   holdStartTime: 0,
 };
 
+type TrailState = {
+  points: Vec2[];
+  lastUpdatedAt: number;
+};
+
 let socket: WebSocket | null = null;
 let connectionState: ConnectionState = 'offline';
 let localPlayerId: string | null = null;
@@ -57,6 +62,7 @@ let cameraY = 0;
 let zoom = 1;
 let lastFrameTime = performance.now();
 let lastPingAt = 0;
+const trailStates = new Map<string, TrailState>();
 
 const PING_INTERVAL_MS = 2000;
 const SNAPSHOT_BUFFER_MAX = 12;
@@ -67,6 +73,8 @@ const MAX_ZOOM = 2.2;
 const GRID_SIZE = 120;
 const STAR_CELL_SIZE = 520;
 const STARS_PER_CELL = 3;
+const TRAIL_POINT_MIN_SCREEN_DISTANCE = 1.2;
+const TRAIL_RESET_WORLD_DISTANCE = 420;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
@@ -78,31 +86,10 @@ const cloneSnapshot = (snapshot: OrbitSnapshot): OrbitSnapshot => ({
   events: [...snapshot.events],
 });
 
-const makeInterpolatedTrail = (
-  from: OrbitBodySnapshot | undefined,
-  to: OrbitBodySnapshot,
-  current: Vec2,
-  amount: number,
-  tickDelta: number,
-): Vec2[] => {
-  const currentPoint = { x: current.x, y: current.y };
-  if (!from) {
-    return [...to.path.slice(0, Math.max(0, to.path.length - 1)), currentPoint].slice(-ORBITAL_CONFIG.trailLength);
-  }
-
-  const newPointCapacity = Math.min(Math.max(1, tickDelta), to.path.length);
-  const visibleNewPoints = clamp(Math.floor(newPointCapacity * amount), 0, newPointCapacity);
-  const base = from.path.slice(-Math.max(0, ORBITAL_CONFIG.trailLength - visibleNewPoints - 1));
-  const newPoints =
-    visibleNewPoints > 0 ? to.path.slice(-newPointCapacity, -newPointCapacity + visibleNewPoints) : [];
-  return [...base, ...newPoints, currentPoint].slice(-ORBITAL_CONFIG.trailLength);
-};
-
 const interpolateBody = (
   from: OrbitBodySnapshot | undefined,
   to: OrbitBodySnapshot,
   amount: number,
-  tickDelta: number,
 ): OrbitBodySnapshot => {
   if (!from) return { ...to, path: to.path.map((point) => ({ ...point })) };
   const current = {
@@ -115,17 +102,16 @@ const interpolateBody = (
     y: current.y,
     vx: lerp(from.vx, to.vx, amount),
     vy: lerp(from.vy, to.vy, amount),
-    path: makeInterpolatedTrail(from, to, current, amount, tickDelta),
+    path: [],
   };
 };
 
 const interpolateSnapshot = (from: OrbitSnapshot, to: OrbitSnapshot, amount: number): OrbitSnapshot => {
   const previousBodies = new Map(from.bodies.map((body) => [body.id, body]));
-  const tickDelta = Math.max(1, to.tick - from.tick);
   return {
     ...to,
     serverTime: lerp(from.serverTime, to.serverTime, amount),
-    bodies: to.bodies.map((body) => interpolateBody(previousBodies.get(body.id), body, amount, tickDelta)),
+    bodies: to.bodies.map((body) => interpolateBody(previousBodies.get(body.id), body, amount)),
     events: [],
   };
 };
@@ -247,6 +233,14 @@ const worldToScreen = (point: Vec2): Vec2 => ({
   y: height / 2 + (point.y - cameraY) * zoom,
 });
 
+const distanceWorld = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
+
+const distanceScreen = (a: Vec2, b: Vec2): number => {
+  const from = worldToScreen(a);
+  const to = worldToScreen(b);
+  return Math.hypot(from.x - to.x, from.y - to.y);
+};
+
 const resize = (): void => {
   const rect = canvas.getBoundingClientRect();
   width = Math.max(1, rect.width);
@@ -340,6 +334,46 @@ const drawBoundary = (): void => {
     despawnBottomRight.y - despawnTopLeft.y,
   );
   ctx.restore();
+};
+
+const withClientTrail = (body: OrbitBodySnapshot, time: number): OrbitBodySnapshot => {
+  const currentPoint = { x: body.x, y: body.y };
+  let trail = trailStates.get(body.id);
+
+  if (!trail) {
+    trail = { points: [currentPoint], lastUpdatedAt: time };
+    trailStates.set(body.id, trail);
+  } else {
+    const previous = trail.points[trail.points.length - 1];
+    const shouldReset = previous && distanceWorld(previous, currentPoint) > TRAIL_RESET_WORLD_DISTANCE;
+    if (shouldReset) {
+      trail.points = [currentPoint];
+    } else if (!previous || distanceScreen(previous, currentPoint) >= TRAIL_POINT_MIN_SCREEN_DISTANCE) {
+      trail.points.push(currentPoint);
+      if (trail.points.length > ORBITAL_CONFIG.trailLength) {
+        trail.points.splice(0, trail.points.length - ORBITAL_CONFIG.trailLength);
+      }
+    } else if (previous) {
+      previous.x = currentPoint.x;
+      previous.y = currentPoint.y;
+    }
+    trail.lastUpdatedAt = time;
+  }
+
+  return {
+    ...body,
+    path: trail.points,
+  };
+};
+
+const attachClientTrails = (bodies: OrbitBodySnapshot[], time: number): OrbitBodySnapshot[] => {
+  const activeIds = new Set(bodies.map((body) => body.id));
+  for (const [id, trail] of trailStates.entries()) {
+    if (!activeIds.has(id) || time - trail.lastUpdatedAt > 2000) {
+      trailStates.delete(id);
+    }
+  }
+  return bodies.map((body) => withClientTrail(body, time));
 };
 
 const drawBodyTrail = (body: OrbitBodySnapshot): void => {
@@ -504,7 +538,7 @@ const render = (time: number): void => {
   drawBoundary();
 
   const renderSnapshot = getRenderableSnapshot(time);
-  const bodies = renderSnapshot?.bodies ?? [];
+  const bodies = attachClientTrails(renderSnapshot?.bodies ?? [], time);
   for (const body of bodies) drawBodyTrail(body);
   for (const body of bodies) drawBody(body);
   drawCreationPreview();
@@ -580,6 +614,7 @@ const connect = (): void => {
     localPlayerId = null;
     latestSnapshot = null;
     snapshotBuffer = [];
+    trailStates.clear();
     serverClock.synced = false;
     window.setTimeout(connect, 1400);
   });

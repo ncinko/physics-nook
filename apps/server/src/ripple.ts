@@ -439,13 +439,8 @@ export const createRippleWorld = () => {
     const room = getJoinedRoom(client);
     if (!room) return;
 
-    const now = Date.now();
-    room.emitters = new Map(createDefaultRippleEmitters(now).map((emitter) => [emitter.id, emitter]));
-    room.objects = new Map();
     room.recentSplashes = [];
-    room.paused = false;
     room.resetVersion += 1;
-    room.nextObjectId = 1;
     broadcastSnapshot(room);
   };
 

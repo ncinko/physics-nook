@@ -93,8 +93,9 @@ const MAX_ROWS = 88;
 const CELL_TARGET = 14;
 const WORLD_SCALE = 3;
 const DAMPING = 0.9976;
-const EDGE_DAMPING_LAYER_CELLS = 12;
-const EDGE_DAMPING_MAX = 0.86;
+const ABSORBING_BOUNDARY_LAYER_CELLS = 24;
+const ABSORBING_BOUNDARY_MAX_DAMPING = 0.94;
+const ABSORBING_BOUNDARY_COEFFICIENT = (Math.SQRT1_2 - 1) / (Math.SQRT1_2 + 1);
 const DRAG_INTERVAL_MS = 65;
 const EMITTER_SEND_INTERVAL_MS = 44;
 const OBJECT_SEND_INTERVAL_MS = 44;
@@ -354,6 +355,40 @@ const buildObjectMask = (): void => {
 const sampleNeighbor = (index: number, currentIndex: number): number =>
   objectMask[index] ? -grid.current[currentIndex] * 0.78 : grid.current[index];
 
+const applyAbsorbingBoundary = (current: Float32Array, next: Float32Array): void => {
+  const { cols, rows } = size;
+  const coefficient = ABSORBING_BOUNDARY_COEFFICIENT;
+
+  for (let col = 1; col < cols - 1; col += 1) {
+    const top = col;
+    const topInner = cols + col;
+    const bottom = (rows - 1) * cols + col;
+    const bottomInner = (rows - 2) * cols + col;
+
+    next[top] = current[topInner] + coefficient * (next[topInner] - current[top]);
+    next[bottom] = current[bottomInner] + coefficient * (next[bottomInner] - current[bottom]);
+  }
+
+  for (let row = 1; row < rows - 1; row += 1) {
+    const left = row * cols;
+    const leftInner = left + 1;
+    const right = row * cols + cols - 1;
+    const rightInner = right - 1;
+
+    next[left] = current[leftInner] + coefficient * (next[leftInner] - current[left]);
+    next[right] = current[rightInner] + coefficient * (next[rightInner] - current[right]);
+  }
+
+  next[0] = (next[1] + next[cols]) * 0.5;
+  next[cols - 1] = (next[cols - 2] + next[2 * cols - 1]) * 0.5;
+
+  const bottomLeft = (rows - 1) * cols;
+  next[bottomLeft] = (next[bottomLeft + 1] + next[bottomLeft - cols]) * 0.5;
+
+  const bottomRight = rows * cols - 1;
+  next[bottomRight] = (next[bottomRight - 1] + next[bottomRight - cols]) * 0.5;
+};
+
 const stepGrid = (): void => {
   const { cols, rows } = size;
   const { previous, current, next } = grid;
@@ -374,24 +409,16 @@ const stepGrid = (): void => {
       let nextValue = ((neighborSum * 0.5) - previous[index]) * DAMPING;
 
       const edgeDistance = Math.min(col, row, cols - 1 - col, rows - 1 - row);
-      if (edgeDistance < EDGE_DAMPING_LAYER_CELLS) {
-        const normalized = (EDGE_DAMPING_LAYER_CELLS - edgeDistance) / EDGE_DAMPING_LAYER_CELLS;
-        nextValue *= 1 - normalized * normalized * EDGE_DAMPING_MAX;
+      if (edgeDistance < ABSORBING_BOUNDARY_LAYER_CELLS) {
+        const normalized = (ABSORBING_BOUNDARY_LAYER_CELLS - edgeDistance) / ABSORBING_BOUNDARY_LAYER_CELLS;
+        nextValue *= 1 - normalized * normalized * ABSORBING_BOUNDARY_MAX_DAMPING;
       }
 
       next[index] = nextValue;
     }
   }
 
-  for (let col = 0; col < cols; col += 1) {
-    next[col] = 0;
-    next[(rows - 1) * cols + col] = 0;
-  }
-
-  for (let row = 0; row < rows; row += 1) {
-    next[row * cols] = 0;
-    next[row * cols + cols - 1] = 0;
-  }
+  applyAbsorbingBoundary(current, next);
 
   grid.previous = current;
   grid.current = next;
@@ -667,8 +694,6 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
     resetVersion = snapshot.resetVersion;
     processedSplashIds.clear();
     clearGrid();
-    simTime = 0;
-    selectedObjectId = null;
   }
 
   emitters = snapshot.emitters;

@@ -197,6 +197,32 @@ test('ripples websocket handles pause, reset, and invalid payloads', async () =>
       sendJson(socket, { type: 'rippleJoin', name: 'Ada' });
       await waitForMessage<{ type: string }>(socket, (message) => message.type === 'rippleJoined');
 
+      const emitterMessage = waitForMessage<{
+        type: string;
+        emitters: Array<{ id: string; amplitude: number }>;
+      }>(
+        socket,
+        (message) =>
+          message.type === 'rippleSnapshot' &&
+          message.emitters.some((emitter) => emitter.id === 'cool-left' && emitter.amplitude === 1.73),
+      );
+      sendJson(socket, { type: 'rippleEmitterUpdate', id: 'cool-left', patch: { amplitude: 1.73 } });
+      await emitterMessage;
+
+      const objectMessage = waitForMessage<{ type: string; objects: Array<{ id: string; kind: string }> }>(
+        socket,
+        (message) => message.type === 'rippleSnapshot' && message.objects.some((object) => object.kind === 'barrier'),
+      );
+      sendJson(socket, { type: 'rippleObjectCreate', kind: 'barrier', object: { x: 0.44, y: 0.55 } });
+      await objectMessage;
+
+      const splashMessage = waitForMessage<{ type: string; recentSplashes: unknown[] }>(
+        socket,
+        (message) => message.type === 'rippleSnapshot' && message.recentSplashes.length > 0,
+      );
+      sendJson(socket, { type: 'rippleSplash', splash: { x: 0.25, y: 0.25 } });
+      await splashMessage;
+
       const pausedMessage = waitForMessage<{ type: string; paused: boolean }>(
         socket,
         (message) => message.type === 'rippleSnapshot' && message.paused === true,
@@ -209,11 +235,19 @@ test('ripples websocket handles pause, reset, and invalid payloads', async () =>
         paused: boolean;
         resetVersion: number;
         recentSplashes: unknown[];
+        emitters: Array<{ id: string; amplitude: number }>;
+        objects: Array<{ kind: string }>;
       }>(socket, (message) => message.type === 'rippleSnapshot' && message.resetVersion === 1);
       sendJson(socket, { type: 'rippleReset' });
       const resetSnapshot = await resetMessage;
-      assert.equal(resetSnapshot.paused, false);
+      const resetEmitter = resetSnapshot.emitters.find((emitter) => emitter.id === 'cool-left');
+      assert.equal(resetSnapshot.paused, true);
       assert.equal(resetSnapshot.recentSplashes.length, 0);
+      assert.equal(resetEmitter?.amplitude, 1.73);
+      assert.equal(resetSnapshot.objects.length, 1);
+      assert.equal(resetSnapshot.objects[0]?.kind, 'barrier');
+
+      await new Promise((resolve) => setTimeout(resolve, RIPPLE_CONFIG.splashRateLimitMs + 5));
 
       const errorMessage = waitForMessage<{ type: string; message: string }>(
         socket,

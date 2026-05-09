@@ -18,6 +18,7 @@ import {
   formatSeconds,
   isInsideStopZone,
   sanitizeLeaderboardName,
+  selectBestScoresByUniqueName,
   shrinkZoneHalfWidth,
   wrapPosition,
   type HistoryPoint,
@@ -125,6 +126,18 @@ const getCssColor = (name: string, fallback: string) => {
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] disabled:cursor-not-allowed disabled:opacity-50';
 
+const formatScoreDate = (createdAt: number) => {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return '--';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(createdAt));
+};
+
 export default function StopInZonesChallenge() {
   const runtimeRef = useRef<Runtime | null>(null);
   if (runtimeRef.current === null) {
@@ -162,7 +175,7 @@ export default function StopInZonesChallenge() {
       const raw = window.localStorage.getItem(STOP_ZONE_DEFAULTS.localStorageKey);
       const parsed = raw ? JSON.parse(raw) : [];
       if (Array.isArray(parsed)) {
-        return parsed.slice(0, 10) as ScoreEntry[];
+        return selectBestScoresByUniqueName(parsed as ScoreEntry[]);
       }
     } catch {
       return [];
@@ -172,9 +185,7 @@ export default function StopInZonesChallenge() {
   }, []);
 
   const saveLocalScore = useCallback((score: ScoreEntry) => {
-    const next = [...loadLocalScores(), score]
-      .sort((a, b) => a.timeMs - b.timeMs || a.createdAt - b.createdAt)
-      .slice(0, 10);
+    const next = selectBestScoresByUniqueName([...loadLocalScores(), score]);
 
     try {
       window.localStorage.setItem(STOP_ZONE_DEFAULTS.localStorageKey, JSON.stringify(next));
@@ -446,7 +457,10 @@ export default function StopInZonesChallenge() {
     return () => window.removeEventListener('resize', handleResize);
   }, [snapshot]);
 
-  const leaderboardScores = apiStatus === 'online' ? cloudScores : localScores;
+  const leaderboardScores = useMemo(
+    () => selectBestScoresByUniqueName(apiStatus === 'online' ? cloudScores : localScores),
+    [apiStatus, cloudScores, localScores],
+  );
   const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
 
   const handleScoreSubmit = async () => {
@@ -627,18 +641,27 @@ export default function StopInZonesChallenge() {
             </div>
             {showLeaderboard ? (
               leaderboardScores.length > 0 ? (
-                <ol className="m-0 space-y-2 p-0">
+                <div>
+                  <div className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_5.25rem] gap-2 border-b border-[var(--grid-line)] pb-2 text-xs font-semibold uppercase text-[var(--text-muted)]">
+                    <span className="text-right">#</span>
+                    <span>Date</span>
+                    <span>Name</span>
+                    <span>Time</span>
+                  </div>
+                  <ol className="m-0 space-y-0 p-0">
                   {leaderboardScores.map((score, index) => (
                     <li
                       key={`${score.id ?? score.name}-${score.timeMs}-${index}`}
-                      className="grid grid-cols-[2.5rem_1fr_5.5rem] items-center gap-2 border-b border-[var(--grid-line)] pb-2 text-sm last:border-b-0 last:pb-0"
+                      className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_5.25rem] items-center gap-2 border-b border-[var(--grid-line)] py-2 text-sm last:border-b-0"
                     >
                       <span className="text-right font-semibold text-[var(--text-muted)]">#{index + 1}</span>
+                      <span className="text-xs text-[var(--text-muted)]">{formatScoreDate(score.createdAt)}</span>
                       <span className="min-w-0 truncate font-semibold">{score.name}</span>
                       <span>{formatSeconds(score.timeMs)}</span>
                     </li>
                   ))}
-                </ol>
+                  </ol>
+                </div>
               ) : (
                 <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
               )

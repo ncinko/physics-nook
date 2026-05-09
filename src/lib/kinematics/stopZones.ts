@@ -26,6 +26,12 @@ export interface ScoreValidationResult {
   errors: string[];
 }
 
+export interface LeaderboardLikeScore {
+  name: string;
+  timeMs: number;
+  createdAt: number;
+}
+
 export const STOP_ZONE_DEFAULTS = {
   aMax: 4,
   worldHalfWidthM: 6,
@@ -188,6 +194,30 @@ export const validateScoreSubmission = (payload: {
     stops,
     errors,
   };
+};
+
+export const selectBestScoresByUniqueName = <T extends LeaderboardLikeScore>(
+  scores: T[],
+  limit = STOP_ZONE_DEFAULTS.leaderboardLimit,
+) => {
+  const bestByName = new Map<string, T>();
+
+  scores.forEach((score) => {
+    const key = sanitizeLeaderboardName(score.name).toLocaleLowerCase();
+    const current = bestByName.get(key);
+
+    if (
+      !current ||
+      score.timeMs < current.timeMs ||
+      (score.timeMs === current.timeMs && score.createdAt < current.createdAt)
+    ) {
+      bestByName.set(key, score);
+    }
+  });
+
+  return [...bestByName.values()]
+    .sort((a, b) => a.timeMs - b.timeMs || a.createdAt - b.createdAt)
+    .slice(0, limit);
 };
 
 export const formatSeconds = (timeMs: number | null) =>

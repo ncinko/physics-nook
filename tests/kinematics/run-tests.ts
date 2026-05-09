@@ -5,6 +5,7 @@ import {
   chooseNextZoneCenter,
   isInsideStopZone,
   sanitizeLeaderboardName,
+  selectBestScoresByUniqueName,
   shrinkZoneHalfWidth,
   validateScoreSubmission,
   wrapDelta,
@@ -90,6 +91,22 @@ assert.equal(
     stops: STOP_ZONE_DEFAULTS.winStops - 1,
   }).ok,
   false,
+);
+
+assert.deepEqual(
+  selectBestScoresByUniqueName(
+    [
+      { name: 'nick', timeMs: 30000, createdAt: 3 },
+      { name: 'Ada', timeMs: 25000, createdAt: 2 },
+      { name: 'Nick', timeMs: 28000, createdAt: 4 },
+      { name: 'ada ', timeMs: 26000, createdAt: 1 },
+    ],
+    10,
+  ),
+  [
+    { name: 'Ada', timeMs: 25000, createdAt: 2 },
+    { name: 'Nick', timeMs: 28000, createdAt: 4 },
+  ],
 );
 
 console.log('Kinematics helper tests passed.');

@@ -14,7 +14,20 @@ const fetchTopScores = async (db: any, limit: number) => {
   const result = await db
     .prepare(
       `SELECT id, name, time_ms, stops, created_at
-       FROM kinematics_scores
+       FROM (
+         SELECT
+           id,
+           name,
+           time_ms,
+           stops,
+           created_at,
+           ROW_NUMBER() OVER (
+             PARTITION BY lower(trim(name))
+             ORDER BY time_ms ASC, created_at ASC
+           ) AS score_rank
+         FROM kinematics_scores
+       )
+       WHERE score_rank = 1
        ORDER BY time_ms ASC, created_at ASC
        LIMIT ${limit}`,
     )

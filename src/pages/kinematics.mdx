@@ -82,8 +82,6 @@ The slope idea repeats: acceleration is the slope of a velocity versus time plot
   Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.
 </DerivationPanel>
 
-## Try It
-
 The challenge below turns the sign conventions into a control problem. Apply acceleration left or right, watch the position and velocity traces, and stop inside each target zone.
 
 <SimulationBlock
@@ -93,6 +91,86 @@ The challenge below turns the sign conventions into a control problem. Apply acc
 >
   <StopInZonesChallenge client:only="react" />
 </SimulationBlock>
+
+## Kinematic Equations
+
+The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, so the final time is just $t$. The displacement is $\Delta x = x_f - x_i$.
+
+Start with average acceleration:
+
+$$
+a = \frac{\Delta v}{\Delta t}
+= \frac{v_f - v_i}{t}.
+$$
+
+Solving for the final velocity gives
+
+$$
+v_f = v_i + at.
+$$
+
+Now use average velocity. By definition,
+
+$$
+\overline{v} = \frac{\Delta x}{t},
+$$
+
+so
+
+$$
+\Delta x = \overline{v}t.
+$$
+
+When acceleration is constant, velocity changes at a steady rate, so the average velocity over the interval is the midpoint between the initial and final velocities:
+
+$$
+\overline{v} = \frac{v_i + v_f}{2}.
+$$
+
+That gives the displacement equation
+
+$$
+\Delta x = \left(\frac{v_i + v_f}{2}\right)t.
+$$
+
+Substitute $v_f = v_i + at$ to write displacement using only the initial velocity, acceleration, and time:
+
+$$
+\Delta x
+= \left(\frac{v_i + v_i + at}{2}\right)t
+= v_i t + \frac{1}{2}at^2.
+$$
+
+To remove time, use $t = (v_f - v_i)/a$ in the average-velocity displacement equation:
+
+$$
+\Delta x
+= \left(\frac{v_i + v_f}{2}\right)
+\left(\frac{v_f - v_i}{a}\right)
+= \frac{v_f^2 - v_i^2}{2a}.
+$$
+
+Rearranging gives
+
+$$
+v_f^2 = v_i^2 + 2a\Delta x.
+$$
+
+Together, for constant acceleration,
+
+$$
+v_f = v_i + at,
+\qquad
+\Delta x = \left(\frac{v_i + v_f}{2}\right)t,
+$$
+
+$$
+\Delta x = v_i t + \frac{1}{2}at^2,
+\qquad
+v_f^2 = v_i^2 + 2a\Delta x.
+$$
+
+If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
 
 <ProblemSolvingSection>
   <WorkedExampleCard

@@ -104,7 +104,7 @@ test('ripples websocket shares splashes and emitter updates across users', async
       const firstJoined = await waitForMessage<{
         type: string;
         you: string;
-        snapshot: { roomCode: string; emitters: Array<{ id: string }>; playerCount: number };
+        snapshot: { roomCode: string; emitters: Array<{ id: string }>; objects: unknown[]; playerCount: number };
       }>(first, (message) => message.type === 'rippleJoined');
 
       const firstPresence = waitForMessage<{ type: string; playerCount: number }>(
@@ -118,6 +118,7 @@ test('ripples websocket shares splashes and emitter updates across users', async
 
       assert.equal(firstJoined.snapshot.roomCode, 'LAB1');
       assert.equal(firstJoined.snapshot.emitters.length, 3);
+      assert.equal(firstJoined.snapshot.objects.length, 0);
       assert.ok(firstJoined.you);
 
       const splashMessage = waitForMessage<{
@@ -151,6 +152,36 @@ test('ripples websocket shares splashes and emitter updates across users', async
       const emitter = emitterSnapshot.emitters.find((candidate) => candidate.id === 'cool-left');
       assert.ok(emitter);
       assert.equal(emitter.controlledBy, firstJoined.you);
+
+      const objectMessage = waitForMessage<{
+        type: string;
+        objects: Array<{ id: string; kind: string; x: number; controlledBy: string | null }>;
+      }>(
+        second,
+        (message) => message.type === 'rippleSnapshot' && message.objects.some((object) => object.kind === 'single-slit'),
+      );
+      sendJson(first, { type: 'rippleObjectCreate', kind: 'single-slit', object: { x: 0.5, y: 0.5 } });
+      const objectSnapshot = await objectMessage;
+      const object = objectSnapshot.objects.find((candidate) => candidate.kind === 'single-slit');
+      assert.ok(object);
+      assert.equal(object.controlledBy, firstJoined.you);
+
+      const movedObject = waitForMessage<{
+        type: string;
+        objects: Array<{ id: string; x: number }>;
+      }>(
+        second,
+        (message) => message.type === 'rippleSnapshot' && message.objects.some((candidate) => candidate.id === object.id && candidate.x === 0.6),
+      );
+      sendJson(first, { type: 'rippleObjectUpdate', id: object.id, patch: { x: 0.6 } });
+      await movedObject;
+
+      const deletedObject = waitForMessage<{ type: string; objects: unknown[] }>(
+        second,
+        (message) => message.type === 'rippleSnapshot' && message.objects.length === 0,
+      );
+      sendJson(first, { type: 'rippleObjectDelete', id: object.id });
+      await deletedObject;
     } finally {
       first.close();
       second.close();

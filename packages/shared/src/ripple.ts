@@ -15,6 +15,19 @@ export type RippleEmitterSnapshot = RippleVec2 & {
   updatedAt: number;
 };
 
+export type RippleObjectKind = 'barrier' | 'parabola' | 'single-slit';
+
+export type RippleObjectSnapshot = RippleVec2 & {
+  id: string;
+  kind: RippleObjectKind;
+  width: number;
+  height: number;
+  rotation: number;
+  gap: number;
+  controlledBy: string | null;
+  updatedAt: number;
+};
+
 export type RippleSplashPayload = RippleVec2 & {
   strength?: number;
   radius?: number;
@@ -32,6 +45,10 @@ export type RippleEmitterPatch = Partial<
   Pick<RippleEmitterSnapshot, 'x' | 'y' | 'amplitude' | 'frequency' | 'phase' | 'radius' | 'color' | 'enabled'>
 >;
 
+export type RippleObjectPatch = Partial<
+  Pick<RippleObjectSnapshot, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'gap'>
+>;
+
 export type RippleSnapshot = {
   type: 'rippleSnapshot';
   roomCode: string;
@@ -39,6 +56,7 @@ export type RippleSnapshot = {
   paused: boolean;
   resetVersion: number;
   emitters: RippleEmitterSnapshot[];
+  objects: RippleObjectSnapshot[];
   recentSplashes: RippleSplashEvent[];
   playerCount: number;
 };
@@ -65,6 +83,28 @@ export type RippleEmitterReleaseMessage = {
   id: string;
 };
 
+export type RippleObjectCreateMessage = {
+  type: 'rippleObjectCreate';
+  kind: RippleObjectKind;
+  object: RippleObjectPatch;
+};
+
+export type RippleObjectUpdateMessage = {
+  type: 'rippleObjectUpdate';
+  id: string;
+  patch: RippleObjectPatch;
+};
+
+export type RippleObjectDeleteMessage = {
+  type: 'rippleObjectDelete';
+  id: string;
+};
+
+export type RippleObjectReleaseMessage = {
+  type: 'rippleObjectRelease';
+  id: string;
+};
+
 export type RippleSetPausedMessage = {
   type: 'rippleSetPaused';
   paused: boolean;
@@ -84,6 +124,10 @@ export type RippleClientToServerMessage =
   | RippleSplashMessage
   | RippleEmitterUpdateMessage
   | RippleEmitterReleaseMessage
+  | RippleObjectCreateMessage
+  | RippleObjectUpdateMessage
+  | RippleObjectDeleteMessage
+  | RippleObjectReleaseMessage
   | RippleSetPausedMessage
   | RippleResetMessage
   | RipplePingMessage;
@@ -140,6 +184,13 @@ export const RIPPLE_CONFIG = {
     maxFrequency: 2.8,
     minRadius: 0.012,
     maxRadius: 0.085,
+  },
+  object: {
+    maxObjects: 24,
+    minSize: 0.025,
+    maxSize: 0.55,
+    minGap: 0.035,
+    maxGap: 0.28,
   },
 } as const;
 
@@ -257,11 +308,88 @@ export const sanitizeRippleEmitterPatch = (patch: unknown): RippleEmitterPatch |
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 };
 
+export const isRippleObjectKind = (value: unknown): value is RippleObjectKind =>
+  value === 'barrier' || value === 'parabola' || value === 'single-slit';
+
+export const sanitizeRippleObjectPatch = (patch: unknown): RippleObjectPatch | null => {
+  if (!patch || typeof patch !== 'object') return null;
+  const candidate = patch as RippleObjectPatch;
+  const sanitized: RippleObjectPatch = {};
+
+  if ('x' in candidate) {
+    if (!isFiniteRippleNumber(candidate.x)) return null;
+    sanitized.x = clampRippleNumber(candidate.x, 0, 1);
+  }
+
+  if ('y' in candidate) {
+    if (!isFiniteRippleNumber(candidate.y)) return null;
+    sanitized.y = clampRippleNumber(candidate.y, 0, 1);
+  }
+
+  if ('width' in candidate) {
+    if (!isFiniteRippleNumber(candidate.width)) return null;
+    sanitized.width = clampRippleNumber(
+      candidate.width,
+      RIPPLE_CONFIG.object.minSize,
+      RIPPLE_CONFIG.object.maxSize,
+    );
+  }
+
+  if ('height' in candidate) {
+    if (!isFiniteRippleNumber(candidate.height)) return null;
+    sanitized.height = clampRippleNumber(
+      candidate.height,
+      RIPPLE_CONFIG.object.minSize,
+      RIPPLE_CONFIG.object.maxSize,
+    );
+  }
+
+  if ('rotation' in candidate) {
+    if (!isFiniteRippleNumber(candidate.rotation)) return null;
+    sanitized.rotation = clampRippleNumber(candidate.rotation, -Math.PI * 2, Math.PI * 2);
+  }
+
+  if ('gap' in candidate) {
+    if (!isFiniteRippleNumber(candidate.gap)) return null;
+    sanitized.gap = clampRippleNumber(candidate.gap, RIPPLE_CONFIG.object.minGap, RIPPLE_CONFIG.object.maxGap);
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : null;
+};
+
+export const createDefaultRippleObject = (
+  id: string,
+  kind: RippleObjectKind,
+  patch: RippleObjectPatch,
+  updatedAt = 0,
+): RippleObjectSnapshot => {
+  const base =
+    kind === 'parabola'
+      ? { width: 0.22, height: 0.18, gap: 0.1 }
+      : kind === 'single-slit'
+        ? { width: 0.035, height: 0.32, gap: 0.1 }
+        : { width: 0.24, height: 0.035, gap: 0.1 };
+  const sanitized = sanitizeRippleObjectPatch({ ...base, ...patch }) ?? base;
+
+  return {
+    id,
+    kind,
+    x: sanitized.x ?? 0.5,
+    y: sanitized.y ?? 0.5,
+    width: sanitized.width ?? base.width,
+    height: sanitized.height ?? base.height,
+    rotation: sanitized.rotation ?? 0,
+    gap: sanitized.gap ?? base.gap,
+    controlledBy: null,
+    updatedAt,
+  };
+};
+
 export const createDefaultRippleEmitters = (updatedAt = 0): RippleEmitterSnapshot[] => [
   {
     id: 'cool-left',
-    x: 0.18,
-    y: 0.32,
+    x: 0.39,
+    y: 0.44,
     amplitude: 1.05,
     frequency: 0.72,
     phase: 0,
@@ -273,8 +401,8 @@ export const createDefaultRippleEmitters = (updatedAt = 0): RippleEmitterSnapsho
   },
   {
     id: 'cool-center',
-    x: 0.46,
-    y: 0.36,
+    x: 0.5,
+    y: 0.46,
     amplitude: 0.94,
     frequency: 0.72,
     phase: 0,
@@ -286,8 +414,8 @@ export const createDefaultRippleEmitters = (updatedAt = 0): RippleEmitterSnapsho
   },
   {
     id: 'warm-right',
-    x: 0.78,
-    y: 0.31,
+    x: 0.62,
+    y: 0.44,
     amplitude: 1.0,
     frequency: 0.72,
     phase: Math.PI,
@@ -300,5 +428,7 @@ export const createDefaultRippleEmitters = (updatedAt = 0): RippleEmitterSnapsho
 ];
 
 export const cloneRippleEmitter = (emitter: RippleEmitterSnapshot): RippleEmitterSnapshot => ({ ...emitter });
+
+export const cloneRippleObject = (object: RippleObjectSnapshot): RippleObjectSnapshot => ({ ...object });
 
 export const cloneRippleSplash = (splash: RippleSplashEvent): RippleSplashEvent => ({ ...splash });

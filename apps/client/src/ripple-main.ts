@@ -8,12 +8,16 @@ import type {
   RippleClientToServerMessage,
   RippleEmitterPatch,
   RippleEmitterSnapshot,
+  RippleObjectKind,
+  RippleObjectPatch,
+  RippleObjectSnapshot,
   RippleServerToClientMessage,
   RippleSnapshot,
   RippleSplashEvent,
 } from '../../../packages/shared/src/ripple.ts';
 
 type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
+type PointerMode = 'splash' | 'emitter' | 'object-move' | 'object-rotate';
 
 type GridState = {
   previous: Float32Array;
@@ -24,19 +28,20 @@ type GridState = {
 type PoolSize = {
   width: number;
   height: number;
+  viewCols: number;
+  viewRows: number;
   cols: number;
   rows: number;
   cellWidth: number;
   cellHeight: number;
 };
 
-type PointerMode = 'splash' | 'emitter';
-
 type DragState = {
   active: boolean;
   pointerId: number | null;
   mode: PointerMode;
   emitterId: string | null;
+  objectId: string | null;
   lastX: number;
   lastY: number;
   lastAt: number;
@@ -48,10 +53,10 @@ const playerCount = document.getElementById('playerCount');
 const emitterCount = document.getElementById('emitterCount');
 const connectionPill = document.getElementById('connectionPill');
 const statusText = document.getElementById('statusText');
+const themeButton = document.getElementById('themeButton') as HTMLButtonElement | null;
 const pauseButton = document.getElementById('pauseButton') as HTMLButtonElement | null;
 const resetButton = document.getElementById('resetButton') as HTMLButtonElement | null;
 const emitterButtons = document.getElementById('emitterButtons');
-const selectedEmitterLabel = document.getElementById('selectedEmitterLabel');
 const amplitudeInput = document.getElementById('amplitudeInput') as HTMLInputElement | null;
 const frequencyInput = document.getElementById('frequencyInput') as HTMLInputElement | null;
 const phaseInput = document.getElementById('phaseInput') as HTMLInputElement | null;
@@ -64,10 +69,10 @@ if (
   !emitterCount ||
   !connectionPill ||
   !statusText ||
+  !themeButton ||
   !pauseButton ||
   !resetButton ||
   !emitterButtons ||
-  !selectedEmitterLabel ||
   !amplitudeInput ||
   !frequencyInput ||
   !phaseInput ||
@@ -86,15 +91,17 @@ const MAX_COLS = 132;
 const MIN_ROWS = 28;
 const MAX_ROWS = 88;
 const CELL_TARGET = 14;
+const WORLD_SCALE = 3;
 const DAMPING = 0.9976;
-const SIDE_DAMPING_LAYER_CELLS = 10;
-const SIDE_DAMPING_MAX = 0.18;
-const VERTICAL_DAMPING_LAYER_CELLS = 5;
-const VERTICAL_DAMPING_MAX = 0.82;
+const EDGE_DAMPING_LAYER_CELLS = 12;
+const EDGE_DAMPING_MAX = 0.86;
 const DRAG_INTERVAL_MS = 65;
 const EMITTER_SEND_INTERVAL_MS = 44;
+const OBJECT_SEND_INTERVAL_MS = 44;
 const PING_INTERVAL_MS = 2000;
 const SPLASH_PROCESSED_LIMIT = 500;
+const CAMERA_SPEED_SCREENS = 0.92;
+const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
@@ -116,6 +123,7 @@ const emptyDragState = (): DragState => ({
   pointerId: null,
   mode: 'splash',
   emitterId: null,
+  objectId: null,
   lastX: 0,
   lastY: 0,
   lastAt: 0,
@@ -126,7 +134,10 @@ let connectionState: ConnectionState = 'offline';
 let localPlayerId: string | null = null;
 let latestSnapshot: RippleSnapshot | null = null;
 let emitters: RippleEmitterSnapshot[] = [];
+let objects: RippleObjectSnapshot[] = [];
 let selectedEmitterId = 'cool-left';
+let selectedObjectId: string | null = null;
+let pendingObjectKind: RippleObjectKind | null = null;
 let paused = false;
 let resetVersion = -1;
 let dpr = 1;
@@ -134,23 +145,41 @@ let simTime = 0;
 let lastFrameAt = performance.now();
 let lastPingAt = 0;
 let lastEmitterSendAt = 0;
+let lastObjectSendAt = 0;
 let processedSplashIds = new Set<string>();
+let objectMask = new Uint8Array(0);
+const keyState = new Set<string>();
+const camera = { xScreens: 0, yScreens: 0 };
 
 const size: PoolSize = {
   width: 0,
   height: 0,
-  cols: MIN_COLS,
-  rows: MIN_ROWS,
+  viewCols: MIN_COLS,
+  viewRows: MIN_ROWS,
+  cols: MIN_COLS * WORLD_SCALE,
+  rows: MIN_ROWS * WORLD_SCALE,
   cellWidth: 1,
   cellHeight: 1,
 };
-let grid = createGridState(MIN_COLS, MIN_ROWS);
+let grid = createGridState(size.cols, size.rows);
 let dragState = emptyDragState();
 
 const setConnectionState = (state: ConnectionState, label: string): void => {
   connectionState = state;
   connectionPill.dataset.state = state;
   statusText.textContent = label;
+};
+
+const applyTheme = (theme: 'light' | 'dark'): void => {
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  themeButton.textContent = theme === 'dark' ? 'Light' : 'Dark';
+  themeButton.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+};
+
+const initializeTheme = (): void => {
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
+  applyTheme(stored === 'dark' ? 'dark' : 'light');
 };
 
 const getConfiguredWsUrl = (): string | null => {
@@ -198,8 +227,30 @@ const sendMessage = (message: RippleClientToServerMessage): void => {
   socket.send(JSON.stringify(message));
 };
 
+const visibleOrigin = () => ({
+  col: Math.round((camera.xScreens + 1) * size.viewCols),
+  row: Math.round((camera.yScreens + 1) * size.viewRows),
+});
+
+const worldToScreen = (point: { x: number; y: number }) => {
+  const origin = visibleOrigin();
+  return {
+    x: (point.x * (size.cols - 1) - origin.col) * size.cellWidth,
+    y: (point.y * (size.rows - 1) - origin.row) * size.cellHeight,
+  };
+};
+
+const screenToWorld = (x: number, y: number) => {
+  const origin = visibleOrigin();
+  return {
+    x: clamp((origin.col + x / size.cellWidth) / (size.cols - 1), 0, 1),
+    y: clamp((origin.row + y / size.cellHeight) / (size.rows - 1), 0, 1),
+  };
+};
+
 const clearGrid = (): void => {
   grid = createGridState(size.cols, size.rows);
+  objectMask = new Uint8Array(size.cols * size.rows);
 };
 
 const resize = (): void => {
@@ -207,10 +258,12 @@ const resize = (): void => {
   size.width = Math.max(rect.width, 1);
   size.height = Math.max(rect.height, 1);
   dpr = Math.min(window.devicePixelRatio || 1, 2);
-  size.cols = clamp(Math.round(size.width / CELL_TARGET), MIN_COLS, MAX_COLS);
-  size.rows = clamp(Math.round(size.height / CELL_TARGET), MIN_ROWS, MAX_ROWS);
-  size.cellWidth = size.width / size.cols;
-  size.cellHeight = size.height / size.rows;
+  size.viewCols = clamp(Math.round(size.width / CELL_TARGET), MIN_COLS, MAX_COLS);
+  size.viewRows = clamp(Math.round(size.height / CELL_TARGET), MIN_ROWS, MAX_ROWS);
+  size.cols = size.viewCols * WORLD_SCALE;
+  size.rows = size.viewRows * WORLD_SCALE;
+  size.cellWidth = size.width / size.viewCols;
+  size.cellHeight = size.height / size.viewRows;
 
   canvas.width = Math.round(size.width * dpr);
   canvas.height = Math.round(size.height * dpr);
@@ -223,7 +276,7 @@ const resize = (): void => {
 const addSplash = (xNorm: number, yNorm: number, strength: number, radiusNorm: number): void => {
   const gridX = Math.round(clamp(xNorm, 0, 1) * (size.cols - 1));
   const gridY = Math.round(clamp(yNorm, 0, 1) * (size.rows - 1));
-  const radius = clamp(Math.round(Math.min(size.cols, size.rows) * radiusNorm), 1, 10);
+  const radius = clamp(Math.round(Math.min(size.viewCols, size.viewRows) * radiusNorm), 1, 10);
 
   for (let dy = -radius; dy <= radius; dy += 1) {
     const row = gridY + dy;
@@ -232,12 +285,13 @@ const addSplash = (xNorm: number, yNorm: number, strength: number, radiusNorm: n
     for (let dx = -radius; dx <= radius; dx += 1) {
       const col = gridX + dx;
       if (col < 1 || col >= size.cols - 1) continue;
+      const index = row * size.cols + col;
+      if (objectMask[index]) continue;
 
       const distance = Math.hypot(dx, dy);
       if (distance > radius) continue;
 
       const falloff = Math.cos((distance / radius) * Math.PI * 0.5) ** 2;
-      const index = row * size.cols + col;
       grid.current[index] += strength * falloff;
     }
   }
@@ -246,10 +300,59 @@ const addSplash = (xNorm: number, yNorm: number, strength: number, radiusNorm: n
 const applySplashEvent = (splash: RippleSplashEvent, referenceTime: number): void => {
   const ageSeconds = Math.max(0, (referenceTime - splash.serverTime) / 1000);
   if (ageSeconds > 7) return;
-
-  const decayedStrength = splash.strength * Math.exp(-ageSeconds * 0.55);
-  addSplash(splash.x, splash.y, decayedStrength, splash.radius);
+  addSplash(splash.x, splash.y, splash.strength * Math.exp(-ageSeconds * 0.55), splash.radius);
 };
+
+const localObjectCoordinates = (object: RippleObjectSnapshot, x: number, y: number) => {
+  const dx = x - object.x;
+  const dy = y - object.y;
+  const cos = Math.cos(-object.rotation);
+  const sin = Math.sin(-object.rotation);
+  return {
+    x: dx * cos - dy * sin,
+    y: dx * sin + dy * cos,
+  };
+};
+
+const isPointInsideObject = (object: RippleObjectSnapshot, x: number, y: number): boolean => {
+  const local = localObjectCoordinates(object, x, y);
+  const halfWidth = object.width / 2;
+  const halfHeight = object.height / 2;
+
+  if (object.kind === 'barrier') {
+    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight;
+  }
+
+  if (object.kind === 'single-slit') {
+    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight && Math.abs(local.y) > object.gap / 2;
+  }
+
+  if (Math.abs(local.x) > halfWidth) return false;
+  const t = local.x / Math.max(halfWidth, 1e-6);
+  const curveY = t * t * object.height - halfHeight;
+  const thickness = Math.max(0.012, Math.min(object.width, object.height) * 0.12);
+  return Math.abs(local.y - curveY) <= thickness;
+};
+
+const buildObjectMask = (): void => {
+  objectMask.fill(0);
+  for (let row = 1; row < size.rows - 1; row += 1) {
+    const y = row / (size.rows - 1);
+    for (let col = 1; col < size.cols - 1; col += 1) {
+      const x = col / (size.cols - 1);
+      if (objects.some((object) => isPointInsideObject(object, x, y))) {
+        const index = row * size.cols + col;
+        objectMask[index] = 1;
+        grid.current[index] = 0;
+        grid.previous[index] = 0;
+        grid.next[index] = 0;
+      }
+    }
+  }
+};
+
+const sampleNeighbor = (index: number, currentIndex: number): number =>
+  objectMask[index] ? -grid.current[currentIndex] * 0.78 : grid.current[index];
 
 const stepGrid = (): void => {
   const { cols, rows } = size;
@@ -258,21 +361,22 @@ const stepGrid = (): void => {
   for (let row = 1; row < rows - 1; row += 1) {
     for (let col = 1; col < cols - 1; col += 1) {
       const index = row * cols + col;
-      let nextValue =
-        (((current[index - 1] + current[index + 1] + current[index - cols] + current[index + cols]) * 0.5) -
-          previous[index]) *
-        DAMPING;
-
-      const sideDistance = Math.min(col, cols - 1 - col);
-      if (sideDistance < SIDE_DAMPING_LAYER_CELLS) {
-        const normalized = (SIDE_DAMPING_LAYER_CELLS - sideDistance) / SIDE_DAMPING_LAYER_CELLS;
-        nextValue *= 1 - normalized * normalized * SIDE_DAMPING_MAX;
+      if (objectMask[index]) {
+        next[index] = 0;
+        continue;
       }
 
-      const verticalDistance = Math.min(row, rows - 1 - row);
-      if (verticalDistance < VERTICAL_DAMPING_LAYER_CELLS) {
-        const normalized = (VERTICAL_DAMPING_LAYER_CELLS - verticalDistance) / VERTICAL_DAMPING_LAYER_CELLS;
-        nextValue *= 1 - normalized * normalized * VERTICAL_DAMPING_MAX;
+      const neighborSum =
+        sampleNeighbor(index - 1, index) +
+        sampleNeighbor(index + 1, index) +
+        sampleNeighbor(index - cols, index) +
+        sampleNeighbor(index + cols, index);
+      let nextValue = ((neighborSum * 0.5) - previous[index]) * DAMPING;
+
+      const edgeDistance = Math.min(col, row, cols - 1 - col, rows - 1 - row);
+      if (edgeDistance < EDGE_DAMPING_LAYER_CELLS) {
+        const normalized = (EDGE_DAMPING_LAYER_CELLS - edgeDistance) / EDGE_DAMPING_LAYER_CELLS;
+        nextValue *= 1 - normalized * normalized * EDGE_DAMPING_MAX;
       }
 
       next[index] = nextValue;
@@ -281,14 +385,12 @@ const stepGrid = (): void => {
 
   for (let col = 0; col < cols; col += 1) {
     next[col] = 0;
-    next[cols + col] *= 0.8;
     next[(rows - 1) * cols + col] = 0;
-    next[(rows - 2) * cols + col] *= 0.8;
   }
 
   for (let row = 0; row < rows; row += 1) {
-    next[row * cols] = next[row * cols + 1];
-    next[row * cols + cols - 1] = next[row * cols + cols - 2];
+    next[row * cols] = 0;
+    next[row * cols + cols - 1] = 0;
   }
 
   grid.previous = current;
@@ -307,57 +409,70 @@ const injectEmitters = (): void => {
 };
 
 const drawWater = (): void => {
-  const { cols, rows, width, height, cellWidth, cellHeight } = size;
-  const { current } = grid;
+  const origin = visibleOrigin();
+  const current = grid.current;
+  const lightMode = document.documentElement.dataset.theme !== 'dark';
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  for (let row = 1; row < rows - 1; row += 1) {
-    for (let col = 1; col < cols - 1; col += 1) {
-      const index = row * cols + col;
+  for (let viewRow = 1; viewRow < size.viewRows - 1; viewRow += 1) {
+    const row = origin.row + viewRow;
+    if (row <= 0 || row >= size.rows - 1) continue;
+
+    for (let viewCol = 1; viewCol < size.viewCols - 1; viewCol += 1) {
+      const col = origin.col + viewCol;
+      if (col <= 0 || col >= size.cols - 1) continue;
+
+      const index = row * size.cols + col;
       const value = current[index];
       const magnitude = Math.abs(value);
+      if (magnitude < 0.008 && !objectMask[index]) continue;
 
-      if (magnitude < 0.008) continue;
+      const x = viewCol * size.cellWidth;
+      const y = viewRow * size.cellHeight;
+
+      if (objectMask[index]) {
+        ctx.fillStyle = lightMode ? 'rgba(15, 87, 116, 0.18)' : 'rgba(199, 233, 255, 0.14)';
+        ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
+        continue;
+      }
 
       const slopeX = current[index + 1] - current[index - 1];
-      const slopeY = current[index + cols] - current[index - cols];
+      const slopeY = current[index + size.cols] - current[index - size.cols];
       const shimmer = clamp(0.5 + slopeX * 0.7 - slopeY * 0.55, 0, 1);
-      const alpha = clamp(0.05 + magnitude * 0.13, 0.04, 0.36);
-      const x = col * cellWidth;
-      const y = row * cellHeight;
+      const alpha = clamp(0.05 + magnitude * 0.13, 0.04, lightMode ? 0.32 : 0.36);
 
       if (value >= 0) {
-        const r = Math.round(44 + shimmer * 26);
-        const g = Math.round(116 + shimmer * 34);
-        const b = Math.round(184 + shimmer * 22);
+        const r = lightMode ? Math.round(92 + shimmer * 70) : Math.round(44 + shimmer * 26);
+        const g = lightMode ? Math.round(164 + shimmer * 42) : Math.round(116 + shimmer * 34);
+        const b = lightMode ? 248 : Math.round(184 + shimmer * 22);
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
       } else {
-        const r = Math.round(18 + shimmer * 20);
-        const g = Math.round(82 + shimmer * 28);
-        const b = Math.round(118 + shimmer * 24);
+        const r = lightMode ? Math.round(15 + shimmer * 22) : Math.round(18 + shimmer * 20);
+        const g = lightMode ? Math.round(118 + shimmer * 20) : Math.round(82 + shimmer * 28);
+        const b = lightMode ? Math.round(128 + shimmer * 26) : Math.round(118 + shimmer * 24);
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.92})`;
       }
 
-      ctx.fillRect(x, y, cellWidth + 1, cellHeight + 1);
+      ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
     }
   }
 
   ctx.save();
-  ctx.strokeStyle = 'rgba(199, 233, 255, 0.13)';
+  ctx.strokeStyle = lightMode ? 'rgba(255, 255, 255, 0.26)' : 'rgba(199, 233, 255, 0.13)';
   ctx.lineWidth = 1.1;
 
-  for (let row = 0; row < 12; row += 1) {
-    const y = height * 0.08 + row * ((height * 0.84) / 11);
+  for (let line = 0; line < 12; line += 1) {
+    const y = size.height * 0.08 + line * ((size.height * 0.84) / 11);
     ctx.beginPath();
     ctx.moveTo(0, y);
 
-    for (let x = 0; x <= width; x += Math.max(cellWidth * 1.2, 10)) {
-      const col = clamp(Math.round((x / width) * (cols - 1)), 1, cols - 2);
-      const mappedRow = clamp(Math.round((y / height) * (rows - 1)), 1, rows - 2);
-      const wave = current[mappedRow * cols + col] * 9;
+    for (let x = 0; x <= size.width; x += Math.max(size.cellWidth * 1.2, 10)) {
+      const col = clamp(origin.col + Math.round(x / size.cellWidth), 1, size.cols - 2);
+      const row = clamp(origin.row + Math.round(y / size.cellHeight), 1, size.rows - 2);
+      const wave = current[row * size.cols + col] * 9;
       ctx.lineTo(x, y + wave);
     }
 
@@ -366,14 +481,104 @@ const drawWater = (): void => {
   ctx.restore();
 };
 
-const emitterScreenPosition = (emitter: RippleEmitterSnapshot) => ({
-  x: emitter.x * size.width,
-  y: emitter.y * size.height,
-});
+const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
+  const point = worldToScreen(object);
+  const width = object.width * (size.cols - 1) * size.cellWidth;
+  const height = object.height * (size.rows - 1) * size.cellHeight;
+
+  ctx.save();
+  ctx.translate(point.x, point.y);
+  ctx.rotate(object.rotation);
+  ctx.beginPath();
+
+  if (object.kind === 'barrier') {
+    ctx.rect(-width / 2, -height / 2, width, height);
+  } else if (object.kind === 'single-slit') {
+    const gap = object.gap * (size.rows - 1) * size.cellHeight;
+    ctx.rect(-width / 2, -height / 2, width, Math.max(1, (height - gap) / 2));
+    ctx.rect(-width / 2, gap / 2, width, Math.max(1, (height - gap) / 2));
+  } else {
+    ctx.moveTo(-width / 2, height / 2);
+    for (let i = 0; i <= 32; i += 1) {
+      const x = -width / 2 + (i / 32) * width;
+      const t = x / Math.max(width / 2, 1);
+      const y = t * t * height - height / 2;
+      ctx.lineTo(x, y);
+    }
+  }
+
+  if (fill) ctx.fill();
+  else ctx.stroke();
+  ctx.restore();
+};
+
+const objectHandlePoints = (object: RippleObjectSnapshot) => {
+  const center = worldToScreen(object);
+  const width = object.width * (size.cols - 1) * size.cellWidth;
+  const height = object.height * (size.rows - 1) * size.cellHeight;
+  const cos = Math.cos(object.rotation);
+  const sin = Math.sin(object.rotation);
+  const rotateLocal = { x: 0, y: -height / 2 - 28 };
+  const deleteLocal = { x: width / 2 + 18, y: -height / 2 - 18 };
+
+  return {
+    rotate: {
+      x: center.x + rotateLocal.x * cos - rotateLocal.y * sin,
+      y: center.y + rotateLocal.x * sin + rotateLocal.y * cos,
+    },
+    delete: {
+      x: center.x + deleteLocal.x * cos - deleteLocal.y * sin,
+      y: center.y + deleteLocal.x * sin + deleteLocal.y * cos,
+    },
+  };
+};
+
+const drawObjects = (): void => {
+  const lightMode = document.documentElement.dataset.theme !== 'dark';
+  for (const object of objects) {
+    const selected = object.id === selectedObjectId;
+    const mine = object.controlledBy === localPlayerId;
+
+    ctx.save();
+    ctx.lineWidth = selected ? 2.6 : 1.6;
+    ctx.strokeStyle = selected || mine ? (lightMode ? '#075985' : '#e0f2fe') : lightMode ? 'rgba(15, 87, 116, 0.76)' : 'rgba(199, 233, 255, 0.58)';
+    ctx.fillStyle = lightMode ? 'rgba(14, 116, 144, 0.12)' : 'rgba(199, 233, 255, 0.08)';
+    drawObjectShape(object, true);
+    drawObjectShape(object);
+    ctx.restore();
+
+    if (!selected) continue;
+    const handles = objectHandlePoints(object);
+    ctx.save();
+    ctx.fillStyle = lightMode ? '#0f766e' : '#7dd3fc';
+    ctx.strokeStyle = lightMode ? '#ffffff' : '#082f49';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(handles.rotate.x, handles.rotate.y, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(handles.delete.x, handles.delete.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = '#fb7185';
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(handles.delete.x - 4, handles.delete.y - 4);
+    ctx.lineTo(handles.delete.x + 4, handles.delete.y + 4);
+    ctx.moveTo(handles.delete.x + 4, handles.delete.y - 4);
+    ctx.lineTo(handles.delete.x - 4, handles.delete.y + 4);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
 
 const drawEmitters = (timestamp: number): void => {
   for (const emitter of emitters) {
-    const point = emitterScreenPosition(emitter);
+    const point = worldToScreen(emitter);
+    if (point.x < -60 || point.x > size.width + 60 || point.y < -60 || point.y > size.height + 60) continue;
+
     const selected = emitter.id === selectedEmitterId;
     const mine = emitter.controlledBy && emitter.controlledBy === localPlayerId;
     const controlled = Boolean(emitter.controlledBy && emitter.controlledBy !== localPlayerId);
@@ -385,28 +590,17 @@ const drawEmitters = (timestamp: number): void => {
     ctx.fillStyle = emitter.color;
     ctx.strokeStyle = controlled ? '#fbbf24' : mine || selected ? '#e0f2fe' : emitter.color;
     ctx.lineWidth = selected || controlled || mine ? 2.8 : 1.7;
-
     ctx.globalAlpha = emitter.enabled ? 0.18 : 0.08;
     ctx.beginPath();
     ctx.arc(point.x, point.y, 30 * pulse, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.globalAlpha = alpha;
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 10 : 8, 0, Math.PI * 2);
     ctx.fill();
-
     ctx.beginPath();
     ctx.arc(point.x, point.y, selected ? 20 : 16, 0, Math.PI * 2);
     ctx.stroke();
-
-    if (controlled || mine) {
-      ctx.setLineDash([5, 5]);
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, 26, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-
     ctx.restore();
   }
 };
@@ -414,18 +608,10 @@ const drawEmitters = (timestamp: number): void => {
 const getSelectedEmitter = (): RippleEmitterSnapshot | null =>
   emitters.find((emitter) => emitter.id === selectedEmitterId) ?? emitters[0] ?? null;
 
-const formatEmitterName = (id: string): string =>
-  id
-    .split('-')
-    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
-    .join(' ');
-
 const updateSelectedControls = (): void => {
   const emitter = getSelectedEmitter();
   if (!emitter) return;
-
   selectedEmitterId = emitter.id;
-  selectedEmitterLabel.textContent = formatEmitterName(emitter.id);
   amplitudeInput.value = String(emitter.amplitude);
   frequencyInput.value = String(emitter.frequency);
   phaseInput.value = String(emitter.phase);
@@ -437,18 +623,22 @@ const updateLocalEmitter = (id: string, patch: RippleEmitterPatch): void => {
   emitters = emitters.map((emitter) => (emitter.id === id ? { ...emitter, ...patch } : emitter));
 };
 
+const updateLocalObject = (id: string, patch: RippleObjectPatch): void => {
+  objects = objects.map((object) => (object.id === id ? { ...object, ...patch } : object));
+};
+
 const renderEmitterTray = (): void => {
   emitterButtons.textContent = '';
-
   for (const emitter of emitters) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'emitter-button';
-    button.setAttribute('aria-label', `Select ${formatEmitterName(emitter.id)} emitter`);
+    button.setAttribute('aria-label', 'Select emitter');
     button.setAttribute('aria-pressed', String(emitter.id === selectedEmitterId));
     button.dataset.disabled = String(!emitter.enabled);
     button.addEventListener('click', () => {
       selectedEmitterId = emitter.id;
+      selectedObjectId = null;
       renderEmitterTray();
       updateSelectedControls();
     });
@@ -478,11 +668,16 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
     processedSplashIds.clear();
     clearGrid();
     simTime = 0;
+    selectedObjectId = null;
   }
 
   emitters = snapshot.emitters;
+  objects = snapshot.objects;
   if (!emitters.some((emitter) => emitter.id === selectedEmitterId)) {
     selectedEmitterId = emitters[0]?.id ?? 'cool-left';
+  }
+  if (selectedObjectId && !objects.some((object) => object.id === selectedObjectId)) {
+    selectedObjectId = null;
   }
   renderEmitterTray();
 
@@ -523,63 +718,56 @@ const handleSocketMessage = (event: MessageEvent): void => {
 
 const connect = (): void => {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
-
   setConnectionState('connecting', 'Connecting');
   socket = new WebSocket(getDefaultWsUrl());
-
-  socket.addEventListener('open', () => {
-    sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode });
-  });
-
+  socket.addEventListener('open', () => sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode }));
   socket.addEventListener('message', handleSocketMessage);
-
   socket.addEventListener('close', () => {
     setConnectionState('offline', 'Offline');
     localPlayerId = null;
     window.setTimeout(connect, 1200);
   });
-
-  socket.addEventListener('error', () => {
-    setConnectionState('error', 'Socket error');
-  });
+  socket.addEventListener('error', () => setConnectionState('error', 'Socket error'));
 };
 
 const pointFromEvent = (event: PointerEvent) => {
   const rect = canvas.getBoundingClientRect();
-  const x = clamp(event.clientX - rect.left, 0, rect.width);
-  const y = clamp(event.clientY - rect.top, 0, rect.height);
-  return {
-    x,
-    y,
-    xNorm: rect.width > 0 ? x / rect.width : 0,
-    yNorm: rect.height > 0 ? y / rect.height : 0,
-  };
+  const screenX = clamp(event.clientX - rect.left, 0, rect.width);
+  const screenY = clamp(event.clientY - rect.top, 0, rect.height);
+  const world = screenToWorld(screenX, screenY);
+  return { screenX, screenY, x: world.x, y: world.y };
 };
 
 const hitEmitter = (x: number, y: number): RippleEmitterSnapshot | null => {
   for (let index = emitters.length - 1; index >= 0; index -= 1) {
     const emitter = emitters[index];
-    const point = emitterScreenPosition(emitter);
+    const point = worldToScreen(emitter);
     const hitRadius = Math.max(28, emitter.radius * Math.min(size.width, size.height) * 1.8);
-    if (Math.hypot(x - point.x, y - point.y) <= hitRadius) {
-      return emitter;
-    }
+    if (Math.hypot(x - point.x, y - point.y) <= hitRadius) return emitter;
   }
+  return null;
+};
 
+const hitObject = (x: number, y: number): RippleObjectSnapshot | null => {
+  const world = screenToWorld(x, y);
+  for (let index = objects.length - 1; index >= 0; index -= 1) {
+    if (isPointInsideObject(objects[index], world.x, world.y)) return objects[index];
+  }
+  return null;
+};
+
+const hitObjectHandle = (x: number, y: number): 'rotate' | 'delete' | null => {
+  const selected = selectedObjectId ? objects.find((object) => object.id === selectedObjectId) : null;
+  if (!selected) return null;
+  const handles = objectHandlePoints(selected);
+  if (Math.hypot(x - handles.delete.x, y - handles.delete.y) <= 16) return 'delete';
+  if (Math.hypot(x - handles.rotate.x, y - handles.rotate.y) <= 16) return 'rotate';
   return null;
 };
 
 const sendSplash = (x: number, y: number, strength: number): void => {
   if (paused) return;
-  sendMessage({
-    type: 'rippleSplash',
-    splash: {
-      x,
-      y,
-      strength,
-      radius: RIPPLE_CONFIG.splash.defaultRadius,
-    },
-  });
+  sendMessage({ type: 'rippleSplash', splash: { x, y, strength, radius: RIPPLE_CONFIG.splash.defaultRadius } });
 };
 
 const sendEmitterPatch = (id: string, patch: RippleEmitterPatch, force = false): void => {
@@ -590,37 +778,59 @@ const sendEmitterPatch = (id: string, patch: RippleEmitterPatch, force = false):
   sendMessage({ type: 'rippleEmitterUpdate', id, patch });
 };
 
+const sendObjectPatch = (id: string, patch: RippleObjectPatch, force = false): void => {
+  updateLocalObject(id, patch);
+  const now = performance.now();
+  if (!force && now - lastObjectSendAt < OBJECT_SEND_INTERVAL_MS) return;
+  lastObjectSendAt = now;
+  sendMessage({ type: 'rippleObjectUpdate', id, patch });
+};
+
+const createObjectAt = (kind: RippleObjectKind, x: number, y: number): void => {
+  sendMessage({ type: 'rippleObjectCreate', kind, object: { x, y } });
+};
+
 const handlePointerDown = (event: PointerEvent): void => {
   if (event.button !== 0) return;
   const point = pointFromEvent(event);
-  const emitter = hitEmitter(point.x, point.y);
+  const handle = hitObjectHandle(point.screenX, point.screenY);
 
-  if (emitter) {
-    selectedEmitterId = emitter.id;
-    renderEmitterTray();
-    sendEmitterPatch(emitter.id, { x: point.xNorm, y: point.yNorm }, true);
-    dragState = {
-      active: true,
-      pointerId: event.pointerId,
-      mode: 'emitter',
-      emitterId: emitter.id,
-      lastX: point.x,
-      lastY: point.y,
-      lastAt: performance.now(),
-    };
-  } else {
-    sendSplash(point.xNorm, point.yNorm, RIPPLE_CONFIG.splash.defaultStrength);
-    dragState = {
-      active: true,
-      pointerId: event.pointerId,
-      mode: 'splash',
-      emitterId: null,
-      lastX: point.x,
-      lastY: point.y,
-      lastAt: performance.now(),
-    };
+  if (handle === 'delete' && selectedObjectId) {
+    sendMessage({ type: 'rippleObjectDelete', id: selectedObjectId });
+    selectedObjectId = null;
+    return;
   }
 
+  if (handle === 'rotate' && selectedObjectId) {
+    dragState = { active: true, pointerId: event.pointerId, mode: 'object-rotate', emitterId: null, objectId: selectedObjectId, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
+
+  const object = hitObject(point.screenX, point.screenY);
+  if (object) {
+    selectedObjectId = object.id;
+    selectedEmitterId = '';
+    sendObjectPatch(object.id, { x: point.x, y: point.y }, true);
+    dragState = { active: true, pointerId: event.pointerId, mode: 'object-move', emitterId: null, objectId: object.id, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
+
+  const emitter = hitEmitter(point.screenX, point.screenY);
+  if (emitter) {
+    selectedEmitterId = emitter.id;
+    selectedObjectId = null;
+    renderEmitterTray();
+    sendEmitterPatch(emitter.id, { x: point.x, y: point.y }, true);
+    dragState = { active: true, pointerId: event.pointerId, mode: 'emitter', emitterId: emitter.id, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
+
+  selectedObjectId = null;
+  sendSplash(point.x, point.y, RIPPLE_CONFIG.splash.defaultStrength);
+  dragState = { active: true, pointerId: event.pointerId, mode: 'splash', emitterId: null, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
   canvas.setPointerCapture(event.pointerId);
 };
 
@@ -630,33 +840,36 @@ const handlePointerMove = (event: PointerEvent): void => {
   const now = performance.now();
 
   if (dragState.mode === 'emitter' && dragState.emitterId) {
-    sendEmitterPatch(dragState.emitterId, { x: point.xNorm, y: point.yNorm });
-    dragState.lastX = point.x;
-    dragState.lastY = point.y;
-    dragState.lastAt = now;
-    return;
-  }
-
-  const distance = Math.hypot(point.x - dragState.lastX, point.y - dragState.lastY);
-  if (distance > 24 && now - dragState.lastAt > DRAG_INTERVAL_MS) {
-    sendSplash(point.xNorm, point.yNorm, 1.2);
-    dragState.lastX = point.x;
-    dragState.lastY = point.y;
-    dragState.lastAt = now;
+    sendEmitterPatch(dragState.emitterId, { x: point.x, y: point.y });
+  } else if (dragState.mode === 'object-move' && dragState.objectId) {
+    sendObjectPatch(dragState.objectId, { x: point.x, y: point.y });
+  } else if (dragState.mode === 'object-rotate' && dragState.objectId) {
+    const object = objects.find((candidate) => candidate.id === dragState.objectId);
+    if (object) {
+      const center = worldToScreen(object);
+      sendObjectPatch(dragState.objectId, { rotation: Math.atan2(point.screenY - center.y, point.screenX - center.x) + Math.PI / 2 });
+    }
+  } else {
+    const distance = Math.hypot(point.screenX - dragState.lastX, point.screenY - dragState.lastY);
+    if (distance > 24 && now - dragState.lastAt > DRAG_INTERVAL_MS) {
+      sendSplash(point.x, point.y, 1.2);
+      dragState.lastX = point.screenX;
+      dragState.lastY = point.screenY;
+      dragState.lastAt = now;
+    }
   }
 };
 
 const finishPointer = (event: PointerEvent): void => {
   if (!dragState.active || dragState.pointerId !== event.pointerId) return;
-
   if (dragState.mode === 'emitter' && dragState.emitterId) {
     sendMessage({ type: 'rippleEmitterRelease', id: dragState.emitterId });
   }
-
-  dragState = emptyDragState();
-  if (canvas.hasPointerCapture(event.pointerId)) {
-    canvas.releasePointerCapture(event.pointerId);
+  if ((dragState.mode === 'object-move' || dragState.mode === 'object-rotate') && dragState.objectId) {
+    sendMessage({ type: 'rippleObjectRelease', id: dragState.objectId });
   }
+  dragState = emptyDragState();
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
 };
 
 const sendSelectedControlPatch = (patch: RippleEmitterPatch, force = false): void => {
@@ -666,34 +879,50 @@ const sendSelectedControlPatch = (patch: RippleEmitterPatch, force = false): voi
   renderEmitterTray();
 };
 
-amplitudeInput.addEventListener('input', () => {
-  sendSelectedControlPatch({ amplitude: Number.parseFloat(amplitudeInput.value) });
-});
-amplitudeInput.addEventListener('change', () => {
-  sendSelectedControlPatch({ amplitude: Number.parseFloat(amplitudeInput.value) }, true);
-});
-frequencyInput.addEventListener('input', () => {
-  sendSelectedControlPatch({ frequency: Number.parseFloat(frequencyInput.value) });
-});
-frequencyInput.addEventListener('change', () => {
-  sendSelectedControlPatch({ frequency: Number.parseFloat(frequencyInput.value) }, true);
-});
-phaseInput.addEventListener('input', () => {
-  sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) });
-});
-phaseInput.addEventListener('change', () => {
-  sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }, true);
-});
+const updateCamera = (dt: number): void => {
+  const left = keyState.has('KeyA') || keyState.has('ArrowLeft');
+  const right = keyState.has('KeyD') || keyState.has('ArrowRight');
+  const up = keyState.has('KeyW') || keyState.has('ArrowUp');
+  const down = keyState.has('KeyS') || keyState.has('ArrowDown');
+  camera.xScreens = clamp(camera.xScreens + (Number(right) - Number(left)) * CAMERA_SPEED_SCREENS * dt, -1, 1);
+  camera.yScreens = clamp(camera.yScreens + (Number(down) - Number(up)) * CAMERA_SPEED_SCREENS * dt, -1, 1);
+};
+
+amplitudeInput.addEventListener('input', () => sendSelectedControlPatch({ amplitude: Number.parseFloat(amplitudeInput.value) }));
+amplitudeInput.addEventListener('change', () => sendSelectedControlPatch({ amplitude: Number.parseFloat(amplitudeInput.value) }, true));
+frequencyInput.addEventListener('input', () => sendSelectedControlPatch({ frequency: Number.parseFloat(frequencyInput.value) }));
+frequencyInput.addEventListener('change', () => sendSelectedControlPatch({ frequency: Number.parseFloat(frequencyInput.value) }, true));
+phaseInput.addEventListener('input', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }));
+phaseInput.addEventListener('change', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }, true));
 enableButton.addEventListener('click', () => {
   const emitter = getSelectedEmitter();
-  if (!emitter) return;
-  sendSelectedControlPatch({ enabled: !emitter.enabled }, true);
+  if (emitter) sendSelectedControlPatch({ enabled: !emitter.enabled }, true);
 });
-pauseButton.addEventListener('click', () => {
-  sendMessage({ type: 'rippleSetPaused', paused: !paused });
-});
-resetButton.addEventListener('click', () => {
-  sendMessage({ type: 'rippleReset' });
+pauseButton.addEventListener('click', () => sendMessage({ type: 'rippleSetPaused', paused: !paused }));
+resetButton.addEventListener('click', () => sendMessage({ type: 'rippleReset' }));
+themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+document.querySelectorAll<HTMLButtonElement>('[data-object-kind]').forEach((button) => {
+  button.addEventListener('pointerdown', (event) => {
+    pendingObjectKind = button.dataset.objectKind as RippleObjectKind;
+    button.setPointerCapture(event.pointerId);
+  });
+  button.addEventListener('pointerup', (event) => {
+    if (!pendingObjectKind) return;
+    const rect = canvas.getBoundingClientRect();
+    if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const world = screenToWorld(x, y);
+      createObjectAt(pendingObjectKind, world.x, world.y);
+    } else {
+      createObjectAt(pendingObjectKind, 0.5, 0.5);
+    }
+    pendingObjectKind = null;
+  });
+  button.addEventListener('pointercancel', () => {
+    pendingObjectKind = null;
+  });
 });
 
 canvas.addEventListener('pointerdown', handlePointerDown);
@@ -701,10 +930,19 @@ canvas.addEventListener('pointermove', handlePointerMove);
 canvas.addEventListener('pointerup', finishPointer);
 canvas.addEventListener('pointercancel', finishPointer);
 window.addEventListener('resize', resize);
+window.addEventListener('keydown', (event) => {
+  if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
+    event.preventDefault();
+    keyState.add(event.code);
+  }
+});
+window.addEventListener('keyup', (event) => keyState.delete(event.code));
 
 const draw = (timestamp: number): void => {
   const dt = clamp((timestamp - lastFrameAt) / 1000, 0, 0.04);
   lastFrameAt = timestamp;
+  updateCamera(dt);
+  buildObjectMask();
 
   if (!paused) {
     simTime += dt;
@@ -713,6 +951,7 @@ const draw = (timestamp: number): void => {
   }
 
   drawWater();
+  drawObjects();
   drawEmitters(timestamp);
 
   if (socket?.readyState === WebSocket.OPEN && timestamp - lastPingAt > PING_INTERVAL_MS) {
@@ -723,6 +962,7 @@ const draw = (timestamp: number): void => {
   window.requestAnimationFrame(draw);
 };
 
+initializeTheme();
 roomLabel.textContent = roomCode;
 resize();
 connect();

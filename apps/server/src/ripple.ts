@@ -3,16 +3,21 @@ import { randomUUID } from 'node:crypto';
 import {
   RIPPLE_CONFIG,
   cloneRippleEmitter,
+  cloneRippleObject,
   cloneRippleSplash,
+  createDefaultRippleObject,
   createDefaultRippleEmitters,
+  isRippleObjectKind,
   normalizeRippleRoomCode,
   sanitizeRippleEmitterPatch,
   sanitizeRippleName,
+  sanitizeRippleObjectPatch,
   sanitizeRippleSplash,
 } from '../../../packages/shared/src/ripple.ts';
 import type {
   RippleClientToServerMessage,
   RippleEmitterSnapshot,
+  RippleObjectSnapshot,
   RippleServerToClientMessage,
   RippleSnapshot,
   RippleSplashEvent,
@@ -36,11 +41,13 @@ type RippleRoom = {
   roomCode: string;
   clients: Set<RippleClient>;
   emitters: Map<string, RippleEmitterSnapshot>;
+  objects: Map<string, RippleObjectSnapshot>;
   recentSplashes: RippleSplashEvent[];
   paused: boolean;
   resetVersion: number;
   createdAt: number;
   nextSplashId: number;
+  nextObjectId: number;
 };
 
 const sendFrame = (socket: import('node:net').Socket, payload: RippleServerToClientMessage | string): void => {
@@ -144,11 +151,13 @@ const createRippleRoom = (roomCode: string): RippleRoom => {
     roomCode,
     clients: new Set(),
     emitters: new Map(createDefaultRippleEmitters(now).map((emitter) => [emitter.id, emitter])),
+    objects: new Map(),
     recentSplashes: [],
     paused: false,
     resetVersion: 0,
     createdAt: now,
     nextSplashId: 1,
+    nextObjectId: 1,
   };
 };
 
@@ -174,6 +183,7 @@ export const createRippleWorld = () => {
     paused: room.paused,
     resetVersion: room.resetVersion,
     emitters: [...room.emitters.values()].map(cloneRippleEmitter),
+    objects: [...room.objects.values()].map(cloneRippleObject),
     recentSplashes: room.recentSplashes.map(cloneRippleSplash),
     playerCount: joinedCount(room),
   });
@@ -204,17 +214,23 @@ export const createRippleWorld = () => {
     const wasJoined = client.joined;
     room.clients.delete(client);
 
-    let releasedEmitter = false;
+    let releasedState = false;
     room.emitters.forEach((emitter, id) => {
       if (emitter.controlledBy === client.id) {
         room.emitters.set(id, { ...emitter, controlledBy: null, updatedAt: Date.now() });
-        releasedEmitter = true;
+        releasedState = true;
+      }
+    });
+    room.objects.forEach((object, id) => {
+      if (object.controlledBy === client.id) {
+        room.objects.set(id, { ...object, controlledBy: null, updatedAt: Date.now() });
+        releasedState = true;
       }
     });
 
     if (wasJoined) {
       broadcastPresence(room);
-      if (releasedEmitter) broadcastSnapshot(room);
+      if (releasedState) broadcastSnapshot(room);
     }
 
     if (room.clients.size === 0 && room.roomCode !== RIPPLE_CONFIG.defaultRoomCode) {
@@ -333,6 +349,82 @@ export const createRippleWorld = () => {
     broadcastSnapshot(room);
   };
 
+  const handleObjectCreate = (client: RippleClient, message: RippleClientToServerMessage): void => {
+    if (message.type !== 'rippleObjectCreate') return;
+    const room = getJoinedRoom(client);
+    if (!room) return;
+
+    if (!isRippleObjectKind(message.kind)) {
+      sendError(client, 'Invalid ripple object kind.');
+      return;
+    }
+
+    if (room.objects.size >= RIPPLE_CONFIG.object.maxObjects) {
+      sendError(client, `The tank is full at ${RIPPLE_CONFIG.object.maxObjects} objects.`);
+      return;
+    }
+
+    const patch = sanitizeRippleObjectPatch(message.object);
+    if (!patch) {
+      sendError(client, 'Invalid ripple object payload.');
+      return;
+    }
+
+    const id = `object-${room.nextObjectId++}`;
+    const now = Date.now();
+    const object = createDefaultRippleObject(id, message.kind, patch, now);
+    room.objects.set(id, { ...object, controlledBy: client.id });
+    broadcastSnapshot(room);
+  };
+
+  const handleObjectUpdate = (client: RippleClient, message: RippleClientToServerMessage): void => {
+    if (message.type !== 'rippleObjectUpdate') return;
+    const room = getJoinedRoom(client);
+    if (!room) return;
+
+    const object = room.objects.get(message.id);
+    if (!object) {
+      sendError(client, `Unknown ripple object: ${message.id}`);
+      return;
+    }
+
+    const patch = sanitizeRippleObjectPatch(message.patch);
+    if (!patch) {
+      sendError(client, 'Invalid ripple object update.');
+      return;
+    }
+
+    room.objects.set(message.id, {
+      ...object,
+      ...patch,
+      controlledBy: client.id,
+      updatedAt: Date.now(),
+    });
+    broadcastSnapshot(room);
+  };
+
+  const handleObjectDelete = (client: RippleClient, message: RippleClientToServerMessage): void => {
+    if (message.type !== 'rippleObjectDelete') return;
+    const room = getJoinedRoom(client);
+    if (!room) return;
+
+    if (room.objects.delete(message.id)) {
+      broadcastSnapshot(room);
+    }
+  };
+
+  const handleObjectRelease = (client: RippleClient, message: RippleClientToServerMessage): void => {
+    if (message.type !== 'rippleObjectRelease') return;
+    const room = getJoinedRoom(client);
+    if (!room) return;
+
+    const object = room.objects.get(message.id);
+    if (!object || object.controlledBy !== client.id) return;
+
+    room.objects.set(message.id, { ...object, controlledBy: null, updatedAt: Date.now() });
+    broadcastSnapshot(room);
+  };
+
   const handlePause = (client: RippleClient, message: RippleClientToServerMessage): void => {
     if (message.type !== 'rippleSetPaused') return;
     const room = getJoinedRoom(client);
@@ -349,9 +441,11 @@ export const createRippleWorld = () => {
 
     const now = Date.now();
     room.emitters = new Map(createDefaultRippleEmitters(now).map((emitter) => [emitter.id, emitter]));
+    room.objects = new Map();
     room.recentSplashes = [];
     room.paused = false;
     room.resetVersion += 1;
+    room.nextObjectId = 1;
     broadcastSnapshot(room);
   };
 
@@ -380,6 +474,14 @@ export const createRippleWorld = () => {
       handleEmitterUpdate(client, message);
     } else if (message.type === 'rippleEmitterRelease') {
       handleEmitterRelease(client, message);
+    } else if (message.type === 'rippleObjectCreate') {
+      handleObjectCreate(client, message);
+    } else if (message.type === 'rippleObjectUpdate') {
+      handleObjectUpdate(client, message);
+    } else if (message.type === 'rippleObjectDelete') {
+      handleObjectDelete(client, message);
+    } else if (message.type === 'rippleObjectRelease') {
+      handleObjectRelease(client, message);
     } else if (message.type === 'rippleSetPaused') {
       handlePause(client, message);
     } else if (message.type === 'rippleReset') {

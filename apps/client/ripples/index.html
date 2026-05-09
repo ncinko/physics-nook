@@ -34,6 +34,7 @@
             <span id="statusText">Offline</span>
           </div>
           <div class="action-group" aria-label="Studio controls">
+            <button id="themeButton" type="button" aria-label="Switch color theme">Dark</button>
             <button id="pauseButton" type="button" aria-label="Pause ripple simulation">Pause</button>
             <button id="resetButton" type="button" aria-label="Reset ripple tank">Reset</button>
           </div>
@@ -43,7 +44,6 @@
       <aside class="emitter-tray" aria-label="Emitter tools">
         <div class="tray-heading">
           <span>Emitters</span>
-          <strong id="selectedEmitterLabel">Cool Left</strong>
         </div>
         <div id="emitterButtons" class="emitter-buttons"></div>
         <label class="control-slider">
@@ -59,6 +59,23 @@
           <input id="phaseInput" type="range" min="-6.283" max="6.283" step="0.05" value="0" />
         </label>
         <button id="enableButton" class="enable-button" type="button">Enabled</button>
+      </aside>
+
+      <aside class="object-tray" aria-label="Objects">
+        <div class="tray-heading">
+          <span>Objects</span>
+        </div>
+        <div class="object-buttons">
+          <button class="object-button" type="button" data-object-kind="barrier" aria-label="Add rectangular barrier">
+            <span class="object-icon barrier-icon" aria-hidden="true"></span>
+          </button>
+          <button class="object-button" type="button" data-object-kind="parabola" aria-label="Add parabolic reflector">
+            <span class="object-icon parabola-icon" aria-hidden="true"></span>
+          </button>
+          <button class="object-button" type="button" data-object-kind="single-slit" aria-label="Add single slit barrier">
+            <span class="object-icon slit-icon" aria-hidden="true"></span>
+          </button>
+        </div>
       </aside>
     </main>
 

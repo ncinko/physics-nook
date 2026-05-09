@@ -1,10 +1,55 @@
 :root {
-  color: #f8fbff;
-  background: #041018;
+  color: #092033;
+  background: #f4fbff;
+  --ripple-bg:
+    radial-gradient(circle at 18% 12%, rgba(96, 165, 250, 0.18), transparent 34%),
+    radial-gradient(circle at 78% 26%, rgba(14, 165, 233, 0.1), transparent 30%),
+    radial-gradient(circle at 88% 84%, rgba(15, 118, 110, 0.12), transparent 34%),
+    linear-gradient(180deg, #f8fcff, #e8f7fc 70%, #f5fbff);
+  --water-backdrop:
+    radial-gradient(circle at 18% 20%, rgba(125, 211, 252, 0.18), transparent 34%),
+    radial-gradient(circle at 80% 26%, rgba(248, 113, 113, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(186, 230, 253, 0.2));
+  --panel-bg: rgba(255, 255, 255, 0.72);
+  --panel-border: rgba(12, 74, 110, 0.16);
+  --panel-shadow: rgba(12, 74, 110, 0.12);
+  --primary-text: #082f49;
+  --muted-text: #42677b;
+  --button-hover: rgba(14, 116, 144, 0.1);
+  --button-bg: rgba(255, 255, 255, 0.42);
+  --button-border: rgba(12, 74, 110, 0.14);
+  --focus: #0284c7;
+  --edge-top: rgba(248, 252, 255, 0.72);
+  --edge-bottom: rgba(245, 251, 255, 0.66);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+:root[data-theme="dark"] {
+  color: #f8fbff;
+  background: #041018;
+  --ripple-bg:
+    radial-gradient(circle at 18% 12%, rgba(96, 165, 250, 0.18), transparent 34%),
+    radial-gradient(circle at 78% 26%, rgba(14, 165, 233, 0.12), transparent 30%),
+    radial-gradient(circle at 88% 84%, rgba(15, 118, 110, 0.18), transparent 34%),
+    linear-gradient(180deg, #071622, #031019 70%, #051923);
+  --water-backdrop:
+    radial-gradient(circle at 18% 20%, rgba(125, 211, 252, 0.12), transparent 34%),
+    radial-gradient(circle at 80% 26%, rgba(248, 113, 113, 0.1), transparent 28%),
+    linear-gradient(180deg, rgba(2, 6, 23, 0.2), rgba(8, 47, 73, 0.18));
+  --panel-bg: rgba(3, 12, 22, 0.74);
+  --panel-border: rgba(226, 244, 255, 0.16);
+  --panel-shadow: rgba(0, 0, 0, 0.28);
+  --primary-text: #ffffff;
+  --muted-text: #9fb8ca;
+  --button-hover: rgba(125, 211, 252, 0.1);
+  --button-bg: rgba(15, 23, 42, 0.42);
+  --button-border: rgba(226, 244, 255, 0.14);
+  --focus: #7dd3fc;
+  --edge-top: rgba(4, 16, 24, 0.76);
+  --edge-bottom: rgba(4, 16, 24, 0.7);
 }
 
 * {
@@ -36,7 +81,7 @@ button {
 
 button:focus-visible,
 input:focus-visible {
-  outline: 3px solid #7dd3fc;
+  outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -46,11 +91,7 @@ input:focus-visible {
   height: 100vh;
   min-height: 540px;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 18% 12%, rgba(96, 165, 250, 0.18), transparent 34%),
-    radial-gradient(circle at 78% 26%, rgba(14, 165, 233, 0.12), transparent 30%),
-    radial-gradient(circle at 88% 84%, rgba(15, 118, 110, 0.18), transparent 34%),
-    linear-gradient(180deg, #071622, #031019 70%, #051923);
+  background: var(--ripple-bg);
 }
 
 .water-backdrop,
@@ -62,10 +103,7 @@ input:focus-visible {
 
 .water-backdrop {
   inset: 0;
-  background:
-    radial-gradient(circle at 18% 20%, rgba(125, 211, 252, 0.12), transparent 34%),
-    radial-gradient(circle at 80% 26%, rgba(248, 113, 113, 0.1), transparent 28%),
-    linear-gradient(180deg, rgba(2, 6, 23, 0.2), rgba(8, 47, 73, 0.18));
+  background: var(--water-backdrop);
 }
 
 .center-glow {
@@ -74,7 +112,7 @@ input:focus-visible {
   width: min(94vw, 56rem);
   height: 72%;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(224, 242, 254, 0.1), rgba(8, 47, 73, 0.08) 56%, transparent 80%);
+  background: radial-gradient(circle, rgba(224, 242, 254, 0.22), rgba(8, 145, 178, 0.08) 56%, transparent 80%);
   filter: blur(42px);
 }
 
@@ -87,12 +125,12 @@ input:focus-visible {
 
 .edge-fade.top {
   top: 0;
-  background: linear-gradient(180deg, rgba(4, 16, 24, 0.76), transparent);
+  background: linear-gradient(180deg, var(--edge-top), transparent);
 }
 
 .edge-fade.bottom {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(4, 16, 24, 0.7), transparent);
+  background: linear-gradient(0deg, var(--edge-bottom), transparent);
 }
 
 #rippleCanvas {
@@ -123,11 +161,12 @@ input:focus-visible {
 .connection-pill,
 .stat-card,
 .action-group,
-.emitter-tray {
-  border: 1px solid rgba(226, 244, 255, 0.16);
+.emitter-tray,
+.object-tray {
+  border: 1px solid var(--panel-border);
   border-radius: 8px;
-  background: rgba(3, 12, 22, 0.74);
-  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.28);
+  background: var(--panel-bg);
+  box-shadow: 0 14px 36px var(--panel-shadow);
   backdrop-filter: blur(14px);
 }
 
@@ -141,7 +180,7 @@ input:focus-visible {
 
 .ripple-title strong {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--primary-text);
   font-size: 0.98rem;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -150,7 +189,7 @@ input:focus-visible {
 
 .ripple-title span {
   overflow: hidden;
-  color: #b7d6ec;
+  color: var(--muted-text);
   font-size: 0.74rem;
   font-weight: 650;
   line-height: 1.25;
@@ -175,7 +214,7 @@ input:focus-visible {
   align-items: center;
   justify-content: center;
   padding: 10px 11px;
-  color: #eef8ff;
+  color: var(--primary-text);
   font-size: 0.76rem;
   font-weight: 760;
   line-height: 1;
@@ -219,6 +258,7 @@ input:focus-visible {
 .tray-heading span,
 .control-slider span {
   color: #9fb8ca;
+  color: var(--muted-text);
   font-size: 0.62rem;
   font-weight: 800;
   line-height: 1;
@@ -227,7 +267,7 @@ input:focus-visible {
 }
 
 .stat-card strong {
-  color: #ffffff;
+  color: var(--primary-text);
   font-size: 1.1rem;
   font-weight: 850;
   line-height: 1;
@@ -244,7 +284,7 @@ input:focus-visible {
   min-width: 74px;
   padding: 10px 12px;
   background: transparent;
-  color: #e8f6ff;
+  color: var(--primary-text);
   font-size: 0.76rem;
   font-weight: 820;
   line-height: 1;
@@ -257,13 +297,14 @@ input:focus-visible {
 
 .action-group button:hover,
 .enable-button:hover,
-.emitter-button:hover {
-  background: rgba(125, 211, 252, 0.1);
+.emitter-button:hover,
+.object-button:hover {
+  background: var(--button-hover);
 }
 
-.emitter-tray {
+.emitter-tray,
+.object-tray {
   position: absolute;
-  right: 16px;
   bottom: 16px;
   z-index: 7;
   display: grid;
@@ -271,6 +312,15 @@ input:focus-visible {
   gap: 12px;
   padding: 12px;
   pointer-events: auto;
+}
+
+.emitter-tray {
+  right: 16px;
+}
+
+.object-tray {
+  left: 16px;
+  width: min(220px, calc(100vw - 32px));
 }
 
 .tray-heading {
@@ -283,7 +333,7 @@ input:focus-visible {
 
 .tray-heading strong {
   overflow: hidden;
-  color: #ffffff;
+  color: var(--primary-text);
   font-size: 0.92rem;
   line-height: 1.2;
   text-overflow: ellipsis;
@@ -296,14 +346,15 @@ input:focus-visible {
   gap: 8px;
 }
 
-.emitter-button {
+.emitter-button,
+.object-button {
   display: flex;
   height: 42px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(226, 244, 255, 0.14);
+  border: 1px solid var(--button-border);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--button-bg);
 }
 
 .emitter-button[aria-pressed="true"] {
@@ -323,6 +374,55 @@ input:focus-visible {
   box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.08);
 }
 
+.object-buttons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.object-icon {
+  position: relative;
+  display: block;
+  width: 28px;
+  height: 24px;
+  color: var(--primary-text);
+}
+
+.barrier-icon::before {
+  position: absolute;
+  inset: 9px 2px;
+  content: "";
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.parabola-icon::before {
+  position: absolute;
+  inset: 2px 2px 4px;
+  content: "";
+  border-bottom: 3px solid currentColor;
+  border-radius: 0 0 50% 50%;
+}
+
+.slit-icon::before,
+.slit-icon::after {
+  position: absolute;
+  left: 12px;
+  width: 4px;
+  height: 8px;
+  content: "";
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.slit-icon::before {
+  top: 2px;
+}
+
+.slit-icon::after {
+  bottom: 2px;
+}
+
 .control-slider {
   display: grid;
   gap: 8px;
@@ -335,7 +435,7 @@ input:focus-visible {
   cursor: pointer;
   appearance: none;
   border-radius: 999px;
-  background: rgba(148, 197, 255, 0.18);
+  background: color-mix(in srgb, var(--focus) 18%, transparent);
   accent-color: #7dd3fc;
 }
 
@@ -359,9 +459,9 @@ input:focus-visible {
 }
 
 .enable-button {
-  border: 1px solid rgba(226, 244, 255, 0.14);
+  border: 1px solid var(--button-border);
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.42);
+  background: var(--button-bg);
 }
 
 .enable-button[data-enabled="false"] {
@@ -399,6 +499,13 @@ input:focus-visible {
     bottom: 12px;
     width: auto;
     grid-template-columns: 1fr;
+  }
+
+  .object-tray {
+    left: 12px;
+    right: auto;
+    bottom: 224px;
+    width: min(220px, calc(100vw - 24px));
   }
 
   .control-slider.compact {

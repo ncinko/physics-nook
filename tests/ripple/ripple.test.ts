@@ -3,10 +3,12 @@ import test from 'node:test';
 
 import {
   RIPPLE_CONFIG,
+  createDefaultRippleObject,
   createDefaultRippleEmitters,
   normalizeRippleRoomCode,
   sanitizeRippleEmitterPatch,
   sanitizeRippleName,
+  sanitizeRippleObjectPatch,
   sanitizeRippleSplash,
 } from '../../packages/shared/src/ripple.ts';
 
@@ -21,6 +23,7 @@ test('default ripple emitters match the planned home-page source layout', () => 
   assert.equal(emitters[0].color, '#60a5fa');
   assert.equal(emitters[1].color, '#22d3ee');
   assert.equal(emitters[2].color, '#f87171');
+  assert.ok(emitters.every((emitter) => emitter.x > 0.33 && emitter.x < 0.67));
   assert.equal(emitters[2].phase, Math.PI);
   assert.ok(emitters.every((emitter) => emitter.enabled && emitter.controlledBy === null && emitter.updatedAt === 123));
 });
@@ -80,6 +83,26 @@ test('ripple emitter patches sanitize individual controls', () => {
       enabled: false,
     },
   );
+});
+
+test('ripple objects sanitize geometry and create default shapes', () => {
+  assert.equal(sanitizeRippleObjectPatch({ x: Number.NaN }), null);
+  assert.equal(sanitizeRippleObjectPatch({}), null);
+
+  assert.deepEqual(sanitizeRippleObjectPatch({ x: -1, y: 2, width: 2, height: 0, rotation: Math.PI * 4, gap: 1 }), {
+    x: 0,
+    y: 1,
+    width: RIPPLE_CONFIG.object.maxSize,
+    height: RIPPLE_CONFIG.object.minSize,
+    rotation: Math.PI * 2,
+    gap: RIPPLE_CONFIG.object.maxGap,
+  });
+
+  const slit = createDefaultRippleObject('object-1', 'single-slit', { x: 0.5, y: 0.5 }, 321);
+  assert.equal(slit.kind, 'single-slit');
+  assert.equal(slit.controlledBy, null);
+  assert.equal(slit.updatedAt, 321);
+  assert.ok(slit.gap > 0);
 });
 
 test('ripple names and room codes normalize for shared room routing', () => {

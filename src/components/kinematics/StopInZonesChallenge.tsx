@@ -146,6 +146,7 @@ export default function StopInZonesChallenge() {
 
   const historyRef = useRef<HistoryPoint[]>([]);
   const keysRef = useRef({ left: false, right: false });
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const submittedRef = useRef(false);
   const [snapshot, setSnapshot] = useState(() => makeSnapshot(runtimeRef.current as Runtime));
@@ -294,6 +295,9 @@ export default function StopInZonesChallenge() {
 
   const setGameMode = useCallback((gameOn: boolean) => {
     restart(gameOn);
+    if (gameOn) {
+      window.requestAnimationFrame(() => shellRef.current?.focus({ preventScroll: true }));
+    }
   }, [restart]);
 
   const setWrapWorld = useCallback((wrapWorld: boolean) => {
@@ -356,12 +360,20 @@ export default function StopInZonesChallenge() {
       }
     };
 
+    const handleBlur = () => {
+      keysRef.current.left = false;
+      keysRef.current.right = false;
+    };
+    const shell = shellRef.current;
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+    shell?.addEventListener('blur', handleBlur);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      shell?.removeEventListener('blur', handleBlur);
     };
   }, [restart, setPaused]);
 
@@ -518,7 +530,11 @@ export default function StopInZonesChallenge() {
   };
 
   return (
-    <div className="flex h-full min-h-[48rem] w-full flex-col bg-[var(--sim-bg)] text-[var(--text-primary)]">
+    <div
+      ref={shellRef}
+      tabIndex={-1}
+      className="flex h-full min-h-[48rem] w-full flex-col bg-[var(--sim-bg)] text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+    >
       <div className="grid gap-4 border-b border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 lg:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -669,15 +685,6 @@ export default function StopInZonesChallenge() {
               <p className="m-0 text-sm text-[var(--text-muted)]">Open the leaderboard after a challenge run.</p>
             )}
             {isPosting && <p className="mt-3 mb-0 text-sm text-[var(--text-muted)]">Posting score...</p>}
-          </div>
-
-          <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-            <h3 className="m-0 text-base font-semibold">Challenge Rules</h3>
-            <ul className="mt-3 mb-0 space-y-2 pl-5 text-sm leading-6 text-[var(--text-muted)]">
-              <li>Stop inside each shaded zone with speed below {STOP_ZONE_DEFAULTS.velocityThresholdMps.toFixed(2)} m/s.</li>
-              <li>Hold the stop for {STOP_ZONE_DEFAULTS.holdTimeS.toFixed(1)} s before the next zone appears.</li>
-              <li>Finish {STOP_ZONE_DEFAULTS.winStops} stops before a zone timer runs out.</li>
-            </ul>
           </div>
         </aside>
       </div>

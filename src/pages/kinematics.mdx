@@ -23,20 +23,20 @@ The sign matters. If rightward motion is positive, then a negative velocity mean
 
 ## Velocity
 
-Average velocity compares two positions at two times:
+Average velocity is the rate at which position changes between two moments in time:
 
 $$
 \overline{v} = \frac{\Delta x}{\Delta t}
 = \frac{x_2 - x_1}{t_2 - t_1}.
 $$
 
-Instantaneous velocity is the velocity at one moment:
+If the two moments are indistinguishable (calculus allows us to take the limit as $$t_2 - t_1 \rightarrow 0$$), then we have the instantaneous velocity:
 
 $$
 v(t) = \frac{dx}{dt}.
 $$
 
-Graphically, average velocity is the slope of a secant line on a position-time graph. Instantaneous velocity is the slope of the tangent line at a single point.
+Graphically, average velocity is the slope of a secant line on a position versus time plot. Instantaneous velocity is the slope of the tangent line at a single point.
 
 <SimulationBlock
   title="Position and Velocity"
@@ -57,20 +57,24 @@ Graphically, average velocity is the slope of a secant line on a position-time g
 
 ## Acceleration
 
-Average acceleration compares two velocities at two times:
+Average acceleration is the rate at which velocity changes between two moments in time:
 
 $$
 \overline{a} = \frac{\Delta v}{\Delta t}
 = \frac{v_2 - v_1}{t_2 - t_1}.
 $$
 
-Instantaneous acceleration is the acceleration at one moment:
+This can be a tricky concept to grasp fully, as it's a bit recursive.  Velocity is already a rate of change (in position).  Acceleration is a rate of change [in velocity].  This means acceleration is also a rate of change [in a rate of change (in position)].
+
+The good news is that you already have incredible intuition for what it *feels like* to experience acceleration.  The challenge is to connect this everyday experience to these more precise mathematical ideas.
+
+As with velocity, instantaneous acceleration is the acceleration at one moment in time:
 
 $$
 a(t) = \frac{dv}{dt}.
 $$
 
-The slope idea repeats: acceleration is the slope of a velocity-time graph in the same way velocity is the slope of a position-time graph.
+The slope idea repeats: acceleration is the slope of a velocity versus time plot in the same way velocity is the slope of a position versus time plot.
 
 <DerivationPanel title="How can negative acceleration speed something up?">
   Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.

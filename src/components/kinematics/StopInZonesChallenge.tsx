@@ -153,7 +153,6 @@ export default function StopInZonesChallenge() {
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [cloudScores, setCloudScores] = useState<ScoreEntry[]>([]);
   const [localScores, setLocalScores] = useState<ScoreEntry[]>([]);
-  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -491,7 +490,6 @@ export default function StopInZonesChallenge() {
     };
 
     saveLocalScore(score);
-    setShowLeaderboard(true);
     setNameModalOpen(false);
 
     if (!runtime.runId) {
@@ -549,15 +547,9 @@ export default function StopInZonesChallenge() {
           <button type="button" className={buttonClass} onClick={() => restart()} title="Restart">
             <RotateCcw size={16} aria-hidden="true" />
             Restart
-          </button>
-          <button
-            type="button"
-            className={buttonClass}
-            onClick={() => setShowLeaderboard((value) => !value)}
-            title="Leaderboard"
-          >
-            <Trophy size={16} aria-hidden="true" />
-            Leaderboard
+            <kbd className="ml-1 border border-[var(--grid-line)] bg-[var(--sim-bg)] px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none text-[var(--text-muted)]">
+              R
+            </kbd>
           </button>
           <label className="inline-flex items-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold">
             <input
@@ -655,8 +647,7 @@ export default function StopInZonesChallenge() {
                 {apiStatus}
               </span>
             </div>
-            {showLeaderboard ? (
-              leaderboardScores.length > 0 ? (
+            {leaderboardScores.length > 0 ? (
                 <div>
                   <div className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_5.25rem] gap-2 border-b border-[var(--grid-line)] pb-2 text-xs font-semibold uppercase text-[var(--text-muted)]">
                     <span className="text-right">#</span>
@@ -678,11 +669,8 @@ export default function StopInZonesChallenge() {
                   ))}
                   </ol>
                 </div>
-              ) : (
-                <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
-              )
             ) : (
-              <p className="m-0 text-sm text-[var(--text-muted)]">Open the leaderboard after a challenge run.</p>
+              <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
             )}
             {isPosting && <p className="mt-3 mb-0 text-sm text-[var(--text-muted)]">Posting score...</p>}
           </div>

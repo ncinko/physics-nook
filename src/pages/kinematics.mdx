@@ -7,6 +7,8 @@ canonicalPath: /kinematics
 
 import SimulationBlock from '../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import VelocityExplorer from '../components/kinematics/VelocityExplorer';
 import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
@@ -91,6 +93,156 @@ The challenge below turns the sign conventions into a control problem. Apply acc
 >
   <StopInZonesChallenge client:only="react" />
 </SimulationBlock>
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Average Velocity from Position Data"
+    accent="blue"
+  >
+    #### Problem
+
+    A cart is at $x_1 = -3.0\,\text{m}$ when $t_1 = 2.0\,\text{s}$. Later, it is at $x_2 = 9.0\,\text{m}$ when $t_2 = 5.0\,\text{s}$. Find the cart's average velocity over this interval.
+
+    #### Given
+
+    - $x_1 = -3.0\,\text{m}$
+    - $t_1 = 2.0\,\text{s}$
+    - $x_2 = 9.0\,\text{m}$
+    - $t_2 = 5.0\,\text{s}$
+
+    #### Use
+
+    $$
+    \overline{v} = \frac{\Delta x}{\Delta t}
+    = \frac{x_2 - x_1}{t_2 - t_1}.
+    $$
+
+    #### Solve
+
+    First find the change in position:
+
+    $$
+    \Delta x = 9.0 - (-3.0) = 12.0\,\text{m}.
+    $$
+
+    Then find the elapsed time:
+
+    $$
+    \Delta t = 5.0 - 2.0 = 3.0\,\text{s}.
+    $$
+
+    So the average velocity is
+
+    $$
+    \overline{v} = \frac{12.0}{3.0} = 4.0\,\text{m/s}.
+    $$
+
+    #### Check
+
+    The cart moved from a negative position to a positive position, so the displacement is positive. A positive average velocity is exactly what we should expect.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Average Acceleration from Velocity Data"
+    accent="red"
+  >
+    #### Problem
+
+    A cyclist is moving right at $12\,\text{m/s}$ and brakes uniformly until their velocity is $4\,\text{m/s}$ to the right after $4.0\,\text{s}$. Find the average acceleration.
+
+    #### Given
+
+    - $v_1 = 12\,\text{m/s}$
+    - $v_2 = 4\,\text{m/s}$
+    - $\Delta t = 4.0\,\text{s}$
+
+    #### Use
+
+    $$
+    \overline{a} = \frac{\Delta v}{\Delta t}
+    = \frac{v_2 - v_1}{\Delta t}.
+    $$
+
+    #### Solve
+
+    The change in velocity is
+
+    $$
+    \Delta v = 4 - 12 = -8\,\text{m/s}.
+    $$
+
+    Therefore
+
+    $$
+    \overline{a} = \frac{-8}{4.0}
+    = -2.0\,\text{m/s}^2.
+    $$
+
+    #### Check
+
+    The cyclist is still moving right because the velocity remains positive, but the negative acceleration means that rightward velocity is decreasing. That matches the idea of braking.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Stopping Under Constant Acceleration"
+    accent="blue"
+  >
+    #### Problem
+
+    In the zone challenge, suppose the cart is moving right at $8.0\,\text{m/s}$ and you apply a constant acceleration of $-2.0\,\text{m/s}^2$. How long does it take to stop, and how far does it travel during that time?
+
+    #### Given
+
+    - $v_i = 8.0\,\text{m/s}$
+    - $v_f = 0$
+    - $a = -2.0\,\text{m/s}^2$
+
+    #### Use
+
+    With constant acceleration,
+
+    $$
+    v_f = v_i + at.
+    $$
+
+    The velocity changes linearly, so the displacement is average velocity times time:
+
+    $$
+    \Delta x = \overline{v}t
+    = \left(\frac{v_i + v_f}{2}\right)t.
+    $$
+
+    #### Solve
+
+    Solve for the stopping time:
+
+    $$
+    0 = 8.0 + (-2.0)t
+    $$
+
+    $$
+    2.0t = 8.0
+    \qquad \Rightarrow \qquad
+    t = 4.0\,\text{s}.
+    $$
+
+    The average velocity during the stop is
+
+    $$
+    \overline{v} = \frac{8.0 + 0}{2} = 4.0\,\text{m/s}.
+    $$
+
+    So the stopping distance is
+
+    $$
+    \Delta x = (4.0)(4.0) = 16\,\text{m}.
+    $$
+
+    #### Check
+
+    The acceleration points opposite the motion, so the cart should slow to a stop. It does not stop immediately; it continues moving right while its velocity falls to zero, so a positive stopping distance makes sense.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
 
 <QuestionSequence
   client:load

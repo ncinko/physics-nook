@@ -82,3 +82,15 @@ npm run game:build
 Use `apps/client/dist` as the Pages output directory for `game.physicsnook.com`.
 
 Host the authoritative server separately and expose it as `wss://ws.physicsnook.com`. The server process listens on `GAME_WS_PORT`, then `PORT`, then `8788`.
+
+## 1D Kinematics Leaderboard
+
+The `/kinematics` stop-in-zones challenge uses Cloudflare Pages Functions and D1:
+
+```sh
+wrangler d1 create physics-nook-kinematics
+wrangler d1 migrations apply physics-nook-kinematics --remote
+wrangler pages secret put LEADERBOARD_SALT
+```
+
+After creating the database, replace the placeholder `database_id` in `wrangler.toml`. The Pages binding name must remain `KINEMATICS_DB`, and `LEADERBOARD_SALT` should be a private random string with at least 16 characters.

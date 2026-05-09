@@ -1,0 +1,10 @@
+name = "physics-nook-astro"
+compatibility_date = "2026-05-09"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "physics_nook_kinematics"
+database_name = "physics-nook-kinematics"
+database_id = "aa68320e-892e-4747-af1f-013d16aca1c9"
+preview_database_id = "KINEMATICS_DB"
+migrations_dir = "migrations"

@@ -16,6 +16,7 @@
     "game:preview": "vite preview --config apps/client/vite.config.ts",
     "game:server": "node --experimental-strip-types apps/server/src/server.ts",
     "game:server:watch": "node --experimental-strip-types --watch apps/server/src/server.ts",
+    "test:kinematics": "node --experimental-strip-types tests/kinematics/run-tests.ts",
     "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
     "test:oscillations": "node --experimental-strip-types tests/oscillations/run-tests.ts",
     "test:ripple": "node --experimental-strip-types tests/ripple/run-tests.ts",

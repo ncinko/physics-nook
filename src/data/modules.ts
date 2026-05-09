@@ -44,6 +44,43 @@ export interface ModulePathGroup {
 
 export const modules: ModuleMeta[] = [
   {
+    slug: 'kinematics',
+    href: '/kinematics',
+    title: '1D Kinematics',
+    navLabel: 'Kinematics',
+    summary:
+      'Position, velocity, acceleration, graph slopes, and one-dimensional control challenges.',
+    audience: 'Self-learners building a first mechanics foundation.',
+    prerequisites: ['Graph reading', 'Signed numbers', 'Basic algebra with ratios'],
+    learningObjectives: [
+      'Interpret signed position, velocity, and acceleration in one dimension',
+      'Connect average and instantaneous velocity to slopes on a position-time graph',
+      'Connect acceleration to changes in velocity over time',
+      'Use acceleration controls to solve a stop-in-zones motion challenge',
+    ],
+    status: 'active',
+    navVisibility: 'hidden',
+    cardEyebrow: 'Mechanics',
+    accent: '#0f766e',
+    heroImage: '/social/physics-nook-card.svg',
+    pages: [
+      {
+        id: 'kinematics-core',
+        href: '/kinematics',
+        title: '1D Kinematics',
+        description:
+          'Learn position, velocity, and acceleration through graph slopes and a stop-in-zones challenge.',
+        seo: {
+          title: '1D Kinematics',
+          description:
+            'Learn one-dimensional kinematics with interactive position and velocity graphs plus a stop-in-zones acceleration challenge.',
+          canonicalPath: '/kinematics',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+    ],
+  },
+  {
     slug: 'relativity',
     href: '/relativity',
     title: 'Relativity',
@@ -465,6 +502,7 @@ const mustGetModuleBySlug = (slug: string) => {
 };
 
 const relativityModule = mustGetModuleBySlug('relativity');
+const kinematicsModule = mustGetModuleBySlug('kinematics');
 const oscillationsModule = mustGetModuleBySlug('oscillations');
 const wavesModule = mustGetModuleBySlug('waves');
 const quantumModule = mustGetModuleBySlug('quantum');
@@ -476,6 +514,17 @@ const gameSiteUrl =
 const orbitalsGameHref = `${gameSiteUrl.replace(/\/$/, '')}/orbitals/`;
 
 export const quantumModuleMeta = quantumModule;
+
+export const mechanicsPath = {
+  id: 'mechanics',
+  href: kinematicsModule.href,
+  navLabel: 'Mechanics',
+  summary:
+    'Core motion ideas starting with one-dimensional kinematics.',
+  cardEyebrow: 'Mechanics',
+  navVisibility: 'menu',
+  pages: [kinematicsModule.pages[0]],
+} satisfies ModulePathGroup;
 
 export const relativityPath = {
   id: 'relativity',
@@ -561,6 +610,7 @@ export const gamesPath = {
 } satisfies ModulePathGroup;
 
 export const exploreModuleGroups = [
+  mechanicsPath,
   relativityPath,
   wavesAndOscillationsPath,
   quantumPath,

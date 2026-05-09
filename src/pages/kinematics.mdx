@@ -1,0 +1,123 @@
+---
+layout: ../layouts/TextbookLayout.astro
+title: 1D Kinematics
+description: Learn position, velocity, and acceleration in one dimension with interactive graphs and a stop-in-zones motion challenge.
+canonicalPath: /kinematics
+---
+
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../components/textbook/DerivationPanel.astro';
+import VelocityExplorer from '../components/kinematics/VelocityExplorer';
+import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+
+# 1D Kinematics
+
+Kinematics describes **how motion changes** without asking what caused the motion. In one dimension, the whole story can be told with three time-dependent quantities: position, velocity, and acceleration.
+
+- **Position** tells us where an object is along a line.
+- **Velocity** tells us how quickly position changes, including direction.
+- **Acceleration** tells us how quickly velocity changes, including direction.
+
+The sign matters. If rightward motion is positive, then a negative velocity means motion to the left. A negative acceleration means the velocity is becoming more negative, not automatically that the object is slowing down.
+
+## Velocity
+
+Average velocity compares two positions at two times:
+
+$$
+\overline{v} = \frac{\Delta x}{\Delta t}
+= \frac{x_2 - x_1}{t_2 - t_1}.
+$$
+
+Instantaneous velocity is the velocity at one moment:
+
+$$
+v(t) = \frac{dx}{dt}.
+$$
+
+Graphically, average velocity is the slope of a secant line on a position-time graph. Instantaneous velocity is the slope of the tangent line at a single point.
+
+<SimulationBlock
+  title="Position and Velocity"
+  description="Move the markers to compare secant slopes, tangent slopes, and the matching velocity graph."
+>
+  <VelocityExplorer client:only="react" />
+</SimulationBlock>
+
+<DerivationPanel title="Is velocity the same as speed?">
+  Almost, but not quite. Speed only says how fast something moves. Velocity says how fast and in which signed direction. In one dimension, the speed is the absolute value of the velocity:
+
+  $$
+  \text{speed} = |v|.
+  $$
+
+  An object with $v = -4\,\text{m/s}$ and an object with $v = +4\,\text{m/s}$ have the same speed, but they are moving in opposite directions.
+</DerivationPanel>
+
+## Acceleration
+
+Average acceleration compares two velocities at two times:
+
+$$
+\overline{a} = \frac{\Delta v}{\Delta t}
+= \frac{v_2 - v_1}{t_2 - t_1}.
+$$
+
+Instantaneous acceleration is the acceleration at one moment:
+
+$$
+a(t) = \frac{dv}{dt}.
+$$
+
+The slope idea repeats: acceleration is the slope of a velocity-time graph in the same way velocity is the slope of a position-time graph.
+
+<DerivationPanel title="How can negative acceleration speed something up?">
+  Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.
+</DerivationPanel>
+
+## Try It
+
+The challenge below turns the sign conventions into a control problem. Apply acceleration left or right, watch the position and velocity traces, and stop inside each target zone.
+
+<SimulationBlock
+  title="Stop-in-Zones Challenge"
+  description="Control acceleration, stop in each target zone, and compare run times on the leaderboard."
+  width="full"
+>
+  <StopInZonesChallenge client:only="react" />
+</SimulationBlock>
+
+<QuestionSequence
+  client:load
+  eyebrow="Kinematics Checkpoint"
+  questions={[
+    {
+      id: 'positive-position-negative-velocity',
+      question: 'An object has positive position and negative velocity. What is it doing?',
+      options: [
+        { id: 'A', text: 'It is to the right of the origin and moving left.', isCorrect: true, explanation: 'Positive position places the object on the positive side of the origin. Negative velocity means its position is decreasing, so it is moving left.' },
+        { id: 'B', text: 'It is to the left of the origin and moving right.', isCorrect: false, explanation: 'That would describe negative position with positive velocity.' },
+        { id: 'C', text: 'It must be slowing down.', isCorrect: false, explanation: 'Velocity alone tells direction and speed. To decide whether it is slowing down, we also need the acceleration.' }
+      ]
+    },
+    {
+      id: 'positive-velocity-negative-acceleration',
+      question: 'An object has positive velocity and negative acceleration. Which description is correct at that moment?',
+      options: [
+        { id: 'B', text: 'It is moving right but slowing down.', isCorrect: true, explanation: 'Positive velocity means motion to the right. Negative acceleration makes the velocity decrease, so the object is slowing down while the velocity remains positive.' },
+        { id: 'A', text: 'It is moving left and speeding up.', isCorrect: false, explanation: 'Moving left would require negative velocity, not positive velocity.' },
+        { id: 'C', text: 'It is stopped because the signs are opposite.', isCorrect: false, explanation: 'Opposite signs mean the speed is decreasing. The object is only stopped if the velocity itself is zero.' }
+      ]
+    },
+    {
+      id: 'constant-acceleration-traces',
+      question: 'If acceleration is constant and nonzero, what do the velocity and position graphs look like?',
+      options: [
+        { id: 'C', text: 'Velocity is a line, and position is a parabola.', isCorrect: true, explanation: 'Constant acceleration changes velocity at a constant rate, so $v(t)$ is linear. Position accumulates that changing velocity, so $x(t)$ is quadratic.' },
+        { id: 'A', text: 'Velocity is a parabola, and position is a line.', isCorrect: false, explanation: 'A linear position graph would have constant velocity, not changing velocity.' },
+        { id: 'B', text: 'Both graphs are horizontal lines.', isCorrect: false, explanation: 'Horizontal velocity would mean zero acceleration. Horizontal position would mean no motion.' }
+      ]
+    }
+  ]}
+/>

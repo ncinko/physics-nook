@@ -504,7 +504,7 @@ input:focus-visible {
   .object-tray {
     left: 12px;
     right: auto;
-    bottom: 224px;
+    bottom: 316px;
     width: min(220px, calc(100vw - 24px));
   }
 

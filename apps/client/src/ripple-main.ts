@@ -30,6 +30,10 @@ type PoolSize = {
   height: number;
   viewCols: number;
   viewRows: number;
+  activeCols: number;
+  activeRows: number;
+  sinkCols: number;
+  sinkRows: number;
   cols: number;
   rows: number;
   cellWidth: number;
@@ -60,6 +64,7 @@ const emitterButtons = document.getElementById('emitterButtons');
 const amplitudeInput = document.getElementById('amplitudeInput') as HTMLInputElement | null;
 const frequencyInput = document.getElementById('frequencyInput') as HTMLInputElement | null;
 const phaseInput = document.getElementById('phaseInput') as HTMLInputElement | null;
+const sensitivityInput = document.getElementById('sensitivityInput') as HTMLInputElement | null;
 const enableButton = document.getElementById('enableButton') as HTMLButtonElement | null;
 
 if (
@@ -76,6 +81,7 @@ if (
   !amplitudeInput ||
   !frequencyInput ||
   !phaseInput ||
+  !sensitivityInput ||
   !enableButton
 ) {
   throw new Error('Ripple Tank Studio markup is missing required elements.');
@@ -93,8 +99,11 @@ const MAX_ROWS = 88;
 const CELL_TARGET = 14;
 const WORLD_SCALE = 3;
 const DAMPING = 0.9976;
+const QUIET_FIELD_EPSILON = 0.00042;
+const HIDDEN_SINK_SCREENS = 0.5;
+const HIDDEN_SINK_MAX_DAMPING = 0.985;
 const ABSORBING_BOUNDARY_LAYER_CELLS = 24;
-const ABSORBING_BOUNDARY_MAX_DAMPING = 0.94;
+const ABSORBING_BOUNDARY_MAX_DAMPING = 0.985;
 const ABSORBING_BOUNDARY_COEFFICIENT = (Math.SQRT1_2 - 1) / (Math.SQRT1_2 + 1);
 const DRAG_INTERVAL_MS = 65;
 const EMITTER_SEND_INTERVAL_MS = 44;
@@ -103,6 +112,10 @@ const PING_INTERVAL_MS = 2000;
 const SPLASH_PROCESSED_LIMIT = 500;
 const CAMERA_SPEED_SCREENS = 0.92;
 const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
+const SENSITIVITY_STORAGE_KEY = 'physics-nook-ripple-display-sensitivity';
+const DEFAULT_DISPLAY_SENSITIVITY = 72;
+const MIN_DISPLAY_THRESHOLD = 0.002;
+const MAX_DISPLAY_THRESHOLD = 0.026;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
@@ -149,6 +162,7 @@ let lastEmitterSendAt = 0;
 let lastObjectSendAt = 0;
 let processedSplashIds = new Set<string>();
 let objectMask = new Uint8Array(0);
+let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
 const keyState = new Set<string>();
 const camera = { xScreens: 0, yScreens: 0 };
 
@@ -157,8 +171,12 @@ const size: PoolSize = {
   height: 0,
   viewCols: MIN_COLS,
   viewRows: MIN_ROWS,
-  cols: MIN_COLS * WORLD_SCALE,
-  rows: MIN_ROWS * WORLD_SCALE,
+  activeCols: MIN_COLS * WORLD_SCALE,
+  activeRows: MIN_ROWS * WORLD_SCALE,
+  sinkCols: ABSORBING_BOUNDARY_LAYER_CELLS,
+  sinkRows: ABSORBING_BOUNDARY_LAYER_CELLS,
+  cols: MIN_COLS * WORLD_SCALE + ABSORBING_BOUNDARY_LAYER_CELLS * 2,
+  rows: MIN_ROWS * WORLD_SCALE + ABSORBING_BOUNDARY_LAYER_CELLS * 2,
   cellWidth: 1,
   cellHeight: 1,
 };
@@ -181,6 +199,22 @@ const applyTheme = (theme: 'light' | 'dark'): void => {
 const initializeTheme = (): void => {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
   applyTheme(stored === 'dark' ? 'dark' : 'light');
+};
+
+const setDisplaySensitivity = (value: number): void => {
+  displaySensitivity = clamp(Math.round(value), 0, 100);
+  sensitivityInput.value = String(displaySensitivity);
+  localStorage.setItem(SENSITIVITY_STORAGE_KEY, String(displaySensitivity));
+};
+
+const initializeDisplaySensitivity = (): void => {
+  const stored = Number.parseFloat(localStorage.getItem(SENSITIVITY_STORAGE_KEY) ?? '');
+  setDisplaySensitivity(Number.isFinite(stored) ? stored : DEFAULT_DISPLAY_SENSITIVITY);
+};
+
+const displayThreshold = (): number => {
+  const sensitivity = displaySensitivity / 100;
+  return MAX_DISPLAY_THRESHOLD - sensitivity * (MAX_DISPLAY_THRESHOLD - MIN_DISPLAY_THRESHOLD);
 };
 
 const getConfiguredWsUrl = (): string | null => {
@@ -229,23 +263,29 @@ const sendMessage = (message: RippleClientToServerMessage): void => {
 };
 
 const visibleOrigin = () => ({
-  col: Math.round((camera.xScreens + 1) * size.viewCols),
-  row: Math.round((camera.yScreens + 1) * size.viewRows),
+  col: size.sinkCols + Math.round((camera.xScreens + 1) * size.viewCols),
+  row: size.sinkRows + Math.round((camera.yScreens + 1) * size.viewRows),
+});
+
+const worldToGrid = (point: { x: number; y: number }) => ({
+  col: size.sinkCols + point.x * (size.activeCols - 1),
+  row: size.sinkRows + point.y * (size.activeRows - 1),
 });
 
 const worldToScreen = (point: { x: number; y: number }) => {
   const origin = visibleOrigin();
+  const gridPoint = worldToGrid(point);
   return {
-    x: (point.x * (size.cols - 1) - origin.col) * size.cellWidth,
-    y: (point.y * (size.rows - 1) - origin.row) * size.cellHeight,
+    x: (gridPoint.col - origin.col) * size.cellWidth,
+    y: (gridPoint.row - origin.row) * size.cellHeight,
   };
 };
 
 const screenToWorld = (x: number, y: number) => {
   const origin = visibleOrigin();
   return {
-    x: clamp((origin.col + x / size.cellWidth) / (size.cols - 1), 0, 1),
-    y: clamp((origin.row + y / size.cellHeight) / (size.rows - 1), 0, 1),
+    x: clamp((origin.col + x / size.cellWidth - size.sinkCols) / (size.activeCols - 1), 0, 1),
+    y: clamp((origin.row + y / size.cellHeight - size.sinkRows) / (size.activeRows - 1), 0, 1),
   };
 };
 
@@ -261,8 +301,18 @@ const resize = (): void => {
   dpr = Math.min(window.devicePixelRatio || 1, 2);
   size.viewCols = clamp(Math.round(size.width / CELL_TARGET), MIN_COLS, MAX_COLS);
   size.viewRows = clamp(Math.round(size.height / CELL_TARGET), MIN_ROWS, MAX_ROWS);
-  size.cols = size.viewCols * WORLD_SCALE;
-  size.rows = size.viewRows * WORLD_SCALE;
+  size.activeCols = size.viewCols * WORLD_SCALE;
+  size.activeRows = size.viewRows * WORLD_SCALE;
+  size.sinkCols = Math.max(
+    ABSORBING_BOUNDARY_LAYER_CELLS + 4,
+    Math.round(size.viewCols * HIDDEN_SINK_SCREENS),
+  );
+  size.sinkRows = Math.max(
+    ABSORBING_BOUNDARY_LAYER_CELLS + 4,
+    Math.round(size.viewRows * HIDDEN_SINK_SCREENS),
+  );
+  size.cols = size.activeCols + size.sinkCols * 2;
+  size.rows = size.activeRows + size.sinkRows * 2;
   size.cellWidth = size.width / size.viewCols;
   size.cellHeight = size.height / size.viewRows;
 
@@ -275,8 +325,9 @@ const resize = (): void => {
 };
 
 const addSplash = (xNorm: number, yNorm: number, strength: number, radiusNorm: number): void => {
-  const gridX = Math.round(clamp(xNorm, 0, 1) * (size.cols - 1));
-  const gridY = Math.round(clamp(yNorm, 0, 1) * (size.rows - 1));
+  const gridPoint = worldToGrid({ x: clamp(xNorm, 0, 1), y: clamp(yNorm, 0, 1) });
+  const gridX = Math.round(gridPoint.col);
+  const gridY = Math.round(gridPoint.row);
   const radius = clamp(Math.round(Math.min(size.viewCols, size.viewRows) * radiusNorm), 1, 10);
 
   for (let dy = -radius; dy <= radius; dy += 1) {
@@ -304,9 +355,18 @@ const applySplashEvent = (splash: RippleSplashEvent, referenceTime: number): voi
   addSplash(splash.x, splash.y, splash.strength * Math.exp(-ageSeconds * 0.55), splash.radius);
 };
 
-const localObjectCoordinates = (object: RippleObjectSnapshot, x: number, y: number) => {
-  const dx = x - object.x;
-  const dy = y - object.y;
+const activeWorldPixelWidth = (): number => (size.activeCols - 1) * size.cellWidth;
+const activeWorldPixelHeight = (): number => (size.activeRows - 1) * size.cellHeight;
+
+const localObjectCoordinates = (
+  object: RippleObjectSnapshot,
+  x: number,
+  y: number,
+  worldPixelWidth = activeWorldPixelWidth(),
+  worldPixelHeight = activeWorldPixelHeight(),
+) => {
+  const dx = (x - object.x) * worldPixelWidth;
+  const dy = (y - object.y) * worldPixelHeight;
   const cos = Math.cos(-object.rotation);
   const sin = Math.sin(-object.rotation);
   return {
@@ -316,31 +376,41 @@ const localObjectCoordinates = (object: RippleObjectSnapshot, x: number, y: numb
 };
 
 const isPointInsideObject = (object: RippleObjectSnapshot, x: number, y: number): boolean => {
-  const local = localObjectCoordinates(object, x, y);
-  const halfWidth = object.width / 2;
-  const halfHeight = object.height / 2;
+  const worldPixelWidth = activeWorldPixelWidth();
+  const worldPixelHeight = activeWorldPixelHeight();
+  const local = localObjectCoordinates(object, x, y, worldPixelWidth, worldPixelHeight);
+  const width = object.width * worldPixelWidth;
+  const height = object.height * worldPixelHeight;
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
 
   if (object.kind === 'barrier') {
     return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight;
   }
 
   if (object.kind === 'single-slit') {
-    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight && Math.abs(local.y) > object.gap / 2;
+    const gap = object.gap * worldPixelHeight;
+    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight && Math.abs(local.y) > gap / 2;
   }
 
   if (Math.abs(local.x) > halfWidth) return false;
   const t = local.x / Math.max(halfWidth, 1e-6);
-  const curveY = t * t * object.height - halfHeight;
-  const thickness = Math.max(0.012, Math.min(object.width, object.height) * 0.12);
+  const curveY = t * t * height - halfHeight;
+  const thickness = Math.max(Math.min(size.cellWidth, size.cellHeight) * 1.4, Math.min(width, height) * 0.12);
   return Math.abs(local.y - curveY) <= thickness;
 };
 
 const buildObjectMask = (): void => {
   objectMask.fill(0);
-  for (let row = 1; row < size.rows - 1; row += 1) {
-    const y = row / (size.rows - 1);
-    for (let col = 1; col < size.cols - 1; col += 1) {
-      const x = col / (size.cols - 1);
+  const firstRow = Math.max(1, size.sinkRows);
+  const lastRow = Math.min(size.rows - 2, size.sinkRows + size.activeRows - 1);
+  const firstCol = Math.max(1, size.sinkCols);
+  const lastCol = Math.min(size.cols - 2, size.sinkCols + size.activeCols - 1);
+
+  for (let row = firstRow; row <= lastRow; row += 1) {
+    const y = (row - size.sinkRows) / (size.activeRows - 1);
+    for (let col = firstCol; col <= lastCol; col += 1) {
+      const x = (col - size.sinkCols) / (size.activeCols - 1);
       if (objects.some((object) => isPointInsideObject(object, x, y))) {
         const index = row * size.cols + col;
         objectMask[index] = 1;
@@ -354,6 +424,20 @@ const buildObjectMask = (): void => {
 
 const sampleNeighbor = (index: number, currentIndex: number): number =>
   objectMask[index] ? -grid.current[currentIndex] * 0.78 : grid.current[index];
+
+const hiddenSinkProgress = (col: number, row: number): number => {
+  const left = size.sinkCols;
+  const right = size.sinkCols + size.activeCols - 1;
+  const top = size.sinkRows;
+  const bottom = size.sinkRows + size.activeRows - 1;
+  const outsideX = col < left ? left - col : col > right ? col - right : 0;
+  const outsideY = row < top ? top - row : row > bottom ? row - bottom : 0;
+  if (outsideX === 0 && outsideY === 0) return 0;
+
+  const xProgress = outsideX / Math.max(1, size.sinkCols);
+  const yProgress = outsideY / Math.max(1, size.sinkRows);
+  return clamp(Math.max(xProgress, yProgress), 0, 1);
+};
 
 const applyAbsorbingBoundary = (current: Float32Array, next: Float32Array): void => {
   const { cols, rows } = size;
@@ -414,6 +498,15 @@ const stepGrid = (): void => {
         nextValue *= 1 - normalized * normalized * ABSORBING_BOUNDARY_MAX_DAMPING;
       }
 
+      const sinkProgress = hiddenSinkProgress(col, row);
+      if (sinkProgress > 0) {
+        nextValue *= 1 - sinkProgress * sinkProgress * HIDDEN_SINK_MAX_DAMPING;
+      }
+
+      if (Math.abs(nextValue) < QUIET_FIELD_EPSILON && Math.abs(current[index]) < QUIET_FIELD_EPSILON) {
+        nextValue = 0;
+      }
+
       next[index] = nextValue;
     }
   }
@@ -439,6 +532,8 @@ const drawWater = (): void => {
   const origin = visibleOrigin();
   const current = grid.current;
   const lightMode = document.documentElement.dataset.theme !== 'dark';
+  const threshold = displayThreshold();
+  const gain = 0.1 + (displaySensitivity / 100) * 0.08;
 
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -455,7 +550,7 @@ const drawWater = (): void => {
       const index = row * size.cols + col;
       const value = current[index];
       const magnitude = Math.abs(value);
-      if (magnitude < 0.008 && !objectMask[index]) continue;
+      if (magnitude < threshold && !objectMask[index]) continue;
 
       const x = viewCol * size.cellWidth;
       const y = viewRow * size.cellHeight;
@@ -469,7 +564,8 @@ const drawWater = (): void => {
       const slopeX = current[index + 1] - current[index - 1];
       const slopeY = current[index + size.cols] - current[index - size.cols];
       const shimmer = clamp(0.5 + slopeX * 0.7 - slopeY * 0.55, 0, 1);
-      const alpha = clamp(0.05 + magnitude * 0.13, 0.04, lightMode ? 0.32 : 0.36);
+      const visibleMagnitude = Math.max(0, magnitude - threshold);
+      const alpha = clamp(0.04 + visibleMagnitude * gain, 0.035, lightMode ? 0.32 : 0.36);
 
       if (value >= 0) {
         const r = lightMode ? Math.round(92 + shimmer * 70) : Math.round(44 + shimmer * 26);
@@ -499,7 +595,8 @@ const drawWater = (): void => {
     for (let x = 0; x <= size.width; x += Math.max(size.cellWidth * 1.2, 10)) {
       const col = clamp(origin.col + Math.round(x / size.cellWidth), 1, size.cols - 2);
       const row = clamp(origin.row + Math.round(y / size.cellHeight), 1, size.rows - 2);
-      const wave = current[row * size.cols + col] * 9;
+      const sample = current[row * size.cols + col];
+      const wave = Math.abs(sample) < threshold ? 0 : sample * 9;
       ctx.lineTo(x, y + wave);
     }
 
@@ -510,8 +607,8 @@ const drawWater = (): void => {
 
 const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
   const point = worldToScreen(object);
-  const width = object.width * (size.cols - 1) * size.cellWidth;
-  const height = object.height * (size.rows - 1) * size.cellHeight;
+  const width = object.width * (size.activeCols - 1) * size.cellWidth;
+  const height = object.height * (size.activeRows - 1) * size.cellHeight;
 
   ctx.save();
   ctx.translate(point.x, point.y);
@@ -521,7 +618,7 @@ const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
   if (object.kind === 'barrier') {
     ctx.rect(-width / 2, -height / 2, width, height);
   } else if (object.kind === 'single-slit') {
-    const gap = object.gap * (size.rows - 1) * size.cellHeight;
+    const gap = object.gap * (size.activeRows - 1) * size.cellHeight;
     ctx.rect(-width / 2, -height / 2, width, Math.max(1, (height - gap) / 2));
     ctx.rect(-width / 2, gap / 2, width, Math.max(1, (height - gap) / 2));
   } else {
@@ -541,8 +638,8 @@ const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
 
 const objectHandlePoints = (object: RippleObjectSnapshot) => {
   const center = worldToScreen(object);
-  const width = object.width * (size.cols - 1) * size.cellWidth;
-  const height = object.height * (size.rows - 1) * size.cellHeight;
+  const width = object.width * (size.activeCols - 1) * size.cellWidth;
+  const height = object.height * (size.activeRows - 1) * size.cellHeight;
   const cos = Math.cos(object.rotation);
   const sin = Math.sin(object.rotation);
   const rotateLocal = { x: 0, y: -height / 2 - 28 };
@@ -919,6 +1016,7 @@ frequencyInput.addEventListener('input', () => sendSelectedControlPatch({ freque
 frequencyInput.addEventListener('change', () => sendSelectedControlPatch({ frequency: Number.parseFloat(frequencyInput.value) }, true));
 phaseInput.addEventListener('input', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }));
 phaseInput.addEventListener('change', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }, true));
+sensitivityInput.addEventListener('input', () => setDisplaySensitivity(Number.parseFloat(sensitivityInput.value)));
 enableButton.addEventListener('click', () => {
   const emitter = getSelectedEmitter();
   if (emitter) sendSelectedControlPatch({ enabled: !emitter.enabled }, true);
@@ -988,6 +1086,7 @@ const draw = (timestamp: number): void => {
 };
 
 initializeTheme();
+initializeDisplaySensitivity();
 roomLabel.textContent = roomCode;
 resize();
 connect();

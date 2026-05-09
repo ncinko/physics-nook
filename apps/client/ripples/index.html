@@ -60,7 +60,11 @@
         </label>
         <label class="control-slider">
           <span>Display sensitivity</span>
-          <input id="sensitivityInput" type="range" min="0" max="100" step="1" value="72" />
+          <input id="sensitivityInput" type="range" min="0" max="160" step="1" value="72" />
+        </label>
+        <label class="control-toggle">
+          <input id="gradientInput" type="checkbox" />
+          <span>Gradient</span>
         </label>
         <button id="enableButton" class="enable-button" type="button">Enabled</button>
       </aside>
@@ -78,6 +82,9 @@
           </button>
           <button class="object-button" type="button" data-object-kind="single-slit" aria-label="Add single slit barrier">
             <span class="object-icon slit-icon" aria-hidden="true"></span>
+          </button>
+          <button class="object-button" type="button" data-object-kind="double-slit" aria-label="Add double slit barrier">
+            <span class="object-icon double-slit-icon" aria-hidden="true"></span>
           </button>
         </div>
       </aside>

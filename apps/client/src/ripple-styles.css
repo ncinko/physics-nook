@@ -256,14 +256,15 @@ input:focus-visible {
 
 .stat-card span,
 .tray-heading span,
-.control-slider span {
+.control-slider span,
+.control-toggle span {
   color: #9fb8ca;
   color: var(--muted-text);
   font-size: 0.62rem;
   font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .stat-card strong {
@@ -320,7 +321,7 @@ input:focus-visible {
 
 .object-tray {
   left: 16px;
-  width: min(220px, calc(100vw - 32px));
+  width: min(276px, calc(100vw - 32px));
 }
 
 .tray-heading {
@@ -376,7 +377,7 @@ input:focus-visible {
 
 .object-buttons {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -423,6 +424,25 @@ input:focus-visible {
   bottom: 2px;
 }
 
+.double-slit-icon::before {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 12px;
+  width: 4px;
+  content: "";
+  border-radius: 2px;
+  background:
+    linear-gradient(
+      180deg,
+      currentColor 0 21%,
+      transparent 21% 36%,
+      currentColor 36% 64%,
+      transparent 64% 79%,
+      currentColor 79% 100%
+    );
+}
+
 .control-slider {
   display: grid;
   gap: 8px;
@@ -456,6 +476,23 @@ input:focus-visible {
   border-radius: 999px;
   background: #0ea5e9;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+}
+
+.control-toggle {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.control-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: #0ea5e9;
 }
 
 .enable-button {
@@ -504,8 +541,8 @@ input:focus-visible {
   .object-tray {
     left: 12px;
     right: auto;
-    bottom: 316px;
-    width: min(220px, calc(100vw - 24px));
+    bottom: 356px;
+    width: min(276px, calc(100vw - 24px));
   }
 
   .control-slider.compact {

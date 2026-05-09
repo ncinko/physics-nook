@@ -17,7 +17,8 @@ import type {
 } from '../../../packages/shared/src/ripple.ts';
 
 type ConnectionState = 'offline' | 'connecting' | 'online' | 'error';
-type PointerMode = 'splash' | 'emitter' | 'object-move' | 'object-rotate';
+type PointerMode = 'splash' | 'emitter' | 'object-move' | 'object-rotate' | 'object-width';
+type ObjectHandle = 'rotate' | 'delete' | 'width';
 
 type GridState = {
   previous: Float32Array;
@@ -65,6 +66,7 @@ const amplitudeInput = document.getElementById('amplitudeInput') as HTMLInputEle
 const frequencyInput = document.getElementById('frequencyInput') as HTMLInputElement | null;
 const phaseInput = document.getElementById('phaseInput') as HTMLInputElement | null;
 const sensitivityInput = document.getElementById('sensitivityInput') as HTMLInputElement | null;
+const gradientInput = document.getElementById('gradientInput') as HTMLInputElement | null;
 const enableButton = document.getElementById('enableButton') as HTMLButtonElement | null;
 
 if (
@@ -82,6 +84,7 @@ if (
   !frequencyInput ||
   !phaseInput ||
   !sensitivityInput ||
+  !gradientInput ||
   !enableButton
 ) {
   throw new Error('Ripple Tank Studio markup is missing required elements.');
@@ -113,15 +116,39 @@ const SPLASH_PROCESSED_LIMIT = 500;
 const CAMERA_SPEED_SCREENS = 0.92;
 const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
 const SENSITIVITY_STORAGE_KEY = 'physics-nook-ripple-display-sensitivity';
+const GRADIENT_DRAW_STORAGE_KEY = 'physics-nook-ripple-gradient-draw';
 const DEFAULT_DISPLAY_SENSITIVITY = 72;
-const MIN_DISPLAY_THRESHOLD = 0.002;
-const MAX_DISPLAY_THRESHOLD = 0.026;
+const DISPLAY_SENSITIVITY_MAX = 160;
+const MIN_DISPLAY_THRESHOLD = 0.0011;
+const DEFAULT_DISPLAY_THRESHOLD = 0.00872;
+const MAX_DISPLAY_THRESHOLD = 0.048;
+const MAX_SLIT_OBJECT_WIDTH = 0.08;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
 const roomCode = normalizeRippleRoomCode(searchParams.get('room') ?? undefined);
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
+
+type Rgb = {
+  r: number;
+  g: number;
+  b: number;
+};
+
+const mixChannel = (a: number, b: number, t: number): number => Math.round(a + (b - a) * t);
+
+const mixColor = (a: Rgb, b: Rgb, t: number): Rgb => ({
+  r: mixChannel(a.r, b.r, t),
+  g: mixChannel(a.g, b.g, t),
+  b: mixChannel(a.b, b.b, t),
+});
+
+const scaleColor = (color: Rgb, factor: number): Rgb => ({
+  r: clamp(Math.round(color.r * factor), 0, 255),
+  g: clamp(Math.round(color.g * factor), 0, 255),
+  b: clamp(Math.round(color.b * factor), 0, 255),
+});
 
 const createGridState = (cols: number, rows: number): GridState => {
   const size = cols * rows;
@@ -163,6 +190,7 @@ let lastObjectSendAt = 0;
 let processedSplashIds = new Set<string>();
 let objectMask = new Uint8Array(0);
 let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
+let useGradientDrawing = false;
 const keyState = new Set<string>();
 const camera = { xScreens: 0, yScreens: 0 };
 
@@ -202,7 +230,7 @@ const initializeTheme = (): void => {
 };
 
 const setDisplaySensitivity = (value: number): void => {
-  displaySensitivity = clamp(Math.round(value), 0, 100);
+  displaySensitivity = clamp(Math.round(value), 0, DISPLAY_SENSITIVITY_MAX);
   sensitivityInput.value = String(displaySensitivity);
   localStorage.setItem(SENSITIVITY_STORAGE_KEY, String(displaySensitivity));
 };
@@ -213,8 +241,23 @@ const initializeDisplaySensitivity = (): void => {
 };
 
 const displayThreshold = (): number => {
-  const sensitivity = displaySensitivity / 100;
-  return MAX_DISPLAY_THRESHOLD - sensitivity * (MAX_DISPLAY_THRESHOLD - MIN_DISPLAY_THRESHOLD);
+  if (displaySensitivity <= DEFAULT_DISPLAY_SENSITIVITY) {
+    const t = displaySensitivity / DEFAULT_DISPLAY_SENSITIVITY;
+    return MAX_DISPLAY_THRESHOLD - t * (MAX_DISPLAY_THRESHOLD - DEFAULT_DISPLAY_THRESHOLD);
+  }
+
+  const t = (displaySensitivity - DEFAULT_DISPLAY_SENSITIVITY) / (DISPLAY_SENSITIVITY_MAX - DEFAULT_DISPLAY_SENSITIVITY);
+  return DEFAULT_DISPLAY_THRESHOLD - t * (DEFAULT_DISPLAY_THRESHOLD - MIN_DISPLAY_THRESHOLD);
+};
+
+const setGradientDrawing = (enabled: boolean): void => {
+  useGradientDrawing = enabled;
+  gradientInput.checked = enabled;
+  localStorage.setItem(GRADIENT_DRAW_STORAGE_KEY, String(enabled));
+};
+
+const initializeGradientDrawing = (): void => {
+  setGradientDrawing(localStorage.getItem(GRADIENT_DRAW_STORAGE_KEY) === 'true');
 };
 
 const getConfiguredWsUrl = (): string | null => {
@@ -358,6 +401,59 @@ const applySplashEvent = (splash: RippleSplashEvent, referenceTime: number): voi
 const activeWorldPixelWidth = (): number => (size.activeCols - 1) * size.cellWidth;
 const activeWorldPixelHeight = (): number => (size.activeRows - 1) * size.cellHeight;
 
+const isSlitObjectKind = (kind: RippleObjectKind): kind is 'single-slit' | 'double-slit' =>
+  kind === 'single-slit' || kind === 'double-slit';
+
+type SlitOpeningRange = {
+  start: number;
+  end: number;
+};
+
+const slitOpeningRanges = (
+  kind: 'single-slit' | 'double-slit',
+  height: number,
+  gap: number,
+): SlitOpeningRange[] => {
+  if (kind === 'single-slit') {
+    const slitHeight = clamp(gap, 2, Math.max(2, height * 0.72));
+    return [{ start: -slitHeight / 2, end: slitHeight / 2 }];
+  }
+
+  const slitHeight = clamp(gap, 2, Math.max(2, height * 0.28));
+  const maxOffset = Math.max(0, height / 2 - slitHeight / 2 - 1);
+  const offset = Math.min(Math.max(slitHeight * 0.8, height * 0.18), maxOffset);
+
+  return [
+    { start: -offset - slitHeight / 2, end: -offset + slitHeight / 2 },
+    { start: offset - slitHeight / 2, end: offset + slitHeight / 2 },
+  ];
+};
+
+const isInsideSlitOpening = (localY: number, openings: SlitOpeningRange[]): boolean =>
+  openings.some((opening) => localY >= opening.start && localY <= opening.end);
+
+const appendSlitBarrierPath = (
+  width: number,
+  height: number,
+  openings: SlitOpeningRange[],
+): void => {
+  const halfHeight = height / 2;
+  let cursor = -halfHeight;
+
+  for (const opening of openings) {
+    const start = clamp(opening.start, -halfHeight, halfHeight);
+    const end = clamp(opening.end, -halfHeight, halfHeight);
+    if (start - cursor > 0.5) {
+      ctx.rect(-width / 2, cursor, width, start - cursor);
+    }
+    cursor = Math.max(cursor, end);
+  }
+
+  if (halfHeight - cursor > 0.5) {
+    ctx.rect(-width / 2, cursor, width, halfHeight - cursor);
+  }
+};
+
 const localObjectCoordinates = (
   object: RippleObjectSnapshot,
   x: number,
@@ -375,7 +471,19 @@ const localObjectCoordinates = (
   };
 };
 
-const isPointInsideObject = (object: RippleObjectSnapshot, x: number, y: number): boolean => {
+const slitObjectWidthFromPoint = (object: RippleObjectSnapshot, x: number, y: number): number => {
+  const worldPixelWidth = activeWorldPixelWidth();
+  const local = localObjectCoordinates(object, x, y, worldPixelWidth);
+  const width = (Math.abs(local.x) * 2) / Math.max(worldPixelWidth, 1);
+  return clamp(width, RIPPLE_CONFIG.object.minSize, MAX_SLIT_OBJECT_WIDTH);
+};
+
+const isPointInsideObject = (
+  object: RippleObjectSnapshot,
+  x: number,
+  y: number,
+  paddingPx = 0,
+): boolean => {
   const worldPixelWidth = activeWorldPixelWidth();
   const worldPixelHeight = activeWorldPixelHeight();
   const local = localObjectCoordinates(object, x, y, worldPixelWidth, worldPixelHeight);
@@ -385,19 +493,24 @@ const isPointInsideObject = (object: RippleObjectSnapshot, x: number, y: number)
   const halfHeight = height / 2;
 
   if (object.kind === 'barrier') {
-    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight;
+    return Math.abs(local.x) <= halfWidth + paddingPx && Math.abs(local.y) <= halfHeight + paddingPx;
   }
 
-  if (object.kind === 'single-slit') {
+  if (isSlitObjectKind(object.kind)) {
     const gap = object.gap * worldPixelHeight;
-    return Math.abs(local.x) <= halfWidth && Math.abs(local.y) <= halfHeight && Math.abs(local.y) > gap / 2;
+    const openings = slitOpeningRanges(object.kind, height, gap);
+    return (
+      Math.abs(local.x) <= halfWidth + paddingPx &&
+      Math.abs(local.y) <= halfHeight + paddingPx &&
+      !isInsideSlitOpening(local.y, openings)
+    );
   }
 
-  if (Math.abs(local.x) > halfWidth) return false;
+  if (Math.abs(local.x) > halfWidth + paddingPx) return false;
   const t = local.x / Math.max(halfWidth, 1e-6);
   const curveY = t * t * height - halfHeight;
   const thickness = Math.max(Math.min(size.cellWidth, size.cellHeight) * 1.4, Math.min(width, height) * 0.12);
-  return Math.abs(local.y - curveY) <= thickness;
+  return Math.abs(local.y - curveY) <= thickness + paddingPx;
 };
 
 const buildObjectMask = (): void => {
@@ -528,6 +641,25 @@ const injectEmitters = (): void => {
   }
 };
 
+const gradientWaterFill = (
+  value: number,
+  magnitude: number,
+  threshold: number,
+  shimmer: number,
+  lightMode: boolean,
+): string => {
+  const trough = lightMode ? { r: 12, g: 116, b: 128 } : { r: 18, g: 87, b: 120 };
+  const neutral = lightMode ? { r: 190, g: 235, b: 239 } : { r: 76, g: 142, b: 164 };
+  const crest = lightMode ? { r: 104, g: 168, b: 248 } : { r: 120, g: 208, b: 252 };
+  const signed = clamp(value / Math.max(threshold * 7, DEFAULT_DISPLAY_THRESHOLD * 1.6), -1, 1);
+  const color = signed >= 0 ? mixColor(neutral, crest, signed) : mixColor(neutral, trough, -signed);
+  const intensity = clamp((magnitude - threshold) / Math.max(threshold * 5, 0.006), 0, 1);
+  const alpha = clamp(0.025 + intensity * intensity * (lightMode ? 0.32 : 0.36), 0.02, lightMode ? 0.36 : 0.4);
+  const litColor = scaleColor(color, 0.92 + shimmer * 0.18);
+
+  return `rgba(${litColor.r}, ${litColor.g}, ${litColor.b}, ${alpha})`;
+};
+
 const drawWater = (): void => {
   const origin = visibleOrigin();
   const current = grid.current;
@@ -564,6 +696,13 @@ const drawWater = (): void => {
       const slopeX = current[index + 1] - current[index - 1];
       const slopeY = current[index + size.cols] - current[index - size.cols];
       const shimmer = clamp(0.5 + slopeX * 0.7 - slopeY * 0.55, 0, 1);
+
+      if (useGradientDrawing) {
+        ctx.fillStyle = gradientWaterFill(value, magnitude, threshold, shimmer, lightMode);
+        ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
+        continue;
+      }
+
       const visibleMagnitude = Math.max(0, magnitude - threshold);
       const alpha = clamp(0.04 + visibleMagnitude * gain, 0.035, lightMode ? 0.32 : 0.36);
 
@@ -617,10 +756,9 @@ const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
 
   if (object.kind === 'barrier') {
     ctx.rect(-width / 2, -height / 2, width, height);
-  } else if (object.kind === 'single-slit') {
+  } else if (isSlitObjectKind(object.kind)) {
     const gap = object.gap * (size.activeRows - 1) * size.cellHeight;
-    ctx.rect(-width / 2, -height / 2, width, Math.max(1, (height - gap) / 2));
-    ctx.rect(-width / 2, gap / 2, width, Math.max(1, (height - gap) / 2));
+    appendSlitBarrierPath(width, height, slitOpeningRanges(object.kind, height, gap));
   } else {
     ctx.moveTo(-width / 2, height / 2);
     for (let i = 0; i <= 32; i += 1) {
@@ -644,16 +782,16 @@ const objectHandlePoints = (object: RippleObjectSnapshot) => {
   const sin = Math.sin(object.rotation);
   const rotateLocal = { x: 0, y: -height / 2 - 28 };
   const deleteLocal = { x: width / 2 + 18, y: -height / 2 - 18 };
+  const widthLocal = { x: width / 2 + 24, y: 0 };
+  const toScreen = (local: { x: number; y: number }) => ({
+    x: center.x + local.x * cos - local.y * sin,
+    y: center.y + local.x * sin + local.y * cos,
+  });
 
   return {
-    rotate: {
-      x: center.x + rotateLocal.x * cos - rotateLocal.y * sin,
-      y: center.y + rotateLocal.x * sin + rotateLocal.y * cos,
-    },
-    delete: {
-      x: center.x + deleteLocal.x * cos - deleteLocal.y * sin,
-      y: center.y + deleteLocal.x * sin + deleteLocal.y * cos,
-    },
+    rotate: toScreen(rotateLocal),
+    delete: toScreen(deleteLocal),
+    width: isSlitObjectKind(object.kind) ? toScreen(widthLocal) : null,
   };
 };
 
@@ -681,6 +819,21 @@ const drawObjects = (): void => {
     ctx.arc(handles.rotate.x, handles.rotate.y, 9, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    if (handles.width) {
+      ctx.beginPath();
+      ctx.arc(handles.width.x, handles.width.y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = lightMode ? '#0284c7' : '#38bdf8';
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(handles.width.x - 4, handles.width.y);
+      ctx.lineTo(handles.width.x + 4, handles.width.y);
+      ctx.stroke();
+      ctx.strokeStyle = lightMode ? '#ffffff' : '#082f49';
+      ctx.lineWidth = 2;
+    }
     ctx.beginPath();
     ctx.arc(handles.delete.x, handles.delete.y, 10, 0, Math.PI * 2);
     ctx.fillStyle = '#fb7185';
@@ -873,16 +1026,17 @@ const hitEmitter = (x: number, y: number): RippleEmitterSnapshot | null => {
 const hitObject = (x: number, y: number): RippleObjectSnapshot | null => {
   const world = screenToWorld(x, y);
   for (let index = objects.length - 1; index >= 0; index -= 1) {
-    if (isPointInsideObject(objects[index], world.x, world.y)) return objects[index];
+    if (isPointInsideObject(objects[index], world.x, world.y, 10)) return objects[index];
   }
   return null;
 };
 
-const hitObjectHandle = (x: number, y: number): 'rotate' | 'delete' | null => {
+const hitObjectHandle = (x: number, y: number): ObjectHandle | null => {
   const selected = selectedObjectId ? objects.find((object) => object.id === selectedObjectId) : null;
   if (!selected) return null;
   const handles = objectHandlePoints(selected);
   if (Math.hypot(x - handles.delete.x, y - handles.delete.y) <= 16) return 'delete';
+  if (handles.width && Math.hypot(x - handles.width.x, y - handles.width.y) <= 15) return 'width';
   if (Math.hypot(x - handles.rotate.x, y - handles.rotate.y) <= 16) return 'rotate';
   return null;
 };
@@ -929,6 +1083,12 @@ const handlePointerDown = (event: PointerEvent): void => {
     return;
   }
 
+  if (handle === 'width' && selectedObjectId) {
+    dragState = { active: true, pointerId: event.pointerId, mode: 'object-width', emitterId: null, objectId: selectedObjectId, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    canvas.setPointerCapture(event.pointerId);
+    return;
+  }
+
   const object = hitObject(point.screenX, point.screenY);
   if (object) {
     selectedObjectId = object.id;
@@ -971,6 +1131,11 @@ const handlePointerMove = (event: PointerEvent): void => {
       const center = worldToScreen(object);
       sendObjectPatch(dragState.objectId, { rotation: Math.atan2(point.screenY - center.y, point.screenX - center.x) + Math.PI / 2 });
     }
+  } else if (dragState.mode === 'object-width' && dragState.objectId) {
+    const object = objects.find((candidate) => candidate.id === dragState.objectId);
+    if (object && isSlitObjectKind(object.kind)) {
+      sendObjectPatch(dragState.objectId, { width: slitObjectWidthFromPoint(object, point.x, point.y) });
+    }
   } else {
     const distance = Math.hypot(point.screenX - dragState.lastX, point.screenY - dragState.lastY);
     if (distance > 24 && now - dragState.lastAt > DRAG_INTERVAL_MS) {
@@ -987,7 +1152,10 @@ const finishPointer = (event: PointerEvent): void => {
   if (dragState.mode === 'emitter' && dragState.emitterId) {
     sendMessage({ type: 'rippleEmitterRelease', id: dragState.emitterId });
   }
-  if ((dragState.mode === 'object-move' || dragState.mode === 'object-rotate') && dragState.objectId) {
+  if (
+    (dragState.mode === 'object-move' || dragState.mode === 'object-rotate' || dragState.mode === 'object-width') &&
+    dragState.objectId
+  ) {
     sendMessage({ type: 'rippleObjectRelease', id: dragState.objectId });
   }
   dragState = emptyDragState();
@@ -1017,6 +1185,7 @@ frequencyInput.addEventListener('change', () => sendSelectedControlPatch({ frequ
 phaseInput.addEventListener('input', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }));
 phaseInput.addEventListener('change', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }, true));
 sensitivityInput.addEventListener('input', () => setDisplaySensitivity(Number.parseFloat(sensitivityInput.value)));
+gradientInput.addEventListener('change', () => setGradientDrawing(gradientInput.checked));
 enableButton.addEventListener('click', () => {
   const emitter = getSelectedEmitter();
   if (emitter) sendSelectedControlPatch({ enabled: !emitter.enabled }, true);
@@ -1087,6 +1256,7 @@ const draw = (timestamp: number): void => {
 
 initializeTheme();
 initializeDisplaySensitivity();
+initializeGradientDrawing();
 roomLabel.textContent = roomCode;
 resize();
 connect();

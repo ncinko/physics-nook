@@ -15,7 +15,7 @@ export type RippleEmitterSnapshot = RippleVec2 & {
   updatedAt: number;
 };
 
-export type RippleObjectKind = 'barrier' | 'parabola' | 'single-slit';
+export type RippleObjectKind = 'barrier' | 'parabola' | 'single-slit' | 'double-slit';
 
 export type RippleObjectSnapshot = RippleVec2 & {
   id: string;
@@ -187,7 +187,7 @@ export const RIPPLE_CONFIG = {
   },
   object: {
     maxObjects: 24,
-    minSize: 0.025,
+    minSize: 0.008,
     maxSize: 0.55,
     minGap: 0.035,
     maxGap: 0.28,
@@ -309,7 +309,7 @@ export const sanitizeRippleEmitterPatch = (patch: unknown): RippleEmitterPatch |
 };
 
 export const isRippleObjectKind = (value: unknown): value is RippleObjectKind =>
-  value === 'barrier' || value === 'parabola' || value === 'single-slit';
+  value === 'barrier' || value === 'parabola' || value === 'single-slit' || value === 'double-slit';
 
 export const sanitizeRippleObjectPatch = (patch: unknown): RippleObjectPatch | null => {
   if (!patch || typeof patch !== 'object') return null;
@@ -367,7 +367,9 @@ export const createDefaultRippleObject = (
     kind === 'parabola'
       ? { width: 0.22, height: 0.18, gap: 0.1 }
       : kind === 'single-slit'
-        ? { width: 0.035, height: 0.32, gap: 0.1 }
+        ? { width: 0.012, height: 0.32, gap: 0.1 }
+        : kind === 'double-slit'
+          ? { width: 0.012, height: 0.34, gap: 0.065 }
         : { width: 0.24, height: 0.035, gap: 0.1 };
   const sanitized = sanitizeRippleObjectPatch({ ...base, ...patch }) ?? base;
 

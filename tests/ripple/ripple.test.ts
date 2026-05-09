@@ -102,7 +102,13 @@ test('ripple objects sanitize geometry and create default shapes', () => {
   assert.equal(slit.kind, 'single-slit');
   assert.equal(slit.controlledBy, null);
   assert.equal(slit.updatedAt, 321);
+  assert.ok(slit.width <= 0.014);
   assert.ok(slit.gap > 0);
+
+  const doubleSlit = createDefaultRippleObject('object-2', 'double-slit', { x: 0.48, y: 0.52 }, 321);
+  assert.equal(doubleSlit.kind, 'double-slit');
+  assert.ok(doubleSlit.width <= 0.014);
+  assert.ok(doubleSlit.gap < slit.gap);
 });
 
 test('ripple names and room codes normalize for shared room routing', () => {

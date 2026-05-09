@@ -211,9 +211,9 @@ test('ripples websocket handles pause, reset, and invalid payloads', async () =>
 
       const objectMessage = waitForMessage<{ type: string; objects: Array<{ id: string; kind: string }> }>(
         socket,
-        (message) => message.type === 'rippleSnapshot' && message.objects.some((object) => object.kind === 'barrier'),
+        (message) => message.type === 'rippleSnapshot' && message.objects.some((object) => object.kind === 'double-slit'),
       );
-      sendJson(socket, { type: 'rippleObjectCreate', kind: 'barrier', object: { x: 0.44, y: 0.55 } });
+      sendJson(socket, { type: 'rippleObjectCreate', kind: 'double-slit', object: { x: 0.44, y: 0.55 } });
       await objectMessage;
 
       const splashMessage = waitForMessage<{ type: string; recentSplashes: unknown[] }>(
@@ -245,7 +245,7 @@ test('ripples websocket handles pause, reset, and invalid payloads', async () =>
       assert.equal(resetSnapshot.recentSplashes.length, 0);
       assert.equal(resetEmitter?.amplitude, 1.73);
       assert.equal(resetSnapshot.objects.length, 1);
-      assert.equal(resetSnapshot.objects[0]?.kind, 'barrier');
+      assert.equal(resetSnapshot.objects[0]?.kind, 'double-slit');
 
       await new Promise((resolve) => setTimeout(resolve, RIPPLE_CONFIG.splashRateLimitMs + 5));
 

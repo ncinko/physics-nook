@@ -94,98 +94,120 @@ The challenge below turns the sign conventions into a control problem. Apply acc
 
 ## Kinematic Equations
 
-The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, so the final time is just $t$. The displacement is $\Delta x = x_f - x_i$.
+The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, so the final time is just $t$. The displacement is $\Delta x = x_f - x_i$. Click an equation to reveal where it comes from.
 
-Start with average acceleration:
+<div class="kinematic-equation-tabs not-prose my-6 rounded-[1.35rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-5 py-5 shadow-sm">
+  <input id="kinematic-eq-velocity" name="kinematic-equation" type="radio" />
+  <input id="kinematic-eq-average" name="kinematic-equation" type="radio" />
+  <input id="kinematic-eq-displacement" name="kinematic-equation" type="radio" />
+  <input id="kinematic-eq-notime" name="kinematic-equation" type="radio" />
 
-$$
-a = \frac{\Delta v}{\Delta t}
-= \frac{v_f - v_i}{t}.
-$$
-
-Solving for the final velocity gives
-
-$$
-v_f = v_i + at.
-$$
-
-Now use average velocity. By definition,
-
-$$
-\overline{v} = \frac{\Delta x}{t},
-$$
-
-so
-
-$$
-\Delta x = \overline{v}t.
-$$
-
-When acceleration is constant, velocity changes at a steady rate, so the average velocity over the interval is the midpoint between the initial and final velocities:
-
-$$
-\overline{v} = \frac{v_i + v_f}{2}.
-$$
-
-That gives the displacement equation
-
-$$
-\Delta x = \left(\frac{v_i + v_f}{2}\right)t.
-$$
-
-Substitute $v_f = v_i + at$ to write displacement using only the initial velocity, acceleration, and time:
-
-$$
-\Delta x
-= \left(\frac{v_i + v_i + at}{2}\right)t
-= v_i t + \frac{1}{2}at^2.
-$$
-
-<DerivationPanel
-  title="Where does the no-time equation come from?"
-  prompt="Open this when you want the algebra that removes time from the constant-acceleration equations."
->
-  To remove time, use $t = (v_f - v_i)/a$ in the average-velocity displacement equation:
-
-  $$
-  \Delta x
-  = \left(\frac{v_i + v_f}{2}\right)
-  \left(\frac{v_f - v_i}{a}\right)
-  = \frac{v_f^2 - v_i^2}{2a}.
-  $$
-
-  Rearranging gives
-
-  $$
-  v_f^2 = v_i^2 + 2a\Delta x.
-  $$
-</DerivationPanel>
-
-Together, for constant acceleration,
-
-<div class="not-prose my-6 rounded-[1.35rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-5 py-5 shadow-sm">
-  <div class="grid gap-4 md:grid-cols-2">
-    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+  <div class="kinematic-equation-grid grid gap-4 md:grid-cols-2">
+    <label for="kinematic-eq-velocity" class="kinematic-equation-panel kinematic-equation-panel-velocity cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
       v_f = v_i + at
       $$
-    </div>
+    </label>
 
-    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+    <label for="kinematic-eq-average" class="kinematic-equation-panel kinematic-equation-panel-average cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
       \Delta x = \left(\frac{v_i + v_f}{2}\right)t
       $$
-    </div>
+    </label>
 
-    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+    <label for="kinematic-eq-displacement" class="kinematic-equation-panel kinematic-equation-panel-displacement cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
       \Delta x = v_i t + \frac{1}{2}at^2
       $$
-    </div>
+    </label>
 
-    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+    <label for="kinematic-eq-notime" class="kinematic-equation-panel kinematic-equation-panel-notime cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
       v_f^2 = v_i^2 + 2a\Delta x
+      $$
+    </label>
+  </div>
+
+  <div class="kinematic-equation-derivations mt-4 rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_68%,var(--surface-elevated))] px-5 py-5">
+    <div class="equation-derivation derivation-velocity prose prose-theme max-w-none">
+      Start with average acceleration:
+
+      $$
+      a = \frac{\Delta v}{\Delta t}
+      = \frac{v_f - v_i}{t}.
+      $$
+
+      Multiply both sides by $t$ and add $v_i$:
+
+      $$
+      at = v_f - v_i
+      \qquad \Rightarrow \qquad
+      v_f = v_i + at.
+      $$
+    </div>
+
+    <div class="equation-derivation derivation-average prose prose-theme max-w-none">
+      By definition,
+
+      $$
+      \overline{v} = \frac{\Delta x}{t},
+      $$
+
+      so
+
+      $$
+      \Delta x = \overline{v}t.
+      $$
+
+      When acceleration is constant, velocity changes at a steady rate, so the average velocity is the midpoint between the initial and final velocities:
+
+      $$
+      \overline{v} = \frac{v_i + v_f}{2}.
+      $$
+
+      Therefore,
+
+      $$
+      \Delta x = \left(\frac{v_i + v_f}{2}\right)t.
+      $$
+    </div>
+
+    <div class="equation-derivation derivation-displacement prose prose-theme max-w-none">
+      Start with the average-velocity displacement equation:
+
+      $$
+      \Delta x = \left(\frac{v_i + v_f}{2}\right)t.
+      $$
+
+      Substitute $v_f = v_i + at$:
+
+      $$
+      \Delta x
+      = \left(\frac{v_i + v_i + at}{2}\right)t
+      = v_i t + \frac{1}{2}at^2.
+      $$
+    </div>
+
+    <div class="equation-derivation derivation-notime prose prose-theme max-w-none">
+      Start with $v_f = v_i + at$, then solve for time:
+
+      $$
+      t = \frac{v_f - v_i}{a}.
+      $$
+
+      Substitute that into the average-velocity displacement equation:
+
+      $$
+      \Delta x
+      = \left(\frac{v_i + v_f}{2}\right)
+      \left(\frac{v_f - v_i}{a}\right)
+      = \frac{v_f^2 - v_i^2}{2a}.
+      $$
+
+      Rearranging gives
+
+      $$
+      v_f^2 = v_i^2 + 2a\Delta x.
       $$
     </div>
   </div>

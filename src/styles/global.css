@@ -155,3 +155,65 @@ div {
     color 200ms ease,
     box-shadow 200ms ease;
 }
+
+.kinematic-equation-tabs > input[type='radio'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.kinematic-equation-panel:hover,
+#kinematic-eq-velocity:checked ~ .kinematic-equation-grid .kinematic-equation-panel-velocity,
+#kinematic-eq-average:checked ~ .kinematic-equation-grid .kinematic-equation-panel-average,
+#kinematic-eq-displacement:checked ~ .kinematic-equation-grid .kinematic-equation-panel-displacement,
+#kinematic-eq-notime:checked ~ .kinematic-equation-grid .kinematic-equation-panel-notime {
+  border-color: color-mix(in srgb, var(--accent-blue) 58%, var(--grid-line));
+  background: color-mix(in srgb, var(--accent-blue) 10%, var(--bg-primary));
+}
+
+#kinematic-eq-velocity:focus-visible ~ .kinematic-equation-grid .kinematic-equation-panel-velocity,
+#kinematic-eq-average:focus-visible ~ .kinematic-equation-grid .kinematic-equation-panel-average,
+#kinematic-eq-displacement:focus-visible ~ .kinematic-equation-grid .kinematic-equation-panel-displacement,
+#kinematic-eq-notime:focus-visible ~ .kinematic-equation-grid .kinematic-equation-panel-notime {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 3px;
+}
+
+.kinematic-equation-derivations {
+  display: none;
+}
+
+.equation-derivation {
+  display: none;
+}
+
+#kinematic-eq-velocity:checked ~ .kinematic-equation-derivations,
+#kinematic-eq-average:checked ~ .kinematic-equation-derivations,
+#kinematic-eq-displacement:checked ~ .kinematic-equation-derivations,
+#kinematic-eq-notime:checked ~ .kinematic-equation-derivations {
+  display: block;
+}
+
+#kinematic-eq-velocity:checked ~ .kinematic-equation-derivations .derivation-velocity,
+#kinematic-eq-average:checked ~ .kinematic-equation-derivations .derivation-average,
+#kinematic-eq-displacement:checked ~ .kinematic-equation-derivations .derivation-displacement,
+#kinematic-eq-notime:checked ~ .kinematic-equation-derivations .derivation-notime {
+  display: block;
+}
+
+.kinematic-equation-panel .katex-display {
+  margin: 0.5rem 0;
+}
+
+.equation-derivation :first-child {
+  margin-top: 0;
+}
+
+.equation-derivation :last-child {
+  margin-bottom: 0;
+}

@@ -9,6 +9,7 @@ import {
   createDefaultRippleEmitters,
   isRippleObjectKind,
   normalizeRippleRoomCode,
+  resolvePersistentRippleRoomCode,
   sanitizeRippleEmitterPatch,
   sanitizeRippleName,
   sanitizeRippleObjectPatch,
@@ -18,6 +19,7 @@ import type {
   RippleClientToServerMessage,
   RippleEmitterSnapshot,
   RippleObjectSnapshot,
+  RippleRoomSummary,
   RippleServerToClientMessage,
   RippleSnapshot,
   RippleSplashEvent,
@@ -34,6 +36,7 @@ type RippleClient = {
   name: string;
   roomCode: string;
   lastMessageAt: number;
+  lastActiveAt: number;
   lastSplashAt: number;
 };
 
@@ -163,9 +166,10 @@ const createRippleRoom = (roomCode: string): RippleRoom => {
 
 export const createRippleWorld = () => {
   const rooms = new Map<string, RippleRoom>();
+  const clients = new Set<RippleClient>();
 
   const getRoom = (roomCode: string): RippleRoom => {
-    const normalized = normalizeRippleRoomCode(roomCode);
+    const normalized = resolvePersistentRippleRoomCode(roomCode);
     const existing = rooms.get(normalized);
     if (existing) return existing;
 
@@ -175,6 +179,16 @@ export const createRippleWorld = () => {
   };
 
   const joinedCount = (room: RippleRoom): number => [...room.clients].filter((client) => client.joined).length;
+  const activeClientCount = (): number => [...clients].filter((client) => client.joined).length;
+
+  const roomSummaries = (): RippleRoomSummary[] =>
+    RIPPLE_CONFIG.persistentRoomCodes.map((roomCode) => {
+      const room = getRoom(roomCode);
+      return {
+        roomCode: room.roomCode,
+        playerCount: joinedCount(room),
+      };
+    });
 
   const makeSnapshot = (room: RippleRoom): RippleSnapshot => ({
     type: 'rippleSnapshot',
@@ -203,8 +217,32 @@ export const createRippleWorld = () => {
     broadcast(room, { type: 'ripplePresence', playerCount: joinedCount(room) });
   };
 
+  const broadcastRooms = (): void => {
+    const message: RippleServerToClientMessage = {
+      type: 'rippleRooms',
+      rooms: roomSummaries(),
+      maxActiveUsers: RIPPLE_CONFIG.maxActiveUsers,
+    };
+    const text = JSON.stringify(message);
+    clients.forEach((client) => sendFrame(client.socket, text));
+  };
+
   const sendError = (client: RippleClient, message: string): void => {
     sendFrame(client.socket, { type: 'error', message });
+  };
+
+  const sendLobby = (
+    client: RippleClient,
+    reason: 'inactive' | 'full' | 'local',
+    message: string,
+  ): void => {
+    sendFrame(client.socket, {
+      type: 'rippleLobby',
+      reason,
+      message,
+      rooms: roomSummaries(),
+      maxActiveUsers: RIPPLE_CONFIG.maxActiveUsers,
+    });
   };
 
   const removeClientFromRoom = (client: RippleClient): void => {
@@ -213,6 +251,7 @@ export const createRippleWorld = () => {
 
     const wasJoined = client.joined;
     room.clients.delete(client);
+    client.joined = false;
 
     let releasedState = false;
     room.emitters.forEach((emitter, id) => {
@@ -231,31 +270,36 @@ export const createRippleWorld = () => {
     if (wasJoined) {
       broadcastPresence(room);
       if (releasedState) broadcastSnapshot(room);
-    }
-
-    if (room.clients.size === 0 && room.roomCode !== RIPPLE_CONFIG.defaultRoomCode) {
-      rooms.delete(room.roomCode);
+      broadcastRooms();
     }
   };
 
   const joinRoom = (client: RippleClient, message: RippleClientToServerMessage): void => {
     if (message.type !== 'rippleJoin') return;
 
+    const requestedRoomCode = resolvePersistentRippleRoomCode(message.roomCode ?? client.roomCode);
+
     if (client.joined) {
       removeClientFromRoom(client);
     } else {
       const previousRoom = rooms.get(client.roomCode);
       previousRoom?.clients.delete(client);
-      if (previousRoom && previousRoom.clients.size === 0 && previousRoom.roomCode !== RIPPLE_CONFIG.defaultRoomCode) {
-        rooms.delete(previousRoom.roomCode);
-      }
     }
 
-    const room = getRoom(message.roomCode ?? RIPPLE_CONFIG.defaultRoomCode);
+    if (activeClientCount() >= RIPPLE_CONFIG.maxActiveUsers) {
+      client.joined = false;
+      client.roomCode = requestedRoomCode;
+      sendLobby(client, 'full', `All ${RIPPLE_CONFIG.maxActiveUsers} active ripple tank seats are full.`);
+      broadcastRooms();
+      return;
+    }
+
+    const room = getRoom(requestedRoomCode);
     client.roomCode = room.roomCode;
     client.joined = true;
     client.name = sanitizeRippleName(message.name, `Explorer ${joinedCount(room) + 1}`);
     client.lastMessageAt = Date.now();
+    client.lastActiveAt = client.lastMessageAt;
     room.clients.add(client);
 
     sendFrame(client.socket, {
@@ -263,8 +307,11 @@ export const createRippleWorld = () => {
       protocolVersion: RIPPLE_CONFIG.protocolVersion,
       you: client.id,
       snapshot: makeSnapshot(room),
+      rooms: roomSummaries(),
+      maxActiveUsers: RIPPLE_CONFIG.maxActiveUsers,
     });
     broadcastPresence(room);
+    broadcastRooms();
   };
 
   const getJoinedRoom = (client: RippleClient): RippleRoom | null => {
@@ -297,6 +344,7 @@ export const createRippleWorld = () => {
     }
 
     client.lastSplashAt = now;
+    client.lastActiveAt = now;
     room.recentSplashes.push({
       id: `${room.roomCode}-${room.nextSplashId++}`,
       createdBy: client.id,
@@ -328,6 +376,7 @@ export const createRippleWorld = () => {
       return;
     }
 
+    client.lastActiveAt = Date.now();
     room.emitters.set(message.id, {
       ...emitter,
       ...patch,
@@ -345,6 +394,7 @@ export const createRippleWorld = () => {
     const emitter = room.emitters.get(message.id);
     if (!emitter || emitter.controlledBy !== client.id) return;
 
+    client.lastActiveAt = Date.now();
     room.emitters.set(message.id, { ...emitter, controlledBy: null, updatedAt: Date.now() });
     broadcastSnapshot(room);
   };
@@ -372,6 +422,7 @@ export const createRippleWorld = () => {
 
     const id = `object-${room.nextObjectId++}`;
     const now = Date.now();
+    client.lastActiveAt = now;
     const object = createDefaultRippleObject(id, message.kind, patch, now);
     room.objects.set(id, { ...object, controlledBy: client.id });
     broadcastSnapshot(room);
@@ -394,6 +445,7 @@ export const createRippleWorld = () => {
       return;
     }
 
+    client.lastActiveAt = Date.now();
     room.objects.set(message.id, {
       ...object,
       ...patch,
@@ -408,6 +460,7 @@ export const createRippleWorld = () => {
     const room = getJoinedRoom(client);
     if (!room) return;
 
+    client.lastActiveAt = Date.now();
     if (room.objects.delete(message.id)) {
       broadcastSnapshot(room);
     }
@@ -421,6 +474,7 @@ export const createRippleWorld = () => {
     const object = room.objects.get(message.id);
     if (!object || object.controlledBy !== client.id) return;
 
+    client.lastActiveAt = Date.now();
     room.objects.set(message.id, { ...object, controlledBy: null, updatedAt: Date.now() });
     broadcastSnapshot(room);
   };
@@ -431,6 +485,7 @@ export const createRippleWorld = () => {
     if (!room) return;
 
     room.paused = Boolean(message.paused);
+    client.lastActiveAt = Date.now();
     broadcastSnapshot(room);
   };
 
@@ -441,6 +496,7 @@ export const createRippleWorld = () => {
 
     room.recentSplashes = [];
     room.resetVersion += 1;
+    client.lastActiveAt = Date.now();
     broadcastSnapshot(room);
   };
 
@@ -489,7 +545,19 @@ export const createRippleWorld = () => {
     }
   };
 
-  getRoom(RIPPLE_CONFIG.defaultRoomCode);
+  const moveInactiveClientsToLobby = (): void => {
+    const now = Date.now();
+    clients.forEach((client) => {
+      if (!client.joined || now - client.lastActiveAt < RIPPLE_CONFIG.inactiveTimeoutMs) return;
+      removeClientFromRoom(client);
+      client.joined = false;
+      sendLobby(client, 'inactive', 'You were moved to the local lobby after 120 seconds of inactivity.');
+    });
+  };
+
+  const inactivityInterval = setInterval(moveInactiveClientsToLobby, 5000);
+
+  RIPPLE_CONFIG.persistentRoomCodes.forEach((roomCode) => getRoom(roomCode));
 
   return {
     accept(socket: import('node:net').Socket, roomCode = RIPPLE_CONFIG.defaultRoomCode): void {
@@ -500,12 +568,13 @@ export const createRippleWorld = () => {
         id: randomUUID(),
         joined: false,
         name: 'Explorer',
-        roomCode: normalizeRippleRoomCode(roomCode),
+        roomCode: resolvePersistentRippleRoomCode(roomCode),
         lastMessageAt: Date.now(),
+        lastActiveAt: Date.now(),
         lastSplashAt: 0,
       };
 
-      getRoom(client.roomCode).clients.add(client);
+      clients.add(client);
 
       socket.on('data', (chunk) => {
         try {
@@ -516,20 +585,27 @@ export const createRippleWorld = () => {
         }
       });
 
-      socket.on('close', () => removeClientFromRoom(client));
-      socket.on('error', () => removeClientFromRoom(client));
+      socket.on('close', () => {
+        removeClientFromRoom(client);
+        clients.delete(client);
+      });
+      socket.on('error', () => {
+        removeClientFromRoom(client);
+        clients.delete(client);
+      });
     },
     health() {
-      const roomList = [...rooms.values()];
       return {
         ok: true,
         mode: 'ripples',
-        rooms: roomList.length,
-        players: roomList.reduce((total, room) => total + joinedCount(room), 0),
+        rooms: roomSummaries(),
+        players: activeClientCount(),
+        maxActiveUsers: RIPPLE_CONFIG.maxActiveUsers,
         defaultRoom: RIPPLE_CONFIG.defaultRoomCode,
       };
     },
     close(): void {
+      clearInterval(inactivityInterval);
       rooms.forEach((room) => {
         room.clients.forEach((client) => {
           sendClose(client.socket);
@@ -538,6 +614,11 @@ export const createRippleWorld = () => {
         room.clients.clear();
       });
       rooms.clear();
+      clients.forEach((client) => {
+        sendClose(client.socket);
+        client.socket.destroy();
+      });
+      clients.clear();
     },
   };
 };

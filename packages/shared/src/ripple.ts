@@ -62,6 +62,11 @@ export type RippleSnapshot = {
   playerCount: number;
 };
 
+export type RippleRoomSummary = {
+  roomCode: string;
+  playerCount: number;
+};
+
 export type RippleJoinMessage = {
   type: 'rippleJoin';
   name?: string;
@@ -138,11 +143,27 @@ export type RippleJoinedMessage = {
   protocolVersion: number;
   you: string;
   snapshot: RippleSnapshot;
+  rooms: RippleRoomSummary[];
+  maxActiveUsers: number;
 };
 
 export type RipplePresenceMessage = {
   type: 'ripplePresence';
   playerCount: number;
+};
+
+export type RippleRoomsMessage = {
+  type: 'rippleRooms';
+  rooms: RippleRoomSummary[];
+  maxActiveUsers: number;
+};
+
+export type RippleLobbyMessage = {
+  type: 'rippleLobby';
+  reason: 'inactive' | 'full' | 'local';
+  message: string;
+  rooms: RippleRoomSummary[];
+  maxActiveUsers: number;
 };
 
 export type RippleErrorMessage = {
@@ -160,12 +181,17 @@ export type RippleServerToClientMessage =
   | RippleJoinedMessage
   | RippleSnapshot
   | RipplePresenceMessage
+  | RippleRoomsMessage
+  | RippleLobbyMessage
   | RippleErrorMessage
   | RipplePongMessage;
 
 export const RIPPLE_CONFIG = {
   protocolVersion: 1,
-  defaultRoomCode: 'TANK',
+  defaultRoomCode: 'TANK1',
+  persistentRoomCodes: ['TANK1', 'TANK2', 'TANK3'],
+  maxActiveUsers: 25,
+  inactiveTimeoutMs: 120_000,
   roomCodeLength: 16,
   recentSplashLimit: 90,
   splashRateLimitMs: 38,
@@ -211,6 +237,14 @@ export const normalizeRippleRoomCode = (value?: string): string => {
     .slice(0, RIPPLE_CONFIG.roomCodeLength);
 
   return normalized || RIPPLE_CONFIG.defaultRoomCode;
+};
+
+export const isPersistentRippleRoomCode = (value: string): boolean =>
+  (RIPPLE_CONFIG.persistentRoomCodes as readonly string[]).includes(normalizeRippleRoomCode(value));
+
+export const resolvePersistentRippleRoomCode = (value?: string): string => {
+  const normalized = normalizeRippleRoomCode(value);
+  return isPersistentRippleRoomCode(normalized) ? normalized : RIPPLE_CONFIG.defaultRoomCode;
 };
 
 export const sanitizeRippleName = (value: unknown, fallback = 'Explorer'): string => {

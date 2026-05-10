@@ -2,7 +2,7 @@ import './ripple-styles.css';
 
 import {
   RIPPLE_CONFIG,
-  normalizeRippleRoomCode,
+  resolvePersistentRippleRoomCode,
 } from '../../../packages/shared/src/ripple.ts';
 import type {
   RippleClientToServerMessage,
@@ -11,6 +11,7 @@ import type {
   RippleObjectKind,
   RippleObjectPatch,
   RippleObjectSnapshot,
+  RippleRoomSummary,
   RippleServerToClientMessage,
   RippleSnapshot,
   RippleSplashEvent,
@@ -55,6 +56,10 @@ type DragState = {
 const canvas = document.getElementById('rippleCanvas') as HTMLCanvasElement | null;
 const roomLabel = document.getElementById('roomLabel');
 const playerCount = document.getElementById('playerCount');
+const tankSwitcherButton = document.getElementById('tankSwitcherButton') as HTMLButtonElement | null;
+const tankSwitcher = document.getElementById('tankSwitcher') as HTMLElement | null;
+const lobbyNotice = document.getElementById('lobbyNotice') as HTMLElement | null;
+const tankButtons = document.getElementById('tankButtons');
 const themeButton = document.getElementById('themeButton') as HTMLButtonElement | null;
 const pauseButton = document.getElementById('pauseButton') as HTMLButtonElement | null;
 const resetButton = document.getElementById('resetButton') as HTMLButtonElement | null;
@@ -81,6 +86,10 @@ if (
   !canvas ||
   !roomLabel ||
   !playerCount ||
+  !tankSwitcherButton ||
+  !tankSwitcher ||
+  !lobbyNotice ||
+  !tankButtons ||
   !themeButton ||
   !pauseButton ||
   !resetButton ||
@@ -145,7 +154,7 @@ const MAX_SLIT_OBJECT_WIDTH = 0.08;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
-const roomCode = normalizeRippleRoomCode(searchParams.get('room') ?? undefined);
+let activeRoomCode = resolvePersistentRippleRoomCode(searchParams.get('room') ?? undefined);
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
@@ -210,6 +219,12 @@ let processedSplashIds = new Set<string>();
 let objectMask = new Uint8Array(0);
 let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
 let useGradientDrawing = false;
+let inLobby = true;
+let lobbyMessage = 'Choose a ripple tank to join.';
+let roomSummaries: RippleRoomSummary[] = RIPPLE_CONFIG.persistentRoomCodes.map((roomCode) => ({
+  roomCode,
+  playerCount: 0,
+}));
 const keyState = new Set<string>();
 const camera = { xScreens: 0, yScreens: 0, zoom: 1 };
 
@@ -236,6 +251,79 @@ const setConnectionState = (state: ConnectionState, _label: string): void => {
 
 const setPlayerCount = (count: number): void => {
   playerCount.textContent = `Users: ${count}`;
+};
+
+const activeRoomSummary = (): RippleRoomSummary =>
+  roomSummaries.find((room) => room.roomCode === activeRoomCode) ?? { roomCode: activeRoomCode, playerCount: 0 };
+
+const updateBrowserRoom = (): void => {
+  const url = new URL(window.location.href);
+  url.searchParams.set('room', activeRoomCode);
+  window.history.replaceState(null, '', url);
+};
+
+const renderTankSwitcher = (): void => {
+  tankButtons.textContent = '';
+  for (const room of roomSummaries) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'tank-button';
+    button.dataset.active = String(!inLobby && room.roomCode === activeRoomCode);
+    button.setAttribute('aria-pressed', String(!inLobby && room.roomCode === activeRoomCode));
+    button.addEventListener('click', () => joinTank(room.roomCode));
+
+    const label = document.createElement('strong');
+    label.textContent = room.roomCode.replace(/^TANK/, 'Tank ');
+    const count = document.createElement('span');
+    count.textContent = `${room.playerCount}/${RIPPLE_CONFIG.maxActiveUsers}`;
+    button.append(label, count);
+    tankButtons.append(button);
+  }
+
+  const summary = activeRoomSummary();
+  roomLabel.textContent = inLobby ? 'LOBBY' : activeRoomCode;
+  setPlayerCount(summary.playerCount);
+  lobbyNotice.hidden = !inLobby && !lobbyMessage;
+  lobbyNotice.textContent = lobbyMessage;
+};
+
+const setRoomSummaries = (summaries: RippleRoomSummary[]): void => {
+  roomSummaries = RIPPLE_CONFIG.persistentRoomCodes.map((roomCode) => (
+    summaries.find((summary) => summary.roomCode === roomCode) ?? { roomCode, playerCount: 0 }
+  ));
+  renderTankSwitcher();
+};
+
+const setTankSwitcherOpen = (open: boolean): void => {
+  tankSwitcher.hidden = !open;
+  tankSwitcherButton.setAttribute('aria-expanded', String(open));
+};
+
+const enterLobby = (message: string): void => {
+  inLobby = true;
+  lobbyMessage = message;
+  selectedEmitterId = null;
+  selectedObjectId = null;
+  emitters = [];
+  objects = [];
+  latestSnapshot = null;
+  processedSplashIds.clear();
+  clearGrid();
+  setTankSwitcherOpen(true);
+  renderTankSwitcher();
+  updateSelectionPanel();
+};
+
+const joinTank = (roomCode: string): void => {
+  activeRoomCode = resolvePersistentRippleRoomCode(roomCode);
+  inLobby = true;
+  lobbyMessage = `Joining ${activeRoomCode.replace(/^TANK/, 'Tank ')}...`;
+  setTankSwitcherOpen(false);
+  updateBrowserRoom();
+  clearSelection();
+  clearGrid();
+  renderTankSwitcher();
+  sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode: activeRoomCode });
 };
 
 const applyTheme = (theme: 'light' | 'dark'): void => {
@@ -291,7 +379,7 @@ const appendRipplePath = (base: string): string => {
   if (!url.pathname.endsWith('/ripples')) {
     url.pathname = `${url.pathname.replace(/\/$/, '')}/ripples`;
   }
-  url.searchParams.set('room', roomCode);
+  url.searchParams.set('room', activeRoomCode);
   return url.toString();
 };
 
@@ -302,14 +390,14 @@ const getDefaultWsUrl = (): string => {
   const localHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
   const hostName = window.location.hostname || 'localhost';
   if (localHosts.has(hostName) || hostName.startsWith('192.168.') || hostName.startsWith('10.') || hostName.endsWith('.local')) {
-    return `ws://${hostName}:8788/ripples?room=${encodeURIComponent(roomCode)}`;
+    return `ws://${hostName}:8788/ripples?room=${encodeURIComponent(activeRoomCode)}`;
   }
 
   if (window.location.protocol === 'https:') {
-    return `wss://ws.physicsnook.com/ripples?room=${encodeURIComponent(roomCode)}`;
+    return `wss://ws.physicsnook.com/ripples?room=${encodeURIComponent(activeRoomCode)}`;
   }
 
-  return `ws://${hostName}:8788/ripples?room=${encodeURIComponent(roomCode)}`;
+  return `ws://${hostName}:8788/ripples?room=${encodeURIComponent(activeRoomCode)}`;
 };
 
 const makeExplorerName = (): string => {
@@ -1024,11 +1112,17 @@ const selectObject = (id: string): void => {
 
 const handleSnapshot = (snapshot: RippleSnapshot): void => {
   latestSnapshot = snapshot;
+  inLobby = false;
+  lobbyMessage = '';
+  activeRoomCode = resolvePersistentRippleRoomCode(snapshot.roomCode);
+  setTankSwitcherOpen(false);
   paused = snapshot.paused;
   pauseButton.textContent = paused ? 'Play' : 'Pause';
   pauseButton.setAttribute('aria-label', paused ? 'Resume ripple simulation' : 'Pause ripple simulation');
-  roomLabel.textContent = snapshot.roomCode;
-  setPlayerCount(snapshot.playerCount);
+  setRoomSummaries(roomSummaries.map((room) => (
+    room.roomCode === activeRoomCode ? { ...room, playerCount: snapshot.playerCount } : room
+  )));
+  updateBrowserRoom();
 
   if (snapshot.resetVersion !== resetVersion) {
     resetVersion = snapshot.resetVersion;
@@ -1068,11 +1162,19 @@ const handleSocketMessage = (event: MessageEvent): void => {
   if (message.type === 'rippleJoined') {
     localPlayerId = message.you;
     setConnectionState('online', 'Online');
+    setRoomSummaries(message.rooms);
     handleSnapshot(message.snapshot);
   } else if (message.type === 'rippleSnapshot') {
     handleSnapshot(message);
   } else if (message.type === 'ripplePresence') {
-    setPlayerCount(message.playerCount);
+    setRoomSummaries(roomSummaries.map((room) => (
+      room.roomCode === activeRoomCode ? { ...room, playerCount: message.playerCount } : room
+    )));
+  } else if (message.type === 'rippleRooms') {
+    setRoomSummaries(message.rooms);
+  } else if (message.type === 'rippleLobby') {
+    setRoomSummaries(message.rooms);
+    enterLobby(message.message);
   } else if (message.type === 'pong') {
     if (connectionState === 'online') return;
   } else if (message.type === 'error') {
@@ -1084,7 +1186,7 @@ const connect = (): void => {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   setConnectionState('connecting', 'Connecting');
   socket = new WebSocket(getDefaultWsUrl());
-  socket.addEventListener('open', () => sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode }));
+  socket.addEventListener('open', () => sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode: activeRoomCode }));
   socket.addEventListener('message', handleSocketMessage);
   socket.addEventListener('close', () => {
     setConnectionState('offline', 'Offline');
@@ -1319,13 +1421,17 @@ selectionCloseButton.addEventListener('click', clearSelection);
 pauseButton.addEventListener('click', () => sendMessage({ type: 'rippleSetPaused', paused: !paused }));
 resetButton.addEventListener('click', () => sendMessage({ type: 'rippleReset' }));
 themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+tankSwitcherButton.addEventListener('click', () => setTankSwitcherOpen(tankSwitcher.hidden));
 
 document.addEventListener('pointerdown', (event) => {
-  if (selectionPanel.hidden) return;
   const target = event.target;
   if (!(target instanceof Node)) return;
-  if (selectionPanel.contains(target) || canvas.contains(target)) return;
-  clearSelection();
+  if (!tankSwitcher.hidden && !tankSwitcher.contains(target) && !tankSwitcherButton.contains(target)) {
+    setTankSwitcherOpen(false);
+  }
+  if (!selectionPanel.hidden && !selectionPanel.contains(target) && !canvas.contains(target)) {
+    clearSelection();
+  }
 });
 
 document.querySelectorAll<HTMLButtonElement>('[data-object-kind]').forEach((button) => {
@@ -1368,18 +1474,26 @@ window.addEventListener('keyup', (event) => keyState.delete(event.code));
 const draw = (timestamp: number): void => {
   const dt = clamp((timestamp - lastFrameAt) / 1000, 0, 0.04);
   lastFrameAt = timestamp;
-  updateCamera(dt);
-  buildObjectMask();
+  const tankVisible = !inLobby && !document.hidden;
 
-  if (!paused) {
-    simTime += dt;
-    injectEmitters();
-    stepGrid();
+  if (tankVisible) {
+    updateCamera(dt);
+    buildObjectMask();
+
+    if (!paused) {
+      simTime += dt;
+      injectEmitters();
+      stepGrid();
+    }
+
+    drawWater();
+    drawObjects();
+    drawEmitters(timestamp);
+  } else {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
-
-  drawWater();
-  drawObjects();
-  drawEmitters(timestamp);
 
   if (socket?.readyState === WebSocket.OPEN && timestamp - lastPingAt > PING_INTERVAL_MS) {
     lastPingAt = timestamp;
@@ -1392,7 +1506,8 @@ const draw = (timestamp: number): void => {
 initializeTheme();
 initializeDisplaySensitivity();
 initializeGradientDrawing();
-roomLabel.textContent = roomCode;
+renderTankSwitcher();
+updateBrowserRoom();
 resize();
 connect();
 window.requestAnimationFrame(draw);

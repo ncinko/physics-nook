@@ -86,24 +86,36 @@ const sendJson = (socket: WebSocket, message: unknown) => {
 test('ripples health reports the shared ripple world', async () => {
   await withServer(async (port) => {
     const response = await fetch(`http://127.0.0.1:${port}/ripples/health`);
-    const health = (await response.json()) as { ok: boolean; mode: string; defaultRoom: string };
+    const health = (await response.json()) as {
+      ok: boolean;
+      mode: string;
+      defaultRoom: string;
+      maxActiveUsers: number;
+      rooms: Array<{ roomCode: string; playerCount: number }>;
+    };
 
     assert.equal(health.ok, true);
     assert.equal(health.mode, 'ripples');
     assert.equal(health.defaultRoom, RIPPLE_CONFIG.defaultRoomCode);
+    assert.equal(health.maxActiveUsers, RIPPLE_CONFIG.maxActiveUsers);
+    assert.deepEqual(
+      health.rooms.map((room) => room.roomCode),
+      RIPPLE_CONFIG.persistentRoomCodes,
+    );
   });
 });
 
 test('ripples websocket shares splashes and emitter updates across users', async () => {
   await withServer(async (port) => {
-    const first = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=lab1`);
-    const second = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=lab1`);
+    const first = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=TANK2`);
+    const second = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=TANK2`);
 
     try {
-      sendJson(first, { type: 'rippleJoin', name: 'Ada', roomCode: 'lab1' });
+      sendJson(first, { type: 'rippleJoin', name: 'Ada', roomCode: 'TANK2' });
       const firstJoined = await waitForMessage<{
         type: string;
         you: string;
+        rooms: Array<{ roomCode: string; playerCount: number }>;
         snapshot: { roomCode: string; emitters: Array<{ id: string }>; objects: unknown[]; playerCount: number };
       }>(first, (message) => message.type === 'rippleJoined');
 
@@ -112,11 +124,12 @@ test('ripples websocket shares splashes and emitter updates across users', async
         (message) => message.type === 'ripplePresence' && message.playerCount === 2,
       );
       const secondJoined = waitForMessage<{ type: string }>(second, (message) => message.type === 'rippleJoined');
-      sendJson(second, { type: 'rippleJoin', name: 'Ben', roomCode: 'lab1' });
+      sendJson(second, { type: 'rippleJoin', name: 'Ben', roomCode: 'TANK2' });
       await secondJoined;
       await firstPresence;
 
-      assert.equal(firstJoined.snapshot.roomCode, 'LAB1');
+      assert.equal(firstJoined.snapshot.roomCode, 'TANK2');
+      assert.deepEqual(firstJoined.rooms.map((room) => room.roomCode), RIPPLE_CONFIG.persistentRoomCodes);
       assert.equal(firstJoined.snapshot.emitters.length, 3);
       assert.equal(firstJoined.snapshot.objects.length, 0);
       assert.ok(firstJoined.you);
@@ -257,6 +270,38 @@ test('ripples websocket handles pause, reset, and invalid payloads', async () =>
       await errorMessage;
     } finally {
       socket.close();
+    }
+  });
+});
+
+test('ripples websocket keeps only persistent tanks and sends overflow users to lobby', async () => {
+  await withServer(async (port) => {
+    const sockets: WebSocket[] = [];
+
+    try {
+      for (let index = 0; index < RIPPLE_CONFIG.maxActiveUsers; index += 1) {
+        const socket = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=custom-${index}`);
+        sockets.push(socket);
+        sendJson(socket, { type: 'rippleJoin', name: `User ${index}`, roomCode: `custom-${index}` });
+        const joined = await waitForMessage<{ type: string; snapshot: { roomCode: string } }>(
+          socket,
+          (message) => message.type === 'rippleJoined',
+        );
+        assert.equal(joined.snapshot.roomCode, RIPPLE_CONFIG.defaultRoomCode);
+      }
+
+      const overflow = await connectWebSocket(`ws://127.0.0.1:${port}/ripples?room=TANK3`);
+      sockets.push(overflow);
+      sendJson(overflow, { type: 'rippleJoin', name: 'Overflow', roomCode: 'TANK3' });
+      const lobby = await waitForMessage<{ type: string; reason: string; rooms: Array<{ roomCode: string }> }>(
+        overflow,
+        (message) => message.type === 'rippleLobby',
+      );
+
+      assert.equal(lobby.reason, 'full');
+      assert.deepEqual(lobby.rooms.map((room) => room.roomCode), RIPPLE_CONFIG.persistentRoomCodes);
+    } finally {
+      sockets.forEach((socket) => socket.close());
     }
   });
 });

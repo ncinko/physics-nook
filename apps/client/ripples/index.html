@@ -16,10 +16,10 @@
       <div class="edge-fade bottom" aria-hidden="true"></div>
 
       <header class="ripple-topbar">
-        <div class="ripple-title">
+        <button id="tankSwitcherButton" class="ripple-title" type="button" aria-expanded="false" aria-controls="tankSwitcher">
           <strong id="playerCount">Users: 0</strong>
           <span id="roomLabel">TANK</span>
-        </div>
+        </button>
 
         <div class="ripple-status">
           <div class="display-controls" aria-label="Display controls">
@@ -39,6 +39,14 @@
           </div>
         </div>
       </header>
+
+      <aside id="tankSwitcher" class="tank-switcher" aria-label="Ripple tanks" hidden>
+        <div class="tray-heading">
+          <strong>Ripple Tanks</strong>
+        </div>
+        <p id="lobbyNotice" class="lobby-notice" hidden>Choose a ripple tank to join.</p>
+        <div id="tankButtons" class="tank-buttons"></div>
+      </aside>
 
       <aside id="selectionPanel" class="selection-panel" aria-label="Selection controls" hidden>
         <div class="tray-heading">

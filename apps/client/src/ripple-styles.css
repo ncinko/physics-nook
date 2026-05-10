@@ -164,6 +164,7 @@ input:focus-visible {
 .ripple-title,
 .action-group,
 .display-controls,
+.tank-switcher,
 .selection-panel,
 .object-tray {
   border: 1px solid var(--panel-border);
@@ -179,6 +180,9 @@ input:focus-visible {
   max-width: min(390px, calc(100vw - 360px));
   gap: 2px;
   padding: 10px 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  text-align: left;
 }
 
 .ripple-title strong {
@@ -252,6 +256,7 @@ input:focus-visible {
   background: var(--button-hover);
 }
 
+.tank-switcher,
 .selection-panel,
 .object-tray {
   position: absolute;
@@ -289,6 +294,12 @@ input:focus-visible {
   width: min(340px, calc(100vw - 32px));
 }
 
+.tank-switcher {
+  top: 82px;
+  left: 16px;
+  width: min(260px, calc(100vw - 32px));
+}
+
 .object-tray {
   left: 16px;
   bottom: 16px;
@@ -315,6 +326,49 @@ input:focus-visible {
 .panel-section {
   display: grid;
   gap: 12px;
+}
+
+.lobby-notice {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.tank-buttons {
+  display: grid;
+  gap: 8px;
+}
+
+.tank-button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--button-border);
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--primary-text);
+  padding: 9px 10px;
+}
+
+.tank-button:hover,
+.tank-button[data-active="true"] {
+  background: var(--button-hover);
+}
+
+.tank-button strong {
+  font-size: 0.84rem;
+  line-height: 1;
+}
+
+.tank-button span {
+  color: var(--muted-text);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 .object-button {
@@ -489,6 +543,12 @@ input:focus-visible {
 
   .ripple-title {
     max-width: calc(100vw - 172px);
+  }
+
+  .tank-switcher {
+    top: 78px;
+    left: 12px;
+    width: min(260px, calc(100vw - 24px));
   }
 
   .ripple-status {

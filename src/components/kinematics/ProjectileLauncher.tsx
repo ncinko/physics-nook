@@ -25,6 +25,8 @@ type ProjectileState = {
 type DragMode = 'aim' | 'target' | null;
 
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+const VIEWPORT_WIDTH_M = 100;
+const GRID_STEP_M = 10;
 const INITIAL_PROJECTILE: ProjectileState = {
   t: 0,
   x: 0,
@@ -57,14 +59,6 @@ const makeProjectile = (angleDeg: number, speed: number): ProjectileState => {
     vx: speed * Math.cos(angle),
     vy: speed * Math.sin(angle),
   };
-};
-
-const niceStep = (target: number) => {
-  const power = 10 ** Math.floor(Math.log10(Math.max(0.0001, target)));
-  const candidates = [1, 2, 5, 10].map((value) => value * power);
-  return candidates.reduce((best, value) =>
-    Math.abs(value - target) < Math.abs(best - target) ? value : best,
-  );
 };
 
 export default function ProjectileLauncher() {
@@ -225,33 +219,36 @@ export default function ProjectileLauncher() {
     };
   }, [playing, step]);
 
-  const getWorldWindow = useCallback(() => {
-    const rangeMax = Math.max(70, targetX + 16, preview.range + 14, snapshot.x + 14);
-    const heightMax = Math.max(32, preview.maxHeight + 10, snapshot.maxHeight + 10);
-    const scale = Math.min((size.width - 84) / rangeMax, (size.height - 76) / heightMax);
-    return { scale: Math.max(3.2, scale), rangeMax, heightMax };
-  }, [preview.maxHeight, preview.range, size.height, size.width, snapshot.maxHeight, snapshot.x, targetX]);
+  const getWorldViewport = useCallback(() => {
+    const scale = (size.width - 84) / VIEWPORT_WIDTH_M;
+
+    return {
+      scale,
+      rangeMax: VIEWPORT_WIDTH_M,
+      heightMax: Math.max(0, (size.height - 76) / scale),
+    };
+  }, [size.height, size.width]);
 
   const worldToScreen = useCallback(
     (point: Point) => {
-      const { scale } = getWorldWindow();
+      const { scale } = getWorldViewport();
       return {
         x: 48 + point.x * scale,
         y: size.height - 42 - point.y * scale,
       };
     },
-    [getWorldWindow, size.height],
+    [getWorldViewport, size.height],
   );
 
   const screenToWorld = useCallback(
     (x: number, y: number) => {
-      const { scale } = getWorldWindow();
+      const { scale } = getWorldViewport();
       return {
         x: (x - 48) / scale,
         y: (size.height - 42 - y) / scale,
       };
     },
-    [getWorldWindow, size.height],
+    [getWorldViewport, size.height],
   );
 
   const drawScene = useCallback(() => {
@@ -286,9 +283,9 @@ export default function ProjectileLauncher() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size.width, size.height);
 
-    const { rangeMax, heightMax, scale } = getWorldWindow();
+    const { rangeMax, heightMax, scale } = getWorldViewport();
     const groundY = size.height - 42;
-    const stepMeters = niceStep(48 / scale);
+    const stepMeters = GRID_STEP_M;
 
     if (showGrid) {
       ctx.strokeStyle = grid;
@@ -418,7 +415,7 @@ export default function ProjectileLauncher() {
       ctx.stroke();
     }
   }, [
-    getWorldWindow,
+    getWorldViewport,
     gravity,
     initialComponents.vx,
     initialComponents.vy,
@@ -464,7 +461,7 @@ export default function ProjectileLauncher() {
     const point = screenToWorld(px, py);
 
     if (dragModeRef.current === 'target') {
-      setTargetX(clamp(point.x, 4, 180));
+      setTargetX(clamp(point.x, 4, VIEWPORT_WIDTH_M - 4));
       return;
     }
 

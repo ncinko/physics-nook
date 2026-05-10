@@ -45,18 +45,14 @@ type Snapshot = Runtime & {
 const STORAGE_KEY = 'physics-nook-2d-kinematics-best-v1';
 const GAME_TIME = 30;
 const PLAYER_RADIUS = 8;
-const BASE_ACCEL = 175;
-const MOUSE_ACCEL = 215;
-const MAX_ACCEL = 360;
+const CONTROL_ACCEL = 200;
+const BOOST_ACCEL_BONUS = 100;
 const MAX_SPEED = 820;
-const BOOST_MULTIPLIER = 1.8;
 const BOOST_DURATION = 5;
 const CLOCK_BONUS = 5;
 const SPAWN_COUNT = 4;
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
 
 const getCssColor = (name: string, fallback: string) => {
@@ -286,31 +282,32 @@ export default function Kinematics2DSandbox() {
     (dt: number) => {
       const runtime = runtimeRef.current;
       const keys = keysRef.current;
-      let ax = 0;
-      let ay = 0;
+      let controlX = 0;
+      let controlY = 0;
 
       if (pointerRef.current.active) {
-        const dx = pointerRef.current.x - runtime.x;
-        const dy = pointerRef.current.y - runtime.y;
-        const length = Math.hypot(dx, dy);
-        if (length > 0.0001) {
-          ax += (dx / length) * MOUSE_ACCEL;
-          ay += (dy / length) * MOUSE_ACCEL;
-        }
+        controlX = pointerRef.current.x - runtime.x;
+        controlY = pointerRef.current.y - runtime.y;
       } else {
-        if (keys.left) ax -= BASE_ACCEL;
-        if (keys.right) ax += BASE_ACCEL;
-        if (keys.up) ay -= BASE_ACCEL;
-        if (keys.down) ay += BASE_ACCEL;
+        controlX = Number(keys.right) - Number(keys.left);
+        controlY = Number(keys.down) - Number(keys.up);
+      }
+
+      let ax = 0;
+      let ay = 0;
+      const controlMagnitude = Math.hypot(controlX, controlY);
+      if (controlMagnitude > 0.0001) {
+        const controlAccel = CONTROL_ACCEL + (runtime.boostLeft > 0 ? BOOST_ACCEL_BONUS : 0);
+        ax = (controlX / controlMagnitude) * controlAccel;
+        ay = (controlY / controlMagnitude) * controlAccel;
       }
 
       if (runtime.gravityOn) {
         ay += 105;
       }
 
-      const boostMultiplier = runtime.boostLeft > 0 ? BOOST_MULTIPLIER : 1;
-      runtime.ax = clamp(ax * boostMultiplier, -MAX_ACCEL * boostMultiplier, MAX_ACCEL * boostMultiplier);
-      runtime.ay = clamp(ay * boostMultiplier, -MAX_ACCEL * boostMultiplier, MAX_ACCEL * boostMultiplier);
+      runtime.ax = ax;
+      runtime.ay = ay;
       runtime.boostLeft = Math.max(0, runtime.boostLeft - dt);
 
       if (runtime.running && !runtime.ended) {

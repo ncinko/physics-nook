@@ -17,11 +17,11 @@ const {
 
 const breakoutClass =
   width === 'full'
-    ? 'w-screen max-w-none'
-    : 'w-screen max-w-7xl';
+    ? 'w-[calc(100vw-2rem)] max-w-none sm:w-screen'
+    : 'w-[calc(100vw-2rem)] max-w-7xl sm:w-screen';
 ---
 
-<section class={`not-prose relative left-1/2 my-10 -translate-x-1/2 px-4 sm:px-6 lg:px-8 ${breakoutClass}`}>
+<section class={`not-prose relative left-1/2 my-10 -translate-x-1/2 sm:px-6 lg:px-8 ${breakoutClass}`}>
   <div
     data-simulation-block
     class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-theme-sim shadow-sm"

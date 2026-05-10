@@ -1,0 +1,738 @@
+import { Pause, Play, RotateCcw, Timer, Trophy, Zap } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+
+type Size = {
+  width: number;
+  height: number;
+};
+
+type SpawnKind = 'goal' | 'boost' | 'clock';
+
+type Spawn = {
+  id: number;
+  kind: SpawnKind;
+  x: number;
+  y: number;
+  radius: number;
+  points: number;
+  golden: boolean;
+};
+
+type Runtime = {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  ax: number;
+  ay: number;
+  running: boolean;
+  gravityOn: boolean;
+  goalRush: boolean;
+  score: number;
+  normalHits: number;
+  goldenHits: number;
+  timeLeft: number;
+  boostLeft: number;
+  ended: boolean;
+  spawns: Spawn[];
+  lastTime: number | null;
+};
+
+type Snapshot = Runtime & {
+  speed: number;
+};
+
+const STORAGE_KEY = 'physics-nook-2d-kinematics-best-v1';
+const GAME_TIME = 30;
+const PLAYER_RADIUS = 8;
+const BASE_ACCEL = 175;
+const MOUSE_ACCEL = 215;
+const MAX_ACCEL = 360;
+const MAX_SPEED = 820;
+const BOOST_MULTIPLIER = 1.8;
+const BOOST_DURATION = 5;
+const CLOCK_BONUS = 5;
+const SPAWN_COUNT = 4;
+const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+
+const clamp = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
+
+const getCssColor = (name: string, fallback: string) => {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+};
+
+const createRuntime = (): Runtime => ({
+  x: 0,
+  y: 0,
+  vx: 0,
+  vy: 0,
+  ax: 0,
+  ay: 0,
+  running: false,
+  gravityOn: false,
+  goalRush: false,
+  score: 0,
+  normalHits: 0,
+  goldenHits: 0,
+  timeLeft: GAME_TIME,
+  boostLeft: 0,
+  ended: false,
+  spawns: [],
+  lastTime: null,
+});
+
+const makeSnapshot = (runtime: Runtime): Snapshot => ({
+  ...runtime,
+  spawns: runtime.spawns.map((spawn) => ({ ...spawn })),
+  speed: Math.hypot(runtime.vx, runtime.vy),
+});
+
+const makeSpawn = (width: number, height: number, id: number): Spawn => {
+  const roll = Math.random();
+  const margin = 58;
+  const x = randomBetween(-width / 2 + margin, width / 2 - margin);
+  const y = randomBetween(-height / 2 + margin, height / 2 - margin);
+
+  if (roll < 0.14) {
+    return { id, kind: 'clock', x, y, radius: 16, points: 0, golden: false };
+  }
+
+  if (roll < 0.29) {
+    return { id, kind: 'boost', x, y, radius: 16, points: 0, golden: false };
+  }
+
+  const golden = Math.random() < 0.16;
+  return {
+    id,
+    kind: 'goal',
+    x,
+    y,
+    radius: golden ? 20 : 18,
+    points: golden ? 3 : 1,
+    golden,
+  };
+};
+
+export default function Kinematics2DSandbox() {
+  const [size, setSize] = useState<Size>({ width: 860, height: 560 });
+  const [snapshot, setSnapshot] = useState<Snapshot>(() => makeSnapshot(createRuntime()));
+  const [bestScore, setBestScore] = useState(0);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const runtimeRef = useRef<Runtime>(createRuntime());
+  const rafRef = useRef<number | null>(null);
+  const keysRef = useRef({ left: false, right: false, up: false, down: false });
+  const pointerRef = useRef<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
+  const spawnIdRef = useRef(0);
+
+  const readouts = useMemo(
+    () => [
+      { label: 'position', value: `<${snapshot.x.toFixed(0)}, ${(-snapshot.y).toFixed(0)}>` },
+      { label: 'velocity', value: `${snapshot.speed.toFixed(0)} px/s` },
+      { label: 'acceleration', value: `${Math.hypot(snapshot.ax, snapshot.ay).toFixed(0)} px/s^2` },
+      { label: 'score', value: snapshot.goalRush ? String(snapshot.score) : '--' },
+    ],
+    [snapshot.ax, snapshot.ay, snapshot.goalRush, snapshot.score, snapshot.speed, snapshot.x, snapshot.y],
+  );
+
+  const syncSnapshot = useCallback(() => {
+    setSnapshot(makeSnapshot(runtimeRef.current));
+  }, []);
+
+  const seedSpawns = useCallback(() => {
+    const runtime = runtimeRef.current;
+    const nextSpawns: Spawn[] = [];
+    for (let index = 0; index < SPAWN_COUNT; index += 1) {
+      spawnIdRef.current += 1;
+      nextSpawns.push(makeSpawn(size.width, size.height, spawnIdRef.current));
+    }
+    runtime.spawns = nextSpawns;
+  }, [size.height, size.width]);
+
+  const reset = useCallback(
+    (keepMode = true) => {
+      const previous = runtimeRef.current;
+      runtimeRef.current = {
+        ...createRuntime(),
+        goalRush: keepMode ? previous.goalRush : false,
+        gravityOn: keepMode ? previous.gravityOn : false,
+      };
+
+      if (runtimeRef.current.goalRush) {
+        seedSpawns();
+      }
+
+      syncSnapshot();
+    },
+    [seedSpawns, syncSnapshot],
+  );
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const parsed = raw ? Number(raw) : 0;
+    if (Number.isFinite(parsed)) {
+      setBestScore(parsed);
+    }
+  }, []);
+
+  useEffect(() => {
+    const element = wrapperRef.current;
+    if (!element) {
+      return undefined;
+    }
+
+    const resize = () => {
+      const width = Math.max(320, Math.floor(element.clientWidth));
+      const height = Math.max(380, Math.min(620, Math.round(width * 0.66)));
+      setSize({ width, height });
+    };
+
+    resize();
+    const observer = new ResizeObserver(resize);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (runtimeRef.current.goalRush) {
+      seedSpawns();
+      syncSnapshot();
+    }
+  }, [seedSpawns, syncSnapshot]);
+
+  useEffect(() => {
+    const updateKey = (event: KeyboardEvent, isDown: boolean) => {
+      const key = event.key.toLowerCase();
+      const usesControl =
+        key === 'arrowleft' ||
+        key === 'arrowright' ||
+        key === 'arrowup' ||
+        key === 'arrowdown' ||
+        key === 'a' ||
+        key === 'd' ||
+        key === 'w' ||
+        key === 's' ||
+        key === ' ';
+
+      if (!usesControl) {
+        return;
+      }
+
+      const active = document.activeElement;
+      if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      event.preventDefault();
+
+      keysRef.current.left = key === 'arrowleft' || key === 'a' ? isDown : keysRef.current.left;
+      keysRef.current.right = key === 'arrowright' || key === 'd' ? isDown : keysRef.current.right;
+      keysRef.current.up = key === 'arrowup' || key === 'w' ? isDown : keysRef.current.up;
+      keysRef.current.down = key === 'arrowdown' || key === 's' ? isDown : keysRef.current.down;
+
+      if (key === ' ' && isDown) {
+        runtimeRef.current.running = true;
+        syncSnapshot();
+      }
+    };
+
+    const onDown = (event: KeyboardEvent) => updateKey(event, true);
+    const onUp = (event: KeyboardEvent) => updateKey(event, false);
+    window.addEventListener('keydown', onDown, { passive: false });
+    window.addEventListener('keyup', onUp, { passive: false });
+
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+    };
+  }, [syncSnapshot]);
+
+  const toScreen = useCallback(
+    (x: number, y: number) => ({
+      x: size.width / 2 + x,
+      y: size.height / 2 + y,
+    }),
+    [size.height, size.width],
+  );
+
+  const toWorld = useCallback(
+    (x: number, y: number) => ({
+      x: x - size.width / 2,
+      y: y - size.height / 2,
+    }),
+    [size.height, size.width],
+  );
+
+  const finishGame = useCallback(() => {
+    const runtime = runtimeRef.current;
+    runtime.ended = true;
+    runtime.running = false;
+    runtime.timeLeft = 0;
+
+    if (runtime.score > bestScore) {
+      window.localStorage.setItem(STORAGE_KEY, String(runtime.score));
+      setBestScore(runtime.score);
+    }
+  }, [bestScore]);
+
+  const stepRuntime = useCallback(
+    (dt: number) => {
+      const runtime = runtimeRef.current;
+      const keys = keysRef.current;
+      let ax = 0;
+      let ay = 0;
+
+      if (pointerRef.current.active) {
+        const dx = pointerRef.current.x - runtime.x;
+        const dy = pointerRef.current.y - runtime.y;
+        const length = Math.hypot(dx, dy);
+        if (length > 0.0001) {
+          ax += (dx / length) * MOUSE_ACCEL;
+          ay += (dy / length) * MOUSE_ACCEL;
+        }
+      } else {
+        if (keys.left) ax -= BASE_ACCEL;
+        if (keys.right) ax += BASE_ACCEL;
+        if (keys.up) ay -= BASE_ACCEL;
+        if (keys.down) ay += BASE_ACCEL;
+      }
+
+      if (runtime.gravityOn) {
+        ay += 105;
+      }
+
+      const boostMultiplier = runtime.boostLeft > 0 ? BOOST_MULTIPLIER : 1;
+      runtime.ax = clamp(ax * boostMultiplier, -MAX_ACCEL * boostMultiplier, MAX_ACCEL * boostMultiplier);
+      runtime.ay = clamp(ay * boostMultiplier, -MAX_ACCEL * boostMultiplier, MAX_ACCEL * boostMultiplier);
+      runtime.boostLeft = Math.max(0, runtime.boostLeft - dt);
+
+      if (runtime.running && !runtime.ended) {
+        runtime.vx += runtime.ax * dt;
+        runtime.vy += runtime.ay * dt;
+        const speed = Math.hypot(runtime.vx, runtime.vy);
+        if (speed > MAX_SPEED) {
+          runtime.vx *= MAX_SPEED / speed;
+          runtime.vy *= MAX_SPEED / speed;
+        }
+        runtime.x += runtime.vx * dt;
+        runtime.y += runtime.vy * dt;
+
+        if (runtime.goalRush) {
+          runtime.timeLeft = Math.max(0, runtime.timeLeft - dt);
+          if (runtime.timeLeft <= 0) {
+            finishGame();
+          }
+        }
+      } else {
+        const damping = Math.exp(-2.4 * dt);
+        runtime.vx *= damping;
+        runtime.vy *= damping;
+        runtime.x += runtime.vx * dt;
+        runtime.y += runtime.vy * dt;
+      }
+
+      const halfW = size.width / 2 - PLAYER_RADIUS - 8;
+      const halfH = size.height / 2 - PLAYER_RADIUS - 8;
+      if (runtime.x < -halfW) {
+        runtime.x = -halfW;
+        runtime.vx *= -0.62;
+      }
+      if (runtime.x > halfW) {
+        runtime.x = halfW;
+        runtime.vx *= -0.62;
+      }
+      if (runtime.y < -halfH) {
+        runtime.y = -halfH;
+        runtime.vy *= -0.62;
+      }
+      if (runtime.y > halfH) {
+        runtime.y = halfH;
+        runtime.vy *= -0.62;
+      }
+
+      if (runtime.goalRush && runtime.running && !runtime.ended) {
+        runtime.spawns.forEach((spawn, index) => {
+          const touched = Math.hypot(runtime.x - spawn.x, runtime.y - spawn.y) <= PLAYER_RADIUS + spawn.radius;
+          if (!touched) {
+            return;
+          }
+
+          if (spawn.kind === 'goal') {
+            runtime.score += spawn.points;
+            if (spawn.golden) {
+              runtime.goldenHits += 1;
+            } else {
+              runtime.normalHits += 1;
+            }
+          } else if (spawn.kind === 'boost') {
+            runtime.boostLeft = BOOST_DURATION;
+          } else {
+            runtime.timeLeft += CLOCK_BONUS;
+          }
+
+          spawnIdRef.current += 1;
+          runtime.spawns[index] = makeSpawn(size.width, size.height, spawnIdRef.current);
+        });
+      }
+    },
+    [finishGame, size.height, size.width],
+  );
+
+  const drawScene = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.floor(size.width * dpr);
+    canvas.height = Math.floor(size.height * dpr);
+    canvas.style.width = `${size.width}px`;
+    canvas.style.height = `${size.height}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const bg = getCssColor('--sim-bg', '#f8fafc');
+    const grid = getCssColor('--grid-line', '#d1d5db');
+    const text = getCssColor('--text-primary', '#111827');
+    const muted = getCssColor('--text-muted', '#4b5563');
+    const blue = getCssColor('--accent-blue', '#3b82f6');
+    const red = getCssColor('--accent-red', '#ef4444');
+    const green = '#16a34a';
+    const amber = '#d97706';
+    const violet = '#7c3aed';
+
+    const runtime = runtimeRef.current;
+    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, size.width, size.height);
+
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    for (let x = size.width / 2; x <= size.width; x += 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size.height);
+      ctx.stroke();
+    }
+    for (let x = size.width / 2 - 50; x >= 0; x -= 50) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, size.height);
+      ctx.stroke();
+    }
+    for (let y = size.height / 2; y <= size.height; y += 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size.width, y);
+      ctx.stroke();
+    }
+    for (let y = size.height / 2 - 50; y >= 0; y -= 50) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(size.width, y);
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, size.height / 2);
+    ctx.lineTo(size.width, size.height / 2);
+    ctx.moveTo(size.width / 2, 0);
+    ctx.lineTo(size.width / 2, size.height);
+    ctx.stroke();
+
+    if (runtime.goalRush) {
+      runtime.spawns.forEach((spawn) => {
+        const point = toScreen(spawn.x, spawn.y);
+        if (spawn.kind === 'goal') {
+          ctx.strokeStyle = spawn.golden ? amber : green;
+          ctx.lineWidth = spawn.golden ? 4 : 3;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, spawn.radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = spawn.golden ? 'rgba(217,119,6,0.28)' : 'rgba(22,163,74,0.22)';
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, spawn.radius * 0.42, 0, Math.PI * 2);
+          ctx.fill();
+        } else if (spawn.kind === 'boost') {
+          ctx.fillStyle = red;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, spawn.radius, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = `700 18px ${FONT}`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('+', point.x, point.y);
+        } else {
+          ctx.strokeStyle = violet;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(point.x, point.y, spawn.radius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(point.x, point.y);
+          ctx.lineTo(point.x, point.y - 8);
+          ctx.moveTo(point.x, point.y);
+          ctx.lineTo(point.x + 7, point.y + 4);
+          ctx.stroke();
+        }
+      });
+    }
+
+    const player = toScreen(runtime.x, runtime.y);
+    if (runtime.boostLeft > 0) {
+      const pulse = 1 + 0.16 * Math.sin(performance.now() * 0.012);
+      ctx.fillStyle = 'rgba(239,68,68,0.18)';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, 25 * pulse, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    ctx.fillStyle = text;
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    drawArrow(ctx, player.x, player.y, player.x + runtime.vx * 0.18, player.y + runtime.vy * 0.18, blue, 'v');
+    drawArrow(ctx, player.x, player.y, player.x + runtime.ax * 0.24, player.y + runtime.ay * 0.24, amber, 'a');
+
+    ctx.fillStyle = text;
+    ctx.font = `600 13px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    if (runtime.goalRush) {
+      ctx.fillText(`time ${runtime.timeLeft.toFixed(1)} s`, 14, 12);
+      ctx.fillText(`score ${runtime.score}`, 14, 32);
+    } else {
+      ctx.fillText('sandbox', 14, 12);
+    }
+
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, size.width - 2, size.height - 2);
+  }, [size.height, size.width, toScreen]);
+
+  useEffect(() => {
+    const animate = (timestamp: number) => {
+      const runtime = runtimeRef.current;
+      const previous = runtime.lastTime ?? timestamp;
+      runtime.lastTime = timestamp;
+      const dt = Math.min(0.04, Math.max(0, (timestamp - previous) / 1000));
+      stepRuntime(dt);
+      drawScene();
+      setSnapshot(makeSnapshot(runtime));
+      rafRef.current = requestAnimationFrame(animate);
+    };
+
+    rafRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [drawScene, stepRuntime]);
+
+  const setRunning = (running: boolean) => {
+    const runtime = runtimeRef.current;
+    if (runtime.ended && running) {
+      reset(true);
+      runtimeRef.current.running = true;
+    } else {
+      runtime.running = running;
+    }
+    syncSnapshot();
+  };
+
+  const setGoalRush = (goalRush: boolean) => {
+    const runtime = runtimeRef.current;
+    runtime.goalRush = goalRush;
+    runtime.running = false;
+    runtime.ended = false;
+    runtime.timeLeft = GAME_TIME;
+    runtime.score = 0;
+    runtime.normalHits = 0;
+    runtime.goldenHits = 0;
+    runtime.boostLeft = 0;
+    runtime.spawns = [];
+    if (goalRush) {
+      seedSpawns();
+    }
+    syncSnapshot();
+  };
+
+  const setGravity = (gravityOn: boolean) => {
+    runtimeRef.current.gravityOn = gravityOn;
+    syncSnapshot();
+  };
+
+  const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const point = toWorld(event.clientX - rect.left, event.clientY - rect.top);
+    pointerRef.current = { active: true, x: point.x, y: point.y };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (!pointerRef.current.active) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const point = toWorld(event.clientX - rect.left, event.clientY - rect.top);
+    pointerRef.current = { active: true, x: point.x, y: point.y };
+  };
+
+  const handlePointerUp = () => {
+    pointerRef.current.active = false;
+  };
+
+  return (
+    <div ref={wrapperRef} className="flex h-full min-h-[44rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
+      <div className="grid gap-3 md:grid-cols-4">
+        {readouts.map((readout) => (
+          <Readout key={readout.label} label={readout.label} value={readout.value} />
+        ))}
+      </div>
+
+      <canvas
+        ref={canvasRef}
+        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+        style={{ touchAction: 'none' }}
+        aria-label="Two-dimensional acceleration sandbox with velocity and acceleration vectors"
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      />
+
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.6fr)]">
+        <div className="flex flex-wrap gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
+          <button type="button" title={snapshot.running ? 'Pause' : 'Start'} onClick={() => setRunning(!snapshot.running)} className={buttonClass}>
+            {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {snapshot.running ? 'Pause' : 'Start'}
+          </button>
+          <button type="button" title="Reset" onClick={() => reset(true)} className={buttonClass}>
+            <RotateCcw className="h-4 w-4" />
+            Reset
+          </button>
+          <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
+          <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
+        </div>
+
+        <div className="grid gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 text-sm shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+              <Timer className="h-4 w-4 text-[var(--accent-blue)]" />
+              Time
+            </span>
+            <strong>{snapshot.goalRush ? `${snapshot.timeLeft.toFixed(1)} s` : 'sandbox'}</strong>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+              <Trophy className="h-4 w-4 text-[#d97706]" />
+              Best
+            </span>
+            <strong>{bestScore}</strong>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+              <Zap className="h-4 w-4 text-[var(--accent-red)]" />
+              Boost
+            </span>
+            <strong>{snapshot.boostLeft > 0 ? `${snapshot.boostLeft.toFixed(1)} s` : '--'}</strong>
+          </div>
+        </div>
+      </div>
+
+      {snapshot.goalRush && snapshot.ended && (
+        <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 text-center shadow-sm">
+          <p className="m-0 text-lg font-semibold">Final score: {snapshot.score}</p>
+          <p className="mt-1 mb-0 text-sm text-[var(--text-muted)]">
+            Normal zones: {snapshot.normalHits}. Golden zones: {snapshot.goldenHits}.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const buttonClass =
+  'inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]';
+
+function Readout({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
+      <div className="text-xs font-semibold uppercase text-[var(--text-muted)]">{label}</div>
+      <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{value}</div>
+    </div>
+  );
+}
+
+function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
+  return (
+    <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        className="accent-[var(--accent-blue)]"
+      />
+      {label}
+    </label>
+  );
+}
+
+function drawArrow(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: string,
+  label: string,
+) {
+  if (Math.hypot(x1 - x0, y1 - y0) < 2) {
+    return;
+  }
+
+  const angle = Math.atan2(y1 - y0, x1 - x0);
+  const head = 8;
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x0, y0);
+  ctx.lineTo(x1, y1);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
+  ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+  ctx.closePath();
+  ctx.fill();
+  ctx.font = `700 13px ${FONT}`;
+  ctx.fillText(label, x1 + 8, y1 + 4);
+  ctx.restore();
+}

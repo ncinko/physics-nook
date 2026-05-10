@@ -1,0 +1,288 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: 2D Kinematics
+description: Extend kinematics into two dimensions with vector components, projectile motion, and interactive acceleration sandboxes.
+canonicalPath: /kinematics/two-dimensional
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import LaunchDecomposition from '../../components/kinematics/LaunchDecomposition';
+import ProjectileLauncher from '../../components/kinematics/ProjectileLauncher';
+import Kinematics2DSandbox from '../../components/kinematics/Kinematics2DSandbox';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/kinematics/two-dimensional" />
+
+<div id="page-content"></div>
+
+# 2D Kinematics
+
+In one dimension, position, velocity, and acceleration each need one signed number, or **scalar**. In two dimensions, each quantity becomes a **vector** with horizontal and vertical components:
+
+$$
+\begin{aligned}
+\vec{r} &= \langle x, y \rangle,\\
+\vec{v} &= \langle v_x, v_y \rangle,\\
+\vec{a} &= \langle a_x, a_y \rangle.
+\end{aligned}
+$$
+
+The definitions are the same, but we now track motion along two perpendicular axes.
+
+## Component Motion
+
+The useful trick is to split the vector equation into component equations. If acceleration is constant, then
+
+$$
+\vec{v}(t) = \vec{v}_i + \vec{a}t,
+$$
+
+and
+
+$$
+\vec{r}(t) = \vec{r}_i + \vec{v}_it + \frac{1}{2}\vec{a}t^2.
+$$
+
+Written as separate horizontal and vertical equations, this becomes
+
+$$
+\begin{aligned}
+v_x(t) &= v_{ix} + a_xt,\\
+v_y(t) &= v_{iy} + a_yt,
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+x(t) &= x_i + v_{ix}t + \frac{1}{2}a_xt^2,\\
+y(t) &= y_i + v_{iy}t + \frac{1}{2}a_yt^2.
+\end{aligned}
+$$
+
+Note that these equations are tied together by a common variable $$t$$. This shared time is what lets us combine the separate one-dimensional calculations into a two-dimensional path.
+
+
+## Launch Components
+
+Projectile problems often describe an initial velocity using a launch speed $v_0$ and angle $\theta$. The horizontal and vertical pieces are
+
+$$
+v_{0x} = v_0\cos\theta,
+\qquad
+v_{0y} = v_0\sin\theta.
+$$
+
+<SimulationBlock
+  title="Launch Decomposition"
+  description="Drag the launch vector or use the sliders to see how speed and angle set the horizontal and vertical velocity components."
+>
+  <LaunchDecomposition client:only="react" />
+</SimulationBlock>
+
+## Projectile Motion
+
+A simple projectile has no horizontal acceleration and a constant downward acceleration from gravity:
+
+$$
+\vec{a} = \langle 0, -g \rangle,
+\qquad
+g \approx 9.8\,\text{m/s}^2.
+$$
+
+If the projectile starts at the origin, the component equations become
+
+$$
+\begin{aligned}
+x(t) &= v_{0x}t,\\
+y(t) &= v_{0y}t - \frac{1}{2}gt^2,
+\end{aligned}
+$$
+
+$$
+\begin{aligned}
+v_x(t) &= v_{0x},\\
+v_y(t) &= v_{0y} - gt.
+\end{aligned}
+$$
+
+The horizontal component of velocity stays constant while the vertical component changes steadily due to gravity. A projectile effectively moves sideways at a steady rate while its height rises, pauses, and then falls.
+
+<DerivationPanel title="Why is the projectile path a parabola?">
+  Start with the horizontal equation:
+
+  $$
+  x = v_{0x}t.
+  $$
+
+  If $v_{0x} \neq 0$, then
+
+  $$
+  t = \frac{x}{v_{0x}}.
+  $$
+
+  Substitute that time into the vertical equation:
+
+  $$
+  y = v_{0y}\left(\frac{x}{v_{0x}}\right)
+  - \frac{1}{2}g\left(\frac{x}{v_{0x}}\right)^2.
+  $$
+
+  With $v_{0x} = v_0\cos\theta$ and $v_{0y} = v_0\sin\theta$, this can be written as
+
+  $$
+  y = (\tan\theta)x -
+  \frac{g}{2v_0^2\cos^2\theta}x^2.
+  $$
+
+  That is a quadratic function of $x$, so the trajectory is a parabola.
+</DerivationPanel>
+
+<SimulationBlock
+  title="Projectile Launcher"
+  description="Aim, launch, and compare the predicted range with the actual path. Add drag to see where the ideal equations stop being exact."
+  width="full"
+>
+  <ProjectileLauncher client:only="react" />
+</SimulationBlock>
+
+## Acceleration in Two Dimensions
+
+The same component idea works even when you are not solving a standard projectile problem. Acceleration changes the velocity vector, and velocity changes the position vector:
+
+$$
+\begin{aligned}
+\Delta \vec{v} &= \vec{a}\Delta t,\\
+\Delta \vec{r} &\approx \vec{v}\Delta t.
+\end{aligned}
+$$
+
+If acceleration points in the same direction as velocity, the object speeds up. If acceleration points opposite the velocity, it slows down. If acceleration points sideways, it bends the path.
+
+<SimulationBlock
+  title="2D Acceleration Sandbox"
+  description="Use arrow keys, WASD, or pointer drag to accelerate the object. Goal Rush turns the same vector rules into a short collection challenge."
+  width="full"
+>
+  <Kinematics2DSandbox client:only="react" />
+</SimulationBlock>
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Soccer Ball Components"
+    accent="blue"
+  >
+    #### Problem
+
+    A soccer ball is kicked at $20\,\text{m/s}$ at an angle of $30^\circ$ above the horizontal. Find its initial velocity components.
+
+    #### Given
+
+    - $v_0 = 20\,\text{m/s}$
+    - $\theta = 30^\circ$
+
+    #### Use
+
+    $$
+    v_{0x} = v_0\cos\theta,
+    \qquad
+    v_{0y} = v_0\sin\theta.
+    $$
+
+    #### Solve
+
+    $$
+    v_{0x} = (20)\cos 30^\circ \approx 17.3\,\text{m/s},
+    $$
+
+    $$
+    v_{0y} = (20)\sin 30^\circ = 10.0\,\text{m/s}.
+    $$
+
+    #### Check
+
+    The launch angle is closer to horizontal than vertical, so the horizontal component should be larger than the vertical component. It is.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Time of Flight and Range"
+    accent="blue"
+  >
+    #### Problem
+
+    Using the same soccer ball, find the time to maximum height, total flight time, and horizontal range. Assume it lands at the same height it was kicked from and ignore air resistance.
+
+    #### Given
+
+    - $v_{0x} \approx 17.3\,\text{m/s}$
+    - $v_{0y} = 10.0\,\text{m/s}$
+    - $g = 9.8\,\text{m/s}^2$
+
+    #### Solve
+
+    At maximum height, $v_y = 0$:
+
+    $$
+    0 = v_{0y} - gt
+    \qquad \Rightarrow \qquad
+    t = \frac{v_{0y}}{g}
+    = \frac{10.0}{9.8}
+    \approx 1.02\,\text{s}.
+    $$
+
+    For a level landing, the trip down mirrors the trip up, so
+
+    $$
+    T \approx 2(1.02) = 2.04\,\text{s}.
+    $$
+
+    The horizontal range is
+
+    $$
+    R = v_{0x}T \approx (17.3)(2.04)
+    \approx 35.3\,\text{m}.
+    $$
+
+    #### Check
+
+    A two-second flight at a little over $17\,\text{m/s}$ horizontally should cover a bit more than $34\,\text{m}$, so $35.3\,\text{m}$ is reasonable.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="2D Kinematics Checkpoint"
+  questions={[
+    {
+      id: 'projectile-horizontal-velocity',
+      question: 'In ideal projectile motion with no air resistance, what happens to the horizontal velocity?',
+      options: [
+        { id: 'A', text: 'It stays constant because $a_x = 0$.', isCorrect: true, explanation: 'Gravity acts vertically, so the horizontal acceleration is zero. With no horizontal acceleration, $v_x$ remains constant.' },
+        { id: 'B', text: 'It decreases because gravity slows all motion.', isCorrect: false, explanation: 'Gravity changes the vertical component of velocity, not the horizontal component in the ideal projectile model.' },
+        { id: 'C', text: 'It increases until the projectile reaches maximum height.', isCorrect: false, explanation: 'Maximum height is determined by $v_y = 0$. It does not require a change in $v_x$.' }
+      ]
+    },
+    {
+      id: 'maximum-height',
+      question: 'What is true at the top of an ideal projectile path?',
+      options: [
+        { id: 'B', text: '$v_y = 0$ but acceleration is still downward.', isCorrect: true, explanation: 'At the top, the vertical velocity momentarily reaches zero. Gravity still acts, so the acceleration remains $-g$ in the vertical direction.' },
+        { id: 'A', text: 'Both velocity and acceleration are zero.', isCorrect: false, explanation: 'The vertical velocity is zero at the top, but horizontal velocity can remain nonzero and gravity still provides downward acceleration.' },
+        { id: 'C', text: 'The horizontal velocity becomes zero.', isCorrect: false, explanation: 'In ideal projectile motion, the horizontal velocity is unchanged throughout the flight.' }
+      ]
+    },
+    {
+      id: 'sideways-acceleration',
+      question: 'If acceleration is mostly perpendicular to velocity, what is the immediate effect?',
+      options: [
+        { id: 'C', text: 'The path bends because the velocity direction changes.', isCorrect: true, explanation: 'A perpendicular acceleration changes the direction of the velocity vector more than its magnitude, so the path curves.' },
+        { id: 'A', text: 'The object must stop.', isCorrect: false, explanation: 'Stopping requires acceleration opposite the velocity for long enough to reduce speed to zero.' },
+        { id: 'B', text: 'Only the position changes; velocity is unaffected.', isCorrect: false, explanation: 'Acceleration is the rate of change of velocity, so it directly changes the velocity vector.' }
+      ]
+    }
+  ]}
+/>

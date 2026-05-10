@@ -9,9 +9,15 @@ import SimulationBlock from '../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import ModuleHero from '../components/modules/ModuleHero.astro';
 import VelocityExplorer from '../components/kinematics/VelocityExplorer';
 import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
+import { mechanicsPath } from '../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/kinematics" />
+
+<div id="page-content"></div>
 
 # 1D Kinematics
 
@@ -65,9 +71,9 @@ $$
 = \frac{v_2 - v_1}{t_2 - t_1}.
 $$
 
-This can be a tricky concept to grasp fully, as it's a bit recursive.  Velocity is already a rate of change (in position).  Acceleration is a rate of change [in velocity].  This means acceleration is also a rate of change [in a rate of change (in position)].
+This can be a tricky concept to grasp fully, but the good news is that you already have incredible intuition for what it *feels like* to experience acceleration.  The challenge is to connect this everyday experience to these more precise mathematical ideas.
 
-The good news is that you already have incredible intuition for what it *feels like* to experience acceleration.  The challenge is to connect this everyday experience to these more precise mathematical ideas.
+Note that the relationship between acceleration and velocity is analogous to the relationship between velocity and position.  Velocity is a rate of change (in position).  Acceleration is a rate of change [in velocity].  This means acceleration is also a rate of change [in a rate of change (in position)].
 
 As with velocity, instantaneous acceleration is the acceleration at one moment in time:
 

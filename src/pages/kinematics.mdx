@@ -141,34 +141,55 @@ $$
 = v_i t + \frac{1}{2}at^2.
 $$
 
-To remove time, use $t = (v_f - v_i)/a$ in the average-velocity displacement equation:
+<DerivationPanel
+  title="Where does the no-time equation come from?"
+  prompt="Open this when you want the algebra that removes time from the constant-acceleration equations."
+>
+  To remove time, use $t = (v_f - v_i)/a$ in the average-velocity displacement equation:
 
-$$
-\Delta x
-= \left(\frac{v_i + v_f}{2}\right)
-\left(\frac{v_f - v_i}{a}\right)
-= \frac{v_f^2 - v_i^2}{2a}.
-$$
+  $$
+  \Delta x
+  = \left(\frac{v_i + v_f}{2}\right)
+  \left(\frac{v_f - v_i}{a}\right)
+  = \frac{v_f^2 - v_i^2}{2a}.
+  $$
 
-Rearranging gives
+  Rearranging gives
 
-$$
-v_f^2 = v_i^2 + 2a\Delta x.
-$$
+  $$
+  v_f^2 = v_i^2 + 2a\Delta x.
+  $$
+</DerivationPanel>
 
 Together, for constant acceleration,
 
-$$
-v_f = v_i + at,
-\qquad
-\Delta x = \left(\frac{v_i + v_f}{2}\right)t,
-$$
+<div class="not-prose my-6 rounded-[1.35rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-5 py-5 shadow-sm">
+  <div class="grid gap-4 md:grid-cols-2">
+    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+      $$
+      v_f = v_i + at
+      $$
+    </div>
 
-$$
-\Delta x = v_i t + \frac{1}{2}at^2,
-\qquad
-v_f^2 = v_i^2 + 2a\Delta x.
-$$
+    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+      $$
+      \Delta x = \left(\frac{v_i + v_f}{2}\right)t
+      $$
+    </div>
+
+    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+      $$
+      \Delta x = v_i t + \frac{1}{2}at^2
+      $$
+    </div>
+
+    <div class="rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3">
+      $$
+      v_f^2 = v_i^2 + 2a\Delta x
+      $$
+    </div>
+  </div>
+</div>
 
 If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
 

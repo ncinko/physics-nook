@@ -269,7 +269,7 @@ export const createRippleWorld = () => {
 
   const getJoinedRoom = (client: RippleClient): RippleRoom | null => {
     if (!client.joined) {
-      sendError(client, 'Join Ripple Tank Studio before sending actions.');
+      sendError(client, 'Join Ripple Tank before sending actions.');
       return null;
     }
 

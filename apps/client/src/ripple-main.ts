@@ -55,39 +55,55 @@ type DragState = {
 const canvas = document.getElementById('rippleCanvas') as HTMLCanvasElement | null;
 const roomLabel = document.getElementById('roomLabel');
 const playerCount = document.getElementById('playerCount');
-const emitterCount = document.getElementById('emitterCount');
-const connectionPill = document.getElementById('connectionPill');
-const statusText = document.getElementById('statusText');
 const themeButton = document.getElementById('themeButton') as HTMLButtonElement | null;
 const pauseButton = document.getElementById('pauseButton') as HTMLButtonElement | null;
 const resetButton = document.getElementById('resetButton') as HTMLButtonElement | null;
-const emitterButtons = document.getElementById('emitterButtons');
+const selectionPanel = document.getElementById('selectionPanel') as HTMLElement | null;
+const selectionPanelTitle = document.getElementById('selectionPanelTitle');
+const selectionCloseButton = document.getElementById('selectionCloseButton') as HTMLButtonElement | null;
+const emitterControls = document.getElementById('emitterControls') as HTMLElement | null;
+const objectControls = document.getElementById('objectControls') as HTMLElement | null;
 const amplitudeInput = document.getElementById('amplitudeInput') as HTMLInputElement | null;
 const frequencyInput = document.getElementById('frequencyInput') as HTMLInputElement | null;
 const phaseInput = document.getElementById('phaseInput') as HTMLInputElement | null;
 const sensitivityInput = document.getElementById('sensitivityInput') as HTMLInputElement | null;
 const gradientInput = document.getElementById('gradientInput') as HTMLInputElement | null;
 const enableButton = document.getElementById('enableButton') as HTMLButtonElement | null;
+const objectWidthInput = document.getElementById('objectWidthInput') as HTMLInputElement | null;
+const objectHeightInput = document.getElementById('objectHeightInput') as HTMLInputElement | null;
+const objectGapControl = document.getElementById('objectGapControl') as HTMLElement | null;
+const objectGapInput = document.getElementById('objectGapInput') as HTMLInputElement | null;
+const objectSpacingControl = document.getElementById('objectSpacingControl') as HTMLElement | null;
+const objectSpacingInput = document.getElementById('objectSpacingInput') as HTMLInputElement | null;
+const deleteButton = document.getElementById('deleteButton') as HTMLButtonElement | null;
 
 if (
   !canvas ||
   !roomLabel ||
   !playerCount ||
-  !emitterCount ||
-  !connectionPill ||
-  !statusText ||
   !themeButton ||
   !pauseButton ||
   !resetButton ||
-  !emitterButtons ||
+  !selectionPanel ||
+  !selectionPanelTitle ||
+  !selectionCloseButton ||
+  !emitterControls ||
+  !objectControls ||
   !amplitudeInput ||
   !frequencyInput ||
   !phaseInput ||
   !sensitivityInput ||
   !gradientInput ||
-  !enableButton
+  !enableButton ||
+  !objectWidthInput ||
+  !objectHeightInput ||
+  !objectGapControl ||
+  !objectGapInput ||
+  !objectSpacingControl ||
+  !objectSpacingInput ||
+  !deleteButton
 ) {
-  throw new Error('Ripple Tank Studio markup is missing required elements.');
+  throw new Error('Ripple Tank markup is missing required elements.');
 }
 
 const ctx = canvas.getContext('2d', { alpha: true });
@@ -114,6 +130,9 @@ const OBJECT_SEND_INTERVAL_MS = 44;
 const PING_INTERVAL_MS = 2000;
 const SPLASH_PROCESSED_LIMIT = 500;
 const CAMERA_SPEED_SCREENS = 0.92;
+const MIN_CAMERA_ZOOM = 0.65;
+const MAX_CAMERA_ZOOM = 3;
+const WHEEL_ZOOM_RATE = 0.0012;
 const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
 const SENSITIVITY_STORAGE_KEY = 'physics-nook-ripple-display-sensitivity';
 const GRADIENT_DRAW_STORAGE_KEY = 'physics-nook-ripple-gradient-draw';
@@ -176,7 +195,7 @@ let localPlayerId: string | null = null;
 let latestSnapshot: RippleSnapshot | null = null;
 let emitters: RippleEmitterSnapshot[] = [];
 let objects: RippleObjectSnapshot[] = [];
-let selectedEmitterId = 'cool-left';
+let selectedEmitterId: string | null = null;
 let selectedObjectId: string | null = null;
 let pendingObjectKind: RippleObjectKind | null = null;
 let paused = false;
@@ -192,7 +211,7 @@ let objectMask = new Uint8Array(0);
 let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
 let useGradientDrawing = false;
 const keyState = new Set<string>();
-const camera = { xScreens: 0, yScreens: 0 };
+const camera = { xScreens: 0, yScreens: 0, zoom: 1 };
 
 const size: PoolSize = {
   width: 0,
@@ -211,10 +230,12 @@ const size: PoolSize = {
 let grid = createGridState(size.cols, size.rows);
 let dragState = emptyDragState();
 
-const setConnectionState = (state: ConnectionState, label: string): void => {
+const setConnectionState = (state: ConnectionState, _label: string): void => {
   connectionState = state;
-  connectionPill.dataset.state = state;
-  statusText.textContent = label;
+};
+
+const setPlayerCount = (count: number): void => {
+  playerCount.textContent = `Users: ${count}`;
 };
 
 const applyTheme = (theme: 'light' | 'dark'): void => {
@@ -305,10 +326,43 @@ const sendMessage = (message: RippleClientToServerMessage): void => {
   socket.send(JSON.stringify(message));
 };
 
-const visibleOrigin = () => ({
-  col: size.sinkCols + Math.round((camera.xScreens + 1) * size.viewCols),
-  row: size.sinkRows + Math.round((camera.yScreens + 1) * size.viewRows),
-});
+const viewMetrics = () => {
+  const visibleCols = size.viewCols / camera.zoom;
+  const visibleRows = size.viewRows / camera.zoom;
+
+  return {
+    visibleCols,
+    visibleRows,
+    cellWidth: size.width / visibleCols,
+    cellHeight: size.height / visibleRows,
+  };
+};
+
+const screenCellWidth = (): number => viewMetrics().cellWidth;
+const screenCellHeight = (): number => viewMetrics().cellHeight;
+
+const maxVisibleOriginOffset = () => {
+  const metrics = viewMetrics();
+  return {
+    col: Math.max(0, size.activeCols - metrics.visibleCols),
+    row: Math.max(0, size.activeRows - metrics.visibleRows),
+  };
+};
+
+const visibleOrigin = () => {
+  const maxOffset = maxVisibleOriginOffset();
+
+  return {
+    col: size.sinkCols + ((camera.xScreens + 1) / 2) * maxOffset.col,
+    row: size.sinkRows + ((camera.yScreens + 1) / 2) * maxOffset.row,
+  };
+};
+
+const originToCameraPosition = (col: number, row: number): void => {
+  const maxOffset = maxVisibleOriginOffset();
+  camera.xScreens = maxOffset.col > 0 ? clamp(((col - size.sinkCols) / maxOffset.col) * 2 - 1, -1, 1) : 0;
+  camera.yScreens = maxOffset.row > 0 ? clamp(((row - size.sinkRows) / maxOffset.row) * 2 - 1, -1, 1) : 0;
+};
 
 const worldToGrid = (point: { x: number; y: number }) => ({
   col: size.sinkCols + point.x * (size.activeCols - 1),
@@ -318,17 +372,19 @@ const worldToGrid = (point: { x: number; y: number }) => ({
 const worldToScreen = (point: { x: number; y: number }) => {
   const origin = visibleOrigin();
   const gridPoint = worldToGrid(point);
+  const metrics = viewMetrics();
   return {
-    x: (gridPoint.col - origin.col) * size.cellWidth,
-    y: (gridPoint.row - origin.row) * size.cellHeight,
+    x: (gridPoint.col - origin.col) * metrics.cellWidth,
+    y: (gridPoint.row - origin.row) * metrics.cellHeight,
   };
 };
 
 const screenToWorld = (x: number, y: number) => {
   const origin = visibleOrigin();
+  const metrics = viewMetrics();
   return {
-    x: clamp((origin.col + x / size.cellWidth - size.sinkCols) / (size.activeCols - 1), 0, 1),
-    y: clamp((origin.row + y / size.cellHeight - size.sinkRows) / (size.activeRows - 1), 0, 1),
+    x: clamp((origin.col + x / metrics.cellWidth - size.sinkCols) / (size.activeCols - 1), 0, 1),
+    y: clamp((origin.row + y / metrics.cellHeight - size.sinkRows) / (size.activeRows - 1), 0, 1),
   };
 };
 
@@ -398,8 +454,8 @@ const applySplashEvent = (splash: RippleSplashEvent, referenceTime: number): voi
   addSplash(splash.x, splash.y, splash.strength * Math.exp(-ageSeconds * 0.55), splash.radius);
 };
 
-const activeWorldPixelWidth = (): number => (size.activeCols - 1) * size.cellWidth;
-const activeWorldPixelHeight = (): number => (size.activeRows - 1) * size.cellHeight;
+const activeWorldPixelWidth = (): number => (size.activeCols - 1) * screenCellWidth();
+const activeWorldPixelHeight = (): number => (size.activeRows - 1) * screenCellHeight();
 
 const isSlitObjectKind = (kind: RippleObjectKind): kind is 'single-slit' | 'double-slit' =>
   kind === 'single-slit' || kind === 'double-slit';
@@ -413,15 +469,17 @@ const slitOpeningRanges = (
   kind: 'single-slit' | 'double-slit',
   height: number,
   gap: number,
+  spacing = 0,
 ): SlitOpeningRange[] => {
   if (kind === 'single-slit') {
-    const slitHeight = clamp(gap, 2, Math.max(2, height * 0.72));
+    const slitHeight = clamp(gap, Math.max(screenCellHeight(), 2), Math.max(2, height * 0.72));
     return [{ start: -slitHeight / 2, end: slitHeight / 2 }];
   }
 
-  const slitHeight = clamp(gap, 2, Math.max(2, height * 0.28));
+  const slitHeight = clamp(gap, Math.max(screenCellHeight(), 2), Math.max(2, height * 0.28));
   const maxOffset = Math.max(0, height / 2 - slitHeight / 2 - 1);
-  const offset = Math.min(Math.max(slitHeight * 0.8, height * 0.18), maxOffset);
+  const centerSpacing = clamp(slitHeight + spacing, slitHeight + Math.max(screenCellHeight(), 2), height - slitHeight);
+  const offset = Math.min(centerSpacing / 2, maxOffset);
 
   return [
     { start: -offset - slitHeight / 2, end: -offset + slitHeight / 2 },
@@ -498,7 +556,8 @@ const isPointInsideObject = (
 
   if (isSlitObjectKind(object.kind)) {
     const gap = object.gap * worldPixelHeight;
-    const openings = slitOpeningRanges(object.kind, height, gap);
+    const spacing = (object.spacing ?? 0.058) * worldPixelHeight;
+    const openings = slitOpeningRanges(object.kind, height, gap, spacing);
     return (
       Math.abs(local.x) <= halfWidth + paddingPx &&
       Math.abs(local.y) <= halfHeight + paddingPx &&
@@ -509,7 +568,7 @@ const isPointInsideObject = (
   if (Math.abs(local.x) > halfWidth + paddingPx) return false;
   const t = local.x / Math.max(halfWidth, 1e-6);
   const curveY = t * t * height - halfHeight;
-  const thickness = Math.max(Math.min(size.cellWidth, size.cellHeight) * 1.4, Math.min(width, height) * 0.12);
+  const thickness = Math.max(Math.min(screenCellWidth(), screenCellHeight()) * 1.4, Math.min(width, height) * 0.12);
   return Math.abs(local.y - curveY) <= thickness + paddingPx;
 };
 
@@ -662,6 +721,7 @@ const gradientWaterFill = (
 
 const drawWater = (): void => {
   const origin = visibleOrigin();
+  const metrics = viewMetrics();
   const current = grid.current;
   const lightMode = document.documentElement.dataset.theme !== 'dark';
   const threshold = displayThreshold();
@@ -671,12 +731,15 @@ const drawWater = (): void => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  for (let viewRow = 1; viewRow < size.viewRows - 1; viewRow += 1) {
-    const row = origin.row + viewRow;
+  const visibleRows = Math.ceil(metrics.visibleRows);
+  const visibleCols = Math.ceil(metrics.visibleCols);
+
+  for (let viewRow = 1; viewRow < visibleRows - 1; viewRow += 1) {
+    const row = Math.round(origin.row + viewRow);
     if (row <= 0 || row >= size.rows - 1) continue;
 
-    for (let viewCol = 1; viewCol < size.viewCols - 1; viewCol += 1) {
-      const col = origin.col + viewCol;
+    for (let viewCol = 1; viewCol < visibleCols - 1; viewCol += 1) {
+      const col = Math.round(origin.col + viewCol);
       if (col <= 0 || col >= size.cols - 1) continue;
 
       const index = row * size.cols + col;
@@ -684,12 +747,12 @@ const drawWater = (): void => {
       const magnitude = Math.abs(value);
       if (magnitude < threshold && !objectMask[index]) continue;
 
-      const x = viewCol * size.cellWidth;
-      const y = viewRow * size.cellHeight;
+      const x = viewCol * metrics.cellWidth;
+      const y = viewRow * metrics.cellHeight;
 
       if (objectMask[index]) {
         ctx.fillStyle = lightMode ? 'rgba(15, 87, 116, 0.18)' : 'rgba(199, 233, 255, 0.14)';
-        ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
+        ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
         continue;
       }
 
@@ -699,7 +762,7 @@ const drawWater = (): void => {
 
       if (useGradientDrawing) {
         ctx.fillStyle = gradientWaterFill(value, magnitude, threshold, shimmer, lightMode);
-        ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
+        ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
         continue;
       }
 
@@ -718,7 +781,7 @@ const drawWater = (): void => {
         ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.92})`;
       }
 
-      ctx.fillRect(x, y, size.cellWidth + 1, size.cellHeight + 1);
+      ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
     }
   }
 
@@ -731,9 +794,9 @@ const drawWater = (): void => {
     ctx.beginPath();
     ctx.moveTo(0, y);
 
-    for (let x = 0; x <= size.width; x += Math.max(size.cellWidth * 1.2, 10)) {
-      const col = clamp(origin.col + Math.round(x / size.cellWidth), 1, size.cols - 2);
-      const row = clamp(origin.row + Math.round(y / size.cellHeight), 1, size.rows - 2);
+    for (let x = 0; x <= size.width; x += Math.max(metrics.cellWidth * 1.2, 10)) {
+      const col = clamp(Math.round(origin.col + x / metrics.cellWidth), 1, size.cols - 2);
+      const row = clamp(Math.round(origin.row + y / metrics.cellHeight), 1, size.rows - 2);
       const sample = current[row * size.cols + col];
       const wave = Math.abs(sample) < threshold ? 0 : sample * 9;
       ctx.lineTo(x, y + wave);
@@ -746,8 +809,8 @@ const drawWater = (): void => {
 
 const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
   const point = worldToScreen(object);
-  const width = object.width * (size.activeCols - 1) * size.cellWidth;
-  const height = object.height * (size.activeRows - 1) * size.cellHeight;
+  const width = object.width * activeWorldPixelWidth();
+  const height = object.height * activeWorldPixelHeight();
 
   ctx.save();
   ctx.translate(point.x, point.y);
@@ -757,8 +820,9 @@ const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
   if (object.kind === 'barrier') {
     ctx.rect(-width / 2, -height / 2, width, height);
   } else if (isSlitObjectKind(object.kind)) {
-    const gap = object.gap * (size.activeRows - 1) * size.cellHeight;
-    appendSlitBarrierPath(width, height, slitOpeningRanges(object.kind, height, gap));
+    const gap = object.gap * activeWorldPixelHeight();
+    const spacing = (object.spacing ?? 0.058) * activeWorldPixelHeight();
+    appendSlitBarrierPath(width, height, slitOpeningRanges(object.kind, height, gap, spacing));
   } else {
     ctx.moveTo(-width / 2, height / 2);
     for (let i = 0; i <= 32; i += 1) {
@@ -776,8 +840,8 @@ const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
 
 const objectHandlePoints = (object: RippleObjectSnapshot) => {
   const center = worldToScreen(object);
-  const width = object.width * (size.activeCols - 1) * size.cellWidth;
-  const height = object.height * (size.activeRows - 1) * size.cellHeight;
+  const width = object.width * activeWorldPixelWidth();
+  const height = object.height * activeWorldPixelHeight();
   const cos = Math.cos(object.rotation);
   const sin = Math.sin(object.rotation);
   const rotateLocal = { x: 0, y: -height / 2 - 28 };
@@ -805,7 +869,7 @@ const drawObjects = (): void => {
     ctx.lineWidth = selected ? 2.6 : 1.6;
     ctx.strokeStyle = selected || mine ? (lightMode ? '#075985' : '#e0f2fe') : lightMode ? 'rgba(15, 87, 116, 0.76)' : 'rgba(199, 233, 255, 0.58)';
     ctx.fillStyle = lightMode ? 'rgba(14, 116, 144, 0.12)' : 'rgba(199, 233, 255, 0.08)';
-    drawObjectShape(object, true);
+    if (object.kind !== 'parabola') drawObjectShape(object, true);
     drawObjectShape(object);
     ctx.restore();
 
@@ -883,53 +947,79 @@ const drawEmitters = (timestamp: number): void => {
 };
 
 const getSelectedEmitter = (): RippleEmitterSnapshot | null =>
-  emitters.find((emitter) => emitter.id === selectedEmitterId) ?? emitters[0] ?? null;
+  selectedEmitterId ? emitters.find((emitter) => emitter.id === selectedEmitterId) ?? null : null;
 
-const updateSelectedControls = (): void => {
+const getSelectedObject = (): RippleObjectSnapshot | null =>
+  selectedObjectId ? objects.find((object) => object.id === selectedObjectId) ?? null : null;
+
+const objectKindLabel = (kind: RippleObjectKind): string => {
+  if (kind === 'parabola') return 'Parabolic Reflector';
+  if (kind === 'single-slit') return 'Single Slit';
+  if (kind === 'double-slit') return 'Double Slit';
+  return 'Rectangular Barrier';
+};
+
+const updateSelectionPanel = (): void => {
   const emitter = getSelectedEmitter();
-  if (!emitter) return;
-  selectedEmitterId = emitter.id;
-  amplitudeInput.value = String(emitter.amplitude);
-  frequencyInput.value = String(emitter.frequency);
-  phaseInput.value = String(emitter.phase);
-  enableButton.textContent = emitter.enabled ? 'Enabled' : 'Disabled';
-  enableButton.dataset.enabled = String(emitter.enabled);
+  const object = getSelectedObject();
+
+  selectionPanel.hidden = !emitter && !object;
+  emitterControls.hidden = !emitter;
+  objectControls.hidden = !object;
+
+  if (emitter) {
+    selectionPanelTitle.textContent = 'Emitter';
+    amplitudeInput.value = String(emitter.amplitude);
+    frequencyInput.value = String(emitter.frequency);
+    phaseInput.value = String(emitter.phase);
+    enableButton.textContent = emitter.enabled ? 'Enabled' : 'Disabled';
+    enableButton.dataset.enabled = String(emitter.enabled);
+  }
+
+  if (object) {
+    const slitObject = isSlitObjectKind(object.kind);
+    const doubleSlit = object.kind === 'double-slit';
+    selectionPanelTitle.textContent = objectKindLabel(object.kind);
+    objectWidthInput.max = String(slitObject ? MAX_SLIT_OBJECT_WIDTH : RIPPLE_CONFIG.object.maxSize);
+    objectWidthInput.value = String(object.width);
+    objectHeightInput.value = String(object.height);
+    objectGapControl.hidden = !slitObject;
+    objectSpacingControl.hidden = !doubleSlit;
+    objectGapInput.value = String(object.gap);
+    objectSpacingInput.value = String(object.spacing ?? 0.058);
+  }
 };
 
 const updateLocalEmitter = (id: string, patch: RippleEmitterPatch): void => {
   emitters = emitters.map((emitter) => (emitter.id === id ? { ...emitter, ...patch } : emitter));
+  if (id === selectedEmitterId) updateSelectionPanel();
 };
 
 const updateLocalObject = (id: string, patch: RippleObjectPatch): void => {
   objects = objects.map((object) => (object.id === id ? { ...object, ...patch } : object));
+  if (id === selectedObjectId) updateSelectionPanel();
 };
 
-const renderEmitterTray = (): void => {
-  emitterButtons.textContent = '';
-  for (const emitter of emitters) {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'emitter-button';
-    button.setAttribute('aria-label', 'Select emitter');
-    button.setAttribute('aria-pressed', String(emitter.id === selectedEmitterId));
-    button.dataset.disabled = String(!emitter.enabled);
-    button.addEventListener('click', () => {
-      selectedEmitterId = emitter.id;
-      selectedObjectId = null;
-      renderEmitterTray();
-      updateSelectedControls();
-    });
+const syncRipplePanels = (): void => {
+  updateSelectionPanel();
+};
 
-    const swatch = document.createElement('span');
-    swatch.className = 'emitter-swatch';
-    swatch.style.backgroundColor = emitter.color;
-    swatch.setAttribute('aria-hidden', 'true');
-    button.append(swatch);
-    emitterButtons.append(button);
-  }
+const clearSelection = (): void => {
+  selectedEmitterId = null;
+  selectedObjectId = null;
+  updateSelectionPanel();
+};
 
-  emitterCount.textContent = String(emitters.length);
-  updateSelectedControls();
+const selectEmitter = (id: string): void => {
+  selectedEmitterId = id;
+  selectedObjectId = null;
+  updateSelectionPanel();
+};
+
+const selectObject = (id: string): void => {
+  selectedObjectId = id;
+  selectedEmitterId = null;
+  updateSelectionPanel();
 };
 
 const handleSnapshot = (snapshot: RippleSnapshot): void => {
@@ -938,7 +1028,7 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
   pauseButton.textContent = paused ? 'Play' : 'Pause';
   pauseButton.setAttribute('aria-label', paused ? 'Resume ripple simulation' : 'Pause ripple simulation');
   roomLabel.textContent = snapshot.roomCode;
-  playerCount.textContent = String(snapshot.playerCount);
+  setPlayerCount(snapshot.playerCount);
 
   if (snapshot.resetVersion !== resetVersion) {
     resetVersion = snapshot.resetVersion;
@@ -948,13 +1038,13 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
 
   emitters = snapshot.emitters;
   objects = snapshot.objects;
-  if (!emitters.some((emitter) => emitter.id === selectedEmitterId)) {
-    selectedEmitterId = emitters[0]?.id ?? 'cool-left';
+  if (selectedEmitterId && !emitters.some((emitter) => emitter.id === selectedEmitterId)) {
+    selectedEmitterId = null;
   }
   if (selectedObjectId && !objects.some((object) => object.id === selectedObjectId)) {
     selectedObjectId = null;
   }
-  renderEmitterTray();
+  syncRipplePanels();
 
   for (const splash of snapshot.recentSplashes) {
     if (processedSplashIds.has(splash.id)) continue;
@@ -982,10 +1072,9 @@ const handleSocketMessage = (event: MessageEvent): void => {
   } else if (message.type === 'rippleSnapshot') {
     handleSnapshot(message);
   } else if (message.type === 'ripplePresence') {
-    playerCount.textContent = String(message.playerCount);
+    setPlayerCount(message.playerCount);
   } else if (message.type === 'pong') {
-    const latency = Math.max(0, Math.round(performance.now() - message.clientTime));
-    if (connectionState === 'online') statusText.textContent = `${latency} ms`;
+    if (connectionState === 'online') return;
   } else if (message.type === 'error') {
     setConnectionState('error', message.message);
   }
@@ -1011,6 +1100,24 @@ const pointFromEvent = (event: PointerEvent) => {
   const screenY = clamp(event.clientY - rect.top, 0, rect.height);
   const world = screenToWorld(screenX, screenY);
   return { screenX, screenY, x: world.x, y: world.y };
+};
+
+const handleWheel = (event: WheelEvent): void => {
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const screenX = clamp(event.clientX - rect.left, 0, rect.width);
+  const screenY = clamp(event.clientY - rect.top, 0, rect.height);
+  const worldBefore = screenToWorld(screenX, screenY);
+  const nextZoom = clamp(camera.zoom * Math.exp(-event.deltaY * WHEEL_ZOOM_RATE), MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+  if (nextZoom === camera.zoom) return;
+
+  camera.zoom = nextZoom;
+  const gridPoint = worldToGrid(worldBefore);
+  const metrics = viewMetrics();
+  originToCameraPosition(
+    gridPoint.col - screenX / metrics.cellWidth,
+    gridPoint.row - screenY / metrics.cellHeight,
+  );
 };
 
 const hitEmitter = (x: number, y: number): RippleEmitterSnapshot | null => {
@@ -1073,7 +1180,7 @@ const handlePointerDown = (event: PointerEvent): void => {
 
   if (handle === 'delete' && selectedObjectId) {
     sendMessage({ type: 'rippleObjectDelete', id: selectedObjectId });
-    selectedObjectId = null;
+    clearSelection();
     return;
   }
 
@@ -1091,8 +1198,7 @@ const handlePointerDown = (event: PointerEvent): void => {
 
   const object = hitObject(point.screenX, point.screenY);
   if (object) {
-    selectedObjectId = object.id;
-    selectedEmitterId = '';
+    selectObject(object.id);
     sendObjectPatch(object.id, { x: point.x, y: point.y }, true);
     dragState = { active: true, pointerId: event.pointerId, mode: 'object-move', emitterId: null, objectId: object.id, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
     canvas.setPointerCapture(event.pointerId);
@@ -1101,16 +1207,14 @@ const handlePointerDown = (event: PointerEvent): void => {
 
   const emitter = hitEmitter(point.screenX, point.screenY);
   if (emitter) {
-    selectedEmitterId = emitter.id;
-    selectedObjectId = null;
-    renderEmitterTray();
+    selectEmitter(emitter.id);
     sendEmitterPatch(emitter.id, { x: point.x, y: point.y }, true);
     dragState = { active: true, pointerId: event.pointerId, mode: 'emitter', emitterId: emitter.id, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
     canvas.setPointerCapture(event.pointerId);
     return;
   }
 
-  selectedObjectId = null;
+  clearSelection();
   sendSplash(point.x, point.y, RIPPLE_CONFIG.splash.defaultStrength);
   dragState = { active: true, pointerId: event.pointerId, mode: 'splash', emitterId: null, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
   canvas.setPointerCapture(event.pointerId);
@@ -1166,7 +1270,14 @@ const sendSelectedControlPatch = (patch: RippleEmitterPatch, force = false): voi
   const emitter = getSelectedEmitter();
   if (!emitter) return;
   sendEmitterPatch(emitter.id, patch, force);
-  renderEmitterTray();
+  updateSelectionPanel();
+};
+
+const sendSelectedObjectPatch = (patch: RippleObjectPatch, force = false): void => {
+  const object = getSelectedObject();
+  if (!object) return;
+  sendObjectPatch(object.id, patch, force);
+  updateSelectionPanel();
 };
 
 const updateCamera = (dt: number): void => {
@@ -1186,13 +1297,36 @@ phaseInput.addEventListener('input', () => sendSelectedControlPatch({ phase: Num
 phaseInput.addEventListener('change', () => sendSelectedControlPatch({ phase: Number.parseFloat(phaseInput.value) }, true));
 sensitivityInput.addEventListener('input', () => setDisplaySensitivity(Number.parseFloat(sensitivityInput.value)));
 gradientInput.addEventListener('change', () => setGradientDrawing(gradientInput.checked));
+objectWidthInput.addEventListener('input', () => sendSelectedObjectPatch({ width: Number.parseFloat(objectWidthInput.value) }));
+objectWidthInput.addEventListener('change', () => sendSelectedObjectPatch({ width: Number.parseFloat(objectWidthInput.value) }, true));
+objectHeightInput.addEventListener('input', () => sendSelectedObjectPatch({ height: Number.parseFloat(objectHeightInput.value) }));
+objectHeightInput.addEventListener('change', () => sendSelectedObjectPatch({ height: Number.parseFloat(objectHeightInput.value) }, true));
+objectGapInput.addEventListener('input', () => sendSelectedObjectPatch({ gap: Number.parseFloat(objectGapInput.value) }));
+objectGapInput.addEventListener('change', () => sendSelectedObjectPatch({ gap: Number.parseFloat(objectGapInput.value) }, true));
+objectSpacingInput.addEventListener('input', () => sendSelectedObjectPatch({ spacing: Number.parseFloat(objectSpacingInput.value) }));
+objectSpacingInput.addEventListener('change', () => sendSelectedObjectPatch({ spacing: Number.parseFloat(objectSpacingInput.value) }, true));
 enableButton.addEventListener('click', () => {
   const emitter = getSelectedEmitter();
   if (emitter) sendSelectedControlPatch({ enabled: !emitter.enabled }, true);
 });
+deleteButton.addEventListener('click', () => {
+  const object = getSelectedObject();
+  if (!object) return;
+  sendMessage({ type: 'rippleObjectDelete', id: object.id });
+  clearSelection();
+});
+selectionCloseButton.addEventListener('click', clearSelection);
 pauseButton.addEventListener('click', () => sendMessage({ type: 'rippleSetPaused', paused: !paused }));
 resetButton.addEventListener('click', () => sendMessage({ type: 'rippleReset' }));
 themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+document.addEventListener('pointerdown', (event) => {
+  if (selectionPanel.hidden) return;
+  const target = event.target;
+  if (!(target instanceof Node)) return;
+  if (selectionPanel.contains(target) || canvas.contains(target)) return;
+  clearSelection();
+});
 
 document.querySelectorAll<HTMLButtonElement>('[data-object-kind]').forEach((button) => {
   button.addEventListener('pointerdown', (event) => {
@@ -1221,6 +1355,7 @@ canvas.addEventListener('pointerdown', handlePointerDown);
 canvas.addEventListener('pointermove', handlePointerMove);
 canvas.addEventListener('pointerup', finishPointer);
 canvas.addEventListener('pointercancel', finishPointer);
+canvas.addEventListener('wheel', handleWheel, { passive: false });
 window.addEventListener('resize', resize);
 window.addEventListener('keydown', (event) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {

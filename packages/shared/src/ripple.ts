@@ -24,6 +24,7 @@ export type RippleObjectSnapshot = RippleVec2 & {
   height: number;
   rotation: number;
   gap: number;
+  spacing: number;
   controlledBy: string | null;
   updatedAt: number;
 };
@@ -46,7 +47,7 @@ export type RippleEmitterPatch = Partial<
 >;
 
 export type RippleObjectPatch = Partial<
-  Pick<RippleObjectSnapshot, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'gap'>
+  Pick<RippleObjectSnapshot, 'x' | 'y' | 'width' | 'height' | 'rotation' | 'gap' | 'spacing'>
 >;
 
 export type RippleSnapshot = {
@@ -164,7 +165,7 @@ export type RippleServerToClientMessage =
 
 export const RIPPLE_CONFIG = {
   protocolVersion: 1,
-  defaultRoomCode: 'STUDIO',
+  defaultRoomCode: 'TANK',
   roomCodeLength: 16,
   recentSplashLimit: 90,
   splashRateLimitMs: 38,
@@ -189,8 +190,10 @@ export const RIPPLE_CONFIG = {
     maxObjects: 24,
     minSize: 0.008,
     maxSize: 0.55,
-    minGap: 0.035,
+    minGap: 0.006,
     maxGap: 0.28,
+    minSpacing: 0.006,
+    maxSpacing: 0.28,
   },
 } as const;
 
@@ -354,6 +357,15 @@ export const sanitizeRippleObjectPatch = (patch: unknown): RippleObjectPatch | n
     sanitized.gap = clampRippleNumber(candidate.gap, RIPPLE_CONFIG.object.minGap, RIPPLE_CONFIG.object.maxGap);
   }
 
+  if ('spacing' in candidate) {
+    if (!isFiniteRippleNumber(candidate.spacing)) return null;
+    sanitized.spacing = clampRippleNumber(
+      candidate.spacing,
+      RIPPLE_CONFIG.object.minSpacing,
+      RIPPLE_CONFIG.object.maxSpacing,
+    );
+  }
+
   return Object.keys(sanitized).length > 0 ? sanitized : null;
 };
 
@@ -365,12 +377,12 @@ export const createDefaultRippleObject = (
 ): RippleObjectSnapshot => {
   const base =
     kind === 'parabola'
-      ? { width: 0.22, height: 0.18, gap: 0.1 }
+      ? { width: 0.22, height: 0.18, gap: 0.1, spacing: 0.058 }
       : kind === 'single-slit'
-        ? { width: 0.012, height: 0.32, gap: 0.1 }
+        ? { width: 0.012, height: 0.32, gap: 0.1, spacing: 0.058 }
         : kind === 'double-slit'
-          ? { width: 0.012, height: 0.34, gap: 0.065 }
-        : { width: 0.24, height: 0.035, gap: 0.1 };
+          ? { width: 0.012, height: 0.34, gap: 0.065, spacing: 0.058 }
+        : { width: 0.24, height: 0.035, gap: 0.1, spacing: 0.058 };
   const sanitized = sanitizeRippleObjectPatch({ ...base, ...patch }) ?? base;
 
   return {
@@ -382,6 +394,7 @@ export const createDefaultRippleObject = (
     height: sanitized.height ?? base.height,
     rotation: sanitized.rotation ?? 0,
     gap: sanitized.gap ?? base.gap,
+    spacing: sanitized.spacing ?? base.spacing,
     controlledBy: null,
     updatedAt,
   };

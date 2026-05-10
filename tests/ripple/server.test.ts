@@ -83,7 +83,7 @@ const sendJson = (socket: WebSocket, message: unknown) => {
   socket.send(JSON.stringify(message));
 };
 
-test('ripples health reports the shared studio world', async () => {
+test('ripples health reports the shared ripple world', async () => {
   await withServer(async (port) => {
     const response = await fetch(`http://127.0.0.1:${port}/ripples/health`);
     const health = (await response.json()) as { ok: boolean; mode: string; defaultRoom: string };

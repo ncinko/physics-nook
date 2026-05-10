@@ -109,10 +109,13 @@ test('ripple objects sanitize geometry and create default shapes', () => {
   assert.equal(doubleSlit.kind, 'double-slit');
   assert.ok(doubleSlit.width <= 0.014);
   assert.ok(doubleSlit.gap < slit.gap);
+  assert.ok(doubleSlit.spacing >= RIPPLE_CONFIG.object.minSpacing);
+  assert.deepEqual(sanitizeRippleObjectPatch({ gap: 0 }), { gap: RIPPLE_CONFIG.object.minGap });
+  assert.deepEqual(sanitizeRippleObjectPatch({ spacing: -1 }), { spacing: RIPPLE_CONFIG.object.minSpacing });
 });
 
 test('ripple names and room codes normalize for shared room routing', () => {
-  assert.equal(normalizeRippleRoomCode('studio 42!'), 'STUDIO42');
+  assert.equal(normalizeRippleRoomCode('tank 42!'), 'TANK42');
   assert.equal(normalizeRippleRoomCode(''), RIPPLE_CONFIG.defaultRoomCode);
   assert.equal(sanitizeRippleName('<Ada  Lovelace!!>'), 'Ada Lovelace');
   assert.equal(sanitizeRippleName(''), 'Explorer');

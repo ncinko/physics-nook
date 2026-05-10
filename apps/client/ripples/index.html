@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     <meta name="theme-color" content="#041018" />
-    <title>Ripple Tank Studio | Physics Nook</title>
+    <title>Ripple Tank | Physics Nook</title>
+    <meta name="description" content="Ripple Tank" />
   </head>
   <body>
     <main class="ripple-shell">
@@ -16,24 +17,22 @@
 
       <header class="ripple-topbar">
         <div class="ripple-title">
-          <strong>Ripple Tank Studio</strong>
-          <span id="roomLabel">STUDIO</span>
+          <strong id="playerCount">Users: 0</strong>
+          <span id="roomLabel">TANK</span>
         </div>
 
         <div class="ripple-status">
-          <div class="stat-card">
-            <span>Users</span>
-            <strong id="playerCount">0</strong>
+          <div class="display-controls" aria-label="Display controls">
+            <label class="control-slider">
+              <span>Display sensitivity</span>
+              <input id="sensitivityInput" type="range" min="0" max="160" step="1" value="72" />
+            </label>
+            <label class="control-toggle">
+              <input id="gradientInput" type="checkbox" />
+              <span>Gradient</span>
+            </label>
           </div>
-          <div class="stat-card wide">
-            <span>Sources</span>
-            <strong id="emitterCount">3</strong>
-          </div>
-          <div class="connection-pill" data-state="offline" id="connectionPill">
-            <span class="status-dot" aria-hidden="true"></span>
-            <span id="statusText">Offline</span>
-          </div>
-          <div class="action-group" aria-label="Studio controls">
+          <div class="action-group" aria-label="Ripple tank controls">
             <button id="themeButton" type="button" aria-label="Switch color theme">Dark</button>
             <button id="pauseButton" type="button" aria-label="Pause ripple simulation">Pause</button>
             <button id="resetButton" type="button" aria-label="Reset ripple tank">Reset</button>
@@ -41,32 +40,45 @@
         </div>
       </header>
 
-      <aside class="emitter-tray" aria-label="Emitter tools">
+      <aside id="selectionPanel" class="selection-panel" aria-label="Selection controls" hidden>
         <div class="tray-heading">
-          <span>Emitters</span>
+          <strong id="selectionPanelTitle">Selection</strong>
+          <button id="selectionCloseButton" class="panel-close-button" type="button" aria-label="Close selection controls">&times;</button>
         </div>
-        <div id="emitterButtons" class="emitter-buttons"></div>
-        <label class="control-slider">
-          <span>Amplitude</span>
-          <input id="amplitudeInput" type="range" min="0" max="2.4" step="0.05" value="1.05" />
-        </label>
-        <label class="control-slider">
-          <span>Frequency</span>
-          <input id="frequencyInput" type="range" min="0.12" max="2.8" step="0.02" value="0.72" />
-        </label>
-        <label class="control-slider compact">
-          <span>Phase</span>
-          <input id="phaseInput" type="range" min="-6.283" max="6.283" step="0.05" value="0" />
-        </label>
-        <label class="control-slider">
-          <span>Display sensitivity</span>
-          <input id="sensitivityInput" type="range" min="0" max="160" step="1" value="72" />
-        </label>
-        <label class="control-toggle">
-          <input id="gradientInput" type="checkbox" />
-          <span>Gradient</span>
-        </label>
-        <button id="enableButton" class="enable-button" type="button">Enabled</button>
+        <div id="emitterControls" class="panel-section">
+          <label class="control-slider">
+            <span>Amplitude</span>
+            <input id="amplitudeInput" type="range" min="0" max="2.4" step="0.05" value="1.05" />
+          </label>
+          <label class="control-slider">
+            <span>Frequency</span>
+            <input id="frequencyInput" type="range" min="0.12" max="2.8" step="0.02" value="0.72" />
+          </label>
+          <label class="control-slider compact">
+            <span>Phase</span>
+            <input id="phaseInput" type="range" min="-6.283" max="6.283" step="0.05" value="0" />
+          </label>
+          <button id="enableButton" class="enable-button" type="button">Enabled</button>
+        </div>
+        <div id="objectControls" class="panel-section" hidden>
+          <label class="control-slider">
+            <span>Width</span>
+            <input id="objectWidthInput" type="range" min="0.008" max="0.55" step="0.004" value="0.24" />
+          </label>
+          <label class="control-slider">
+            <span>Height</span>
+            <input id="objectHeightInput" type="range" min="0.008" max="0.55" step="0.004" value="0.035" />
+          </label>
+          <label id="objectGapControl" class="control-slider">
+            <span>Opening</span>
+            <input id="objectGapInput" type="range" min="0.006" max="0.28" step="0.002" value="0.1" />
+          </label>
+          <label id="objectSpacingControl" class="control-slider" hidden>
+            <span>Spacing</span>
+            <input id="objectSpacingInput" type="range" min="0.006" max="0.28" step="0.002" value="0.058" />
+          </label>
+          <button id="deleteButton" class="delete-button" type="button">Delete</button>
+        </div>
       </aside>
 
       <aside class="object-tray" aria-label="Objects">

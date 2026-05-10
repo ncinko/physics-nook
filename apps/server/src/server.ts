@@ -1234,7 +1234,7 @@ export const createGameServer = () => {
     }
 
     response.writeHead(426, { 'content-type': 'text/plain' });
-    response.end('Use a WebSocket connection for Manatee Royale, Orbitals, or Ripple Tank Studio.');
+    response.end('Use a WebSocket connection for Manatee Royale, Orbitals, or Ripple Tank.');
   });
 
   const loop = setInterval(() => {

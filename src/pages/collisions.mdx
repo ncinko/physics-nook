@@ -9,7 +9,12 @@ import Collision1D from '../components/simulations/Collision1D.jsx';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import ModuleHero from '../components/modules/ModuleHero.astro';
+import { mechanicsPath } from '../data/modules';
 
+<ModuleHero module={mechanicsPath} currentPath="/collisions" />
+
+<div id="page-content"></div>
 
 # Collisions
 

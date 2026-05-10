@@ -537,10 +537,13 @@ export const mechanicsPath = {
   href: kinematicsModule.href,
   navLabel: 'Mechanics',
   summary:
-    'Core motion ideas from one-dimensional graphs to two-dimensional vector motion.',
+    'Core motion ideas from one-dimensional graphs to two-dimensional vectors and collisions.',
   cardEyebrow: 'Mechanics',
   navVisibility: 'menu',
-  pages: kinematicsModule.pages,
+  pages: [
+    ...kinematicsModule.pages,
+    collisionsModule.pages[0],
+  ],
 } satisfies ModulePathGroup;
 
 export const relativityPath = {
@@ -588,17 +591,6 @@ export const thermodynamicsPath = {
   pages: thermodynamicsModule.pages,
 } satisfies ModulePathGroup;
 
-export const momentumPath = {
-  id: 'momentum',
-  href: '/collisions',
-  navLabel: 'Momentum',
-  summary:
-    'Momentum bookkeeping, collisions, and later impulse-focused lessons collected under one path.',
-  cardEyebrow: 'Momentum',
-  navVisibility: 'menu',
-  pages: [collisionsModule.pages[0]],
-} satisfies ModulePathGroup;
-
 export const gamesPath = {
   id: 'orbitals-game',
   href: orbitalsGameHref,
@@ -632,7 +624,6 @@ export const exploreModuleGroups = [
   wavesAndOscillationsPath,
   quantumPath,
   thermodynamicsPath,
-  momentumPath,
   gamesPath,
 ].filter((group) => group.navVisibility === 'menu');
 

@@ -62,6 +62,8 @@ const MAX_SPEED = 820;
 const BOOST_DURATION = 5;
 const CLOCK_BONUS = 5;
 const SPAWN_COUNT = 4;
+const FULLSCREEN_RAIL_MIN_WIDTH = 1100;
+const FULLSCREEN_RAIL_MIN_HEIGHT = 760;
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
 
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
@@ -147,15 +149,16 @@ export default function Kinematics2DSandbox() {
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  const [shellSize, setShellSize] = useState<Size>({ width: 0, height: 0 });
+  const [fullscreenActive, setFullscreenActive] = useState(false);
 
   const readouts = useMemo(
     () => [
       { label: 'position', value: `<${snapshot.x.toFixed(0)}, ${(-snapshot.y).toFixed(0)}>` },
       { label: 'velocity', value: `${snapshot.speed.toFixed(0)} px/s` },
       { label: 'acceleration', value: `${Math.hypot(snapshot.ax, snapshot.ay).toFixed(0)} px/s^2` },
-      { label: 'score', value: snapshot.goalRush ? String(snapshot.score) : '--' },
     ],
-    [snapshot.ax, snapshot.ay, snapshot.goalRush, snapshot.score, snapshot.speed, snapshot.x, snapshot.y],
+    [snapshot.ax, snapshot.ay, snapshot.speed, snapshot.x, snapshot.y],
   );
 
   const syncSnapshot = useCallback(() => {
@@ -271,15 +274,58 @@ export default function Kinematics2DSandbox() {
   }, [loadLocalScores, refreshLeaderboard]);
 
   useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return undefined;
+    }
+
+    const block = wrapper.closest('[data-simulation-block]');
+    const target = block instanceof HTMLElement ? block : wrapper;
+
+    const updateShellState = () => {
+      const rect = target.getBoundingClientRect();
+      const nextWidth = Math.max(0, Math.round(rect.width));
+      const nextHeight = Math.max(0, Math.round(rect.height));
+      setShellSize((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight },
+      );
+      setFullscreenActive(
+        document.fullscreenElement === target ||
+          (target instanceof HTMLElement && target.classList.contains('is-fallback-fullscreen')),
+      );
+    };
+
+    updateShellState();
+    const resizeObserver = new ResizeObserver(updateShellState);
+    resizeObserver.observe(target);
+    const mutationObserver = new MutationObserver(updateShellState);
+    mutationObserver.observe(target, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('fullscreenchange', updateShellState);
+    window.addEventListener('resize', updateShellState);
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      document.removeEventListener('fullscreenchange', updateShellState);
+      window.removeEventListener('resize', updateShellState);
+    };
+  }, []);
+
+  useEffect(() => {
     const element = stageRef.current;
     if (!element) {
       return undefined;
     }
 
     const resize = () => {
-      const width = Math.max(320, Math.floor(element.clientWidth));
-      const height = Math.max(380, Math.min(620, Math.round(width * 0.66)));
-      setSize({ width, height });
+      const availableWidth = Math.max(320, Math.floor(element.clientWidth));
+      const availableHeight = fullscreenActive
+        ? Math.max(320, shellSize.height - 270)
+        : availableWidth;
+      const side = Math.max(320, Math.floor(Math.min(availableWidth, availableHeight)));
+      setSize({ width: side, height: side });
     };
 
     resize();
@@ -287,7 +333,7 @@ export default function Kinematics2DSandbox() {
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, []);
+  }, [fullscreenActive, shellSize.height]);
 
   useEffect(() => {
     if (runtimeRef.current.goalRush) {
@@ -308,6 +354,7 @@ export default function Kinematics2DSandbox() {
         key === 'd' ||
         key === 'w' ||
         key === 's' ||
+        key === 'r' ||
         key === ' ';
 
       if (!usesControl) {
@@ -320,6 +367,14 @@ export default function Kinematics2DSandbox() {
       }
 
       event.preventDefault();
+
+      if (key === 'r') {
+        if (isDown && !event.repeat) {
+          reset(true);
+          window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+        }
+        return;
+      }
 
       keysRef.current.left = key === 'arrowleft' || key === 'a' ? isDown : keysRef.current.left;
       keysRef.current.right = key === 'arrowright' || key === 'd' ? isDown : keysRef.current.right;
@@ -341,7 +396,7 @@ export default function Kinematics2DSandbox() {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
     };
-  }, [syncSnapshot]);
+  }, [reset, syncSnapshot]);
 
   const toScreen = useCallback(
     (x: number, y: number) => ({
@@ -672,6 +727,7 @@ export default function Kinematics2DSandbox() {
     if (goalRush) {
       seedSpawns();
       void createServerRun();
+      window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
     }
     syncSnapshot();
   };
@@ -708,6 +764,10 @@ export default function Kinematics2DSandbox() {
   );
   const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
   const bestScore = leaderboardScores[0]?.score ?? 0;
+  const useLeaderboardRail =
+    fullscreenActive &&
+    shellSize.width >= FULLSCREEN_RAIL_MIN_WIDTH &&
+    shellSize.height >= FULLSCREEN_RAIL_MIN_HEIGHT;
 
   const handleScoreSubmit = async () => {
     const runtime = runtimeRef.current;
@@ -767,16 +827,26 @@ export default function Kinematics2DSandbox() {
   };
 
   return (
-    <div ref={wrapperRef} className="flex h-full min-h-[48rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
-      <div className="grid gap-3 md:grid-cols-4">
+    <div
+      ref={wrapperRef}
+      tabIndex={-1}
+      className="flex h-full min-h-[48rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+    >
+      <div className="grid gap-3 md:grid-cols-3">
         {readouts.map((readout) => (
           <Readout key={readout.label} label={readout.label} value={readout.value} />
         ))}
       </div>
 
-      <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]">
+      <div
+        className={
+          useLeaderboardRail
+            ? 'grid flex-1 gap-4 grid-cols-[minmax(0,1fr)_minmax(20rem,0.36fr)]'
+            : 'flex flex-1 flex-col gap-4'
+        }
+      >
         <div className="flex min-w-0 flex-col gap-4">
-          <div ref={stageRef} className="min-w-0">
+          <div ref={stageRef} className="flex min-w-0 justify-center">
             <canvas
               ref={canvasRef}
               className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
@@ -799,6 +869,9 @@ export default function Kinematics2DSandbox() {
               <button type="button" title="Reset" onClick={() => reset(true)} className={buttonClass}>
                 <RotateCcw className="h-4 w-4" />
                 Reset
+                <kbd className="ml-1 border border-[var(--grid-line)] bg-[var(--sim-bg)] px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none text-[var(--text-muted)]">
+                  R
+                </kbd>
               </button>
               <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
               <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
@@ -864,12 +937,7 @@ export default function Kinematics2DSandbox() {
                     >
                       <span className="text-right font-semibold text-[var(--text-muted)]">#{index + 1}</span>
                       <span className="text-xs text-[var(--text-muted)]">{formatScoreDate(score.createdAt)}</span>
-                      <span className="min-w-0">
-                        <span className="block truncate font-semibold">{score.name}</span>
-                        <span className="block truncate text-xs text-[var(--text-muted)]">
-                          {score.normalHits} normal, {score.goldenHits} golden
-                        </span>
-                      </span>
+                      <span className="min-w-0 truncate font-semibold">{score.name}</span>
                       <span className="font-semibold">{score.score}</span>
                     </li>
                   ))}

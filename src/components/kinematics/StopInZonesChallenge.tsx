@@ -65,6 +65,8 @@ interface Snapshot {
 }
 
 const INITIAL_MOTION: MotionState = { x: 0, v: 0, a: 0 };
+const FULLSCREEN_RAIL_MIN_WIDTH = 1100;
+const FULLSCREEN_RAIL_MIN_HEIGHT = 760;
 const nowSeconds = () =>
   (typeof performance === 'undefined' ? Date.now() : performance.now()) / 1000;
 
@@ -156,6 +158,8 @@ export default function StopInZonesChallenge() {
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
+  const [fullscreenActive, setFullscreenActive] = useState(false);
 
   const syncSnapshot = useCallback(() => {
     const runtime = runtimeRef.current;
@@ -327,6 +331,46 @@ export default function StopInZonesChallenge() {
   }, [loadLocalScores, refreshLeaderboard]);
 
   useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) {
+      return undefined;
+    }
+
+    const block = shell.closest('[data-simulation-block]');
+    const target = block instanceof HTMLElement ? block : shell;
+
+    const updateShellState = () => {
+      const rect = target.getBoundingClientRect();
+      const nextWidth = Math.max(0, Math.round(rect.width));
+      const nextHeight = Math.max(0, Math.round(rect.height));
+      setShellSize((current) =>
+        current.width === nextWidth && current.height === nextHeight
+          ? current
+          : { width: nextWidth, height: nextHeight },
+      );
+      setFullscreenActive(
+        document.fullscreenElement === target ||
+          (target instanceof HTMLElement && target.classList.contains('is-fallback-fullscreen')),
+      );
+    };
+
+    updateShellState();
+    const resizeObserver = new ResizeObserver(updateShellState);
+    resizeObserver.observe(target);
+    const mutationObserver = new MutationObserver(updateShellState);
+    mutationObserver.observe(target, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('fullscreenchange', updateShellState);
+    window.addEventListener('resize', updateShellState);
+
+    return () => {
+      resizeObserver.disconnect();
+      mutationObserver.disconnect();
+      document.removeEventListener('fullscreenchange', updateShellState);
+      window.removeEventListener('resize', updateShellState);
+    };
+  }, []);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const activeTag = document.activeElement?.tagName;
       if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') {
@@ -406,11 +450,14 @@ export default function StopInZonesChallenge() {
     }
 
     const now = nowSeconds();
-    const t = now - runtime.timelineStartedAt;
-    historyRef.current.push({ t, ...runtime.motion });
-    const cutoff = t - STOP_ZONE_DEFAULTS.historySeconds - 0.25;
-    while (historyRef.current.length && historyRef.current[0].t < cutoff) {
-      historyRef.current.shift();
+
+    if (!runtime.gameOn) {
+      const t = now - runtime.timelineStartedAt;
+      historyRef.current.push({ t, ...runtime.motion });
+      const cutoff = t - STOP_ZONE_DEFAULTS.historySeconds - 0.25;
+      while (historyRef.current.length && historyRef.current[0].t < cutoff) {
+        historyRef.current.shift();
+      }
     }
 
     if (runtime.gameOn) {
@@ -473,6 +520,11 @@ export default function StopInZonesChallenge() {
     [apiStatus, cloudScores, localScores],
   );
   const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
+  const useLeaderboardRail =
+    fullscreenActive &&
+    shellSize.width >= FULLSCREEN_RAIL_MIN_WIDTH &&
+    shellSize.height >= FULLSCREEN_RAIL_MIN_HEIGHT;
+  const traceTick = snapshot.gameOn ? 0 : snapshot.tick;
 
   const handleScoreSubmit = async () => {
     const runtime = runtimeRef.current;
@@ -611,7 +663,13 @@ export default function StopInZonesChallenge() {
         </div>
       )}
 
-      <div className="grid flex-1 gap-4 p-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]">
+      <div
+        className={
+          useLeaderboardRail
+            ? 'grid flex-1 gap-4 p-4 grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]'
+            : 'flex flex-1 flex-col gap-4 p-4'
+        }
+      >
         <div className="flex min-w-0 flex-col gap-3">
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="x" value={`${snapshot.motion.x.toFixed(2)} m`} />
@@ -632,9 +690,9 @@ export default function StopInZonesChallenge() {
           </div>
 
           <div className="grid gap-3">
-            <MiniPlot historyRef={historyRef} tick={snapshot.tick} label="x(t) [m]" color="#0ea5a0" yMin={snapshot.gameOn ? -6 : null} yMax={snapshot.gameOn ? 6 : null} />
-            <MiniPlot historyRef={historyRef} tick={snapshot.tick} label="v(t) [m/s]" color="#7c3aed" />
-            <MiniPlot historyRef={historyRef} tick={snapshot.tick} label="a(t) [m/s^2]" color="#d97706" yMin={-snapshot.aMax - 1} yMax={snapshot.aMax + 1} />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="x(t) [m]" color="#0ea5a0" yMin={snapshot.gameOn ? -6 : null} yMax={snapshot.gameOn ? 6 : null} />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="v(t) [m/s]" color="#7c3aed" />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="a(t) [m/s^2]" color="#d97706" yMin={-snapshot.aMax - 1} yMax={snapshot.aMax + 1} />
           </div>
         </div>
 

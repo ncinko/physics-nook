@@ -65,7 +65,7 @@ export default function VelocityExplorer() {
   const draggingRef = useRef<DragTarget>(null);
   const velocityDraggingRef = useRef(false);
   const playButtonRef = useRef({ x: 18, y: 18, r: 18 });
-  const velocityGeometryRef = useRef({ left: 64, right: 24, top: 14, bottom: 42 });
+  const velocityGeometryRef = useRef({ left: PAD_L, right: PAD_R, top: 14, bottom: 42 });
 
   const xPix = (t: number) =>
     PAD_L + ((t - T_MIN) / (T_MAX - T_MIN)) * (size.w - PAD_L - PAD_R);
@@ -302,23 +302,13 @@ export default function VelocityExplorer() {
     ctx.beginPath();
     ctx.arc(motionX, motionY, 5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = muted;
-    ctx.lineWidth = 1.5;
     const railX = size.w - 48;
-    ctx.beginPath();
-    ctx.moveTo(railX, PAD_T);
-    ctx.lineTo(railX, size.h - PAD_B);
-    ctx.stroke();
-    ctx.fillStyle = muted;
-    ctx.font = `600 12px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText('object', railX, PAD_T + 14);
     ctx.fillStyle = blue;
     ctx.beginPath();
     ctx.arc(railX, Math.max(PAD_T, Math.min(size.h - PAD_B, motionY)), 7, 0, Math.PI * 2);
     ctx.fill();
 
-    playButtonRef.current = { x: 26, y: size.h - PAD_B + 26, r: 18 };
+    playButtonRef.current = { x: railX, y: size.h - PAD_B + 26, r: 18 };
     ctx.fillStyle = bg;
     ctx.strokeStyle = grid;
     ctx.lineWidth = 1.5;
@@ -366,8 +356,8 @@ export default function VelocityExplorer() {
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const green = '#16a34a';
-    const left = 64;
-    const right = 24;
+    const left = PAD_L;
+    const right = PAD_R;
     const top = 16;
     const bottom = 42;
     velocityGeometryRef.current = { left, right, top, bottom };

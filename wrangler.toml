@@ -1,6 +1,6 @@
 name = "physics-nook"
 compatibility_date = "2026-05-09"
-pages_build_output_dir = "dist"
+pages_build_output_dir = "./dist"
 
 [[d1_databases]]
 binding = "KINEMATICS_DB"

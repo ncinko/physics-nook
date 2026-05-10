@@ -57,8 +57,9 @@ type GoalRushScoreEntry = GoalRushLeaderboardScore & { id?: string };
 
 const GAME_TIME = GOAL_RUSH_DEFAULTS.gameTimeS;
 const PLAYER_RADIUS = 8;
-const CONTROL_ACCEL = 200;
-const BOOST_ACCEL_BONUS = 100;
+const CONTROL_ACCEL = 400;
+const BOOST_ACCEL_BONUS = 200;
+const GRAVITY_ACCEL = 210;
 const MAX_SPEED = 820;
 const BOOST_DURATION = 5;
 const CLOCK_BONUS = 5;
@@ -490,7 +491,7 @@ export default function Kinematics2DSandbox() {
       }
 
       if (runtime.gravityOn) {
-        ay += 105;
+        ay += GRAVITY_ACCEL;
       }
 
       runtime.ax = ax;

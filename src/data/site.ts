@@ -25,14 +25,6 @@ export const homePageMeta: PageMeta = {
 
 export const standalonePages: PageMeta[] = [
   {
-    title: 'Hidden Wave Pool',
-    description:
-      'An immersive wave playground inside Physics Nook for exploratory motion and pattern play.',
-    canonicalPath: '/waves/deep-pool',
-    image: '/social/physics-nook-card.svg',
-    noindex: true,
-  },
-  {
     title: 'Pendulum Peg Challenge',
     description:
       'A hidden pendulum game about timing, wrapping a string around a peg, and cutting for the closest landing.',

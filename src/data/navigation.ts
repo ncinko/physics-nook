@@ -45,14 +45,6 @@ export const menuNavSections: NavSectionWithItems[] = exploreModuleGroups.map((g
 
 const hiddenNavItems: NavItem[] = [
   {
-    label: 'Deep Pool',
-    href: '/waves/deep-pool',
-    section: 'hidden',
-    visibility: 'hidden',
-    match: 'prefix',
-    description: 'Immersive wave playground kept out of the primary navigation.',
-  },
-  {
     label: 'Pendulum Peg Challenge',
     href: '/oscillations/pendulum-peg',
     section: 'hidden',

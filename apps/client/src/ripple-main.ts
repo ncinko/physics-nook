@@ -2,7 +2,12 @@ import './ripple-styles.css';
 
 import {
   RIPPLE_CONFIG,
+  createDefaultRippleEmitters,
+  createDefaultRippleObject,
   resolvePersistentRippleRoomCode,
+  sanitizeRippleEmitterPatch,
+  sanitizeRippleObjectPatch,
+  sanitizeRippleSplash,
 } from '../../../packages/shared/src/ripple.ts';
 import type {
   RippleClientToServerMessage,
@@ -202,7 +207,7 @@ let socket: WebSocket | null = null;
 let connectionState: ConnectionState = 'offline';
 let localPlayerId: string | null = null;
 let latestSnapshot: RippleSnapshot | null = null;
-let emitters: RippleEmitterSnapshot[] = [];
+let emitters: RippleEmitterSnapshot[] = createDefaultRippleEmitters(Date.now());
 let objects: RippleObjectSnapshot[] = [];
 let selectedEmitterId: string | null = null;
 let selectedObjectId: string | null = null;
@@ -215,12 +220,14 @@ let lastFrameAt = performance.now();
 let lastPingAt = 0;
 let lastEmitterSendAt = 0;
 let lastObjectSendAt = 0;
+let localObjectId = 1;
 let processedSplashIds = new Set<string>();
 let objectMask = new Uint8Array(0);
 let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
 let useGradientDrawing = false;
-let inLobby = true;
-let lobbyMessage = 'Choose a ripple tank to join.';
+let usingLocalTank = true;
+let inLobby = false;
+let lobbyMessage = 'Local ripple tank is ready while shared tanks connect.';
 let roomSummaries: RippleRoomSummary[] = RIPPLE_CONFIG.persistentRoomCodes.map((roomCode) => ({
   roomCode,
   playerCount: 0,
@@ -253,6 +260,16 @@ const setPlayerCount = (count: number): void => {
   playerCount.textContent = `Users: ${count}`;
 };
 
+const setLocalPlayerCount = (): void => {
+  playerCount.textContent = 'Local';
+};
+
+const setPausedState = (nextPaused: boolean): void => {
+  paused = nextPaused;
+  pauseButton.textContent = paused ? 'Play' : 'Pause';
+  pauseButton.setAttribute('aria-label', paused ? 'Resume ripple simulation' : 'Pause ripple simulation');
+};
+
 const activeRoomSummary = (): RippleRoomSummary =>
   roomSummaries.find((room) => room.roomCode === activeRoomCode) ?? { roomCode: activeRoomCode, playerCount: 0 };
 
@@ -264,12 +281,13 @@ const updateBrowserRoom = (): void => {
 
 const renderTankSwitcher = (): void => {
   tankButtons.textContent = '';
+  const sharedTankActive = !usingLocalTank && !inLobby;
   for (const room of roomSummaries) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'tank-button';
-    button.dataset.active = String(!inLobby && room.roomCode === activeRoomCode);
-    button.setAttribute('aria-pressed', String(!inLobby && room.roomCode === activeRoomCode));
+    button.dataset.active = String(sharedTankActive && room.roomCode === activeRoomCode);
+    button.setAttribute('aria-pressed', String(sharedTankActive && room.roomCode === activeRoomCode));
     button.addEventListener('click', () => joinTank(room.roomCode));
 
     const label = document.createElement('strong');
@@ -281,9 +299,13 @@ const renderTankSwitcher = (): void => {
   }
 
   const summary = activeRoomSummary();
-  roomLabel.textContent = inLobby ? 'LOBBY' : activeRoomCode;
-  setPlayerCount(summary.playerCount);
-  lobbyNotice.hidden = !inLobby && !lobbyMessage;
+  roomLabel.textContent = usingLocalTank ? 'LOCAL' : inLobby ? 'LOBBY' : activeRoomCode;
+  if (usingLocalTank) {
+    setLocalPlayerCount();
+  } else {
+    setPlayerCount(summary.playerCount);
+  }
+  lobbyNotice.hidden = !lobbyMessage;
   lobbyNotice.textContent = lobbyMessage;
 };
 
@@ -299,30 +321,51 @@ const setTankSwitcherOpen = (open: boolean): void => {
   tankSwitcherButton.setAttribute('aria-expanded', String(open));
 };
 
-const enterLobby = (message: string): void => {
-  inLobby = true;
+const localizeTankState = (): void => {
+  const now = Date.now();
+  emitters = emitters.length > 0
+    ? emitters.map((emitter) => ({ ...emitter, controlledBy: null, updatedAt: now }))
+    : createDefaultRippleEmitters(now);
+  objects = objects.map((object) => ({ ...object, controlledBy: null, updatedAt: now }));
+};
+
+const activateLocalTank = (message: string, openSwitcher = false): void => {
+  usingLocalTank = true;
+  inLobby = false;
   lobbyMessage = message;
-  selectedEmitterId = null;
-  selectedObjectId = null;
-  emitters = [];
-  objects = [];
+  localPlayerId = null;
   latestSnapshot = null;
+  localizeTankState();
+  if (selectedEmitterId && !emitters.some((emitter) => emitter.id === selectedEmitterId)) {
+    selectedEmitterId = null;
+  }
+  if (selectedObjectId && !objects.some((object) => object.id === selectedObjectId)) {
+    selectedObjectId = null;
+  }
   processedSplashIds.clear();
-  clearGrid();
-  setTankSwitcherOpen(true);
+  setTankSwitcherOpen(openSwitcher);
   renderTankSwitcher();
   updateSelectionPanel();
 };
 
+const enterLobby = (message: string): void => {
+  activateLocalTank(message, true);
+};
+
 const joinTank = (roomCode: string): void => {
   activeRoomCode = resolvePersistentRippleRoomCode(roomCode);
-  inLobby = true;
-  lobbyMessage = `Joining ${activeRoomCode.replace(/^TANK/, 'Tank ')}...`;
-  setTankSwitcherOpen(false);
   updateBrowserRoom();
   clearSelection();
-  clearGrid();
-  renderTankSwitcher();
+  activateLocalTank(
+    `Local tank is active while ${activeRoomCode.replace(/^TANK/, 'Tank ')} connects.`,
+    false,
+  );
+
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    connect();
+    return;
+  }
+
   sendMessage({ type: 'rippleJoin', name: makeExplorerName(), roomCode: activeRoomCode });
 };
 
@@ -1111,20 +1154,20 @@ const selectObject = (id: string): void => {
 };
 
 const handleSnapshot = (snapshot: RippleSnapshot): void => {
+  const wasUsingLocalTank = usingLocalTank;
   latestSnapshot = snapshot;
+  usingLocalTank = false;
   inLobby = false;
   lobbyMessage = '';
   activeRoomCode = resolvePersistentRippleRoomCode(snapshot.roomCode);
   setTankSwitcherOpen(false);
-  paused = snapshot.paused;
-  pauseButton.textContent = paused ? 'Play' : 'Pause';
-  pauseButton.setAttribute('aria-label', paused ? 'Resume ripple simulation' : 'Pause ripple simulation');
+  setPausedState(snapshot.paused);
   setRoomSummaries(roomSummaries.map((room) => (
     room.roomCode === activeRoomCode ? { ...room, playerCount: snapshot.playerCount } : room
   )));
   updateBrowserRoom();
 
-  if (snapshot.resetVersion !== resetVersion) {
+  if (wasUsingLocalTank || snapshot.resetVersion !== resetVersion) {
     resetVersion = snapshot.resetVersion;
     processedSplashIds.clear();
     clearGrid();
@@ -1182,6 +1225,16 @@ const handleSocketMessage = (event: MessageEvent): void => {
   }
 };
 
+const noteSharedConnectionUnavailable = (message: string): void => {
+  if (!usingLocalTank || inLobby) {
+    activateLocalTank(message, false);
+    return;
+  }
+
+  lobbyMessage = message;
+  renderTankSwitcher();
+};
+
 const connect = (): void => {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
   setConnectionState('connecting', 'Connecting');
@@ -1191,9 +1244,13 @@ const connect = (): void => {
   socket.addEventListener('close', () => {
     setConnectionState('offline', 'Offline');
     localPlayerId = null;
+    noteSharedConnectionUnavailable('Local tank is active while shared tanks are unavailable.');
     window.setTimeout(connect, 1200);
   });
-  socket.addEventListener('error', () => setConnectionState('error', 'Socket error'));
+  socket.addEventListener('error', () => {
+    setConnectionState('error', 'Socket error');
+    noteSharedConnectionUnavailable('Local tank is active while shared tanks are unavailable.');
+  });
 };
 
 const pointFromEvent = (event: PointerEvent) => {
@@ -1252,27 +1309,103 @@ const hitObjectHandle = (x: number, y: number): ObjectHandle | null => {
 
 const sendSplash = (x: number, y: number, strength: number): void => {
   if (paused) return;
+  if (usingLocalTank) {
+    const splash = sanitizeRippleSplash({ x, y, strength, radius: RIPPLE_CONFIG.splash.defaultRadius });
+    if (!splash) return;
+    addSplash(splash.x, splash.y, splash.strength, splash.radius);
+    return;
+  }
+
   sendMessage({ type: 'rippleSplash', splash: { x, y, strength, radius: RIPPLE_CONFIG.splash.defaultRadius } });
 };
 
 const sendEmitterPatch = (id: string, patch: RippleEmitterPatch, force = false): void => {
-  updateLocalEmitter(id, patch);
+  const localPatch = usingLocalTank ? sanitizeRippleEmitterPatch(patch) : patch;
+  if (!localPatch) return;
+
+  updateLocalEmitter(id, localPatch);
+  if (usingLocalTank) return;
+
   const now = performance.now();
   if (!force && now - lastEmitterSendAt < EMITTER_SEND_INTERVAL_MS) return;
   lastEmitterSendAt = now;
-  sendMessage({ type: 'rippleEmitterUpdate', id, patch });
+  sendMessage({ type: 'rippleEmitterUpdate', id, patch: localPatch });
 };
 
 const sendObjectPatch = (id: string, patch: RippleObjectPatch, force = false): void => {
-  updateLocalObject(id, patch);
+  const localPatch = usingLocalTank ? sanitizeRippleObjectPatch(patch) : patch;
+  if (!localPatch) return;
+
+  updateLocalObject(id, localPatch);
+  if (usingLocalTank) return;
+
   const now = performance.now();
   if (!force && now - lastObjectSendAt < OBJECT_SEND_INTERVAL_MS) return;
   lastObjectSendAt = now;
-  sendMessage({ type: 'rippleObjectUpdate', id, patch });
+  sendMessage({ type: 'rippleObjectUpdate', id, patch: localPatch });
 };
 
 const createObjectAt = (kind: RippleObjectKind, x: number, y: number): void => {
+  if (usingLocalTank) {
+    if (objects.length >= RIPPLE_CONFIG.object.maxObjects) return;
+    const patch = sanitizeRippleObjectPatch({ x, y });
+    if (!patch) return;
+
+    const object = createDefaultRippleObject(`local-object-${localObjectId++}`, kind, patch, Date.now());
+    objects = [...objects, object];
+    selectObject(object.id);
+    return;
+  }
+
   sendMessage({ type: 'rippleObjectCreate', kind, object: { x, y } });
+};
+
+const deleteObject = (id: string): void => {
+  if (usingLocalTank) {
+    objects = objects.filter((object) => object.id !== id);
+    if (selectedObjectId === id) {
+      clearSelection();
+    } else {
+      updateSelectionPanel();
+    }
+    return;
+  }
+
+  sendMessage({ type: 'rippleObjectDelete', id });
+};
+
+const releaseSelectedDragTarget = (): void => {
+  if (usingLocalTank) return;
+
+  if (dragState.mode === 'emitter' && dragState.emitterId) {
+    sendMessage({ type: 'rippleEmitterRelease', id: dragState.emitterId });
+  }
+  if (
+    (dragState.mode === 'object-move' || dragState.mode === 'object-rotate' || dragState.mode === 'object-width') &&
+    dragState.objectId
+  ) {
+    sendMessage({ type: 'rippleObjectRelease', id: dragState.objectId });
+  }
+};
+
+const togglePaused = (): void => {
+  if (usingLocalTank) {
+    setPausedState(!paused);
+    return;
+  }
+
+  sendMessage({ type: 'rippleSetPaused', paused: !paused });
+};
+
+const resetTank = (): void => {
+  if (usingLocalTank) {
+    resetVersion += 1;
+    processedSplashIds.clear();
+    clearGrid();
+    return;
+  }
+
+  sendMessage({ type: 'rippleReset' });
 };
 
 const handlePointerDown = (event: PointerEvent): void => {
@@ -1281,8 +1414,7 @@ const handlePointerDown = (event: PointerEvent): void => {
   const handle = hitObjectHandle(point.screenX, point.screenY);
 
   if (handle === 'delete' && selectedObjectId) {
-    sendMessage({ type: 'rippleObjectDelete', id: selectedObjectId });
-    clearSelection();
+    deleteObject(selectedObjectId);
     return;
   }
 
@@ -1355,15 +1487,7 @@ const handlePointerMove = (event: PointerEvent): void => {
 
 const finishPointer = (event: PointerEvent): void => {
   if (!dragState.active || dragState.pointerId !== event.pointerId) return;
-  if (dragState.mode === 'emitter' && dragState.emitterId) {
-    sendMessage({ type: 'rippleEmitterRelease', id: dragState.emitterId });
-  }
-  if (
-    (dragState.mode === 'object-move' || dragState.mode === 'object-rotate' || dragState.mode === 'object-width') &&
-    dragState.objectId
-  ) {
-    sendMessage({ type: 'rippleObjectRelease', id: dragState.objectId });
-  }
+  releaseSelectedDragTarget();
   dragState = emptyDragState();
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
 };
@@ -1414,12 +1538,11 @@ enableButton.addEventListener('click', () => {
 deleteButton.addEventListener('click', () => {
   const object = getSelectedObject();
   if (!object) return;
-  sendMessage({ type: 'rippleObjectDelete', id: object.id });
-  clearSelection();
+  deleteObject(object.id);
 });
 selectionCloseButton.addEventListener('click', clearSelection);
-pauseButton.addEventListener('click', () => sendMessage({ type: 'rippleSetPaused', paused: !paused }));
-resetButton.addEventListener('click', () => sendMessage({ type: 'rippleReset' }));
+pauseButton.addEventListener('click', togglePaused);
+resetButton.addEventListener('click', resetTank);
 themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 tankSwitcherButton.addEventListener('click', () => setTankSwitcherOpen(tankSwitcher.hidden));
 

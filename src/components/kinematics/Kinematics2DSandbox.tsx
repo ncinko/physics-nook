@@ -45,6 +45,7 @@ type Runtime = {
   elapsedMs: number;
   finalDurationMs: number | null;
   runId: string | null;
+  nextClockSpawnMs: number;
 };
 
 type Snapshot = Runtime & {
@@ -61,6 +62,7 @@ const BOOST_ACCEL_BONUS = 100;
 const MAX_SPEED = 820;
 const BOOST_DURATION = 5;
 const CLOCK_BONUS = 5;
+const CLOCK_SPAWN_INTERVAL_MS = 5000;
 const SPAWN_COUNT = 4;
 const FULLSCREEN_RAIL_MIN_WIDTH = 1100;
 const FULLSCREEN_RAIL_MIN_HEIGHT = 760;
@@ -97,6 +99,7 @@ const createRuntime = (): Runtime => ({
   elapsedMs: 0,
   finalDurationMs: null,
   runId: null,
+  nextClockSpawnMs: CLOCK_SPAWN_INTERVAL_MS,
 });
 
 const makeSnapshot = (runtime: Runtime): Snapshot => ({
@@ -105,15 +108,29 @@ const makeSnapshot = (runtime: Runtime): Snapshot => ({
   speed: Math.hypot(runtime.vx, runtime.vy),
 });
 
+const makeSpawnPosition = (width: number, height: number) => {
+  const margin = 58;
+
+  return {
+    x: randomBetween(-width / 2 + margin, width / 2 - margin),
+    y: randomBetween(-height / 2 + margin, height / 2 - margin),
+  };
+};
+
+const makeClockSpawn = (width: number, height: number, id: number): Spawn => {
+  const { x, y } = makeSpawnPosition(width, height);
+
+  return { id, kind: 'clock', x, y, radius: 16, points: 0, golden: false };
+};
+
 const makeSpawn = (width: number, height: number, id: number): Spawn => {
   const roll = Math.random();
-  const margin = 58;
-  const x = randomBetween(-width / 2 + margin, width / 2 - margin);
-  const y = randomBetween(-height / 2 + margin, height / 2 - margin);
 
   if (roll < 0.14) {
-    return { id, kind: 'clock', x, y, radius: 16, points: 0, golden: false };
+    return makeClockSpawn(width, height, id);
   }
+
+  const { x, y } = makeSpawnPosition(width, height);
 
   if (roll < 0.29) {
     return { id, kind: 'boost', x, y, radius: 16, points: 0, golden: false };
@@ -168,11 +185,21 @@ export default function Kinematics2DSandbox() {
   const seedSpawns = useCallback(() => {
     const runtime = runtimeRef.current;
     const nextSpawns: Spawn[] = [];
+
+    spawnIdRef.current += 1;
+    nextSpawns.push(makeClockSpawn(size.width, size.height, spawnIdRef.current));
+
     for (let index = 0; index < SPAWN_COUNT; index += 1) {
+      if (nextSpawns.length >= SPAWN_COUNT) {
+        break;
+      }
+
       spawnIdRef.current += 1;
       nextSpawns.push(makeSpawn(size.width, size.height, spawnIdRef.current));
     }
+
     runtime.spawns = nextSpawns;
+    runtime.nextClockSpawnMs = CLOCK_SPAWN_INTERVAL_MS;
   }, [size.height, size.width]);
 
   const loadLocalScores = useCallback(() => {
@@ -267,6 +294,18 @@ export default function Kinematics2DSandbox() {
     },
     [createServerRun, seedSpawns, syncSnapshot],
   );
+
+  const restart = useCallback(() => {
+    const shouldStart = runtimeRef.current.goalRush;
+
+    reset(true);
+
+    if (shouldStart) {
+      runtimeRef.current.running = true;
+      window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+      syncSnapshot();
+    }
+  }, [reset, syncSnapshot]);
 
   useEffect(() => {
     setLocalScores(loadLocalScores());
@@ -370,8 +409,7 @@ export default function Kinematics2DSandbox() {
 
       if (key === 'r') {
         if (isDown && !event.repeat) {
-          reset(true);
-          window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+          restart();
         }
         return;
       }
@@ -396,7 +434,7 @@ export default function Kinematics2DSandbox() {
       window.removeEventListener('keydown', onDown);
       window.removeEventListener('keyup', onUp);
     };
-  }, [reset, syncSnapshot]);
+  }, [restart, syncSnapshot]);
 
   const toScreen = useCallback(
     (x: number, y: number) => ({
@@ -472,6 +510,12 @@ export default function Kinematics2DSandbox() {
 
         if (runtime.goalRush) {
           runtime.elapsedMs += dt * 1000;
+          while (runtime.elapsedMs >= runtime.nextClockSpawnMs) {
+            spawnIdRef.current += 1;
+            runtime.spawns[0] = makeClockSpawn(size.width, size.height, spawnIdRef.current);
+            runtime.nextClockSpawnMs += CLOCK_SPAWN_INTERVAL_MS;
+          }
+
           runtime.timeLeft = Math.max(0, runtime.timeLeft - dt);
           if (runtime.timeLeft <= 0) {
             finishGame();
@@ -866,7 +910,7 @@ export default function Kinematics2DSandbox() {
                 {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {snapshot.running ? 'Pause' : 'Start'}
               </button>
-              <button type="button" title="Reset" onClick={() => reset(true)} className={buttonClass}>
+              <button type="button" title="Reset" onClick={restart} className={buttonClass}>
                 <RotateCcw className="h-4 w-4" />
                 Reset
                 <kbd className="ml-1 border border-[var(--grid-line)] bg-[var(--sim-bg)] px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none text-[var(--text-muted)]">

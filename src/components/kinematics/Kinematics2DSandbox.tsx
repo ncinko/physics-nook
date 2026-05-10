@@ -1,5 +1,11 @@
-import { Pause, Play, RotateCcw, Timer, Trophy, Zap } from 'lucide-react';
+import { Cloud, Pause, Play, RotateCcw, Timer, Trophy, WifiOff, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+import {
+  GOAL_RUSH_DEFAULTS,
+  selectBestGoalRushScoresByUniqueName,
+  type GoalRushLeaderboardScore,
+} from '../../lib/kinematics/goalRush';
+import { sanitizeLeaderboardName } from '../../lib/kinematics/stopZones';
 
 type Size = {
   width: number;
@@ -36,14 +42,19 @@ type Runtime = {
   ended: boolean;
   spawns: Spawn[];
   lastTime: number | null;
+  elapsedMs: number;
+  finalDurationMs: number | null;
+  runId: string | null;
 };
 
 type Snapshot = Runtime & {
   speed: number;
 };
 
-const STORAGE_KEY = 'physics-nook-2d-kinematics-best-v1';
-const GAME_TIME = 30;
+type ApiStatus = 'checking' | 'online' | 'offline';
+type GoalRushScoreEntry = GoalRushLeaderboardScore & { id?: string };
+
+const GAME_TIME = GOAL_RUSH_DEFAULTS.gameTimeS;
 const PLAYER_RADIUS = 8;
 const CONTROL_ACCEL = 200;
 const BOOST_ACCEL_BONUS = 100;
@@ -81,6 +92,9 @@ const createRuntime = (): Runtime => ({
   ended: false,
   spawns: [],
   lastTime: null,
+  elapsedMs: 0,
+  finalDurationMs: null,
+  runId: null,
 });
 
 const makeSnapshot = (runtime: Runtime): Snapshot => ({
@@ -118,14 +132,21 @@ const makeSpawn = (width: number, height: number, id: number): Spawn => {
 export default function Kinematics2DSandbox() {
   const [size, setSize] = useState<Size>({ width: 860, height: 560 });
   const [snapshot, setSnapshot] = useState<Snapshot>(() => makeSnapshot(createRuntime()));
-  const [bestScore, setBestScore] = useState(0);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const stageRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const runtimeRef = useRef<Runtime>(createRuntime());
   const rafRef = useRef<number | null>(null);
   const keysRef = useRef({ left: false, right: false, up: false, down: false });
   const pointerRef = useRef<{ active: boolean; x: number; y: number }>({ active: false, x: 0, y: 0 });
   const spawnIdRef = useRef(0);
+  const submittedRef = useRef(false);
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
+  const [cloudScores, setCloudScores] = useState<GoalRushScoreEntry[]>([]);
+  const [localScores, setLocalScores] = useState<GoalRushScoreEntry[]>([]);
+  const [nameModalOpen, setNameModalOpen] = useState(false);
+  const [playerName, setPlayerName] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
 
   const readouts = useMemo(
     () => [
@@ -151,6 +172,78 @@ export default function Kinematics2DSandbox() {
     runtime.spawns = nextSpawns;
   }, [size.height, size.width]);
 
+  const loadLocalScores = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+
+    try {
+      const raw = window.localStorage.getItem(GOAL_RUSH_DEFAULTS.localStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        return selectBestGoalRushScoresByUniqueName(parsed as GoalRushScoreEntry[]);
+      }
+    } catch {
+      return [];
+    }
+
+    return [];
+  }, []);
+
+  const saveLocalScore = useCallback((score: GoalRushScoreEntry) => {
+    const next = selectBestGoalRushScoresByUniqueName([...loadLocalScores(), score]);
+
+    try {
+      window.localStorage.setItem(GOAL_RUSH_DEFAULTS.localStorageKey, JSON.stringify(next));
+    } catch {
+      // Local scores are a bonus path; the sandbox should keep running without storage.
+    }
+
+    setLocalScores(next);
+    return next;
+  }, [loadLocalScores]);
+
+  const refreshLeaderboard = useCallback(async () => {
+    try {
+      const response = await fetch('/api/kinematics/goal-rush/leaderboard?limit=10', {
+        headers: { accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Goal Rush leaderboard request failed: ${response.status}`);
+      }
+
+      const body = await response.json();
+      const scores = Array.isArray(body.scores) ? body.scores : [];
+      setCloudScores(scores);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    }
+  }, []);
+
+  const createServerRun = useCallback(async () => {
+    const runtime = runtimeRef.current;
+
+    try {
+      const response = await fetch('/api/kinematics/goal-rush/run', {
+        method: 'POST',
+        headers: { accept: 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Goal Rush run request failed: ${response.status}`);
+      }
+
+      const body = await response.json();
+      runtime.runId = typeof body.runId === 'string' ? body.runId : null;
+      setApiStatus(runtime.runId ? 'online' : 'offline');
+    } catch {
+      runtime.runId = null;
+      setApiStatus('offline');
+    }
+  }, []);
+
   const reset = useCallback(
     (keepMode = true) => {
       const previous = runtimeRef.current;
@@ -159,26 +252,26 @@ export default function Kinematics2DSandbox() {
         goalRush: keepMode ? previous.goalRush : false,
         gravityOn: keepMode ? previous.gravityOn : false,
       };
+      submittedRef.current = false;
+      setNameModalOpen(false);
 
       if (runtimeRef.current.goalRush) {
         seedSpawns();
+        void createServerRun();
       }
 
       syncSnapshot();
     },
-    [seedSpawns, syncSnapshot],
+    [createServerRun, seedSpawns, syncSnapshot],
   );
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? Number(raw) : 0;
-    if (Number.isFinite(parsed)) {
-      setBestScore(parsed);
-    }
-  }, []);
+    setLocalScores(loadLocalScores());
+    void refreshLeaderboard();
+  }, [loadLocalScores, refreshLeaderboard]);
 
   useEffect(() => {
-    const element = wrapperRef.current;
+    const element = stageRef.current;
     if (!element) {
       return undefined;
     }
@@ -268,15 +361,16 @@ export default function Kinematics2DSandbox() {
 
   const finishGame = useCallback(() => {
     const runtime = runtimeRef.current;
+    if (runtime.ended) {
+      return;
+    }
+
     runtime.ended = true;
     runtime.running = false;
     runtime.timeLeft = 0;
-
-    if (runtime.score > bestScore) {
-      window.localStorage.setItem(STORAGE_KEY, String(runtime.score));
-      setBestScore(runtime.score);
-    }
-  }, [bestScore]);
+    runtime.finalDurationMs = Math.max(0, Math.round(runtime.elapsedMs));
+    setNameModalOpen(true);
+  }, []);
 
   const stepRuntime = useCallback(
     (dt: number) => {
@@ -322,6 +416,7 @@ export default function Kinematics2DSandbox() {
         runtime.y += runtime.vy * dt;
 
         if (runtime.goalRush) {
+          runtime.elapsedMs += dt * 1000;
           runtime.timeLeft = Math.max(0, runtime.timeLeft - dt);
           if (runtime.timeLeft <= 0) {
             finishGame();
@@ -568,9 +663,15 @@ export default function Kinematics2DSandbox() {
     runtime.normalHits = 0;
     runtime.goldenHits = 0;
     runtime.boostLeft = 0;
+    runtime.elapsedMs = 0;
+    runtime.finalDurationMs = null;
+    runtime.runId = null;
     runtime.spawns = [];
+    submittedRef.current = false;
+    setNameModalOpen(false);
     if (goalRush) {
       seedSpawns();
+      void createServerRun();
     }
     syncSnapshot();
   };
@@ -601,71 +702,221 @@ export default function Kinematics2DSandbox() {
     pointerRef.current.active = false;
   };
 
+  const leaderboardScores = useMemo(
+    () => selectBestGoalRushScoresByUniqueName(apiStatus === 'online' ? cloudScores : localScores),
+    [apiStatus, cloudScores, localScores],
+  );
+  const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
+  const bestScore = leaderboardScores[0]?.score ?? 0;
+
+  const handleScoreSubmit = async () => {
+    const runtime = runtimeRef.current;
+    if (runtime.finalDurationMs === null || submittedRef.current) {
+      setNameModalOpen(false);
+      return;
+    }
+
+    submittedRef.current = true;
+    const score: GoalRushScoreEntry = {
+      name: sanitizeLeaderboardName(playerName),
+      score: runtime.score,
+      goldenHits: runtime.goldenHits,
+      normalHits: runtime.normalHits,
+      durationMs: runtime.finalDurationMs,
+      createdAt: Date.now(),
+    };
+
+    saveLocalScore(score);
+    setNameModalOpen(false);
+
+    if (!runtime.runId) {
+      setApiStatus('offline');
+      return;
+    }
+
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/kinematics/goal-rush/leaderboard', {
+        method: 'POST',
+        headers: {
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          runId: runtime.runId,
+          name: score.name,
+          score: score.score,
+          goldenHits: score.goldenHits,
+          normalHits: score.normalHits,
+          durationMs: score.durationMs,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Goal Rush score submit failed: ${response.status}`);
+      }
+
+      const body = await response.json();
+      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
   return (
-    <div ref={wrapperRef} className="flex h-full min-h-[44rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
+    <div ref={wrapperRef} className="flex h-full min-h-[48rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
       <div className="grid gap-3 md:grid-cols-4">
         {readouts.map((readout) => (
           <Readout key={readout.label} label={readout.label} value={readout.value} />
         ))}
       </div>
 
-      <canvas
-        ref={canvasRef}
-        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
-        style={{ touchAction: 'none' }}
-        aria-label="Two-dimensional acceleration sandbox with velocity and acceleration vectors"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerUp}
-      />
+      <div className="grid flex-1 gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(20rem,0.75fr)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div ref={stageRef} className="min-w-0">
+            <canvas
+              ref={canvasRef}
+              className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+              style={{ touchAction: 'none' }}
+              aria-label="Two-dimensional acceleration sandbox with velocity and acceleration vectors"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onPointerLeave={handlePointerUp}
+            />
+          </div>
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.6fr)]">
-        <div className="flex flex-wrap gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-          <button type="button" title={snapshot.running ? 'Pause' : 'Start'} onClick={() => setRunning(!snapshot.running)} className={buttonClass}>
-            {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-            {snapshot.running ? 'Pause' : 'Start'}
-          </button>
-          <button type="button" title="Reset" onClick={() => reset(true)} className={buttonClass}>
-            <RotateCcw className="h-4 w-4" />
-            Reset
-          </button>
-          <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
-          <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.6fr)]">
+            <div className="flex flex-wrap gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
+              <button type="button" title={snapshot.running ? 'Pause' : 'Start'} onClick={() => setRunning(!snapshot.running)} className={buttonClass}>
+                {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                {snapshot.running ? 'Pause' : 'Start'}
+              </button>
+              <button type="button" title="Reset" onClick={() => reset(true)} className={buttonClass}>
+                <RotateCcw className="h-4 w-4" />
+                Reset
+              </button>
+              <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
+              <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
+            </div>
+
+            <div className="grid gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 text-sm shadow-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+                  <Timer className="h-4 w-4 text-[var(--accent-blue)]" />
+                  Time
+                </span>
+                <strong>{snapshot.goalRush ? `${snapshot.timeLeft.toFixed(1)} s` : 'sandbox'}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+                  <Trophy className="h-4 w-4 text-[#d97706]" />
+                  Best
+                </span>
+                <strong>{bestScore}</strong>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
+                  <Zap className="h-4 w-4 text-[var(--accent-red)]" />
+                  Boost
+                </span>
+                <strong>{snapshot.boostLeft > 0 ? `${snapshot.boostLeft.toFixed(1)} s` : '--'}</strong>
+              </div>
+            </div>
+          </div>
+
+          {snapshot.goalRush && snapshot.ended && (
+            <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 text-center shadow-sm">
+              <p className="m-0 text-lg font-semibold">Final score: {snapshot.score}</p>
+              <p className="mt-1 mb-0 text-sm text-[var(--text-muted)]">
+                Normal zones: {snapshot.normalHits}. Golden zones: {snapshot.goldenHits}.
+              </p>
+            </div>
+          )}
         </div>
 
-        <div className="grid gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 text-sm shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-              <Timer className="h-4 w-4 text-[var(--accent-blue)]" />
-              Time
-            </span>
-            <strong>{snapshot.goalRush ? `${snapshot.timeLeft.toFixed(1)} s` : 'sandbox'}</strong>
+        <aside className="flex min-w-0 flex-col gap-4">
+          <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className="m-0 text-base font-semibold">{leaderboardLabel}</h3>
+              <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)]">
+                {apiStatus === 'online' ? <Cloud size={15} /> : <WifiOff size={15} />}
+                {apiStatus}
+              </span>
+            </div>
+            {leaderboardScores.length > 0 ? (
+              <div>
+                <div className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_4.5rem] gap-2 border-b border-[var(--grid-line)] pb-2 text-xs font-semibold uppercase text-[var(--text-muted)]">
+                  <span className="text-right">#</span>
+                  <span>Date</span>
+                  <span>Name</span>
+                  <span>Score</span>
+                </div>
+                <ol className="m-0 space-y-0 p-0">
+                  {leaderboardScores.map((score, index) => (
+                    <li
+                      key={`${score.id ?? score.name}-${score.score}-${score.durationMs}-${index}`}
+                      className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_4.5rem] items-center gap-2 border-b border-[var(--grid-line)] py-2 text-sm last:border-b-0"
+                    >
+                      <span className="text-right font-semibold text-[var(--text-muted)]">#{index + 1}</span>
+                      <span className="text-xs text-[var(--text-muted)]">{formatScoreDate(score.createdAt)}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold">{score.name}</span>
+                        <span className="block truncate text-xs text-[var(--text-muted)]">
+                          {score.normalHits} normal, {score.goldenHits} golden
+                        </span>
+                      </span>
+                      <span className="font-semibold">{score.score}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : (
+              <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
+            )}
+            {isPosting && <p className="mt-3 mb-0 text-sm text-[var(--text-muted)]">Posting score...</p>}
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-              <Trophy className="h-4 w-4 text-[#d97706]" />
-              Best
-            </span>
-            <strong>{bestScore}</strong>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-              <Zap className="h-4 w-4 text-[var(--accent-red)]" />
-              Boost
-            </span>
-            <strong>{snapshot.boostLeft > 0 ? `${snapshot.boostLeft.toFixed(1)} s` : '--'}</strong>
-          </div>
-        </div>
+        </aside>
       </div>
 
-      {snapshot.goalRush && snapshot.ended && (
-        <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 text-center shadow-sm">
-          <p className="m-0 text-lg font-semibold">Final score: {snapshot.score}</p>
-          <p className="mt-1 mb-0 text-sm text-[var(--text-muted)]">
-            Normal zones: {snapshot.normalHits}. Golden zones: {snapshot.goldenHits}.
-          </p>
+      {nameModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <form
+            className="w-full max-w-sm border border-[var(--grid-line)] bg-[var(--bg-primary)] p-5 text-[var(--text-primary)] shadow-2xl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleScoreSubmit();
+            }}
+          >
+            <h3 className="m-0 text-lg font-semibold">Save score</h3>
+            <p className="mt-2 mb-4 text-sm text-[var(--text-muted)]">
+              {snapshot.score} points in {formatGoalRushDuration(snapshot.finalDurationMs)}
+            </p>
+            <label className="block text-sm font-semibold">
+              Display name
+              <input
+                value={playerName}
+                onChange={(event) => setPlayerName(event.target.value)}
+                maxLength={24}
+                placeholder="Initials or display name"
+                className="mt-2 w-full rounded-md border border-[var(--grid-line)] bg-[var(--sim-bg)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                autoFocus
+              />
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" className={buttonClass} onClick={() => setNameModalOpen(false)}>
+                Skip
+              </button>
+              <button type="submit" className={buttonClass}>
+                <Trophy size={16} aria-hidden="true" />
+                Save
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
@@ -674,6 +925,26 @@ export default function Kinematics2DSandbox() {
 
 const buttonClass =
   'inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]';
+
+function formatScoreDate(createdAt: number) {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return '--';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(createdAt));
+}
+
+function formatGoalRushDuration(durationMs: number | null) {
+  if (durationMs === null || !Number.isFinite(durationMs)) {
+    return '--';
+  }
+
+  return `${(durationMs / 1000).toFixed(1)} s`;
+}
 
 function Readout({ label, value }: { label: string; value: string }) {
   return (

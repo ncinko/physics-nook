@@ -11,6 +11,10 @@ import {
   wrapDelta,
   wrapPosition,
 } from '../../src/lib/kinematics/stopZones.ts';
+import {
+  selectBestGoalRushScoresByUniqueName,
+  validateGoalRushScoreSubmission,
+} from '../../src/lib/kinematics/goalRush.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -106,6 +110,44 @@ assert.deepEqual(
   [
     { name: 'Ada', timeMs: 25000, createdAt: 2 },
     { name: 'Nick', timeMs: 28000, createdAt: 4 },
+  ],
+);
+
+assert.equal(
+  validateGoalRushScoreSubmission({
+    name: 'Nook',
+    score: 5,
+    normalHits: 2,
+    goldenHits: 1,
+    durationMs: 30000,
+  }).ok,
+  true,
+);
+
+assert.equal(
+  validateGoalRushScoreSubmission({
+    name: 'Nook',
+    score: 4,
+    normalHits: 2,
+    goldenHits: 1,
+    durationMs: 30000,
+  }).ok,
+  false,
+);
+
+assert.deepEqual(
+  selectBestGoalRushScoresByUniqueName(
+    [
+      { name: 'nick', score: 8, normalHits: 5, goldenHits: 1, durationMs: 32000, createdAt: 3 },
+      { name: 'Ada', score: 11, normalHits: 5, goldenHits: 2, durationMs: 34000, createdAt: 2 },
+      { name: 'Nick', score: 8, normalHits: 5, goldenHits: 1, durationMs: 30000, createdAt: 4 },
+      { name: 'ada ', score: 9, normalHits: 6, goldenHits: 1, durationMs: 26000, createdAt: 1 },
+    ],
+    10,
+  ),
+  [
+    { name: 'Ada', score: 11, normalHits: 5, goldenHits: 2, durationMs: 34000, createdAt: 2 },
+    { name: 'Nick', score: 8, normalHits: 5, goldenHits: 1, durationMs: 30000, createdAt: 4 },
   ],
 );
 

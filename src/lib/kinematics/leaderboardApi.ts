@@ -1,4 +1,5 @@
-import { sanitizeLeaderboardName } from './stopZones';
+import { sanitizeLeaderboardName } from './stopZones.ts';
+import type { GoalRushLeaderboardScore } from './goalRush.ts';
 
 export interface LeaderboardScore {
   id: string;
@@ -81,5 +82,17 @@ export const normalizeScoreRow = (row: Record<string, unknown>): LeaderboardScor
   name: sanitizeLeaderboardName(row.name),
   timeMs: Number(row.time_ms ?? row.timeMs),
   stops: Number(row.stops),
+  createdAt: Number(row.created_at ?? row.createdAt),
+});
+
+export const normalizeGoalRushScoreRow = (
+  row: Record<string, unknown>,
+): GoalRushLeaderboardScore & { id: string } => ({
+  id: String(row.id),
+  name: sanitizeLeaderboardName(row.name),
+  score: Number(row.score),
+  goldenHits: Number(row.golden_hits ?? row.goldenHits),
+  normalHits: Number(row.normal_hits ?? row.normalHits),
+  durationMs: Number(row.duration_ms ?? row.durationMs),
   createdAt: Number(row.created_at ?? row.createdAt),
 });

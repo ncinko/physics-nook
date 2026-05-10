@@ -40,7 +40,7 @@ const drawArrow = (
   lineWidth = 3,
 ) => {
   const angle = Math.atan2(y1 - y0, x1 - x0);
-  const head = 10;
+  const head = Math.max(13, lineWidth * 4.25);
 
   ctx.save();
   ctx.strokeStyle = color;
@@ -116,13 +116,11 @@ export default function LaunchDecomposition() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.width, size.height);
 
-    const panel = getCssColor('--bg-primary', '#ffffff');
     const simBg = getCssColor('--sim-bg', '#f8fafc');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
     const blue = getCssColor('--accent-blue', '#2563eb');
-    const red = getCssColor('--accent-red', '#ef4444');
     const green = '#16a34a';
     const amber = '#d97706';
 
@@ -207,14 +205,6 @@ export default function LaunchDecomposition() {
     ctx.beginPath();
     ctx.arc(originX, originY, 5, 0, Math.PI * 2);
     ctx.fill();
-
-    ctx.fillStyle = panel;
-    ctx.strokeStyle = red;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(endX, endY, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
   }, [angleDeg, components.vx, components.vy, size]);
 
   const updateFromPointer = (event: PointerEvent<HTMLCanvasElement>) => {

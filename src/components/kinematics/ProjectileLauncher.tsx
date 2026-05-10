@@ -12,6 +12,8 @@ type Point = {
 };
 
 type ProjectileState = {
+  id: number;
+  launchIndex: number;
   t: number;
   x: number;
   y: number;
@@ -27,16 +29,11 @@ type DragMode = 'aim' | 'target' | null;
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
 const VIEWPORT_WIDTH_M = 100;
 const GRID_STEP_M = 10;
-const INITIAL_PROJECTILE: ProjectileState = {
-  t: 0,
-  x: 0,
-  y: 0,
-  vx: 0,
-  vy: 0,
-  path: [],
-  landed: false,
-  maxHeight: 0,
-};
+const TRAIL_FADE_LAUNCHES = 10;
+const HIT_TOLERANCE_M = 0.2;
+const HIT_SPRITE_CHANCE = 0.25;
+const HIT_SPRITE_DURATION_MS = 1700;
+const HIT_SPRITE_SRC = '/images/resetti.png';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -52,14 +49,41 @@ const getCssColor = (name: string, fallback: string) => {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 };
 
-const makeProjectile = (angleDeg: number, speed: number): ProjectileState => {
+const makeProjectile = (
+  angleDeg: number,
+  speed: number,
+  id: number,
+  launchIndex: number,
+): ProjectileState => {
   const angle = toRadians(angleDeg);
   return {
-    ...INITIAL_PROJECTILE,
+    id,
+    launchIndex,
+    t: 0,
+    x: 0,
+    y: 0,
     vx: speed * Math.cos(angle),
     vy: speed * Math.sin(angle),
+    path: [{ x: 0, y: 0 }],
+    landed: false,
+    maxHeight: 0,
   };
 };
+
+const cloneProjectile = (projectile: ProjectileState): ProjectileState => ({
+  ...projectile,
+  path: [...projectile.path],
+});
+
+const cloneProjectiles = (projectiles: ProjectileState[]) => projectiles.map(cloneProjectile);
+
+const getTrailOpacity = (launchIndex: number, currentLaunchIndex: number) => {
+  const age = Math.max(0, currentLaunchIndex - launchIndex);
+  return clamp(1 - age / TRAIL_FADE_LAUNCHES, 0, 1);
+};
+
+const pruneTrajectories = (trajectories: ProjectileState[], currentLaunchIndex: number) =>
+  trajectories.filter((trajectory) => currentLaunchIndex - trajectory.launchIndex < TRAIL_FADE_LAUNCHES);
 
 export default function ProjectileLauncher() {
   const [size, setSize] = useState<Size>({ width: 860, height: 480 });
@@ -69,18 +93,25 @@ export default function ProjectileLauncher() {
   const [drag, setDrag] = useState(0);
   const [targetX, setTargetX] = useState(50);
   const [playing, setPlaying] = useState(false);
-  const [launched, setLaunched] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
-  const [snapshot, setSnapshot] = useState<ProjectileState>(() => makeProjectile(42, 24));
-  const [previousPath, setPreviousPath] = useState<Point[]>([]);
-  const [metrics, setMetrics] = useState({ time: 0, range: 0, maxHeight: 0 });
+  const [activeProjectiles, setActiveProjectiles] = useState<ProjectileState[]>([]);
+  const [landedTrajectories, setLandedTrajectories] = useState<ProjectileState[]>([]);
+  const [focusedProjectileId, setFocusedProjectileId] = useState<number | null>(null);
+  const [launchCount, setLaunchCount] = useState(0);
+  const [showHitSprite, setShowHitSprite] = useState(false);
+  const [hitSpriteReady, setHitSpriteReady] = useState(false);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const projectileRef = useRef<ProjectileState>(makeProjectile(angleDeg, speed));
+  const hitSpriteRef = useRef<HTMLImageElement | null>(null);
+  const activeProjectilesRef = useRef<ProjectileState[]>([]);
+  const landedTrajectoriesRef = useRef<ProjectileState[]>([]);
   const rafRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
   const dragModeRef = useRef<DragMode>(null);
+  const nextProjectileIdRef = useRef(1);
+  const launchCountRef = useRef(0);
+  const hitSpriteTimeoutRef = useRef<number | null>(null);
 
   const initialComponents = useMemo(() => {
     const angle = toRadians(angleDeg);
@@ -90,15 +121,30 @@ export default function ProjectileLauncher() {
     };
   }, [angleDeg, speed]);
 
-  const preview = useMemo(() => {
-    const tof = gravity > 0 ? (2 * initialComponents.vy) / gravity : 0;
+  const currentTrajectory = useMemo(() => {
+    if (focusedProjectileId === null) {
+      return null;
+    }
+
+    return (
+      activeProjectiles.find((projectile) => projectile.id === focusedProjectileId) ??
+      landedTrajectories.find((projectile) => projectile.id === focusedProjectileId) ??
+      null
+    );
+  }, [activeProjectiles, focusedProjectileId, landedTrajectories]);
+
+  const readoutMetrics = useMemo(() => {
+    if (!currentTrajectory) {
+      return { time: 0, range: 0, maxHeight: 0, miss: 0 };
+    }
+
     return {
-      time: Math.max(0, tof),
-      range: Math.max(0, initialComponents.vx * tof),
-      maxHeight:
-        gravity > 0 ? (initialComponents.vy * initialComponents.vy) / (2 * gravity) : 0,
+      time: currentTrajectory.t,
+      range: currentTrajectory.x,
+      maxHeight: currentTrajectory.maxHeight,
+      miss: Math.abs(targetX - currentTrajectory.x),
     };
-  }, [gravity, initialComponents.vx, initialComponents.vy]);
+  }, [currentTrajectory, targetX]);
 
   useEffect(() => {
     const element = wrapperRef.current;
@@ -119,69 +165,134 @@ export default function ProjectileLauncher() {
     return () => observer.disconnect();
   }, []);
 
-  const prime = useCallback(() => {
-    const projectile = makeProjectile(angleDeg, speed);
-    projectileRef.current = projectile;
-    setSnapshot({ ...projectile, path: [...projectile.path] });
-    setMetrics({ time: 0, range: 0, maxHeight: 0 });
-    setLaunched(false);
-    setPlaying(false);
-  }, [angleDeg, speed]);
-
   useEffect(() => {
-    if (!launched) {
-      projectileRef.current = makeProjectile(angleDeg, speed);
-      setSnapshot({ ...projectileRef.current, path: [] });
+    const image = new Image();
+    hitSpriteRef.current = image;
+    image.onload = () => setHitSpriteReady(true);
+    image.src = HIT_SPRITE_SRC;
+
+    return () => {
+      image.onload = null;
+      if (hitSpriteTimeoutRef.current !== null) {
+        window.clearTimeout(hitSpriteTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const triggerHitSprite = useCallback(() => {
+    if (hitSpriteTimeoutRef.current !== null) {
+      window.clearTimeout(hitSpriteTimeoutRef.current);
     }
-  }, [angleDeg, speed, launched]);
+
+    setShowHitSprite(true);
+    hitSpriteTimeoutRef.current = window.setTimeout(() => {
+      setShowHitSprite(false);
+      hitSpriteTimeoutRef.current = null;
+    }, HIT_SPRITE_DURATION_MS);
+  }, []);
 
   const launch = () => {
-    const projectile = makeProjectile(angleDeg, speed);
-    projectileRef.current = projectile;
-    setSnapshot({ ...projectile, path: [] });
-    setMetrics({ time: 0, range: 0, maxHeight: 0 });
-    setLaunched(true);
+    const nextLaunchCount = launchCountRef.current + 1;
+    const projectile = makeProjectile(
+      angleDeg,
+      speed,
+      nextProjectileIdRef.current,
+      nextLaunchCount,
+    );
+    const nextActiveProjectiles = [...activeProjectilesRef.current, projectile];
+    const nextLandedTrajectories = pruneTrajectories(
+      landedTrajectoriesRef.current,
+      nextLaunchCount,
+    );
+
+    nextProjectileIdRef.current += 1;
+    launchCountRef.current = nextLaunchCount;
+    activeProjectilesRef.current = nextActiveProjectiles;
+    landedTrajectoriesRef.current = nextLandedTrajectories;
+
+    setLaunchCount(nextLaunchCount);
+    setActiveProjectiles(cloneProjectiles(nextActiveProjectiles));
+    setLandedTrajectories(cloneProjectiles(nextLandedTrajectories));
+    setFocusedProjectileId(projectile.id);
     setPlaying(true);
   };
 
   const clear = () => {
-    setPreviousPath([]);
-    prime();
+    if (hitSpriteTimeoutRef.current !== null) {
+      window.clearTimeout(hitSpriteTimeoutRef.current);
+      hitSpriteTimeoutRef.current = null;
+    }
+
+    activeProjectilesRef.current = [];
+    landedTrajectoriesRef.current = [];
+    launchCountRef.current = 0;
+    nextProjectileIdRef.current = 1;
+    lastFrameRef.current = null;
+    setActiveProjectiles([]);
+    setLandedTrajectories([]);
+    setFocusedProjectileId(null);
+    setLaunchCount(0);
+    setShowHitSprite(false);
+    setPlaying(false);
   };
 
   const step = useCallback(
     (dt: number) => {
-      const state = projectileRef.current;
-      if (state.landed) {
+      const projectiles = activeProjectilesRef.current;
+      if (projectiles.length === 0) {
         return;
       }
 
-      const ax = -drag * state.vx;
-      const ay = -gravity - drag * state.vy;
-      state.vx += ax * dt;
-      state.vy += ay * dt;
-      state.x += state.vx * dt;
-      state.y += state.vy * dt;
-      state.t += dt;
-      state.maxHeight = Math.max(state.maxHeight, state.y);
-      state.path.push({ x: state.x, y: Math.max(0, state.y) });
+      const stillActive: ProjectileState[] = [];
+      const newlyLanded: ProjectileState[] = [];
 
-      if (state.y <= 0 && state.t > 0.02) {
-        const last = state.path[state.path.length - 1];
-        const previous = state.path[state.path.length - 2] ?? { x: 0, y: 0 };
-        const fraction = previous.y === last.y ? 1 : clamp(previous.y / (previous.y - last.y), 0, 1);
-        state.x = lerp(previous.x, last.x, fraction);
-        state.y = 0;
-        state.vx = 0;
-        state.vy = 0;
-        state.landed = true;
-        state.path[state.path.length - 1] = { x: state.x, y: 0 };
-        setPlaying(false);
-        setMetrics({ time: state.t, range: state.x, maxHeight: state.maxHeight });
-        setPreviousPath([{ x: 0, y: 0 }, ...state.path]);
+      projectiles.forEach((state) => {
+        const previousX = state.x;
+        const previousY = state.y;
+        const previousT = state.t;
+        const ax = -drag * state.vx;
+        const ay = -gravity - drag * state.vy;
+
+        state.vx += ax * dt;
+        state.vy += ay * dt;
+        state.x += state.vx * dt;
+        state.y += state.vy * dt;
+        state.t += dt;
+        state.maxHeight = Math.max(state.maxHeight, state.y);
+        state.path.push({ x: state.x, y: Math.max(0, state.y) });
+
+        if (state.y <= 0 && state.t > 0.02) {
+          const fraction =
+            previousY === state.y
+              ? 1
+              : clamp(previousY / (previousY - state.y), 0, 1);
+          state.x = lerp(previousX, state.x, fraction);
+          state.y = 0;
+          state.t = lerp(previousT, state.t, fraction);
+          state.vx = 0;
+          state.vy = 0;
+          state.landed = true;
+          state.path[state.path.length - 1] = { x: state.x, y: 0 };
+          if (Math.abs(targetX - state.x) <= HIT_TOLERANCE_M && Math.random() < HIT_SPRITE_CHANCE) {
+            triggerHitSprite();
+          }
+          newlyLanded.push(state);
+          return;
+        }
+
+        stillActive.push(state);
+      });
+
+      activeProjectilesRef.current = stillActive;
+
+      if (newlyLanded.length > 0) {
+        landedTrajectoriesRef.current = pruneTrajectories(
+          [...landedTrajectoriesRef.current, ...newlyLanded],
+          launchCountRef.current,
+        );
       }
     },
-    [drag, gravity],
+    [drag, gravity, targetX, triggerHitSprite],
   );
 
   useEffect(() => {
@@ -202,8 +313,15 @@ export default function ProjectileLauncher() {
         for (let index = 0; index < substeps; index += 1) {
           step(dt / substeps);
         }
-        const current = projectileRef.current;
-        setSnapshot({ ...current, path: [...current.path] });
+        setActiveProjectiles(cloneProjectiles(activeProjectilesRef.current));
+        setLandedTrajectories(cloneProjectiles(landedTrajectoriesRef.current));
+
+        if (activeProjectilesRef.current.length === 0) {
+          setPlaying(false);
+          rafRef.current = null;
+          lastFrameRef.current = null;
+          return;
+        }
       }
 
       lastFrameRef.current = timestamp;
@@ -216,6 +334,8 @@ export default function ProjectileLauncher() {
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
       }
+      rafRef.current = null;
+      lastFrameRef.current = null;
     };
   }, [playing, step]);
 
@@ -278,6 +398,7 @@ export default function ProjectileLauncher() {
     const red = getCssColor('--accent-red', '#ef4444');
     const green = '#16a34a';
     const amber = '#d97706';
+    const launcher = '#c2410c';
 
     ctx.clearRect(0, 0, size.width, size.height);
     ctx.fillStyle = bg;
@@ -342,7 +463,18 @@ export default function ProjectileLauncher() {
     ctx.closePath();
     ctx.fill();
 
-    const drawPath = (path: Point[], color: string, alpha = 1, width = 2.5) => {
+    if (showHitSprite && hitSpriteReady && hitSpriteRef.current) {
+      const spriteSize = 24;
+      const spriteGap = 10;
+      const spriteX =
+        target.x + spriteGap + spriteSize <= size.width - 18
+          ? target.x + spriteGap
+          : target.x - spriteGap - spriteSize;
+      const spriteY = target.y - 44;
+      ctx.drawImage(hitSpriteRef.current, spriteX, spriteY, spriteSize, spriteSize);
+    }
+
+    const drawPath = (path: Point[], color: string, alpha = 1, width = 2.5, dash: number[] = []) => {
       if (path.length < 2) {
         return;
       }
@@ -353,6 +485,7 @@ export default function ProjectileLauncher() {
       ctx.lineWidth = width;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      ctx.setLineDash(dash);
       ctx.beginPath();
       path.forEach((point, index) => {
         const screen = worldToScreen(point);
@@ -366,22 +499,57 @@ export default function ProjectileLauncher() {
       ctx.restore();
     };
 
-    drawPath(previousPath, blue, 0.3, 2.4);
-    drawPath([{ x: 0, y: 0 }, ...snapshot.path], blue, 1, 2.6);
+    landedTrajectories.forEach((trajectory) => {
+      drawPath(
+        trajectory.path,
+        blue,
+        getTrailOpacity(trajectory.launchIndex, launchCount),
+        2.3,
+        [8, 6],
+      );
+    });
 
-    if (!launched) {
-      const origin = worldToScreen({ x: 0, y: 0 });
-      const tip = worldToScreen({ x: initialComponents.vx * 0.72, y: initialComponents.vy * 0.72 });
-      drawArrow(ctx, origin.x, origin.y, tip.x, tip.y, blue, 3);
-    }
+    activeProjectiles.forEach((projectile) => {
+      drawPath(projectile.path, blue, projectile.id === focusedProjectileId ? 1 : 0.68, 2.6);
+    });
 
-    if (launched && !snapshot.landed) {
-      const ball = worldToScreen({ x: snapshot.x, y: snapshot.y });
+    const origin = worldToScreen({ x: 0, y: 0 });
+    const launchTip = worldToScreen({
+      x: initialComponents.vx * 0.72,
+      y: initialComponents.vy * 0.72,
+    });
+    drawArrow(ctx, origin.x, origin.y, launchTip.x, launchTip.y, launcher, 3);
+    ctx.fillStyle = launcher;
+    ctx.font = `700 12px ${FONT}`;
+    ctx.fillText('v0', launchTip.x + 8, launchTip.y - 8);
+
+    activeProjectiles.forEach((projectile) => {
+      const ball = worldToScreen({ x: projectile.x, y: projectile.y });
+      ctx.save();
+      ctx.globalAlpha = projectile.id === focusedProjectileId ? 1 : 0.72;
       ctx.fillStyle = blue;
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
       ctx.fill();
-      drawArrow(ctx, ball.x, ball.y, ball.x + snapshot.vx * scale * 0.35, ball.y - snapshot.vy * scale * 0.35, blue, 2);
+      ctx.restore();
+    });
+
+    const focusedActiveProjectile =
+      focusedProjectileId === null
+        ? null
+        : activeProjectiles.find((projectile) => projectile.id === focusedProjectileId) ?? null;
+
+    if (focusedActiveProjectile) {
+      const ball = worldToScreen({ x: focusedActiveProjectile.x, y: focusedActiveProjectile.y });
+      drawArrow(
+        ctx,
+        ball.x,
+        ball.y,
+        ball.x + focusedActiveProjectile.vx * scale * 0.35,
+        ball.y - focusedActiveProjectile.vy * scale * 0.35,
+        blue,
+        2,
+      );
       drawArrow(ctx, ball.x, ball.y, ball.x, ball.y + gravity * scale * 0.52, amber, 2);
       ctx.fillStyle = text;
       ctx.font = `600 12px ${FONT}`;
@@ -389,14 +557,18 @@ export default function ProjectileLauncher() {
       ctx.fillText('a', ball.x + 10, ball.y + 26);
     }
 
-    const origin = worldToScreen({ x: 0, y: 0 });
     ctx.fillStyle = text;
     ctx.beginPath();
     ctx.arc(origin.x, origin.y, 5, 0, Math.PI * 2);
     ctx.fill();
 
-    if (snapshot.landed) {
-      const landing = worldToScreen({ x: snapshot.x, y: 0 });
+    const focusedLandedProjectile =
+      focusedProjectileId === null
+        ? null
+        : landedTrajectories.find((projectile) => projectile.id === focusedProjectileId) ?? null;
+
+    if (focusedLandedProjectile) {
+      const landing = worldToScreen({ x: focusedLandedProjectile.x, y: 0 });
       ctx.save();
       ctx.setLineDash([6, 5]);
       ctx.strokeStyle = red;
@@ -415,21 +587,19 @@ export default function ProjectileLauncher() {
       ctx.stroke();
     }
   }, [
+    activeProjectiles,
+    focusedProjectileId,
     getWorldViewport,
     gravity,
     initialComponents.vx,
     initialComponents.vy,
-    launched,
-    previousPath,
+    landedTrajectories,
+    launchCount,
     showGrid,
+    showHitSprite,
+    hitSpriteReady,
     size.height,
     size.width,
-    snapshot.landed,
-    snapshot.path,
-    snapshot.vx,
-    snapshot.vy,
-    snapshot.x,
-    snapshot.y,
     targetX,
     worldToScreen,
   ]);
@@ -476,10 +646,10 @@ export default function ProjectileLauncher() {
   return (
     <div ref={wrapperRef} className="flex h-full min-h-[42rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
       <div className="grid gap-3 md:grid-cols-4">
-        <Readout label="time" value={`${(snapshot.landed ? metrics.time : snapshot.t).toFixed(2)} s`} />
-        <Readout label="range" value={`${(snapshot.landed ? metrics.range : preview.range).toFixed(1)} m`} />
-        <Readout label="max height" value={`${(snapshot.landed ? metrics.maxHeight : preview.maxHeight).toFixed(1)} m`} />
-        <Readout label="miss" value={`${Math.abs(targetX - (snapshot.landed ? snapshot.x : preview.range)).toFixed(1)} m`} />
+        <Readout label="time" value={`${readoutMetrics.time.toFixed(2)} s`} />
+        <Readout label="range" value={`${readoutMetrics.range.toFixed(1)} m`} />
+        <Readout label="max height" value={`${readoutMetrics.maxHeight.toFixed(1)} m`} />
+        <Readout label="miss" value={`${readoutMetrics.miss.toFixed(1)} m`} />
       </div>
 
       <canvas
@@ -516,11 +686,11 @@ export default function ProjectileLauncher() {
               <Play className="h-4 w-4" />
               Launch
             </button>
-            <button type="button" title={playing ? 'Pause' : 'Resume'} onClick={() => setPlaying((value) => (launched ? !value : value))} className={buttonClass} disabled={!launched || snapshot.landed}>
+            <button type="button" title={playing ? 'Pause' : 'Resume'} onClick={() => setPlaying((value) => (activeProjectiles.length > 0 ? !value : value))} className={buttonClass} disabled={activeProjectiles.length === 0}>
               <Pause className="h-4 w-4" />
               {playing ? 'Pause' : 'Resume'}
             </button>
-            <button type="button" title="Clear trace" onClick={clear} className={buttonClass}>
+            <button type="button" title="Clear trajectories" onClick={clear} className={buttonClass}>
               <RotateCcw className="h-4 w-4" />
               Reset
             </button>
@@ -570,7 +740,7 @@ function drawArrow(
   lineWidth = 2,
 ) {
   const angle = Math.atan2(y1 - y0, x1 - x0);
-  const head = 9;
+  const head = Math.max(11, lineWidth * 4.5);
 
   ctx.save();
   ctx.strokeStyle = color;

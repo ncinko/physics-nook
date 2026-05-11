@@ -73,13 +73,27 @@ The local game client defaults to `ws://localhost:8788`. In production over HTTP
 
 ## Deployment Notes
 
-Cloudflare Pages can build the game client with:
+This repo has two Cloudflare Pages projects using the same root `wrangler.toml`.
+Both should publish `dist`; the build command decides what goes into that folder.
+
+For `physics-nook`, use:
+
+```sh
+npm run build
+```
+
+For `physics-nook-game`, Cloudflare Pages can build the game client with:
 
 ```sh
 npm run game:build
 ```
 
-Use `apps/client/dist` as the Pages output directory for `game.physicsnook.com`.
+Cloudflare Pages sets `CF_PAGES=1`, so the game build writes to the shared root
+`dist` output directory during deployment. For a manual local Pages-style build, use:
+
+```sh
+npm run game:build:pages
+```
 
 Host the authoritative server separately and expose it as `wss://ws.physicsnook.com`. The server process listens on `GAME_WS_PORT`, then `PORT`, then `8788`.
 

@@ -13,6 +13,7 @@
     "realtime": "node server/realtime.mjs",
     "game:dev": "vite --config apps/client/vite.config.ts",
     "game:build": "vite build --config apps/client/vite.config.ts",
+    "game:build:pages": "vite build --config apps/client/vite.config.ts --outDir ../../dist",
     "game:preview": "vite preview --config apps/client/vite.config.ts",
     "game:server": "node --experimental-strip-types apps/server/src/server.ts",
     "game:server:watch": "node --experimental-strip-types --watch apps/server/src/server.ts",

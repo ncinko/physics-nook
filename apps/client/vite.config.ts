@@ -6,6 +6,9 @@ const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const mainEntry = fileURLToPath(new URL('./index.html', import.meta.url));
 const orbitalsEntry = fileURLToPath(new URL('./orbitals/index.html', import.meta.url));
 const ripplesEntry = fileURLToPath(new URL('./ripples/index.html', import.meta.url));
+const outDir = process.env.CF_PAGES === '1'
+  ? fileURLToPath(new URL('../../dist', import.meta.url))
+  : 'dist';
 
 export default defineConfig({
   root,
@@ -23,7 +26,7 @@ export default defineConfig({
     port: 4173,
   },
   build: {
-    outDir: 'dist',
+    outDir,
     emptyOutDir: true,
     sourcemap: true,
     rollupOptions: {

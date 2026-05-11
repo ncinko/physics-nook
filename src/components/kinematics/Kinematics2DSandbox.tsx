@@ -56,6 +56,11 @@ type ApiStatus = 'checking' | 'online' | 'offline';
 type GoalRushScoreEntry = GoalRushLeaderboardScore & { id?: string };
 
 const GAME_TIME = GOAL_RUSH_DEFAULTS.gameTimeS;
+const GRID_HALF_CELLS = 8;
+const GRID_CELLS = GRID_HALF_CELLS * 2;
+const GRID_CELL_SIZE = 50;
+const BOARD_SIZE = GRID_CELLS * GRID_CELL_SIZE;
+const BOARD_HALF_SIZE = BOARD_SIZE / 2;
 const PLAYER_RADIUS = 8;
 const CONTROL_ACCEL = 400;
 const BOOST_ACCEL_BONUS = 200;
@@ -109,29 +114,29 @@ const makeSnapshot = (runtime: Runtime): Snapshot => ({
   speed: Math.hypot(runtime.vx, runtime.vy),
 });
 
-const makeSpawnPosition = (width: number, height: number) => {
+const makeSpawnPosition = () => {
   const margin = 58;
 
   return {
-    x: randomBetween(-width / 2 + margin, width / 2 - margin),
-    y: randomBetween(-height / 2 + margin, height / 2 - margin),
+    x: randomBetween(-BOARD_HALF_SIZE + margin, BOARD_HALF_SIZE - margin),
+    y: randomBetween(-BOARD_HALF_SIZE + margin, BOARD_HALF_SIZE - margin),
   };
 };
 
-const makeClockSpawn = (width: number, height: number, id: number): Spawn => {
-  const { x, y } = makeSpawnPosition(width, height);
+const makeClockSpawn = (id: number): Spawn => {
+  const { x, y } = makeSpawnPosition();
 
   return { id, kind: 'clock', x, y, radius: 16, points: 0, golden: false };
 };
 
-const makeSpawn = (width: number, height: number, id: number): Spawn => {
+const makeSpawn = (id: number): Spawn => {
   const roll = Math.random();
 
   if (roll < 0.14) {
-    return makeClockSpawn(width, height, id);
+    return makeClockSpawn(id);
   }
 
-  const { x, y } = makeSpawnPosition(width, height);
+  const { x, y } = makeSpawnPosition();
 
   if (roll < 0.29) {
     return { id, kind: 'boost', x, y, radius: 16, points: 0, golden: false };
@@ -150,7 +155,7 @@ const makeSpawn = (width: number, height: number, id: number): Spawn => {
 };
 
 export default function Kinematics2DSandbox() {
-  const [size, setSize] = useState<Size>({ width: 860, height: 560 });
+  const [size, setSize] = useState<Size>({ width: BOARD_SIZE, height: BOARD_SIZE });
   const [snapshot, setSnapshot] = useState<Snapshot>(() => makeSnapshot(createRuntime()));
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -172,9 +177,12 @@ export default function Kinematics2DSandbox() {
 
   const readouts = useMemo(
     () => [
-      { label: 'position', value: `<${snapshot.x.toFixed(0)}, ${(-snapshot.y).toFixed(0)}>` },
-      { label: 'velocity', value: `${snapshot.speed.toFixed(0)} px/s` },
-      { label: 'acceleration', value: `${Math.hypot(snapshot.ax, snapshot.ay).toFixed(0)} px/s^2` },
+      {
+        label: 'position',
+        value: `<${(snapshot.x / GRID_CELL_SIZE).toFixed(1)}, ${(-snapshot.y / GRID_CELL_SIZE).toFixed(1)}>`,
+      },
+      { label: 'velocity', value: `${(snapshot.speed / GRID_CELL_SIZE).toFixed(1)} sq/s` },
+      { label: 'acceleration', value: `${(Math.hypot(snapshot.ax, snapshot.ay) / GRID_CELL_SIZE).toFixed(1)} sq/s^2` },
     ],
     [snapshot.ax, snapshot.ay, snapshot.speed, snapshot.x, snapshot.y],
   );
@@ -188,7 +196,7 @@ export default function Kinematics2DSandbox() {
     const nextSpawns: Spawn[] = [];
 
     spawnIdRef.current += 1;
-    nextSpawns.push(makeClockSpawn(size.width, size.height, spawnIdRef.current));
+    nextSpawns.push(makeClockSpawn(spawnIdRef.current));
 
     for (let index = 0; index < SPAWN_COUNT; index += 1) {
       if (nextSpawns.length >= SPAWN_COUNT) {
@@ -196,12 +204,12 @@ export default function Kinematics2DSandbox() {
       }
 
       spawnIdRef.current += 1;
-      nextSpawns.push(makeSpawn(size.width, size.height, spawnIdRef.current));
+      nextSpawns.push(makeSpawn(spawnIdRef.current));
     }
 
     runtime.spawns = nextSpawns;
     runtime.nextClockSpawnMs = CLOCK_SPAWN_INTERVAL_MS;
-  }, [size.height, size.width]);
+  }, []);
 
   const loadLocalScores = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -439,16 +447,16 @@ export default function Kinematics2DSandbox() {
 
   const toScreen = useCallback(
     (x: number, y: number) => ({
-      x: size.width / 2 + x,
-      y: size.height / 2 + y,
+      x: BOARD_HALF_SIZE + x,
+      y: BOARD_HALF_SIZE + y,
     }),
-    [size.height, size.width],
+    [],
   );
 
   const toWorld = useCallback(
     (x: number, y: number) => ({
-      x: x - size.width / 2,
-      y: y - size.height / 2,
+      x: (x / Math.max(1, size.width)) * BOARD_SIZE - BOARD_HALF_SIZE,
+      y: (y / Math.max(1, size.height)) * BOARD_SIZE - BOARD_HALF_SIZE,
     }),
     [size.height, size.width],
   );
@@ -513,7 +521,7 @@ export default function Kinematics2DSandbox() {
           runtime.elapsedMs += dt * 1000;
           while (runtime.elapsedMs >= runtime.nextClockSpawnMs) {
             spawnIdRef.current += 1;
-            runtime.spawns[0] = makeClockSpawn(size.width, size.height, spawnIdRef.current);
+            runtime.spawns[0] = makeClockSpawn(spawnIdRef.current);
             runtime.nextClockSpawnMs += CLOCK_SPAWN_INTERVAL_MS;
           }
 
@@ -530,8 +538,8 @@ export default function Kinematics2DSandbox() {
         runtime.y += runtime.vy * dt;
       }
 
-      const halfW = size.width / 2 - PLAYER_RADIUS - 8;
-      const halfH = size.height / 2 - PLAYER_RADIUS - 8;
+      const halfW = BOARD_HALF_SIZE - PLAYER_RADIUS - 8;
+      const halfH = BOARD_HALF_SIZE - PLAYER_RADIUS - 8;
       if (runtime.x < -halfW) {
         runtime.x = -halfW;
         runtime.vx *= -0.62;
@@ -570,11 +578,11 @@ export default function Kinematics2DSandbox() {
           }
 
           spawnIdRef.current += 1;
-          runtime.spawns[index] = makeSpawn(size.width, size.height, spawnIdRef.current);
+          runtime.spawns[index] = makeSpawn(spawnIdRef.current);
         });
       }
     },
-    [finishGame, size.height, size.width],
+    [finishGame],
   );
 
   const drawScene = useCallback(() => {
@@ -589,11 +597,15 @@ export default function Kinematics2DSandbox() {
     }
 
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(size.width * dpr);
-    canvas.height = Math.floor(size.height * dpr);
-    canvas.style.width = `${size.width}px`;
-    canvas.style.height = `${size.height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const displayWidth = Math.max(1, size.width);
+    const displayHeight = Math.max(1, size.height);
+    const scaleX = displayWidth / BOARD_SIZE;
+    const scaleY = displayHeight / BOARD_SIZE;
+    canvas.width = Math.floor(displayWidth * dpr);
+    canvas.height = Math.floor(displayHeight * dpr);
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+    ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
 
     const bg = getCssColor('--sim-bg', '#f8fafc');
     const grid = getCssColor('--grid-line', '#d1d5db');
@@ -606,44 +618,44 @@ export default function Kinematics2DSandbox() {
     const violet = '#7c3aed';
 
     const runtime = runtimeRef.current;
-    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.clearRect(0, 0, BOARD_SIZE, BOARD_SIZE);
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, size.width, size.height);
+    ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
 
     ctx.strokeStyle = grid;
     ctx.lineWidth = 1;
-    for (let x = size.width / 2; x <= size.width; x += 50) {
+    for (let x = BOARD_HALF_SIZE; x <= BOARD_SIZE; x += GRID_CELL_SIZE) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, size.height);
+      ctx.lineTo(x, BOARD_SIZE);
       ctx.stroke();
     }
-    for (let x = size.width / 2 - 50; x >= 0; x -= 50) {
+    for (let x = BOARD_HALF_SIZE - GRID_CELL_SIZE; x >= 0; x -= GRID_CELL_SIZE) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, size.height);
+      ctx.lineTo(x, BOARD_SIZE);
       ctx.stroke();
     }
-    for (let y = size.height / 2; y <= size.height; y += 50) {
+    for (let y = BOARD_HALF_SIZE; y <= BOARD_SIZE; y += GRID_CELL_SIZE) {
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(size.width, y);
+      ctx.lineTo(BOARD_SIZE, y);
       ctx.stroke();
     }
-    for (let y = size.height / 2 - 50; y >= 0; y -= 50) {
+    for (let y = BOARD_HALF_SIZE - GRID_CELL_SIZE; y >= 0; y -= GRID_CELL_SIZE) {
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(size.width, y);
+      ctx.lineTo(BOARD_SIZE, y);
       ctx.stroke();
     }
 
     ctx.strokeStyle = muted;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(0, size.height / 2);
-    ctx.lineTo(size.width, size.height / 2);
-    ctx.moveTo(size.width / 2, 0);
-    ctx.lineTo(size.width / 2, size.height);
+    ctx.moveTo(0, BOARD_HALF_SIZE);
+    ctx.lineTo(BOARD_SIZE, BOARD_HALF_SIZE);
+    ctx.moveTo(BOARD_HALF_SIZE, 0);
+    ctx.lineTo(BOARD_HALF_SIZE, BOARD_SIZE);
     ctx.stroke();
 
     if (runtime.goalRush) {
@@ -718,7 +730,7 @@ export default function Kinematics2DSandbox() {
 
     ctx.strokeStyle = muted;
     ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, size.width - 2, size.height - 2);
+    ctx.strokeRect(1, 1, BOARD_SIZE - 2, BOARD_SIZE - 2);
   }, [size.height, size.width, toScreen]);
 
   useEffect(() => {

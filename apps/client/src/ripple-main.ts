@@ -125,6 +125,12 @@ if (!ctx) {
   throw new Error('Could not initialize Ripple Tank canvas.');
 }
 
+const waterBitmapCanvas = document.createElement('canvas');
+const waterBitmapCtx = waterBitmapCanvas.getContext('2d', { alpha: true });
+if (!waterBitmapCtx) {
+  throw new Error('Could not initialize Ripple Tank water bitmap.');
+}
+
 const MIN_COLS = 52;
 const MAX_COLS = 132;
 const MIN_ROWS = 28;
@@ -176,6 +182,10 @@ type Rgb = {
   b: number;
 };
 
+type Rgba = Rgb & {
+  a: number;
+};
+
 const mixChannel = (a: number, b: number, t: number): number => Math.round(a + (b - a) * t);
 
 const mixColor = (a: Rgb, b: Rgb, t: number): Rgb => ({
@@ -189,6 +199,8 @@ const scaleColor = (color: Rgb, factor: number): Rgb => ({
   g: clamp(Math.round(color.g * factor), 0, 255),
   b: clamp(Math.round(color.b * factor), 0, 255),
 });
+
+const alphaByte = (alpha: number): number => clamp(Math.round(alpha * 255), 0, 255);
 
 const createGridState = (cols: number, rows: number): GridState => {
   const size = cols * rows;
@@ -231,6 +243,9 @@ let lastObjectSendAt = 0;
 let localObjectId = 1;
 let processedSplashIds = new Set<string>();
 let objectMask = new Uint8Array(0);
+let objectMaskDirty = true;
+let objectMaskSignature = '';
+let waterBitmapImageData: ImageData | null = null;
 let displaySensitivity = DEFAULT_DISPLAY_SENSITIVITY;
 let useGradientDrawing = false;
 let usingLocalTank = true;
@@ -528,10 +543,31 @@ const screenToWorld = (x: number, y: number) => {
   };
 };
 
+const objectMaskSignatureFor = (items: RippleObjectSnapshot[]): string =>
+  items
+    .map((object) => [
+      object.id,
+      object.kind,
+      object.x,
+      object.y,
+      object.width,
+      object.height,
+      object.rotation,
+      object.gap,
+      object.spacing,
+    ].join(':'))
+    .join('|');
+
+const markObjectMaskDirty = (): void => {
+  objectMaskDirty = true;
+};
+
 const clearGrid = (): void => {
   grid = createGridState(size.cols, size.rows);
   objectMask = new Uint8Array(size.cols * size.rows);
   simulationAccumulator = 0;
+  objectMaskSignature = '';
+  markObjectMaskDirty();
 };
 
 const resize = (): void => {
@@ -728,6 +764,8 @@ const isPointInsideObject = (
 };
 
 const buildObjectMask = (): void => {
+  if (!objectMaskDirty) return;
+
   objectMask.fill(0);
   const firstRow = Math.max(1, size.sinkRows);
   const lastRow = Math.min(size.rows - 2, size.sinkRows + size.activeRows - 1);
@@ -747,6 +785,9 @@ const buildObjectMask = (): void => {
       }
     }
   }
+
+  objectMaskSignature = objectMaskSignatureFor(objects);
+  objectMaskDirty = false;
 };
 
 const sampleNeighbor = (index: number, currentIndex: number): number =>
@@ -861,13 +902,42 @@ const advanceSimulationStep = (): void => {
   stepGrid();
 };
 
-const gradientWaterFill = (
+const ensureWaterBitmap = (cols: number, rows: number): ImageData => {
+  const bitmapCols = Math.max(1, cols);
+  const bitmapRows = Math.max(1, rows);
+
+  if (
+    waterBitmapCanvas.width !== bitmapCols ||
+    waterBitmapCanvas.height !== bitmapRows ||
+    !waterBitmapImageData
+  ) {
+    waterBitmapCanvas.width = bitmapCols;
+    waterBitmapCanvas.height = bitmapRows;
+    waterBitmapImageData = waterBitmapCtx.createImageData(bitmapCols, bitmapRows);
+  }
+
+  return waterBitmapImageData;
+};
+
+const writeWaterPixel = (pixels: Uint8ClampedArray, offset: number, color: Rgba): void => {
+  pixels[offset] = color.r;
+  pixels[offset + 1] = color.g;
+  pixels[offset + 2] = color.b;
+  pixels[offset + 3] = color.a;
+};
+
+const maskedWaterColor = (lightMode: boolean): Rgba =>
+  lightMode
+    ? { r: 15, g: 87, b: 116, a: alphaByte(0.18) }
+    : { r: 199, g: 233, b: 255, a: alphaByte(0.14) };
+
+const gradientWaterColor = (
   value: number,
   magnitude: number,
   threshold: number,
   shimmer: number,
   lightMode: boolean,
-): string => {
+): Rgba => {
   const trough = lightMode ? { r: 12, g: 116, b: 128 } : { r: 18, g: 87, b: 120 };
   const neutral = lightMode ? { r: 190, g: 235, b: 239 } : { r: 76, g: 142, b: 164 };
   const crest = lightMode ? { r: 104, g: 168, b: 248 } : { r: 120, g: 208, b: 252 };
@@ -877,7 +947,35 @@ const gradientWaterFill = (
   const alpha = clamp(0.025 + intensity * intensity * (lightMode ? 0.32 : 0.36), 0.02, lightMode ? 0.36 : 0.4);
   const litColor = scaleColor(color, 0.92 + shimmer * 0.18);
 
-  return `rgba(${litColor.r}, ${litColor.g}, ${litColor.b}, ${alpha})`;
+  return { ...litColor, a: alphaByte(alpha) };
+};
+
+const flatWaterColor = (
+  value: number,
+  magnitude: number,
+  threshold: number,
+  shimmer: number,
+  lightMode: boolean,
+  gain: number,
+): Rgba => {
+  const visibleMagnitude = Math.max(0, magnitude - threshold);
+  const alpha = clamp(0.04 + visibleMagnitude * gain, 0.035, lightMode ? 0.32 : 0.36);
+
+  if (value >= 0) {
+    return {
+      r: lightMode ? Math.round(92 + shimmer * 70) : Math.round(44 + shimmer * 26),
+      g: lightMode ? Math.round(164 + shimmer * 42) : Math.round(116 + shimmer * 34),
+      b: lightMode ? 248 : Math.round(184 + shimmer * 22),
+      a: alphaByte(alpha),
+    };
+  }
+
+  return {
+    r: lightMode ? Math.round(15 + shimmer * 22) : Math.round(18 + shimmer * 20),
+    g: lightMode ? Math.round(118 + shimmer * 20) : Math.round(82 + shimmer * 28),
+    b: lightMode ? Math.round(128 + shimmer * 26) : Math.round(118 + shimmer * 24),
+    a: alphaByte(alpha * 0.92),
+  };
 };
 
 const drawWater = (): void => {
@@ -892,8 +990,12 @@ const drawWater = (): void => {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const visibleRows = Math.ceil(metrics.visibleRows);
-  const visibleCols = Math.ceil(metrics.visibleCols);
+  const visibleRows = Math.max(1, Math.ceil(metrics.visibleRows));
+  const visibleCols = Math.max(1, Math.ceil(metrics.visibleCols));
+  const bitmap = ensureWaterBitmap(visibleCols, visibleRows);
+  const pixels = bitmap.data;
+  pixels.fill(0);
+  const maskedColor = maskedWaterColor(lightMode);
 
   for (let viewRow = 1; viewRow < visibleRows - 1; viewRow += 1) {
     const row = Math.round(origin.row + viewRow);
@@ -907,44 +1009,28 @@ const drawWater = (): void => {
       const value = current[index];
       const magnitude = Math.abs(value);
       if (magnitude < threshold && !objectMask[index]) continue;
-
-      const x = viewCol * metrics.cellWidth;
-      const y = viewRow * metrics.cellHeight;
+      const pixelOffset = (viewRow * visibleCols + viewCol) * 4;
 
       if (objectMask[index]) {
-        ctx.fillStyle = lightMode ? 'rgba(15, 87, 116, 0.18)' : 'rgba(199, 233, 255, 0.14)';
-        ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
+        writeWaterPixel(pixels, pixelOffset, maskedColor);
         continue;
       }
 
       const slopeX = current[index + 1] - current[index - 1];
       const slopeY = current[index + size.cols] - current[index - size.cols];
       const shimmer = clamp(0.5 + slopeX * 0.7 - slopeY * 0.55, 0, 1);
-
-      if (useGradientDrawing) {
-        ctx.fillStyle = gradientWaterFill(value, magnitude, threshold, shimmer, lightMode);
-        ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
-        continue;
-      }
-
-      const visibleMagnitude = Math.max(0, magnitude - threshold);
-      const alpha = clamp(0.04 + visibleMagnitude * gain, 0.035, lightMode ? 0.32 : 0.36);
-
-      if (value >= 0) {
-        const r = lightMode ? Math.round(92 + shimmer * 70) : Math.round(44 + shimmer * 26);
-        const g = lightMode ? Math.round(164 + shimmer * 42) : Math.round(116 + shimmer * 34);
-        const b = lightMode ? 248 : Math.round(184 + shimmer * 22);
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-      } else {
-        const r = lightMode ? Math.round(15 + shimmer * 22) : Math.round(18 + shimmer * 20);
-        const g = lightMode ? Math.round(118 + shimmer * 20) : Math.round(82 + shimmer * 28);
-        const b = lightMode ? Math.round(128 + shimmer * 26) : Math.round(118 + shimmer * 24);
-        ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * 0.92})`;
-      }
-
-      ctx.fillRect(x, y, metrics.cellWidth + 1, metrics.cellHeight + 1);
+      const color = useGradientDrawing
+        ? gradientWaterColor(value, magnitude, threshold, shimmer, lightMode)
+        : flatWaterColor(value, magnitude, threshold, shimmer, lightMode, gain);
+      writeWaterPixel(pixels, pixelOffset, color);
     }
   }
+
+  waterBitmapCtx.putImageData(bitmap, 0, 0);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(waterBitmapCanvas, 0, 0, visibleCols, visibleRows, 0, 0, size.width, size.height);
+  ctx.restore();
 
   ctx.save();
   ctx.strokeStyle = lightMode ? 'rgba(255, 255, 255, 0.26)' : 'rgba(199, 233, 255, 0.13)';
@@ -1158,6 +1244,7 @@ const updateLocalEmitter = (id: string, patch: RippleEmitterPatch): void => {
 
 const updateLocalObject = (id: string, patch: RippleObjectPatch): void => {
   objects = objects.map((object) => (object.id === id ? { ...object, ...patch } : object));
+  markObjectMaskDirty();
   if (id === selectedObjectId) updateSelectionPanel();
 };
 
@@ -1201,6 +1288,11 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
     resetVersion = snapshot.resetVersion;
     processedSplashIds.clear();
     clearGrid();
+  }
+
+  const nextObjectMaskSignature = objectMaskSignatureFor(snapshot.objects);
+  if (objectMaskDirty || nextObjectMaskSignature !== objectMaskSignature) {
+    markObjectMaskDirty();
   }
 
   emitters = snapshot.emitters;
@@ -1383,6 +1475,7 @@ const createObjectAt = (kind: RippleObjectKind, x: number, y: number): void => {
 
     const object = createDefaultRippleObject(`local-object-${localObjectId++}`, kind, patch, Date.now());
     objects = [...objects, object];
+    markObjectMaskDirty();
     selectObject(object.id);
     return;
   }
@@ -1393,6 +1486,7 @@ const createObjectAt = (kind: RippleObjectKind, x: number, y: number): void => {
 const deleteObject = (id: string): void => {
   if (usingLocalTank) {
     objects = objects.filter((object) => object.id !== id);
+    markObjectMaskDirty();
     if (selectedObjectId === id) {
       clearSelection();
     } else {

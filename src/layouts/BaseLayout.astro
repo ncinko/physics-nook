@@ -4,7 +4,12 @@ import Navbar from '../components/layout/Navbar.astro';
 import { getPageMetaByPath } from '../data/modules';
 import { buildDocumentTitle, siteMeta, type PageMeta } from '../data/site';
 
-interface Props extends Partial<PageMeta> {}
+interface Props extends Partial<PageMeta> {
+  showNav?: boolean;
+  bodyClass?: string;
+  mainClass?: string;
+  wrapMain?: boolean;
+}
 
 const currentPath = Astro.url.pathname;
 const defaults = getPageMetaByPath(currentPath);
@@ -14,6 +19,10 @@ const {
   canonicalPath = defaults?.canonicalPath ?? currentPath,
   image = defaults?.image ?? siteMeta.defaultSocialImage,
   noindex = defaults?.noindex ?? false,
+  showNav = true,
+  bodyClass = 'min-h-screen bg-theme-bg text-theme-text',
+  mainClass = showNav ? 'pt-20' : '',
+  wrapMain = true,
 } = Astro.props;
 
 const pageMeta = { title, description, canonicalPath, image, noindex };
@@ -58,11 +67,15 @@ const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString
     <meta name="twitter:description" content={pageMeta.description} />
     {socialImageUrl && <meta name="twitter:image" content={socialImageUrl} />}
   </head>
-  <body class="min-h-screen bg-theme-bg text-theme-text">
-    <Navbar currentPath={currentPath} />
-    <main class="pt-20">
+  <body class={bodyClass}>
+    {showNav && <Navbar currentPath={currentPath} />}
+    {wrapMain ? (
+      <main class={mainClass}>
+        <slot />
+      </main>
+    ) : (
       <slot />
-    </main>
+    )}
   </body>
 </html>
 

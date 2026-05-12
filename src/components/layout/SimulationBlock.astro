@@ -49,7 +49,7 @@ const breakoutClass =
 </section>
 
 <script>
-  const syncButtonState = (block, button, isActive) => {
+  const syncButtonState = (block: Element, button: Element, isActive: boolean) => {
     button.textContent = isActive ? 'Exit Fullscreen' : 'Fullscreen';
     button.setAttribute('aria-label', isActive ? 'Exit fullscreen' : 'Enter fullscreen');
     block.classList.toggle('is-fallback-fullscreen', isActive && !document.fullscreenElement);

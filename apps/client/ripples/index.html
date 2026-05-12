@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
@@ -25,15 +25,15 @@
           <div class="display-controls" aria-label="Display controls">
             <label class="control-slider">
               <span>Display sensitivity</span>
-              <input id="sensitivityInput" type="range" min="0" max="160" step="1" value="72" />
+              <input id="sensitivityInput" type="range" min="0" max="160" step="1" value="0" />
             </label>
             <label class="control-toggle">
-              <input id="gradientInput" type="checkbox" />
+              <input id="gradientInput" type="checkbox" checked />
               <span>Gradient</span>
             </label>
           </div>
           <div class="action-group" aria-label="Ripple tank controls">
-            <button id="themeButton" type="button" aria-label="Switch color theme">Dark</button>
+            <button id="themeButton" type="button" aria-label="Switch to light mode">Light</button>
             <button id="pauseButton" type="button" aria-label="Pause ripple simulation">Pause</button>
             <button id="resetButton" type="button" aria-label="Reset ripple tank">Reset</button>
           </div>

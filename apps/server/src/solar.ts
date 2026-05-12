@@ -265,7 +265,8 @@ export const createSolarWorld = () => {
 
       socket.on('data', (chunk) => {
         try {
-          parseFrames(client, chunk).forEach((message) => handleMessage(client, message));
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          parseFrames(client, data).forEach((message) => handleMessage(client, message));
         } catch (error) {
           sendFrame(socket, { type: 'error', message: error instanceof Error ? error.message : 'Orbitals socket parse error.' });
           socket.destroy();

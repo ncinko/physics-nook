@@ -1,8 +1,12 @@
 # build output
 dist/
+apps/client/dist/
 
 # generated types
 .astro/
+
+# local Cloudflare state
+.wrangler/
 
 # dependencies
 node_modules/
@@ -20,6 +24,10 @@ pnpm-debug.log*
 
 # macOS-specific files
 .DS_Store
+
+# local browser/test profiles and ad-hoc QA captures
+.edge-profile/
+qa-screenshots/
 
 # jetbrains setting folder
 .idea/

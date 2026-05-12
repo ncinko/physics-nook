@@ -417,7 +417,7 @@ export const createDefaultRippleObject = (
         : kind === 'double-slit'
           ? { width: 0.012, height: 0.34, gap: 0.065, spacing: 0.058 }
         : { width: 0.24, height: 0.035, gap: 0.1, spacing: 0.058 };
-  const sanitized = sanitizeRippleObjectPatch({ ...base, ...patch }) ?? base;
+  const sanitized: RippleObjectPatch = sanitizeRippleObjectPatch({ ...base, ...patch }) ?? { ...base };
 
   return {
     id,

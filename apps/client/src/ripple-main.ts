@@ -144,13 +144,20 @@ const OBJECT_SEND_INTERVAL_MS = 44;
 const PING_INTERVAL_MS = 2000;
 const SPLASH_PROCESSED_LIMIT = 500;
 const CAMERA_SPEED_SCREENS = 0.92;
-const MIN_CAMERA_ZOOM = 0.65;
+const MIN_CAMERA_ZOOM = 0.35;
 const MAX_CAMERA_ZOOM = 3;
 const WHEEL_ZOOM_RATE = 0.0012;
+const TARGET_RIPPLE_FRAMES_PER_SECOND = 30;
+const RIPPLE_FRAME_SECONDS = 1 / TARGET_RIPPLE_FRAMES_PER_SECOND;
+const FRAME_SKIP_TOLERANCE_SECONDS = 0.002;
+const TARGET_SIMULATION_STEPS_PER_SECOND = 30;
+const SIMULATION_STEP_SECONDS = 1 / TARGET_SIMULATION_STEPS_PER_SECOND;
+const MAX_SIMULATION_STEPS_PER_FRAME = 1;
 const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
 const SENSITIVITY_STORAGE_KEY = 'physics-nook-ripple-display-sensitivity';
 const GRADIENT_DRAW_STORAGE_KEY = 'physics-nook-ripple-gradient-draw';
-const DEFAULT_DISPLAY_SENSITIVITY = 72;
+const DISPLAY_SENSITIVITY_NEUTRAL = 72;
+const DEFAULT_DISPLAY_SENSITIVITY = 0;
 const DISPLAY_SENSITIVITY_MAX = 160;
 const MIN_DISPLAY_THRESHOLD = 0.0011;
 const DEFAULT_DISPLAY_THRESHOLD = 0.00872;
@@ -216,6 +223,7 @@ let paused = false;
 let resetVersion = -1;
 let dpr = 1;
 let simTime = 0;
+let simulationAccumulator = 0;
 let lastFrameAt = performance.now();
 let lastPingAt = 0;
 let lastEmitterSendAt = 0;
@@ -378,7 +386,7 @@ const applyTheme = (theme: 'light' | 'dark'): void => {
 
 const initializeTheme = (): void => {
   const stored = localStorage.getItem(THEME_STORAGE_KEY);
-  applyTheme(stored === 'dark' ? 'dark' : 'light');
+  applyTheme(stored === 'light' ? 'light' : 'dark');
 };
 
 const setDisplaySensitivity = (value: number): void => {
@@ -393,12 +401,12 @@ const initializeDisplaySensitivity = (): void => {
 };
 
 const displayThreshold = (): number => {
-  if (displaySensitivity <= DEFAULT_DISPLAY_SENSITIVITY) {
-    const t = displaySensitivity / DEFAULT_DISPLAY_SENSITIVITY;
+  if (displaySensitivity <= DISPLAY_SENSITIVITY_NEUTRAL) {
+    const t = displaySensitivity / DISPLAY_SENSITIVITY_NEUTRAL;
     return MAX_DISPLAY_THRESHOLD - t * (MAX_DISPLAY_THRESHOLD - DEFAULT_DISPLAY_THRESHOLD);
   }
 
-  const t = (displaySensitivity - DEFAULT_DISPLAY_SENSITIVITY) / (DISPLAY_SENSITIVITY_MAX - DEFAULT_DISPLAY_SENSITIVITY);
+  const t = (displaySensitivity - DISPLAY_SENSITIVITY_NEUTRAL) / (DISPLAY_SENSITIVITY_MAX - DISPLAY_SENSITIVITY_NEUTRAL);
   return DEFAULT_DISPLAY_THRESHOLD - t * (DEFAULT_DISPLAY_THRESHOLD - MIN_DISPLAY_THRESHOLD);
 };
 
@@ -409,7 +417,8 @@ const setGradientDrawing = (enabled: boolean): void => {
 };
 
 const initializeGradientDrawing = (): void => {
-  setGradientDrawing(localStorage.getItem(GRADIENT_DRAW_STORAGE_KEY) === 'true');
+  const stored = localStorage.getItem(GRADIENT_DRAW_STORAGE_KEY);
+  setGradientDrawing(stored === null ? true : stored === 'true');
 };
 
 const getConfiguredWsUrl = (): string | null => {
@@ -522,13 +531,30 @@ const screenToWorld = (x: number, y: number) => {
 const clearGrid = (): void => {
   grid = createGridState(size.cols, size.rows);
   objectMask = new Uint8Array(size.cols * size.rows);
+  simulationAccumulator = 0;
 };
 
 const resize = (): void => {
   const rect = canvas.getBoundingClientRect();
-  size.width = Math.max(rect.width, 1);
-  size.height = Math.max(rect.height, 1);
-  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const nextWidth = Math.max(rect.width, 1);
+  const nextHeight = Math.max(rect.height, 1);
+  const nextDpr = Math.min(window.devicePixelRatio || 1, 2);
+  const nextCanvasWidth = Math.round(nextWidth * nextDpr);
+  const nextCanvasHeight = Math.round(nextHeight * nextDpr);
+
+  if (
+    size.width === nextWidth &&
+    size.height === nextHeight &&
+    dpr === nextDpr &&
+    canvas.width === nextCanvasWidth &&
+    canvas.height === nextCanvasHeight
+  ) {
+    return;
+  }
+
+  size.width = nextWidth;
+  size.height = nextHeight;
+  dpr = nextDpr;
   size.viewCols = clamp(Math.round(size.width / CELL_TARGET), MIN_COLS, MAX_COLS);
   size.viewRows = clamp(Math.round(size.height / CELL_TARGET), MIN_ROWS, MAX_ROWS);
   size.activeCols = size.viewCols * WORLD_SCALE;
@@ -546,10 +572,8 @@ const resize = (): void => {
   size.cellWidth = size.width / size.viewCols;
   size.cellHeight = size.height / size.viewRows;
 
-  canvas.width = Math.round(size.width * dpr);
-  canvas.height = Math.round(size.height * dpr);
-  canvas.style.width = `${size.width}px`;
-  canvas.style.height = `${size.height}px`;
+  canvas.width = nextCanvasWidth;
+  canvas.height = nextCanvasHeight;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   clearGrid();
 };
@@ -829,6 +853,12 @@ const injectEmitters = (): void => {
     if (Math.abs(strength) < 0.003) continue;
     addSplash(emitter.x, emitter.y, strength, emitter.radius);
   }
+};
+
+const advanceSimulationStep = (): void => {
+  simTime += SIMULATION_STEP_SECONDS;
+  injectEmitters();
+  stepGrid();
 };
 
 const gradientWaterFill = (
@@ -1544,7 +1574,7 @@ selectionCloseButton.addEventListener('click', clearSelection);
 pauseButton.addEventListener('click', togglePaused);
 resetButton.addEventListener('click', resetTank);
 themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
-tankSwitcherButton.addEventListener('click', () => setTankSwitcherOpen(tankSwitcher.hidden));
+tankSwitcherButton.addEventListener('click', () => setTankSwitcherOpen(tankSwitcher.hidden !== false));
 
 document.addEventListener('pointerdown', (event) => {
   const target = event.target;
@@ -1586,6 +1616,9 @@ canvas.addEventListener('pointerup', finishPointer);
 canvas.addEventListener('pointercancel', finishPointer);
 canvas.addEventListener('wheel', handleWheel, { passive: false });
 window.addEventListener('resize', resize);
+window.visualViewport?.addEventListener('resize', resize);
+const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
+resizeObserver?.observe(canvas.parentElement ?? canvas);
 window.addEventListener('keydown', (event) => {
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
     event.preventDefault();
@@ -1595,18 +1628,35 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('keyup', (event) => keyState.delete(event.code));
 
 const draw = (timestamp: number): void => {
-  const dt = clamp((timestamp - lastFrameAt) / 1000, 0, 0.04);
-  lastFrameAt = timestamp;
   const tankVisible = !inLobby && !document.hidden;
+  const elapsedSeconds = (timestamp - lastFrameAt) / 1000;
+
+  if (tankVisible && elapsedSeconds + FRAME_SKIP_TOLERANCE_SECONDS < RIPPLE_FRAME_SECONDS) {
+    window.requestAnimationFrame(draw);
+    return;
+  }
+
+  const dt = clamp(elapsedSeconds, 0, 0.04);
+  lastFrameAt = timestamp;
 
   if (tankVisible) {
     updateCamera(dt);
     buildObjectMask();
 
     if (!paused) {
-      simTime += dt;
-      injectEmitters();
-      stepGrid();
+      simulationAccumulator += dt;
+      let steps = 0;
+      while (simulationAccumulator >= SIMULATION_STEP_SECONDS && steps < MAX_SIMULATION_STEPS_PER_FRAME) {
+        advanceSimulationStep();
+        simulationAccumulator -= SIMULATION_STEP_SECONDS;
+        steps += 1;
+      }
+
+      if (simulationAccumulator >= SIMULATION_STEP_SECONDS) {
+        simulationAccumulator = 0;
+      }
+    } else {
+      simulationAccumulator = 0;
     }
 
     drawWater();

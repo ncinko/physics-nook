@@ -93,7 +93,7 @@ input:focus-visible {
   position: relative;
   width: 100vw;
   height: 100vh;
-  min-height: 540px;
+  height: 100dvh;
   overflow: hidden;
   background: var(--ripple-bg);
 }
@@ -577,10 +577,6 @@ input:focus-visible {
 }
 
 @media (max-width: 520px) {
-  .ripple-shell {
-    min-height: 620px;
-  }
-
   .ripple-title strong {
     font-size: 0.9rem;
   }

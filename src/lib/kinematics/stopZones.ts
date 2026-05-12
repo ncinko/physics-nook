@@ -56,7 +56,7 @@ export const clamp = (value: number, min: number, max: number) =>
 export const wrapDelta = (
   value: number,
   target: number,
-  worldHalfWidth = STOP_ZONE_DEFAULTS.worldHalfWidthM,
+  worldHalfWidth: number = STOP_ZONE_DEFAULTS.worldHalfWidthM,
 ) => {
   let delta = value - target;
   const circumference = worldHalfWidth * 2;
@@ -74,7 +74,7 @@ export const wrapDelta = (
 
 export const wrapPosition = (
   value: number,
-  worldHalfWidth = STOP_ZONE_DEFAULTS.worldHalfWidthM,
+  worldHalfWidth: number = STOP_ZONE_DEFAULTS.worldHalfWidthM,
 ) => {
   const circumference = worldHalfWidth * 2;
   let next = value;
@@ -99,7 +99,7 @@ export const isInsideStopZone = (
 
 export const isSlowEnoughForStop = (
   velocity: number,
-  threshold = STOP_ZONE_DEFAULTS.velocityThresholdMps,
+  threshold: number = STOP_ZONE_DEFAULTS.velocityThresholdMps,
 ) => Math.abs(velocity) <= threshold;
 
 export const advanceDwell = ({
@@ -129,8 +129,8 @@ export const advanceDwell = ({
 
 export const shrinkZoneHalfWidth = (
   currentHalfWidth: number,
-  minHalfWidth = STOP_ZONE_DEFAULTS.minZoneHalfWidthM,
-  shrinkFactor = STOP_ZONE_DEFAULTS.shrinkFactor,
+  minHalfWidth: number = STOP_ZONE_DEFAULTS.minZoneHalfWidthM,
+  shrinkFactor: number = STOP_ZONE_DEFAULTS.shrinkFactor,
 ) => Math.max(minHalfWidth, currentHalfWidth * shrinkFactor);
 
 export const chooseNextZoneCenter = ({

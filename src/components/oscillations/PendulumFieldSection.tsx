@@ -51,7 +51,7 @@ interface TextBounds {
   right: number;
 }
 
-const PENDULUM_PHYSICS_MODE: PendulumPhysicsMode = 'string';
+const PENDULUM_PHYSICS_MODE = 'string' as PendulumPhysicsMode;
 const INITIAL_ANGLES = [0.62, -0.38];
 const GRAVITY = 720;
 const ANGULAR_DAMPING = 0.08;

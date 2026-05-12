@@ -1,6 +1,6 @@
 -- Legacy top-10 seed for the 1D kinematics stop-in-zones challenge.
 -- Apply with:
---   npx wrangler d1 execute physics_nook_kinematics --remote --file seeds/kinematics_legacy_top10.sql
+--   npx wrangler d1 execute physics-nook-kinematics --remote --file seeds/kinematics_legacy_top10.sql
 
 INSERT OR IGNORE INTO kinematics_runs (id, ip_hash, user_agent, created_at, expires_at, used_at) VALUES
   ('legacy-kinematics-2025-09-29-ryo', 'legacy-seed', 'legacy import', 1759147200000, 1759147200000, 1759147200000),

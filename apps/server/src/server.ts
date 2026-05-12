@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import type { Socket } from 'node:net';
 import { URL, pathToFileURL } from 'node:url';
 
 import { createRippleWorld } from './ripple.ts';
@@ -1256,8 +1257,9 @@ export const createGameServer = () => {
         return;
       }
 
+      const netSocket = socket as Socket;
       const accept = createHash('sha1').update(key + WEBSOCKET_GUID).digest('base64');
-      socket.write(
+      netSocket.write(
         [
           'HTTP/1.1 101 Switching Protocols',
           'Upgrade: websocket',
@@ -1267,20 +1269,20 @@ export const createGameServer = () => {
           '',
         ].join('\r\n'),
       );
-      socket.setNoDelay(true);
+      netSocket.setNoDelay(true);
 
       if (url.pathname === '/solar' || url.pathname === '/solar/') {
-        solarWorld.accept(socket);
+        solarWorld.accept(netSocket);
         return;
       }
 
       if (url.pathname === '/ripples' || url.pathname === '/ripples/') {
-        rippleWorld.accept(socket, url.searchParams.get('room') ?? undefined);
+        rippleWorld.accept(netSocket, url.searchParams.get('room') ?? undefined);
         return;
       }
 
       const client: ClientConnection = {
-        socket,
+        socket: netSocket,
         buffer: Buffer.alloc(0),
         closed: false,
         id: '',
@@ -1292,22 +1294,23 @@ export const createGameServer = () => {
       };
 
       connections.add(client);
-      sendFrame(socket, makeLobbyList());
+      sendFrame(netSocket, makeLobbyList());
 
-      socket.on('data', (chunk) => {
+      netSocket.on('data', (chunk) => {
         try {
-          parseFrames(client, chunk).forEach((message) => handleMessage(client, message));
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          parseFrames(client, data).forEach((message) => handleMessage(client, message));
         } catch (error) {
           sendError(client, error instanceof Error ? error.message : 'Socket parse error.');
-          socket.destroy();
+          netSocket.destroy();
         }
       });
 
-      socket.on('close', () => {
+      netSocket.on('close', () => {
         removeClientFromRoom(client);
         connections.delete(client);
       });
-      socket.on('error', () => {
+      netSocket.on('error', () => {
         removeClientFromRoom(client);
         connections.delete(client);
       });

@@ -560,7 +560,7 @@ export const createRippleWorld = () => {
   RIPPLE_CONFIG.persistentRoomCodes.forEach((roomCode) => getRoom(roomCode));
 
   return {
-    accept(socket: import('node:net').Socket, roomCode = RIPPLE_CONFIG.defaultRoomCode): void {
+    accept(socket: import('node:net').Socket, roomCode: string = RIPPLE_CONFIG.defaultRoomCode): void {
       const client: RippleClient = {
         socket,
         buffer: Buffer.alloc(0),
@@ -578,7 +578,8 @@ export const createRippleWorld = () => {
 
       socket.on('data', (chunk) => {
         try {
-          parseFrames(client, chunk).forEach((message) => handleMessage(client, message));
+          const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          parseFrames(client, data).forEach((message) => handleMessage(client, message));
         } catch (error) {
           sendError(client, error instanceof Error ? error.message : 'Ripple socket parse error.');
           socket.destroy();

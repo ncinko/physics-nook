@@ -207,11 +207,11 @@ const mobileLinkClasses = (isActive: boolean) =>
   let isExploreOpen = false;
   let isMobileMenuOpen = false;
 
-  const setExpandedState = (button, expanded) => {
+  const setExpandedState = (button: Element | null, expanded: boolean) => {
     button?.setAttribute('aria-expanded', String(expanded));
   };
 
-  const setPanelVisibility = (panel, visible) => {
+  const setPanelVisibility = (panel: Element | null, visible: boolean) => {
     if (!panel) return;
     panel.classList.toggle('hidden', !visible);
   };

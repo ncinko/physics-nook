@@ -1,36 +1,26 @@
 # Physics Nook
 
-Physics Nook is currently an Astro learning site plus an early browser-based multiplayer arcade platformer prototype.
+Physics Nook is an Astro learning site with interactive physics modules, plus a standalone Vite browser-game client and Node WebSocket server for shared physics experiments.
 
-## Project Layout
+## Project Map
 
 ```text
 apps/
-  client/          Vite + TypeScript canvas game client
-  server/          Node + TypeScript authoritative WebSocket game server
-packages/
-  shared/          Shared game protocol, constants, and map data
-server/            Existing coaster realtime room server
-src/               Astro site pages, layouts, and simulations
-tests/             Node strip-types test runners for physics modules
+  client/          Standalone Vite client for Manatee Royale, Orbitals, and Ripples
+  server/          Node WebSocket server for game and shared simulation rooms
+docs/              Project architecture, content, deployment, and maintenance notes
+functions/         Cloudflare Pages Functions for leaderboard APIs
+migrations/        Cloudflare D1 schema migrations
+packages/shared/   Shared protocol, validation, constants, and simulation helpers
+seeds/             Optional D1 seed data
+server/            Coaster Park realtime room server
+src/               Astro pages, layouts, React islands, styles, and site data
+tests/             Node strip-types test runners by domain
 ```
 
-## Game Prototype Milestone
+## Common Commands
 
-The first game milestone is a minimal 10-player lobby and movement prototype inspired by Killer Queen:
-
-- Room/lobby support with a maximum of 10 connected players.
-- Server-owned player slots, movement, gravity, platform collisions, and snapshots.
-- Browser client that sends input only and renders authoritative snapshots.
-- Shared TypeScript message types, constants, player config, and map data.
-- Static client build intended for Cloudflare Pages at `game.physicsnook.com`.
-- Separate game server intended for `ws.physicsnook.com`.
-
-The prototype does not yet include objectives, combat, deaths, bots, matchmaking, persistence, or win conditions.
-
-## Commands
-
-Run the existing Astro site:
+Run the Astro site:
 
 ```sh
 npm run dev
@@ -38,68 +28,52 @@ npm run build
 npm run preview
 ```
 
-Run the game server:
+Run all domain tests:
 
 ```sh
-npm run game:server
+npm run test:all
 ```
 
-Run the game client in development:
+Run the standalone game client and server:
 
 ```sh
 npm run game:dev
+npm run game:server
 ```
 
-The dedicated multiplayer pages are served from the same Vite client:
+The game client serves:
 
 ```text
+http://localhost:5173/
 http://localhost:5173/orbitals/
 http://localhost:5173/ripples/
 ```
 
-Build the game client for static hosting:
+Run the legacy Coaster Park realtime room server:
 
 ```sh
-npm run game:build
+npm run realtime
 ```
 
-Run Ripple Tank Studio tests:
+## Deployables
 
-```sh
-npm run test:ripple
-```
+- `physics-nook`: Astro static site built with `npm run build`.
+- `physics-nook-game`: Vite game client built with `npm run game:build`.
+- `ws.physicsnook.com`: Node WebSocket server from `apps/server/src/server.ts`.
+- Coaster Park realtime server: `server/realtime.mjs`, used by `/coaster-park`.
 
-The local game client defaults to `ws://localhost:8788`. In production over HTTPS it defaults to `wss://ws.physicsnook.com`. Override with `VITE_GAME_WS_URL` or `PUBLIC_GAME_WS_URL` when needed.
+Both Cloudflare Pages projects publish `dist`; the build command decides what gets written there. See [Deployment](docs/deployment.md) for the full setup.
 
-## Deployment Notes
+## Adding Work
 
-This repo has two Cloudflare Pages projects using the same root `wrangler.toml`.
-Both should publish `dist`; the build command decides what goes into that folder.
+- New learning pages should start with [Adding Content](docs/adding-content.md).
+- New or changed simulations should follow [Adding Simulations](docs/adding-simulations.md).
+- Repo boundaries and ownership live in [Architecture](docs/architecture.md).
+- Cleanup, dependency, and artifact policy live in [Maintenance](docs/maintenance.md).
 
-For `physics-nook`, use:
+## 1D/2D Kinematics Leaderboards
 
-```sh
-npm run build
-```
-
-For `physics-nook-game`, Cloudflare Pages can build the game client with:
-
-```sh
-npm run game:build
-```
-
-Cloudflare Pages sets `CF_PAGES=1`, so the game build writes to the shared root
-`dist` output directory during deployment. For a manual local Pages-style build, use:
-
-```sh
-npm run game:build:pages
-```
-
-Host the authoritative server separately and expose it as `wss://ws.physicsnook.com`. The server process listens on `GAME_WS_PORT`, then `PORT`, then `8788`.
-
-## 1D Kinematics Leaderboard
-
-The `/kinematics` stop-in-zones challenge uses Cloudflare Pages Functions and D1:
+The kinematics challenges use Cloudflare Pages Functions and D1:
 
 ```sh
 wrangler d1 create physics-nook-kinematics
@@ -107,4 +81,4 @@ wrangler d1 migrations apply physics-nook-kinematics --remote
 wrangler pages secret put LEADERBOARD_SALT
 ```
 
-After creating the database, replace the placeholder `database_id` in `wrangler.toml`. The Pages binding name must remain `KINEMATICS_DB`, and `LEADERBOARD_SALT` should be a private random string with at least 16 characters.
+After creating the database, make sure `wrangler.toml` uses the correct `database_id`. The Pages binding name must remain `KINEMATICS_DB`, and `LEADERBOARD_SALT` should be private and at least 16 characters.

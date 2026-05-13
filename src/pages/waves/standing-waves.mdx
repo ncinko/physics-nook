@@ -1,0 +1,230 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import StandingWaveHarmonicsExplorer from '../../components/waves/StandingWaveHarmonicsExplorer.jsx';
+import { wavesAndOscillationsPath } from '../../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/standing-waves" />
+
+<div id="page-content"></div>
+
+# Standing Waves and Harmonics
+
+A traveling wave carries a pattern through space. A **standing wave** is different: the pattern seems to stay in place while the medium oscillates. This happens when two matching waves move through the same region in opposite directions, such as an outgoing wave and its reflection from a boundary.
+
+Where the two waves always cancel, the medium stays still; those points are **nodes**. Where the two waves reinforce most strongly, the medium has the largest oscillation; those points are **antinodes**. The boundary conditions determine which node-antinode patterns can fit.
+
+## Reflection and Superposition
+
+Imagine sending a pulse down a string. At a fixed end, the reflected pulse comes back inverted. If the string is driven periodically, the outgoing and reflected waves overlap again and again. At most frequencies the shape is messy, but at special frequencies a stable standing wave pattern can form.
+
+For two equal sinusoidal waves traveling in opposite directions, their sum can be expressed as:
+
+$$
+y(x,t) = 2A\sin(kx)\cos(\omega t).
+$$
+
+The key feature is that the spatial and temporal variables can be separated. Each point oscillates in time, but the node locations are fixed in space.
+
+## Waves on a String
+
+A boundary condition is a rule the wave must obey at the ends of the system. A string clamped at both ends must have zero displacement at both ends, so both ends are nodes. That requirement allows only wavelengths that fit an integer number of half-wavelengths (i.e. crests/troughs) inside the length $L$:
+
+$$
+L = n\frac{\lambda_n}{2},
+\qquad
+\lambda_n = \frac{2L}{n},
+\qquad
+f_n = \frac{nv}{2L}.
+$$
+
+Here $n = 1, 2, 3, \ldots$ labels the harmonic. The first harmonic is the **fundamental**. The second harmonic has twice the frequency, the third has three times the frequency, and so on.
+
+For a stretched string, the wave speed can be estimated from the tension $T$ and linear mass density $\mu$:
+
+$$
+v = \sqrt{\frac{T}{\mu}}.
+$$
+
+A tighter string raises the wave speed and therefore raises the harmonic frequencies. A heavier string lowers the wave speed and lowers the frequencies.  Note that even though we are discussing standing waves, the wave speed still has an effect.
+
+## Air Columns
+
+Air columns also support standing waves.  You can describe these as pressure waves, but it is often easiest to draw the **displacement** of the air.  At an open end, air can move freely, so the open end is a displacement antinode. At a closed end, air cannot move through the wall, so the closed end is a displacement node.  Note that displacement in this context refers to a correlated motion of ~$10^{23}$ molecules which are surprisingly speedy as individuals.
+
+An open-open air column follows the same wavelength and frequency sequence as a fixed-fixed string:
+
+$$
+\lambda_n = \frac{2L}{n},
+\qquad
+f_n = \frac{nv}{2L}.
+$$
+
+An open-closed air column fits one quarter-wavelength in the fundamental mode, then only odd multiples after that:
+
+$$
+\lambda_m = \frac{4L}{2m - 1},
+\qquad
+f_m = \frac{(2m - 1)v}{4L}.
+$$
+
+This is why an ideal closed-open pipe supports the 1st, 3rd, 5th, and higher odd harmonics, but skips the even ones. One bookkeeping note: pressure nodes and antinodes are reversed compared with displacement nodes and antinodes.
+
+As you explore the standing-wave animations below, try this sequence:
+
+1. Start with the guitar string and step through the first few harmonics.
+2. Switch to the flute pipe and compare the endpoint labels.
+3. Switch to the clarinet pipe and notice how the ladder jumps through odd harmonics.
+4. Change the length and wave speed separately to see how each one shifts the whole set of frequencies.
+
+<SimulationBlock
+  title="Standing Wave Harmonics Explorer"
+  description="Compare string and air-column boundary conditions, node-antinode patterns, and harmonic frequencies."
+>
+  <StandingWaveHarmonicsExplorer client:only="react" />
+</SimulationBlock>
+
+## Music Connections
+
+Musical pitch is defined by the fundamental frequency, but the higher harmonics are just as important.  Real instruments produce a variety of harmonics at different strengths. Those extra components help shape **timbre**, which is why a violin, flute, and clarinet can play the same pitch but still sound different.
+
+Tuning an instrument means changing the allowed frequencies. A guitarist changes the vibrating length by pressing a fret, and changes tension by tuning the string. A wind player changes the effective air-column length with holes, valves, slides, or keys. In every case, the sound produced comes from the underlying standing wave patterns.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="First Three Harmonics of a Guitar String"
+    accent="blue"
+  >
+    #### Problem
+
+    A guitar string has length $L = 0.65\,\text{m}$, tension $T = 80\,\text{N}$, and linear mass density $\mu = 0.00080\,\text{kg/m}$. Find the first three harmonic frequencies.
+
+    #### Given
+
+    - $L = 0.65\,\text{m}$
+    - $T = 80\,\text{N}$
+    - $\mu = 0.00080\,\text{kg/m}$
+
+    #### Use
+
+    First find the wave speed:
+
+    $$
+    v = \sqrt{\frac{T}{\mu}}.
+    $$
+
+    For a fixed-fixed string,
+
+    $$
+    f_n = \frac{nv}{2L}.
+    $$
+
+    #### Solve
+
+    The wave speed is
+
+    $$
+    v = \sqrt{\frac{80}{0.00080}}
+    = \sqrt{100000}
+    \approx 316\,\text{m/s}.
+    $$
+
+    The fundamental is
+
+    $$
+    f_1 = \frac{316}{2(0.65)}
+    = \frac{316}{1.30}
+    \approx 243\,\text{Hz}.
+    $$
+
+    The next harmonics are integer multiples:
+
+    $$
+    f_2 \approx 486\,\text{Hz},
+    \qquad
+    f_3 \approx 729\,\text{Hz}.
+    $$
+
+    #### Check
+
+    The second and third harmonics are exactly two and three times the fundamental in the ideal string model, so the pattern is internally consistent.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Length of a Closed-Open Pipe"
+    accent="red"
+  >
+    #### Problem
+
+    A closed-open pipe should have fundamental frequency $f_1 = 196\,\text{Hz}$. Use $v = 343\,\text{m/s}$ for the speed of sound and ignore end correction. What pipe length is needed?
+
+    #### Given
+
+    - $f_1 = 196\,\text{Hz}$
+    - $v = 343\,\text{m/s}$
+    - closed-open pipe, fundamental mode
+
+    #### Use
+
+    For a closed-open pipe, the fundamental fits one quarter-wavelength:
+
+    $$
+    f_1 = \frac{v}{4L}.
+    $$
+
+    #### Solve
+
+    Rearranging,
+
+    $$
+    L = \frac{v}{4f_1}
+    = \frac{343}{4(196)}
+    = \frac{343}{784}
+    \approx 0.438\,\text{m}.
+    $$
+
+    #### Check
+
+    The pipe is shorter than half a meter, which is reasonable for a sound wave with wavelength about $1.75\,\text{m}$. A closed-open fundamental uses one quarter of that wavelength.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Standing Waves Checkpoint"
+  questions={[
+    {
+      id: 'standing-pattern',
+      question: 'Why does a standing wave not carry a visible wave pattern steadily down the medium?',
+      options: [
+        { id: 'B', text: 'Because the medium stops moving entirely once the standing wave forms.', isCorrect: false, explanation: 'The nodes stay still, but most points in the medium still oscillate. The key difference is that the overall pattern is fixed in place.' },
+        { id: 'A', text: 'Because two matching waves traveling in opposite directions superpose to make fixed nodes and antinodes.', isCorrect: true, explanation: 'Exactly. The underlying waves still travel, but their overlap creates a stationary node-antinode pattern.' },
+        { id: 'C', text: 'Because standing waves can only exist when the wave speed is zero.', isCorrect: false, explanation: 'Standing waves still depend on waves moving through the medium. The wave speed is not zero; the visible pattern is stationary because of superposition.' }
+      ]
+    },
+    {
+      id: 'fixed-string-wavelengths',
+      question: 'Which wavelengths can fit on an ideal string fixed at both ends?',
+      options: [
+        { id: 'C', text: 'Any wavelength can fit as long as the amplitude is large enough.', isCorrect: false, explanation: 'Amplitude changes how far the string moves, not whether the endpoint boundary conditions are satisfied.' },
+        { id: 'A', text: 'Only wavelengths where an integer number of half-wavelengths fits into the string length.', isCorrect: true, explanation: 'Right. Both ends must be nodes, so the string length must equal $n\\lambda/2$.' },
+        { id: 'B', text: 'Only wavelengths shorter than the string length.', isCorrect: false, explanation: 'The fundamental wavelength is actually $2L$, longer than the string. The rule is about fitting half-wavelengths, not just being shorter than $L$.' }
+      ]
+    },
+    {
+      id: 'closed-open-odd-harmonics',
+      question: 'Why does an ideal closed-open pipe support only odd harmonics?',
+      options: [
+        { id: 'B', text: 'Because the closed end reflects every even-frequency sound wave without letting it exist in the pipe.', isCorrect: false, explanation: 'Reflection matters, but the selection rule comes from fitting the displacement node at the closed end and antinode at the open end.' },
+        { id: 'C', text: 'Because air columns cannot have nodes inside them.', isCorrect: false, explanation: 'Higher air-column modes can have internal nodes. The closed-open pattern has a node at the closed end and an antinode at the open end.' },
+        { id: 'A', text: 'Because the displacement must be a node at one end and an antinode at the other, so the allowed lengths are odd quarter-wavelengths.', isCorrect: true, explanation: 'Exactly. The pipe fits $1/4$, $3/4$, $5/4$, and so on of a wavelength, which corresponds to odd harmonics only.' }
+      ]
+    }
+  ]}
+/>

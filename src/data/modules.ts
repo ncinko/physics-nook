@@ -242,13 +242,14 @@ export const modules: ModuleMeta[] = [
     title: 'Waves',
     navLabel: 'Waves',
     summary:
-      'Compare transverse and longitudinal waves while adjusting amplitude, wavelength, and frequency.',
+      'Compare traveling waves, standing waves, harmonics, and musical pitch.',
     audience: 'Self-learners building visual intuition for traveling waves.',
     prerequisites: ['Basic graph reading', 'Ratios', 'Periodic motion vocabulary'],
     learningObjectives: [
       'Differentiate transverse and longitudinal motion',
       'Relate amplitude, wavelength, period, and speed',
       'Track how the medium moves differently from the wave pattern',
+      'Connect standing-wave boundary conditions to harmonics and musical pitch',
     ],
     status: 'active',
     navVisibility: 'menu',
@@ -267,6 +268,21 @@ export const modules: ModuleMeta[] = [
           description:
             'Explore wave propagation with interactive transverse and longitudinal wave comparisons.',
           canonicalPath: '/waves',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'waves-standing-waves',
+        href: '/waves/standing-waves',
+        title: 'Standing Waves and Harmonics',
+        shortTitle: 'Standing Waves',
+        description:
+          'Connect reflected waves, nodes, antinodes, harmonics, and musical pitch on strings and air columns.',
+        seo: {
+          title: 'Standing Waves and Harmonics',
+          description:
+            'Learn standing waves, harmonics, strings, air columns, and musical pitch with an interactive node-and-antinode explorer.',
+          canonicalPath: '/waves/standing-waves',
           image: '/social/physics-nook-card.svg',
         },
       },
@@ -568,6 +584,7 @@ export const wavesAndOscillationsPath = {
     oscillationsModule.pages[0],
     oscillationsModule.pages[1],
     wavesModule.pages[0],
+    wavesModule.pages[1],
   ],
 } satisfies ModulePathGroup;
 

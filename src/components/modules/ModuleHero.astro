@@ -36,7 +36,7 @@ const normalizedCurrentPath = normalizePath(currentPath);
               <a
                 href={linkHref}
                 class:list={[
-                  'block rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
+                  'block min-w-0 rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
                   isCurrent
                     ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color:color-mix(in_srgb,var(--accent-blue)_10%,transparent)] shadow-sm'
                     : 'border-theme-grid bg-[color:color-mix(in_srgb,var(--bg-primary)_82%,transparent)] hover:-translate-y-0.5 hover:border-[var(--accent-blue)]',
@@ -45,11 +45,11 @@ const normalizedCurrentPath = normalizePath(currentPath);
               >
                 <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2">
                   <div class="min-w-0">
-                    <h2 class="m-0 text-base font-semibold leading-6 text-theme-text">{page.title}</h2>
+                    <h2 class="m-0 break-words text-base font-semibold leading-6 text-theme-text">{page.title}</h2>
                   </div>
                   <span
                     class:list={[
-                      'shrink-0 rounded-full px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em]',
+                      'shrink-0 rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] sm:px-2.5 sm:tracking-[0.18em]',
                       isCurrent
                         ? 'bg-[var(--accent-blue)] text-white'
                         : 'border border-theme-grid text-[var(--text-muted)]',
@@ -57,7 +57,7 @@ const normalizedCurrentPath = normalizePath(currentPath);
                   >
                     {stateLabel}
                   </span>
-                  <p class="col-span-2 mt-0 mb-0 text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
+                  <p class="col-span-2 mt-0 mb-0 break-words text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
                 </div>
               </a>
             );

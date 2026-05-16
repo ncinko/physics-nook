@@ -53,9 +53,17 @@ type DragState = {
   mode: PointerMode;
   emitterId: string | null;
   objectId: string | null;
+  offsetX: number;
+  offsetY: number;
   lastX: number;
   lastY: number;
   lastAt: number;
+};
+
+type PendingObjectPreview = {
+  kind: RippleObjectKind;
+  x: number;
+  y: number;
 };
 
 const canvas = document.getElementById('rippleCanvas') as HTMLCanvasElement | null;
@@ -169,6 +177,7 @@ const MIN_DISPLAY_THRESHOLD = 0.0011;
 const DEFAULT_DISPLAY_THRESHOLD = 0.00872;
 const MAX_DISPLAY_THRESHOLD = 0.048;
 const MAX_SLIT_OBJECT_WIDTH = 0.08;
+const OBJECT_HOVER_PADDING_PX = 10;
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
@@ -217,6 +226,8 @@ const emptyDragState = (): DragState => ({
   mode: 'splash',
   emitterId: null,
   objectId: null,
+  offsetX: 0,
+  offsetY: 0,
   lastX: 0,
   lastY: 0,
   lastAt: 0,
@@ -230,7 +241,10 @@ let emitters: RippleEmitterSnapshot[] = createDefaultRippleEmitters(Date.now());
 let objects: RippleObjectSnapshot[] = [];
 let selectedEmitterId: string | null = null;
 let selectedObjectId: string | null = null;
+let hoveredObjectId: string | null = null;
+let hoveredObjectHandle: ObjectHandle | null = null;
 let pendingObjectKind: RippleObjectKind | null = null;
+let pendingObjectPreview: PendingObjectPreview | null = null;
 let paused = false;
 let resetVersion = -1;
 let dpr = 1;
@@ -1054,10 +1068,10 @@ const drawWater = (): void => {
   ctx.restore();
 };
 
-const drawObjectShape = (object: RippleObjectSnapshot, fill = false): void => {
+const drawObjectShape = (object: RippleObjectSnapshot, fill = false, paddingPx = 0): void => {
   const point = worldToScreen(object);
-  const width = object.width * activeWorldPixelWidth();
-  const height = object.height * activeWorldPixelHeight();
+  const width = object.width * activeWorldPixelWidth() + paddingPx * 2;
+  const height = object.height * activeWorldPixelHeight() + paddingPx * 2;
 
   ctx.save();
   ctx.translate(point.x, point.y);
@@ -1110,29 +1124,42 @@ const drawObjects = (): void => {
   const lightMode = document.documentElement.dataset.theme !== 'dark';
   for (const object of objects) {
     const selected = object.id === selectedObjectId;
+    const hovered = object.id === hoveredObjectId && !dragState.active && !pendingObjectKind;
     const mine = object.controlledBy === localPlayerId;
 
+    if (hovered) {
+      ctx.save();
+      ctx.setLineDash([7, 5]);
+      ctx.lineWidth = 2.3;
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = lightMode ? 'rgba(2, 132, 199, 0.78)' : 'rgba(125, 211, 252, 0.82)';
+      drawObjectShape(object, false, OBJECT_HOVER_PADDING_PX);
+      ctx.restore();
+    }
+
     ctx.save();
-    ctx.lineWidth = selected ? 2.6 : 1.6;
-    ctx.strokeStyle = selected || mine ? (lightMode ? '#075985' : '#e0f2fe') : lightMode ? 'rgba(15, 87, 116, 0.76)' : 'rgba(199, 233, 255, 0.58)';
-    ctx.fillStyle = lightMode ? 'rgba(14, 116, 144, 0.12)' : 'rgba(199, 233, 255, 0.08)';
+    ctx.lineWidth = selected || hovered ? 2.6 : 1.6;
+    ctx.strokeStyle = selected || mine || hovered ? (lightMode ? '#075985' : '#e0f2fe') : lightMode ? 'rgba(15, 87, 116, 0.76)' : 'rgba(199, 233, 255, 0.58)';
+    ctx.fillStyle = hovered ? (lightMode ? 'rgba(14, 116, 144, 0.18)' : 'rgba(125, 211, 252, 0.12)') : lightMode ? 'rgba(14, 116, 144, 0.12)' : 'rgba(199, 233, 255, 0.08)';
     if (object.kind !== 'parabola') drawObjectShape(object, true);
     drawObjectShape(object);
     ctx.restore();
 
     if (!selected) continue;
     const handles = objectHandlePoints(object);
+    const handleHovered = hovered && hoveredObjectId === object.id ? hoveredObjectHandle : null;
     ctx.save();
     ctx.fillStyle = lightMode ? '#0f766e' : '#7dd3fc';
     ctx.strokeStyle = lightMode ? '#ffffff' : '#082f49';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(handles.rotate.x, handles.rotate.y, 9, 0, Math.PI * 2);
+    ctx.arc(handles.rotate.x, handles.rotate.y, handleHovered === 'rotate' ? 11 : 9, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     if (handles.width) {
       ctx.beginPath();
-      ctx.arc(handles.width.x, handles.width.y, 8, 0, Math.PI * 2);
+      ctx.arc(handles.width.x, handles.width.y, handleHovered === 'width' ? 10 : 8, 0, Math.PI * 2);
       ctx.fillStyle = lightMode ? '#0284c7' : '#38bdf8';
       ctx.fill();
       ctx.stroke();
@@ -1146,7 +1173,7 @@ const drawObjects = (): void => {
       ctx.lineWidth = 2;
     }
     ctx.beginPath();
-    ctx.arc(handles.delete.x, handles.delete.y, 10, 0, Math.PI * 2);
+    ctx.arc(handles.delete.x, handles.delete.y, handleHovered === 'delete' ? 12 : 10, 0, Math.PI * 2);
     ctx.fillStyle = '#fb7185';
     ctx.fill();
     ctx.stroke();
@@ -1160,6 +1187,28 @@ const drawObjects = (): void => {
     ctx.stroke();
     ctx.restore();
   }
+};
+
+const drawPendingObjectPreview = (): void => {
+  if (!pendingObjectPreview) return;
+
+  const lightMode = document.documentElement.dataset.theme !== 'dark';
+  const preview = createDefaultRippleObject(
+    'pending-object-preview',
+    pendingObjectPreview.kind,
+    { x: pendingObjectPreview.x, y: pendingObjectPreview.y },
+    0,
+  );
+
+  ctx.save();
+  ctx.globalAlpha = 0.76;
+  ctx.setLineDash([8, 5]);
+  ctx.lineWidth = 2.4;
+  ctx.strokeStyle = lightMode ? '#0369a1' : '#bae6fd';
+  ctx.fillStyle = lightMode ? 'rgba(14, 116, 144, 0.16)' : 'rgba(125, 211, 252, 0.12)';
+  if (preview.kind !== 'parabola') drawObjectShape(preview, true);
+  drawObjectShape(preview);
+  ctx.restore();
 };
 
 const drawEmitters = (timestamp: number): void => {
@@ -1303,6 +1352,11 @@ const handleSnapshot = (snapshot: RippleSnapshot): void => {
   if (selectedObjectId && !objects.some((object) => object.id === selectedObjectId)) {
     selectedObjectId = null;
   }
+  if (hoveredObjectId && !objects.some((object) => object.id === hoveredObjectId)) {
+    hoveredObjectId = null;
+    hoveredObjectHandle = null;
+  }
+  syncCanvasCursor();
   syncRipplePanels();
 
   for (const splash of snapshot.recentSplashes) {
@@ -1375,13 +1429,21 @@ const connect = (): void => {
   });
 };
 
-const pointFromEvent = (event: PointerEvent) => {
+const pointFromClient = (clientX: number, clientY: number) => {
   const rect = canvas.getBoundingClientRect();
-  const screenX = clamp(event.clientX - rect.left, 0, rect.width);
-  const screenY = clamp(event.clientY - rect.top, 0, rect.height);
+  const screenX = clamp(clientX - rect.left, 0, rect.width);
+  const screenY = clamp(clientY - rect.top, 0, rect.height);
   const world = screenToWorld(screenX, screenY);
-  return { screenX, screenY, x: world.x, y: world.y };
+  return {
+    screenX,
+    screenY,
+    x: world.x,
+    y: world.y,
+    insideCanvas: clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom,
+  };
 };
+
+const pointFromEvent = (event: PointerEvent) => pointFromClient(event.clientX, event.clientY);
 
 const handleWheel = (event: WheelEvent): void => {
   event.preventDefault();
@@ -1427,6 +1489,54 @@ const hitObjectHandle = (x: number, y: number): ObjectHandle | null => {
   if (handles.width && Math.hypot(x - handles.width.x, y - handles.width.y) <= 15) return 'width';
   if (Math.hypot(x - handles.rotate.x, y - handles.rotate.y) <= 16) return 'rotate';
   return null;
+};
+
+const syncCanvasCursor = (): void => {
+  if (pendingObjectKind) {
+    canvas.style.cursor = 'copy';
+    return;
+  }
+
+  if (dragState.active) {
+    canvas.style.cursor = dragState.mode === 'object-width' ? 'ew-resize' : dragState.mode === 'splash' ? 'crosshair' : 'grabbing';
+    return;
+  }
+
+  if (hoveredObjectHandle === 'delete') {
+    canvas.style.cursor = 'pointer';
+  } else if (hoveredObjectHandle === 'width') {
+    canvas.style.cursor = 'ew-resize';
+  } else if (hoveredObjectHandle === 'rotate' || hoveredObjectId) {
+    canvas.style.cursor = 'grab';
+  } else {
+    canvas.style.cursor = 'crosshair';
+  }
+};
+
+const clearHoverState = (): void => {
+  hoveredObjectId = null;
+  hoveredObjectHandle = null;
+  syncCanvasCursor();
+};
+
+const updateHoverState = (screenX: number, screenY: number): void => {
+  if (dragState.active || pendingObjectKind) {
+    clearHoverState();
+    return;
+  }
+
+  const handle = hitObjectHandle(screenX, screenY);
+  if (handle && selectedObjectId) {
+    hoveredObjectId = selectedObjectId;
+    hoveredObjectHandle = handle;
+    syncCanvasCursor();
+    return;
+  }
+
+  const object = hitObject(screenX, screenY);
+  hoveredObjectId = object?.id ?? null;
+  hoveredObjectHandle = null;
+  syncCanvasCursor();
 };
 
 const sendSplash = (x: number, y: number, strength: number): void => {
@@ -1481,6 +1591,21 @@ const createObjectAt = (kind: RippleObjectKind, x: number, y: number): void => {
   }
 
   sendMessage({ type: 'rippleObjectCreate', kind, object: { x, y } });
+};
+
+const updatePendingObjectPreview = (event: PointerEvent): void => {
+  if (!pendingObjectKind) return;
+  const point = pointFromEvent(event);
+  pendingObjectPreview = { kind: pendingObjectKind, x: point.x, y: point.y };
+  hoveredObjectId = null;
+  hoveredObjectHandle = null;
+  syncCanvasCursor();
+};
+
+const clearPendingObjectPreview = (): void => {
+  pendingObjectKind = null;
+  pendingObjectPreview = null;
+  syncCanvasCursor();
 };
 
 const deleteObject = (id: string): void => {
@@ -1539,27 +1664,44 @@ const handlePointerDown = (event: PointerEvent): void => {
 
   if (handle === 'delete' && selectedObjectId) {
     deleteObject(selectedObjectId);
+    clearHoverState();
     return;
   }
 
   if (handle === 'rotate' && selectedObjectId) {
-    dragState = { active: true, pointerId: event.pointerId, mode: 'object-rotate', emitterId: null, objectId: selectedObjectId, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    dragState = { active: true, pointerId: event.pointerId, mode: 'object-rotate', emitterId: null, objectId: selectedObjectId, offsetX: 0, offsetY: 0, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    clearHoverState();
     canvas.setPointerCapture(event.pointerId);
+    syncCanvasCursor();
     return;
   }
 
   if (handle === 'width' && selectedObjectId) {
-    dragState = { active: true, pointerId: event.pointerId, mode: 'object-width', emitterId: null, objectId: selectedObjectId, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    dragState = { active: true, pointerId: event.pointerId, mode: 'object-width', emitterId: null, objectId: selectedObjectId, offsetX: 0, offsetY: 0, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    clearHoverState();
     canvas.setPointerCapture(event.pointerId);
+    syncCanvasCursor();
     return;
   }
 
   const object = hitObject(point.screenX, point.screenY);
   if (object) {
     selectObject(object.id);
-    sendObjectPatch(object.id, { x: point.x, y: point.y }, true);
-    dragState = { active: true, pointerId: event.pointerId, mode: 'object-move', emitterId: null, objectId: object.id, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    dragState = {
+      active: true,
+      pointerId: event.pointerId,
+      mode: 'object-move',
+      emitterId: null,
+      objectId: object.id,
+      offsetX: object.x - point.x,
+      offsetY: object.y - point.y,
+      lastX: point.screenX,
+      lastY: point.screenY,
+      lastAt: performance.now(),
+    };
+    clearHoverState();
     canvas.setPointerCapture(event.pointerId);
+    syncCanvasCursor();
     return;
   }
 
@@ -1567,26 +1709,36 @@ const handlePointerDown = (event: PointerEvent): void => {
   if (emitter) {
     selectEmitter(emitter.id);
     sendEmitterPatch(emitter.id, { x: point.x, y: point.y }, true);
-    dragState = { active: true, pointerId: event.pointerId, mode: 'emitter', emitterId: emitter.id, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    dragState = { active: true, pointerId: event.pointerId, mode: 'emitter', emitterId: emitter.id, objectId: null, offsetX: 0, offsetY: 0, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+    clearHoverState();
     canvas.setPointerCapture(event.pointerId);
+    syncCanvasCursor();
     return;
   }
 
   clearSelection();
+  clearHoverState();
   sendSplash(point.x, point.y, RIPPLE_CONFIG.splash.defaultStrength);
-  dragState = { active: true, pointerId: event.pointerId, mode: 'splash', emitterId: null, objectId: null, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
+  dragState = { active: true, pointerId: event.pointerId, mode: 'splash', emitterId: null, objectId: null, offsetX: 0, offsetY: 0, lastX: point.screenX, lastY: point.screenY, lastAt: performance.now() };
   canvas.setPointerCapture(event.pointerId);
+  syncCanvasCursor();
 };
 
 const handlePointerMove = (event: PointerEvent): void => {
-  if (!dragState.active || dragState.pointerId !== event.pointerId) return;
   const point = pointFromEvent(event);
+  if (!dragState.active || dragState.pointerId !== event.pointerId) {
+    updateHoverState(point.screenX, point.screenY);
+    return;
+  }
   const now = performance.now();
 
   if (dragState.mode === 'emitter' && dragState.emitterId) {
     sendEmitterPatch(dragState.emitterId, { x: point.x, y: point.y });
   } else if (dragState.mode === 'object-move' && dragState.objectId) {
-    sendObjectPatch(dragState.objectId, { x: point.x, y: point.y });
+    sendObjectPatch(dragState.objectId, {
+      x: clamp(point.x + dragState.offsetX, 0, 1),
+      y: clamp(point.y + dragState.offsetY, 0, 1),
+    });
   } else if (dragState.mode === 'object-rotate' && dragState.objectId) {
     const object = objects.find((candidate) => candidate.id === dragState.objectId);
     if (object) {
@@ -1611,9 +1763,11 @@ const handlePointerMove = (event: PointerEvent): void => {
 
 const finishPointer = (event: PointerEvent): void => {
   if (!dragState.active || dragState.pointerId !== event.pointerId) return;
+  const point = pointFromEvent(event);
   releaseSelectedDragTarget();
   dragState = emptyDragState();
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  updateHoverState(point.screenX, point.screenY);
 };
 
 const sendSelectedControlPatch = (patch: RippleEmitterPatch, force = false): void => {
@@ -1683,24 +1837,26 @@ document.addEventListener('pointerdown', (event) => {
 
 document.querySelectorAll<HTMLButtonElement>('[data-object-kind]').forEach((button) => {
   button.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
     pendingObjectKind = button.dataset.objectKind as RippleObjectKind;
+    updatePendingObjectPreview(event);
     button.setPointerCapture(event.pointerId);
   });
+  button.addEventListener('pointermove', updatePendingObjectPreview);
   button.addEventListener('pointerup', (event) => {
     if (!pendingObjectKind) return;
-    const rect = canvas.getBoundingClientRect();
-    if (event.clientX >= rect.left && event.clientX <= rect.right && event.clientY >= rect.top && event.clientY <= rect.bottom) {
-      const x = event.clientX - rect.left;
-      const y = event.clientY - rect.top;
-      const world = screenToWorld(x, y);
-      createObjectAt(pendingObjectKind, world.x, world.y);
+    const kind = pendingObjectKind;
+    const point = pointFromEvent(event);
+    if (point.insideCanvas) {
+      createObjectAt(kind, point.x, point.y);
     } else {
-      createObjectAt(pendingObjectKind, 0.5, 0.5);
+      createObjectAt(kind, 0.5, 0.5);
     }
-    pendingObjectKind = null;
+    clearPendingObjectPreview();
+    if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId);
   });
   button.addEventListener('pointercancel', () => {
-    pendingObjectKind = null;
+    clearPendingObjectPreview();
   });
 });
 
@@ -1708,6 +1864,9 @@ canvas.addEventListener('pointerdown', handlePointerDown);
 canvas.addEventListener('pointermove', handlePointerMove);
 canvas.addEventListener('pointerup', finishPointer);
 canvas.addEventListener('pointercancel', finishPointer);
+canvas.addEventListener('pointerleave', () => {
+  if (!dragState.active) clearHoverState();
+});
 canvas.addEventListener('wheel', handleWheel, { passive: false });
 window.addEventListener('resize', resize);
 window.visualViewport?.addEventListener('resize', resize);
@@ -1755,6 +1914,7 @@ const draw = (timestamp: number): void => {
 
     drawWater();
     drawObjects();
+    drawPendingObjectPreview();
     drawEmitters(timestamp);
   } else {
     ctx.setTransform(1, 0, 0, 1, 0, 0);

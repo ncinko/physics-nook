@@ -242,13 +242,14 @@ export const modules: ModuleMeta[] = [
     title: 'Waves',
     navLabel: 'Waves',
     summary:
-      'Compare traveling waves, standing waves, harmonics, and musical pitch.',
+      'Compare traveling waves, boundary reflections, standing waves, harmonics, and musical pitch.',
     audience: 'Self-learners building visual intuition for traveling waves.',
     prerequisites: ['Basic graph reading', 'Ratios', 'Periodic motion vocabulary'],
     learningObjectives: [
       'Differentiate transverse and longitudinal motion',
       'Relate amplitude, wavelength, period, and speed',
       'Track how the medium moves differently from the wave pattern',
+      'Explain how superposition, reflection, and transmission satisfy boundary conditions',
       'Connect standing-wave boundary conditions to harmonics and musical pitch',
     ],
     status: 'active',
@@ -268,6 +269,21 @@ export const modules: ModuleMeta[] = [
           description:
             'Explore wave propagation with interactive transverse and longitudinal wave comparisons.',
           canonicalPath: '/waves',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'waves-reflection-transmission',
+        href: '/waves/reflection-transmission',
+        title: 'Superposition and Reflection',
+        shortTitle: 'Reflection',
+        description:
+          'See how incident, reflected, and transmitted waves combine at fixed, free, closed, and open boundaries.',
+        seo: {
+          title: 'Reflection, Transmission, and Superposition',
+          description:
+            'Learn wave superposition, reflection, transmission, and why open pipe ends still reflect sound with an interactive boundary explorer.',
+          canonicalPath: '/waves/reflection-transmission',
           image: '/social/physics-nook-card.svg',
         },
       },
@@ -583,8 +599,7 @@ export const wavesAndOscillationsPath = {
   pages: [
     oscillationsModule.pages[0],
     oscillationsModule.pages[1],
-    wavesModule.pages[0],
-    wavesModule.pages[1],
+    ...wavesModule.pages,
   ],
 } satisfies ModulePathGroup;
 

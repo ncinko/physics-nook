@@ -1,0 +1,89 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import BoundaryReflectionExplorer from '../../components/waves/BoundaryReflectionExplorer.jsx';
+import PulseSuperpositionInline from '../../components/waves/PulseSuperpositionInline.jsx';
+import { wavesAndOscillationsPath } from '../../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/reflection-transmission" />
+
+<div id="page-content"></div>
+
+# Superposition and Reflection
+
+When multiple waves occupy the same place, the medium does not choose one wave and ignore the others. The visible disturbance is the **superposition** of all individual waves:
+
+$$
+\text{total wave} = \text{wave 1} + \text{wave 2} + \cdots
+$$
+
+That means wave amplitudes add point by point, and two waves can amplify or cancel one another locally. 
+
+<PulseSuperpositionInline client:visible />
+
+## Boundaries as Constraints
+
+Now consider waves near a boundary.  An **incident** wave is the wave arriving at the boundary.  A **reflected** wave is the part sent back into the original medium.  A **transmitted** wave is the part that continues into the next medium, if the next medium can respond.
+
+
+
+Although the particular physics that cause reflection and transmission (i.e. medium-dependent forces) may differ, it is convenient to reason 
+about the so-called *boundary conditions*.  These are local demands placed on the total wave.  For example, the displacement must be zero at a fixed end of string. The reflected wave therefore comes back inverted so the incident and reflected displacements cancel exactly at this fixed end.
+
+## Air Boundaries
+
+Like strings, air-filled tubes (flutes, PVC pipes, pipe organs etc.) support similar wave phenomena.  A full description of what individual air molecules are *actually* doing is rather complex, but there are two macroscopic quantities that are convenient to describe:
+
+- **Pressure** tells us how compressed (more dense) or rarefied (less dense) the air is.
+- **Displacement** tells us how the air, when treated as a fluid, is moving back and forth.
+
+The two descriptions are related, but they do not peak in the same place.  Pressure is about crowding: if neighboring regions of air move toward each other, the air between them compresses; if they move apart, it rarefies.  Displacement is about how regions of air have shifted from equilibrium.  In a traveling sound pulse, the crowding shows up slightly ahead of the largest displacement.
+
+When starting, pick whichever is more intuitive; in the long run both descriptions give equivalent results.  For example, a closed pipe wall stops the air motion.  This means a closed end is a displacement node and a pressure antinode. An open pipe end does almost the opposite: the pressure variation near the opening stays close to the outside atmospheric pressure, so the open end is a pressure node and a displacement antinode.
+
+It is tempting to think an open end should simply let the wave leave. Some energy really does radiate outward as sound. But an open end is still a sharp change from a narrow guided air column to a large outside space.
+
+<BoundaryReflectionExplorer client:visible />
+
+## From Reflections to Standing Waves
+
+When a source keeps driving the same system, the incident and reflected waves overlap again and again. Most driving frequencies result in a mess of partial reinforcement and cancellation. Special frequencies make the phase line up so the total pattern repeats in place. Those are the standing waves and harmonics on the next page.
+
+
+<QuestionSequence
+  client:load
+  eyebrow="Reflection Checkpoint"
+  questions={[
+    {
+      id: 'open-end-reflection',
+      question: 'Why can a sound wave reflect from the open end of a pipe?',
+      options: [
+        { id: 'B', text: 'Because the open end secretly behaves like a rigid wall for every sound frequency.', isCorrect: false, explanation: 'A closed wall stops air motion. An open end instead keeps pressure variation near atmospheric pressure and lets air motion be large.' },
+        { id: 'A', text: 'Because the open end is a pressure-release boundary, so an inverted reflected pressure wave helps keep the total pressure variation near zero.', isCorrect: true, explanation: 'Exactly. Some sound radiates outward, but the reflected pressure component is needed to satisfy the open-end pressure condition.' },
+        { id: 'C', text: 'Because air molecules bounce off the outside room and return to the pipe in phase.', isCorrect: false, explanation: 'The useful model is not individual molecules bouncing back. It is wave impedance and boundary conditions for pressure and particle motion.' }
+      ]
+    },
+    {
+      id: 'fixed-string-reflection',
+      question: 'A pulse reaches the fixed end of a string. What must the reflected displacement do at the endpoint?',
+      options: [
+        { id: 'A', text: 'It must invert so the incident and reflected displacements add to zero at the fixed end.', isCorrect: true, explanation: 'Right. The endpoint is clamped, so total displacement at that point must stay zero.' },
+        { id: 'B', text: 'It must keep the same sign so the fixed end becomes an antinode.', isCorrect: false, explanation: 'That would make the endpoint move even more. A fixed end is a displacement node.' },
+        { id: 'C', text: 'It must disappear because fixed ends do not allow reflected waves.', isCorrect: false, explanation: 'Fixed ends are strong reflectors. The reflected wave is what makes the endpoint condition possible.' }
+      ]
+    },
+    {
+      id: 'pipe-end-pairs',
+      question: 'Which pair correctly describes ideal pipe-end boundary conditions?',
+      options: [
+        { id: 'C', text: 'Closed end: pressure node. Open end: displacement node.', isCorrect: false, explanation: 'Those are reversed. Closed ends stop motion and open ends release pressure.' },
+        { id: 'B', text: 'Closed end: displacement or velocity node. Open end: pressure node.', isCorrect: true, explanation: 'Yes. The pressure and displacement descriptions swap node and antinode roles.' },
+        { id: 'A', text: 'Both closed and open ends must be pressure antinodes because sound is a pressure wave.', isCorrect: false, explanation: 'Pressure is only one variable in the sound wave. Air motion matters too, and open ends are pressure nodes in the ideal model.' }
+      ]
+    }
+  ]}
+/>

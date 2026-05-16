@@ -615,7 +615,7 @@ export default function BoundaryReflectionExplorer() {
               Wave traces
             </ViewToggleButton>
             <ViewToggleButton isActive={pipeView === 'particles'} onClick={() => setPipeView('particles')}>
-              Particle view
+              Fluid view
             </ViewToggleButton>
           </div>
         ) : null}

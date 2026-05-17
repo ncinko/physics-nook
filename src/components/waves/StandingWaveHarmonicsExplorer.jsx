@@ -1,14 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CircleGauge,
-  Guitar,
   Music2,
   Pause,
   Play,
-  RotateCcw,
   Ruler,
-  Waves,
-  Wind,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 
 const STAGE = {
@@ -26,86 +24,81 @@ const MAX_LENGTH = 1.2;
 const MIN_SPEED = 120;
 const MAX_SPEED = 600;
 const MAX_MODE = 6;
+const AUDIO_DURATION = 1.45;
+const AUDIO_ATTACK = 0.02;
+const AUDIO_DECAY = 0;
+const AUDIO_RELEASE = 0.28;
+const HARMONIC_ACCENT = '#0f766e';
 
 const BOUNDARY_MODES = {
   fixed: {
     key: 'fixed',
     label: 'Fixed-fixed string',
     shortLabel: 'String',
-    color: 'var(--accent-blue)',
     formulaLabel: 'lambda_n = 2L / n',
     frequencyLabel: 'f_n = n v / 2L',
     startCondition: 'node',
     endCondition: 'node',
     modeWord: 'harmonic',
-    icon: Waves,
   },
   openOpen: {
     key: 'openOpen',
     label: 'Open-open air column',
     shortLabel: 'Open pipe',
-    color: '#0f766e',
     formulaLabel: 'lambda_n = 2L / n',
     frequencyLabel: 'f_n = n v / 2L',
     startCondition: 'antinode',
     endCondition: 'antinode',
     modeWord: 'harmonic',
-    icon: Wind,
   },
   openClosed: {
     key: 'openClosed',
     label: 'Open-closed air column',
     shortLabel: 'Closed pipe',
-    color: 'var(--accent-red)',
     formulaLabel: 'lambda_m = 4L / (2m - 1)',
     frequencyLabel: 'f_m = (2m - 1)v / 4L',
     startCondition: 'node',
     endCondition: 'antinode',
     modeWord: 'mode',
-    icon: Wind,
   },
 };
 
 const INSTRUMENTS = [
   {
     key: 'guitar',
-    label: 'Guitar string',
+    label: 'Guitar',
     boundary: 'fixed',
     length: 0.65,
     speed: 326,
-    icon: Guitar,
-    color: 'var(--accent-blue)',
     mix: [1, 0.46, 0.31, 0.2, 0.14, 0.1],
+    envelope: { attack: 0.008, decay: 0.34, sustain: 0.28, release: 0.32, duration: 1.6 },
   },
   {
     key: 'violin',
-    label: 'Violin string',
+    label: 'Violin',
     boundary: 'fixed',
     length: 0.33,
     speed: 290,
-    icon: Music2,
-    color: '#7c3aed',
     mix: [1, 0.58, 0.37, 0.29, 0.2, 0.16],
+    envelope: { attack: 0.16, decay: 0.18, sustain: 0.86, release: 0.34, duration: 1.7 },
   },
   {
     key: 'flute',
-    label: 'Flute pipe',
+    label: 'Flute',
     boundary: 'openOpen',
     length: 0.66,
     speed: 343,
-    icon: Wind,
-    color: '#0f766e',
     mix: [1, 0.22, 0.11, 0.07, 0.04, 0.03],
+    envelope: { attack: 0.12, decay: 0.16, sustain: 0.76, release: 0.38, duration: 1.65 },
   },
   {
     key: 'clarinet',
-    label: 'Clarinet pipe',
+    label: 'Clarinet',
     boundary: 'openClosed',
     length: 0.66,
     speed: 343,
-    icon: Music2,
-    color: 'var(--accent-red)',
     mix: [1, 0.42, 0.24, 0.14, 0.09, 0.06],
+    envelope: { attack: 0.05, decay: 0.14, sustain: 0.72, release: 0.3, duration: 1.65 },
   },
 ];
 
@@ -215,7 +208,7 @@ function ControlSlider({ icon: Icon, label, value, valueLabel, min, max, step, o
     <label className="block rounded-[1.3rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
       <span className="mb-3 flex items-center justify-between gap-4 text-sm">
         <span className="flex items-center gap-2 font-semibold text-[color:var(--text-primary)]">
-          <Icon className="h-4 w-4 text-[var(--accent-blue)]" aria-hidden="true" />
+          <Icon className="h-4 w-4" style={{ color: HARMONIC_ACCENT }} aria-hidden="true" />
           {label}
         </span>
         <span className="font-mono text-[color:var(--text-muted)]">{valueLabel}</span>
@@ -255,9 +248,204 @@ export default function StandingWaveHarmonicsExplorer() {
   const [speed, setSpeed] = useState(initialInstrument.speed);
   const [modeIndex, setModeIndex] = useState(1);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [isMuted, setIsMuted] = useState(true);
   const [time, setTime] = useState(0);
   const frameRef = useRef(null);
   const lastTimestampRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const activeAudioRef = useRef(null);
+  const soundIdRef = useRef(0);
+
+  const stopActiveAudio = useCallback((fadeOut = 0.05) => {
+    const context = audioContextRef.current;
+    const activeAudio = activeAudioRef.current;
+
+    if (!context || !activeAudio) {
+      activeAudioRef.current = null;
+      return;
+    }
+
+    const now = context.currentTime;
+
+    try {
+      activeAudio.masterGain.gain.cancelScheduledValues(now);
+      if (fadeOut > 0) {
+        activeAudio.masterGain.gain.setTargetAtTime(0.0001, now, fadeOut / 3);
+      } else {
+        activeAudio.masterGain.gain.setValueAtTime(0.0001, now);
+      }
+    } catch {
+      // The browser may already be tearing the audio graph down.
+    }
+
+    activeAudio.oscillators.forEach((oscillator) => {
+      try {
+        oscillator.stop(now + Math.max(fadeOut, 0));
+      } catch {
+        // Oscillators can only be stopped once.
+      }
+    });
+
+    window.setTimeout(() => {
+      activeAudio.gainNodes.forEach((gainNode) => {
+        try {
+          gainNode.disconnect();
+        } catch {
+          // The node may already be disconnected by a prior cleanup.
+        }
+      });
+
+      try {
+        activeAudio.masterGain.disconnect();
+      } catch {
+        // The node may already be disconnected by a prior cleanup.
+      }
+    }, Math.max(fadeOut * 1000 + 40, 40));
+
+    activeAudioRef.current = null;
+  }, []);
+
+  const getAudioContext = useCallback(() => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    if (!audioContextRef.current) {
+      const AudioContextConstructor = window.AudioContext;
+
+      if (!AudioContextConstructor) {
+        return null;
+      }
+
+      audioContextRef.current = new AudioContextConstructor();
+    }
+
+    return audioContextRef.current;
+  }, []);
+
+  const playPartials = useCallback(
+    async (partials, masterLevel = 0.24, envelope = {}) => {
+      if (isMuted) {
+        stopActiveAudio();
+        return;
+      }
+
+      const context = getAudioContext();
+
+      if (!context) {
+        return;
+      }
+
+      if (context.state === 'suspended') {
+        try {
+          await context.resume();
+        } catch {
+          return;
+        }
+      }
+
+      const audiblePartials = partials.filter(
+        (partial) =>
+          Number.isFinite(partial.frequency) &&
+          partial.frequency > 0 &&
+          partial.frequency < context.sampleRate / 2 &&
+          partial.strength > 0,
+      );
+
+      if (audiblePartials.length === 0) {
+        return;
+      }
+
+      soundIdRef.current += 1;
+      const soundId = soundIdRef.current;
+
+      stopActiveAudio();
+
+      const now = context.currentTime;
+      const duration = envelope.duration ?? AUDIO_DURATION;
+      const attack = envelope.attack ?? AUDIO_ATTACK;
+      const decay = envelope.decay ?? AUDIO_DECAY;
+      const release = envelope.release ?? AUDIO_RELEASE;
+      const sustain = clamp(envelope.sustain ?? 1, 0.01, 1);
+      const end = now + duration;
+      const attackEnd = Math.min(now + attack, end);
+      const decayEnd = Math.min(attackEnd + decay, end);
+      const releaseStart = Math.max(decayEnd, end - release);
+      const totalStrength = audiblePartials.reduce((sum, partial) => sum + partial.strength, 0);
+      const masterGain = context.createGain();
+      const oscillators = [];
+      const gainNodes = [];
+      const peakLevel = Math.max(masterLevel, 0.0001);
+      const sustainLevel = Math.max(peakLevel * sustain, 0.0001);
+
+      masterGain.gain.setValueAtTime(0.0001, now);
+
+      if (attackEnd > now) {
+        masterGain.gain.exponentialRampToValueAtTime(peakLevel, attackEnd);
+      } else {
+        masterGain.gain.setValueAtTime(peakLevel, now);
+      }
+
+      if (decayEnd > attackEnd) {
+        masterGain.gain.exponentialRampToValueAtTime(sustainLevel, decayEnd);
+      } else {
+        masterGain.gain.setValueAtTime(sustainLevel, attackEnd);
+      }
+
+      masterGain.gain.setValueAtTime(sustainLevel, releaseStart);
+
+      if (end > releaseStart) {
+        masterGain.gain.exponentialRampToValueAtTime(0.0001, end);
+      } else {
+        masterGain.gain.setValueAtTime(0.0001, end);
+      }
+
+      masterGain.connect(context.destination);
+
+      audiblePartials.forEach((partial) => {
+        const oscillator = context.createOscillator();
+        const gainNode = context.createGain();
+        const partialLevel = partial.strength / totalStrength;
+
+        oscillator.type = 'sine';
+        oscillator.frequency.setValueAtTime(partial.frequency, now);
+        gainNode.gain.setValueAtTime(partialLevel, now);
+
+        oscillator.connect(gainNode);
+        gainNode.connect(masterGain);
+        oscillator.start(now);
+        oscillator.stop(end + 0.02);
+
+        oscillators.push(oscillator);
+        gainNodes.push(gainNode);
+      });
+
+      activeAudioRef.current = { gainNodes, masterGain, oscillators };
+
+      window.setTimeout(() => {
+        if (soundIdRef.current !== soundId) {
+          return;
+        }
+
+        gainNodes.forEach((gainNode) => {
+          try {
+            gainNode.disconnect();
+          } catch {
+            // The node may already be disconnected by a prior cleanup.
+          }
+        });
+
+        try {
+          masterGain.disconnect();
+        } catch {
+          // The node may already be disconnected by a prior cleanup.
+        }
+
+        activeAudioRef.current = null;
+      }, (duration + 0.15) * 1000);
+    },
+    [getAudioContext, isMuted, stopActiveAudio],
+  );
 
   useEffect(() => {
     if (!isPlaying) {
@@ -288,6 +476,18 @@ export default function StandingWaveHarmonicsExplorer() {
     };
   }, [isPlaying]);
 
+  useEffect(() => {
+    return () => {
+      stopActiveAudio(0);
+      const context = audioContextRef.current;
+      audioContextRef.current = null;
+
+      if (context && context.state !== 'closed') {
+        context.close().catch(() => {});
+      }
+    };
+  }, [stopActiveAudio]);
+
   const instrument = INSTRUMENTS.find((entry) => entry.key === instrumentKey) ?? initialInstrument;
   const boundary = BOUNDARY_MODES[boundaryKey];
   const modeInfo = getModeInfo(boundaryKey, modeIndex, length, speed);
@@ -308,25 +508,54 @@ export default function StandingWaveHarmonicsExplorer() {
   });
   const lengthLabel = `${formatNumber(length, 2)} m`;
   const speedLabel = `${formatNumber(speed, 0)} m/s`;
+  const selectedHarmonicStrength = harmonicRows[modeIndex - 1]?.strength ?? 1;
+
+  const playSelectedHarmonic = (nextModeInfo = modeInfo, strength = selectedHarmonicStrength) => {
+    if (strength <= 0) {
+      stopActiveAudio();
+      return;
+    }
+
+    const selectedLevel = 0.24 * clamp(strength, 0, 1);
+
+    void playPartials([{ frequency: nextModeInfo.frequency, strength: 1 }], selectedLevel);
+  };
+
+  const playHarmonicMix = () => {
+    void playPartials(
+      harmonicRows.map((row) => ({
+        frequency: row.frequency,
+        strength: row.strength,
+      })),
+      0.28,
+      instrument.envelope,
+    );
+  };
+
+  const selectMode = (nextModeIndex) => {
+    const nextModeInfo = getModeInfo(boundaryKey, nextModeIndex, length, speed);
+    const nextStrength = instrument.mix[nextModeIndex - 1] ?? 0;
+
+    setModeIndex(nextModeIndex);
+    playSelectedHarmonic(nextModeInfo, nextStrength);
+  };
+
+  const toggleMute = () => {
+    if (!isMuted) {
+      stopActiveAudio();
+    }
+
+    setIsMuted((muted) => !muted);
+  };
 
   const applyInstrument = (nextInstrument) => {
+    stopActiveAudio();
     setInstrumentKey(nextInstrument.key);
     setBoundaryKey(nextInstrument.boundary);
     setLength(nextInstrument.length);
     setSpeed(nextInstrument.speed);
     setModeIndex(1);
     setTime(0);
-  };
-
-  const reset = () => {
-    applyInstrument(instrument);
-  };
-
-  const changeBoundary = (nextBoundaryKey) => {
-    const matchingInstrument =
-      INSTRUMENTS.find((entry) => entry.boundary === nextBoundaryKey) ?? instrument;
-
-    applyInstrument(matchingInstrument);
   };
 
   return (
@@ -338,7 +567,7 @@ export default function StandingWaveHarmonicsExplorer() {
         <div className="overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,118,110,0.12),transparent_36%),var(--bg-primary)] shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--grid-line)] px-5 py-5">
             <div>
-              <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: boundary.color }}>
+              <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: HARMONIC_ACCENT }}>
                 {boundary.label}
               </p>
               <p className="mt-2 mb-0 max-w-xl text-sm leading-7 text-[color:var(--text-muted)]">
@@ -350,18 +579,11 @@ export default function StandingWaveHarmonicsExplorer() {
               <button
                 type="button"
                 onClick={() => setIsPlaying((playing) => !playing)}
-                className="inline-flex items-center gap-2 rounded-full bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5"
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5"
+                style={{ backgroundColor: HARMONIC_ACCENT }}
               >
                 {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {isPlaying ? 'Pause' : 'Play'}
-              </button>
-              <button
-                type="button"
-                onClick={reset}
-                className="inline-flex items-center gap-2 rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-4 py-2 text-sm font-semibold text-[color:var(--text-muted)] shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reset
               </button>
             </div>
           </div>
@@ -483,10 +705,10 @@ export default function StandingWaveHarmonicsExplorer() {
               </text>
 
               <g>
-                <line x1={STAGE.left} x2={STAGE.right} y1="320" y2="320" stroke="rgba(59,130,246,0.86)" strokeWidth="3" strokeLinecap="round" />
-                <path d={`M ${STAGE.left + 8} 312 L ${STAGE.left} 320 L ${STAGE.left + 8} 328`} fill="none" stroke="rgba(59,130,246,0.86)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <path d={`M ${STAGE.right - 8} 312 L ${STAGE.right} 320 L ${STAGE.right - 8} 328`} fill="none" stroke="rgba(59,130,246,0.86)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                <text x={(STAGE.left + STAGE.right) / 2} y="310" textAnchor="middle" fill="rgba(59,130,246,0.94)" fontSize="15" fontWeight="700">
+                <line x1={STAGE.left} x2={STAGE.right} y1="320" y2="320" stroke={HARMONIC_ACCENT} strokeWidth="3" strokeLinecap="round" />
+                <path d={`M ${STAGE.left + 8} 312 L ${STAGE.left} 320 L ${STAGE.left + 8} 328`} fill="none" stroke={HARMONIC_ACCENT} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={`M ${STAGE.right - 8} 312 L ${STAGE.right} 320 L ${STAGE.right - 8} 328`} fill="none" stroke={HARMONIC_ACCENT} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                <text x={(STAGE.left + STAGE.right) / 2} y="310" textAnchor="middle" fill={HARMONIC_ACCENT} fontSize="15" fontWeight="700">
                   L = {lengthLabel}
                 </text>
               </g>
@@ -499,30 +721,68 @@ export default function StandingWaveHarmonicsExplorer() {
             eyebrow="Frequency"
             value={`${formatNumber(modeInfo.frequency, modeInfo.frequency >= 100 ? 0 : 1)} Hz`}
             detail={modeInfo.displayName}
-            color={boundary.color}
+            color={HARMONIC_ACCENT}
           />
           <MetricCard
             eyebrow="Wavelength"
             value={`${formatNumber(modeInfo.wavelength, 2)} m`}
             detail={modeInfo.detailName}
-            color="var(--accent-blue)"
+            color={HARMONIC_ACCENT}
           />
           <MetricCard
             eyebrow="Ends"
             value={`${markers.nodes.length} N / ${markers.antinodes.length} A`}
             detail="nodes and antinodes"
-            color="#0f766e"
+            color={HARMONIC_ACCENT}
           />
         </div>
 
         <div className="rounded-[1.8rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
-              Harmonic ladder
-            </p>
-            <p className="m-0 text-sm text-[color:var(--text-muted)]">
-              {boundaryKey === 'openClosed' ? 'odd harmonics only' : 'all integer harmonics'}
-            </p>
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: HARMONIC_ACCENT }}>
+                Harmonic ladder
+              </p>
+              <p className="mt-2 mb-0 text-sm text-[color:var(--text-muted)]">
+                {boundaryKey === 'openClosed' ? 'odd harmonics only' : 'all integer harmonics'}
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleMute}
+                aria-pressed={isMuted}
+                aria-label={isMuted ? 'Sound muted' : 'Mute sound'}
+                className="inline-flex items-center gap-2 rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-2 text-sm font-semibold text-[color:var(--text-primary)] shadow-sm transition-all duration-200 hover:-translate-y-0.5"
+                style={
+                  isMuted
+                    ? {
+                        borderColor: HARMONIC_ACCENT,
+                        backgroundColor: `color-mix(in srgb, ${HARMONIC_ACCENT} 10%, var(--bg-primary))`,
+                        color: HARMONIC_ACCENT,
+                      }
+                    : undefined
+                }
+              >
+                {isMuted ? (
+                  <VolumeX className="h-4 w-4" aria-hidden="true" />
+                ) : (
+                  <Volume2 className="h-4 w-4" aria-hidden="true" />
+                )}
+                Mute
+              </button>
+              <button
+                type="button"
+                onClick={playHarmonicMix}
+                aria-label="Hear all harmonics together"
+                className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold text-white shadow-sm transition-all duration-200 hover:-translate-y-0.5"
+                style={{ backgroundColor: HARMONIC_ACCENT }}
+              >
+                <Music2 className="h-4 w-4" aria-hidden="true" />
+                All together
+              </button>
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -533,12 +793,20 @@ export default function StandingWaveHarmonicsExplorer() {
                 <button
                   type="button"
                   key={row.modeIndex}
-                  onClick={() => setModeIndex(row.modeIndex)}
+                  onClick={() => selectMode(row.modeIndex)}
                   className={`grid w-full grid-cols-[5.5rem_minmax(0,1fr)_4.8rem] items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-200 ${
                     row.isSelected
-                      ? 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_10%,var(--bg-primary))]'
-                      : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] hover:border-[var(--accent-blue)]'
+                      ? 'border-[var(--grid-line)] bg-[var(--bg-primary)]'
+                      : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] hover:border-slate-400'
                   }`}
+                  style={
+                    row.isSelected
+                      ? {
+                          borderColor: HARMONIC_ACCENT,
+                          backgroundColor: `color-mix(in srgb, ${HARMONIC_ACCENT} 10%, var(--bg-primary))`,
+                        }
+                      : undefined
+                  }
                 >
                   <span className="text-sm font-semibold text-[color:var(--text-primary)]">
                     {boundaryKey === 'openClosed' ? `m ${row.modeIndex}` : `n ${row.modeIndex}`}
@@ -546,7 +814,7 @@ export default function StandingWaveHarmonicsExplorer() {
                   <span className="block h-2.5 overflow-hidden rounded-full bg-slate-200/80">
                     <span
                       className="block h-full rounded-full"
-                      style={{ width: `${strengthPercent}%`, backgroundColor: instrument.color }}
+                      style={{ width: `${strengthPercent}%`, backgroundColor: HARMONIC_ACCENT }}
                     />
                   </span>
                   <span className="text-right font-mono text-sm text-[color:var(--text-muted)]">
@@ -561,12 +829,11 @@ export default function StandingWaveHarmonicsExplorer() {
 
       <div className="space-y-5">
         <div className="rounded-[1.8rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] p-5 shadow-sm">
-          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: HARMONIC_ACCENT }}>
             Instrument type
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             {INSTRUMENTS.map((entry) => {
-              const Icon = entry.icon;
               const active = entry.key === instrumentKey;
 
               return (
@@ -576,55 +843,22 @@ export default function StandingWaveHarmonicsExplorer() {
                   onClick={() => applyInstrument(entry)}
                   className={`flex min-h-16 items-center gap-3 rounded-[1.1rem] border px-4 py-3 text-left transition-all duration-200 ${
                     active
-                      ? 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_10%,var(--bg-primary))] shadow-sm'
-                      : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] hover:border-[var(--accent-blue)]'
+                      ? 'border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm'
+                      : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] hover:border-slate-400'
                   }`}
+                  style={
+                    active
+                      ? {
+                          borderColor: HARMONIC_ACCENT,
+                          backgroundColor: `color-mix(in srgb, ${HARMONIC_ACCENT} 10%, var(--bg-primary))`,
+                        }
+                      : undefined
+                  }
                 >
-                  <span
-                    className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white"
-                    style={{ backgroundColor: entry.color }}
-                  >
-                    <Icon className="h-5 w-5" />
-                  </span>
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-[color:var(--text-primary)]">{entry.label}</span>
                     <span className="block truncate text-xs text-[color:var(--text-muted)]">
                       {BOUNDARY_MODES[entry.boundary].shortLabel}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-[1.8rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] p-5 shadow-sm">
-          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
-            Boundary model
-          </p>
-          <div className="mt-4 grid gap-2">
-            {Object.values(BOUNDARY_MODES).map((entry) => {
-              const Icon = entry.icon;
-              const active = entry.key === boundaryKey;
-
-              return (
-                <button
-                  type="button"
-                  key={entry.key}
-                  onClick={() => changeBoundary(entry.key)}
-                  className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-left transition-all duration-200 ${
-                    active
-                      ? 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_10%,var(--bg-primary))]'
-                      : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] hover:border-[var(--accent-blue)]'
-                  }`}
-                >
-                  <span className="flex min-w-0 items-center gap-3">
-                    <Icon className="h-5 w-5 shrink-0" style={{ color: entry.color }} />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-[color:var(--text-primary)]">{entry.label}</span>
-                      <span className="block text-xs text-[color:var(--text-muted)]">
-                        {entry.startCondition} to {entry.endCondition}
-                      </span>
                     </span>
                   </span>
                 </button>
@@ -657,8 +891,8 @@ export default function StandingWaveHarmonicsExplorer() {
         </div>
 
         <div className="rounded-[1.8rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] p-5 shadow-sm">
-          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: instrument.color }}>
-            Timbre hint
+          <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: HARMONIC_ACCENT }}>
+            Timbre
           </p>
           <p className="mt-3 mb-0 text-sm leading-7 text-[color:var(--text-muted)]">
             The colored bars sketch one possible harmonic mixture for the selected instrument. Longer bars mean that harmonic contributes more strongly to the instrument's tone color.

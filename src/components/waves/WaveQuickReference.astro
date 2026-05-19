@@ -1,30 +1,41 @@
 ---
 const cards = [
   {
-    eyebrow: 'Amplitude',
     title: 'Amplitude',
-    accent: 'var(--accent-red)',
     body:
-      'A larger amplitude means taller crests, deeper troughs, or stronger compressions. In a linear medium, it changes the energy carried by the wave much more than the propagation speed.',
+      'A larger amplitude means taller crests, deeper troughs, or stronger compressions. It also determines the energy carried by the wave.',
     svg: 'amplitude',
   },
   {
-    eyebrow: 'Wavelength',
     title: 'Wavelength',
-    accent: 'var(--accent-blue)',
     body:
-      'The wavelength is the distance between matching points on successive cycles, such as crest to crest or compression to compression. It is one convenient spatial variable for describing the pattern.',
+      'The wavelength is the distance between matching points on successive cycles, such as crest to crest or compression to compression.',
     svg: 'wavelength',
   },
   {
-    eyebrow: 'Period',
     title: 'Period',
-    accent: '#0f766e',
     body:
-      'Starting from the traveling pattern, the period is the time between one crest or compression passing a fixed point and the next one passing that same point. The local medium repeats on that same interval.',
+      'The period is the time it takes the waveform to shift spatially by one wavelength. Locally, the medium oscillates with this same period.',
     svg: 'period',
   },
 ];
+
+const buildSinePath = ({
+  start = -12,
+  end = 292,
+  step = 4,
+  baseline = 78,
+  amplitude = 50,
+  wavelength = 126,
+  crestX = 74,
+} = {}) =>
+  Array.from({ length: Math.floor((end - start) / step) + 1 }, (_, index) => {
+    const x = start + index * step;
+    const y = baseline - amplitude * Math.cos(((x - crestX) / wavelength) * Math.PI * 2);
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
+
+const quickReferenceSinePath = buildSinePath();
 ---
 
 <section class="not-prose my-10 overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_14%,transparent),transparent_34%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_12%,transparent),transparent_36%),var(--sim-bg)] shadow-sm">
@@ -38,17 +49,25 @@ const cards = [
   <div class="grid gap-px bg-[var(--grid-line)] lg:grid-cols-3">
     {cards.map((card) => (
       <article class="bg-[var(--bg-primary)] p-5">
-        <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={`color:${card.accent}`}>
-          {card.eyebrow}
-        </p>
-        <h4 class="mt-3 mb-2 text-lg font-semibold text-[color:var(--text-primary)]">{card.title}</h4>
+        <h4 class="mt-0 mb-2 text-lg font-semibold text-[color:var(--text-primary)]">{card.title}</h4>
         <p class="mt-0 mb-4 text-sm leading-7 text-[color:var(--text-muted)]">{card.body}</p>
 
         <div class="rounded-[1.4rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--sim-bg)_78%,white)] p-4 shadow-sm">
           {card.svg === 'amplitude' && (
             <svg viewBox="0 0 280 140" class="h-auto w-full" role="img" aria-label="Amplitude sketch">
+              <defs>
+                <linearGradient id="amplitude-wave-edge-fade" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stop-color="white" stop-opacity="0" />
+                  <stop offset="12%" stop-color="white" stop-opacity="1" />
+                  <stop offset="88%" stop-color="white" stop-opacity="1" />
+                  <stop offset="100%" stop-color="white" stop-opacity="0" />
+                </linearGradient>
+                <mask id="amplitude-wave-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="280" height="140">
+                  <rect x="0" y="0" width="280" height="140" fill="url(#amplitude-wave-edge-fade)" />
+                </mask>
+              </defs>
               <line x1="14" x2="266" y1="78" y2="78" stroke="rgba(71, 85, 105, 0.28)" stroke-width="2" stroke-dasharray="7 7" />
-              <path d="M 14 78 C 38 78 48 28 74 28 C 98 28 110 128 136 128 C 160 128 172 28 198 28 C 222 28 236 78 266 78" fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="5" stroke-linecap="round" />
+              <path d={quickReferenceSinePath} fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" mask="url(#amplitude-wave-mask)" />
               <line x1="74" x2="74" y1="78" y2="28" stroke="rgba(239, 68, 68, 0.84)" stroke-width="3" stroke-linecap="round" />
               <path d="M 66 36 L 74 28 L 82 36" fill="none" stroke="rgba(239, 68, 68, 0.84)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M 66 70 L 74 78 L 82 70" fill="none" stroke="rgba(239, 68, 68, 0.84)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
@@ -58,13 +77,24 @@ const cards = [
 
           {card.svg === 'wavelength' && (
             <svg viewBox="0 0 280 140" class="h-auto w-full" role="img" aria-label="Wavelength sketch">
-              <path d="M 14 78 C 38 78 48 28 74 28 C 98 28 110 128 136 128 C 160 128 172 28 198 28 C 222 28 236 78 266 78" fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="5" stroke-linecap="round" />
+              <defs>
+                <linearGradient id="wavelength-wave-edge-fade" x1="0" x2="1" y1="0" y2="0">
+                  <stop offset="0%" stop-color="white" stop-opacity="0" />
+                  <stop offset="12%" stop-color="white" stop-opacity="1" />
+                  <stop offset="88%" stop-color="white" stop-opacity="1" />
+                  <stop offset="100%" stop-color="white" stop-opacity="0" />
+                </linearGradient>
+                <mask id="wavelength-wave-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="280" height="140">
+                  <rect x="0" y="0" width="280" height="140" fill="url(#wavelength-wave-edge-fade)" />
+                </mask>
+              </defs>
+              <path d={quickReferenceSinePath} fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" mask="url(#wavelength-wave-mask)" />
               <line x1="74" x2="200" y1="18" y2="18" stroke="rgba(59, 130, 246, 0.92)" stroke-width="3" stroke-linecap="round" />
+              <text x="130" y="14" fill="rgba(59, 130, 246, 0.92)" font-size="16" font-weight="700">&lambda;</text>
               <path d="M 80 10 L 70 18 L 80 26" fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M 190 10 L 200 18 L 190 26" fill="none" stroke="rgba(59, 130, 246, 0.92)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
-              <text x="100" y="10" fill="rgba(59, 130, 246, 0.95)" font-size="13" font-weight="700">wavelength</text>
               <circle cx="74" cy="28" r="5.5" fill="rgba(15, 23, 42, 0.78)" />
-              <circle cx="198" cy="28" r="5.5" fill="rgba(15, 23, 42, 0.78)" />
+              <circle cx="200" cy="28" r="5.5" fill="rgba(15, 23, 42, 0.78)" />
             </svg>
           )}
 

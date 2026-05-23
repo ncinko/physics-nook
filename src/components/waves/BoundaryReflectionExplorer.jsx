@@ -433,9 +433,7 @@ function ParticlePipeDiagram({ mode, time }) {
         x: stageXInterior(u) + displacement * displacementScale,
         y: pipeCenter + rowOffset,
         radius: isCompression ? 3.2 + intensity * 1.7 : 3.1 - intensity * 0.6,
-        fill: isCompression
-          ? `rgba(15,23,42,${0.5 + intensity * 0.38})`
-          : `rgba(37,99,235,${0.28 + intensity * 0.32})`,
+        fill: `rgba(15,23,42,${0.36 + intensity * 0.34})`,
       });
     }
   }

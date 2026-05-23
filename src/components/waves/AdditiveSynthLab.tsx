@@ -76,6 +76,9 @@ type ExtrasSettings = {
   vibratoDepth: number;
   vibratoRate: number;
   softLimit: boolean;
+  arpeggiatorEnabled: boolean;
+  arpeggiatorRate: number;
+  arpeggiatorGate: number;
 };
 
 const HARMONIC_COUNT = 16;
@@ -148,6 +151,9 @@ const INITIAL_EXTRAS: ExtrasSettings = {
   vibratoDepth: 0,
   vibratoRate: 5.2,
   softLimit: false,
+  arpeggiatorEnabled: false,
+  arpeggiatorRate: 4,
+  arpeggiatorGate: 0.56,
 };
 
 const PRESETS: Preset[] = [
@@ -906,16 +912,23 @@ export default function AdditiveSynthLab() {
     envelope: INITIAL_ENVELOPE,
   }));
   const [activeNotes, setActiveNotes] = useState<Map<string, SynthVoice>>(() => new Map());
+  const [pressedNotes, setPressedNotes] = useState<Map<string, NoteKey>>(() => new Map());
   const [keyboardRootOctave, setKeyboardRootOctave] = useState(INITIAL_KEYBOARD_ROOT_OCTAVE);
   const [spectrogramScale, setSpectrogramScale] = useState<SpectrogramScale>('log');
   const [waveTime, setWaveTime] = useState(0);
   const spectrogramCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const graphRef = useRef<AudioGraph | null>(null);
   const activeNotesRef = useRef(activeNotes);
+  const pressedNotesRef = useRef(pressedNotes);
   const pointerNotesRef = useRef<Map<number, string>>(new Map());
   const keyboardNotesRef = useRef<Map<string, string>>(new Map());
   const pendingReleaseNotesRef = useRef<Set<string>>(new Set());
   const releaseNoteRef = useRef<(noteId: string) => void>(() => {});
+  const activeArpVoiceIdRef = useRef<string | null>(null);
+  const arpStepRef = useRef(0);
+  const arpVoiceCounterRef = useRef(0);
+  const arpStepTimerRef = useRef<number | null>(null);
+  const arpGateTimerRef = useRef<number | null>(null);
   const animationRef = useRef<number | null>(null);
   const waveAnimationRef = useRef<number | null>(null);
   const waveLastTimestampRef = useRef<number | null>(null);
@@ -934,6 +947,10 @@ export default function AdditiveSynthLab() {
     [effectiveHarmonics],
   );
   const heldVoices = Array.from(activeNotes.values()).filter((voice) => voice.status === 'held');
+  const pressedNoteList = useMemo(
+    () => Array.from(pressedNotes.values()).sort((first, second) => first.midi - second.midi),
+    [pressedNotes],
+  );
   const activeFrequencies = useMemo(
     () => Array.from(activeNotes.values()).map((voice) => voice.frequency),
     [activeNotes],
@@ -967,10 +984,26 @@ export default function AdditiveSynthLab() {
     (lowest, voice) => (!lowest || voice.frequency < lowest.frequency ? voice : lowest),
     null,
   );
+  const heldNoteValue = extras.arpeggiatorEnabled && pressedNoteList.length
+    ? pressedNoteList.map((note) => note.label).join(' ')
+    : heldVoices.length
+      ? heldVoices.map((voice) => voice.label).join(' ')
+      : 'None';
+  const heldNoteDetail = extras.arpeggiatorEnabled
+    ? pressedNoteList.length
+      ? `${pressedNoteList.length} key${pressedNoteList.length === 1 ? '' : 's'} arpeggiating`
+      : 'Hold keys to arpeggiate'
+    : isSounding
+      ? `${soundingVoices} voice${soundingVoices === 1 ? '' : 's'} sounding`
+      : 'Tap or hold piano keys';
 
   useEffect(() => {
     activeNotesRef.current = activeNotes;
   }, [activeNotes]);
+
+  useEffect(() => {
+    pressedNotesRef.current = pressedNotes;
+  }, [pressedNotes]);
 
   useEffect(() => {
     harmonicsRef.current = harmonics;
@@ -1119,13 +1152,13 @@ export default function AdditiveSynthLab() {
   }, []);
 
   const startNote = useCallback(
-    async (note: NoteKey) => {
-      const existing = activeNotesRef.current.get(note.id);
+    async (note: NoteKey, voiceId = note.id) => {
+      const existing = activeNotesRef.current.get(voiceId);
       if (existing) {
         disconnectVoice(existing);
         updateActiveNotes((current) => {
           const next = new Map(current);
-          next.delete(note.id);
+          next.delete(voiceId);
           return next;
         });
       }
@@ -1179,7 +1212,7 @@ export default function AdditiveSynthLab() {
       vibratoOscillator.start(now);
 
       const voice: SynthVoice = {
-        noteId: note.id,
+        noteId: voiceId,
         label: note.label,
         frequency: note.frequency,
         oscillators,
@@ -1192,13 +1225,13 @@ export default function AdditiveSynthLab() {
 
       updateActiveNotes((current) => {
         const next = new Map(current);
-        next.set(note.id, voice);
+        next.set(voiceId, voice);
         return next;
       });
 
-      if (pendingReleaseNotesRef.current.has(note.id)) {
-        pendingReleaseNotesRef.current.delete(note.id);
-        window.setTimeout(() => releaseNoteRef.current(note.id), 0);
+      if (pendingReleaseNotesRef.current.has(voiceId)) {
+        pendingReleaseNotesRef.current.delete(voiceId);
+        window.setTimeout(() => releaseNoteRef.current(voiceId), 0);
       }
     },
     [createCurrentWave, disconnectVoice, getAudioGraph, updateActiveNotes],
@@ -1273,14 +1306,132 @@ export default function AdditiveSynthLab() {
 
   releaseNoteRef.current = releaseNote;
 
+  const clearArpeggiatorTimers = useCallback(() => {
+    if (arpStepTimerRef.current !== null) {
+      window.clearTimeout(arpStepTimerRef.current);
+      arpStepTimerRef.current = null;
+    }
+
+    if (arpGateTimerRef.current !== null) {
+      window.clearTimeout(arpGateTimerRef.current);
+      arpGateTimerRef.current = null;
+    }
+  }, []);
+
+  const releaseActiveArpVoice = useCallback(() => {
+    const voiceId = activeArpVoiceIdRef.current;
+    if (voiceId) {
+      activeArpVoiceIdRef.current = null;
+      releaseNote(voiceId);
+    }
+  }, [releaseNote]);
+
   const releaseAllNotes = useCallback(() => {
     Array.from(activeNotesRef.current.values())
       .filter((voice) => voice.status === 'held')
       .forEach((voice) => releaseNote(voice.noteId));
+    clearArpeggiatorTimers();
+    activeArpVoiceIdRef.current = null;
     pointerNotesRef.current.clear();
     keyboardNotesRef.current.clear();
+    pressedNotesRef.current = new Map();
+    setPressedNotes(new Map());
     pendingReleaseNotesRef.current.clear();
-  }, [releaseNote]);
+  }, [clearArpeggiatorTimers, releaseNote]);
+
+  const registerPressedNote = useCallback((note: NoteKey) => {
+    setPressedNotes((current) => {
+      const next = new Map(current);
+      next.set(note.id, note);
+      pressedNotesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const unregisterPressedNote = useCallback((noteId: string) => {
+    setPressedNotes((current) => {
+      if (!current.has(noteId)) {
+        return current;
+      }
+
+      const next = new Map(current);
+      next.delete(noteId);
+      pressedNotesRef.current = next;
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!extras.arpeggiatorEnabled) {
+      clearArpeggiatorTimers();
+      releaseActiveArpVoice();
+      arpStepRef.current = 0;
+      Array.from(pressedNotesRef.current.values()).forEach((note) => {
+        if (!activeNotesRef.current.has(note.id)) {
+          void startNote(note);
+        }
+      });
+      return undefined;
+    }
+
+    Array.from(activeNotesRef.current.values())
+      .filter((voice) => voice.status === 'held' && !voice.noteId.startsWith('arp-'))
+      .forEach((voice) => releaseNote(voice.noteId));
+
+    let cancelled = false;
+
+    const scheduleStep = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const sourceNotes = Array.from(pressedNotesRef.current.values())
+        .sort((first, second) => first.midi - second.midi);
+      const stepMs = 1000 / clamp(extrasRef.current.arpeggiatorRate, 1, 12);
+
+      if (sourceNotes.length === 0) {
+        releaseActiveArpVoice();
+        arpStepTimerRef.current = window.setTimeout(scheduleStep, 90);
+        return;
+      }
+
+      const note = sourceNotes[arpStepRef.current % sourceNotes.length];
+      const voiceId = `arp-${note.id}-${arpVoiceCounterRef.current}`;
+      const gateMs = stepMs * clamp(extrasRef.current.arpeggiatorGate, 0.12, 0.95);
+
+      arpVoiceCounterRef.current += 1;
+      arpStepRef.current += 1;
+      releaseActiveArpVoice();
+      activeArpVoiceIdRef.current = voiceId;
+      void startNote(note, voiceId);
+
+      if (arpGateTimerRef.current !== null) {
+        window.clearTimeout(arpGateTimerRef.current);
+      }
+      arpGateTimerRef.current = window.setTimeout(() => {
+        if (activeArpVoiceIdRef.current === voiceId) {
+          releaseActiveArpVoice();
+        }
+      }, gateMs);
+
+      arpStepTimerRef.current = window.setTimeout(scheduleStep, stepMs);
+    };
+
+    scheduleStep();
+
+    return () => {
+      cancelled = true;
+      clearArpeggiatorTimers();
+    };
+  }, [
+    clearArpeggiatorTimers,
+    extras.arpeggiatorEnabled,
+    extras.arpeggiatorGate,
+    extras.arpeggiatorRate,
+    releaseNote,
+    releaseActiveArpVoice,
+    startNote,
+  ]);
 
   useEffect(() => {
     const finishGlobalPointer = (event: PointerEvent) => {
@@ -1290,7 +1441,10 @@ export default function AdditiveSynthLab() {
       }
 
       pointerNotesRef.current.delete(event.pointerId);
-      releaseNote(noteId);
+      unregisterPressedNote(noteId);
+      if (!extrasRef.current.arpeggiatorEnabled) {
+        releaseNote(noteId);
+      }
     };
 
     window.addEventListener('pointerup', finishGlobalPointer);
@@ -1300,7 +1454,7 @@ export default function AdditiveSynthLab() {
       window.removeEventListener('pointerup', finishGlobalPointer);
       window.removeEventListener('pointercancel', finishGlobalPointer);
     };
-  }, [releaseNote]);
+  }, [releaseNote, unregisterPressedNote]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -1421,6 +1575,14 @@ export default function AdditiveSynthLab() {
         window.cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
+      if (arpStepTimerRef.current !== null) {
+        window.clearTimeout(arpStepTimerRef.current);
+        arpStepTimerRef.current = null;
+      }
+      if (arpGateTimerRef.current !== null) {
+        window.clearTimeout(arpGateTimerRef.current);
+        arpGateTimerRef.current = null;
+      }
 
       activeNotesRef.current.forEach((voice) => disconnectVoice(voice));
       activeNotesRef.current = new Map();
@@ -1510,7 +1672,10 @@ export default function AdditiveSynthLab() {
     event.preventDefault();
     pointerNotesRef.current.set(event.pointerId, note.id);
     event.currentTarget.setPointerCapture(event.pointerId);
-    void startNote(note);
+    registerPressedNote(note);
+    if (!extrasRef.current.arpeggiatorEnabled) {
+      void startNote(note);
+    }
   };
 
   const finishPointer = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -1523,7 +1688,10 @@ export default function AdditiveSynthLab() {
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    releaseNote(noteId);
+    unregisterPressedNote(noteId);
+    if (!extrasRef.current.arpeggiatorEnabled) {
+      releaseNote(noteId);
+    }
   };
 
   const shiftKeyboardOctave = useCallback((direction: -1 | 1) => {
@@ -1576,8 +1744,11 @@ export default function AdditiveSynthLab() {
 
     event.preventDefault();
     keyboardNotesRef.current.set(key, note.id);
-    void startNote(note);
-  }, [noteFromComputerKey, shiftKeyboardOctave, startNote]);
+    registerPressedNote(note);
+    if (!extrasRef.current.arpeggiatorEnabled) {
+      void startNote(note);
+    }
+  }, [noteFromComputerKey, registerPressedNote, shiftKeyboardOctave, startNote]);
 
   const handleKeyUp = useCallback((event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
@@ -1588,8 +1759,11 @@ export default function AdditiveSynthLab() {
 
     event.preventDefault();
     keyboardNotesRef.current.delete(key);
-    releaseNote(noteId);
-  }, [releaseNote]);
+    unregisterPressedNote(noteId);
+    if (!extrasRef.current.arpeggiatorEnabled) {
+      releaseNote(noteId);
+    }
+  }, [releaseNote, unregisterPressedNote]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -1694,8 +1868,8 @@ export default function AdditiveSynthLab() {
         <div className="grid gap-4 md:grid-cols-2">
           <MetricCard
             eyebrow="Held notes"
-            value={heldVoices.length ? heldVoices.map((voice) => voice.label).join(' ') : 'None'}
-            detail={isSounding ? `${soundingVoices} voice${soundingVoices === 1 ? '' : 's'} sounding` : 'Tap or hold piano keys'}
+            value={heldNoteValue}
+            detail={heldNoteDetail}
             color={SYNTH_ACCENT}
           />
           <MetricCard
@@ -1761,7 +1935,8 @@ export default function AdditiveSynthLab() {
             >
               <div className="absolute inset-0 flex">
                 {displayedWhiteKeys.map((key) => {
-                  const isHeld = activeNotes.get(key.id)?.status === 'held';
+                  const isHeld = activeNotes.get(key.id)?.status === 'held' ||
+                    (extras.arpeggiatorEnabled && pressedNotes.has(key.id));
                   return (
                     <button
                       type="button"
@@ -1788,7 +1963,8 @@ export default function AdditiveSynthLab() {
               </div>
 
               {displayedBlackKeys.map((key) => {
-                const isHeld = activeNotes.get(key.id)?.status === 'held';
+                const isHeld = activeNotes.get(key.id)?.status === 'held' ||
+                  (extras.arpeggiatorEnabled && pressedNotes.has(key.id));
                 const whiteKeyCount = Math.max(displayedWhiteKeys.length, 1);
                 const relativeWhiteIndex = key.whiteIndex - firstDisplayedWhiteIndex;
                 return (
@@ -2085,6 +2261,45 @@ export default function AdditiveSynthLab() {
                   {extras.softLimit ? 'on' : 'off'}
                 </span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => updateExtras({ arpeggiatorEnabled: !extras.arpeggiatorEnabled })}
+                aria-pressed={extras.arpeggiatorEnabled}
+                className={`mt-3 flex w-full items-center justify-between gap-3 rounded-[1rem] border px-3 py-3 text-left text-sm font-semibold transition-colors ${
+                  extras.arpeggiatorEnabled
+                    ? 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_10%,var(--bg-primary))] text-[var(--accent-blue)]'
+                    : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] hover:border-[var(--accent-blue)]'
+                }`}
+              >
+                <span>Arpeggiator</span>
+                <span className="font-mono text-xs text-[color:var(--text-muted)]">
+                  {extras.arpeggiatorEnabled ? 'on' : 'off'}
+                </span>
+              </button>
+
+              {extras.arpeggiatorEnabled && (
+                <div className="mt-2 divide-y divide-[var(--grid-line)]">
+                  <ExtraRangeControl
+                    label="Arp rate"
+                    value={extras.arpeggiatorRate}
+                    valueLabel={`${formatNumber(extras.arpeggiatorRate, 1)} steps/s`}
+                    min={1}
+                    max={12}
+                    step={0.25}
+                    onChange={(arpeggiatorRate) => updateExtras({ arpeggiatorRate })}
+                  />
+                  <ExtraRangeControl
+                    label="Gate length"
+                    value={extras.arpeggiatorGate}
+                    valueLabel={`${Math.round(extras.arpeggiatorGate * 100)}%`}
+                    min={0.12}
+                    max={0.95}
+                    step={0.01}
+                    onChange={(arpeggiatorGate) => updateExtras({ arpeggiatorGate })}
+                  />
+                </div>
+              )}
             </div>
           )}
         </div>

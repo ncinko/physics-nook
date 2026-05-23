@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
@@ -15,7 +14,6 @@ import {
   Shuffle,
   SlidersHorizontal,
   Volume2,
-  Waves,
 } from 'lucide-react';
 
 type Envelope = {
@@ -73,6 +71,7 @@ const LIVE_WAVE_REFERENCE_FREQUENCY = 500;
 const LIVE_WAVE_SCROLL_RATE = 1;
 const LIVE_WAVE_DISPLAY_GAIN = 0.78;
 const LIVE_WAVE_WINDOW_MS = 1000 / LIVE_WAVE_REFERENCE_FREQUENCY;
+const DEFAULT_MASTER_VOLUME = 0.3;
 const THREE_NOTE_LOUDNESS_TARGET = 1.5;
 const CHORD_LOUDNESS_EXPONENT = Math.log(THREE_NOTE_LOUDNESS_TARGET) / Math.log(3);
 const WHITE_KEY_HEIGHT = 168;
@@ -772,42 +771,6 @@ function EnvelopeEditor({
   );
 }
 
-function ControlSlider({
-  label,
-  value,
-  valueLabel,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  valueLabel: string;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (value: number) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 flex items-center justify-between gap-4 text-sm">
-        <span className="font-semibold text-[color:var(--text-primary)]">{label}</span>
-        <span className="font-mono text-[color:var(--text-muted)]">{valueLabel}</span>
-      </span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(parseFloat(event.currentTarget.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-slate-700"
-      />
-    </label>
-  );
-}
-
 function MetricCard({
   eyebrow,
   value,
@@ -844,7 +807,6 @@ function isTextEditingTarget(target: EventTarget | null) {
 export default function AdditiveSynthLab() {
   const [harmonics, setHarmonics] = useState<number[]>(() => normalizeHarmonics(INITIAL_HARMONICS));
   const [envelope, setEnvelope] = useState<Envelope>(INITIAL_ENVELOPE);
-  const [masterVolume, setMasterVolume] = useState(0.28);
   const [activePresetKey, setActivePresetKey] = useState('custom');
   const [customRecipe, setCustomRecipe] = useState<CustomRecipe>(() => ({
     harmonics: normalizeHarmonics(INITIAL_HARMONICS),
@@ -868,7 +830,6 @@ export default function AdditiveSynthLab() {
   const lastSpectrogramScaleRef = useRef<SpectrogramScale | null>(null);
   const harmonicsRef = useRef(harmonics);
   const envelopeRef = useRef(envelope);
-  const masterVolumeRef = useRef(masterVolume);
 
   const effectiveHarmonics = useMemo(
     () => getEffectiveHarmonics(harmonics),
@@ -926,13 +887,12 @@ export default function AdditiveSynthLab() {
   }, [envelope]);
 
   useEffect(() => {
-    masterVolumeRef.current = masterVolume;
     const graph = graphRef.current;
     if (graph) {
       const now = graph.context.currentTime;
-      graph.masterGain.gain.setTargetAtTime(masterVolume * chordMixScale, now, 0.02);
+      graph.masterGain.gain.setTargetAtTime(DEFAULT_MASTER_VOLUME * chordMixScale, now, 0.02);
     }
-  }, [chordMixScale, masterVolume]);
+  }, [chordMixScale]);
 
   useEffect(() => {
     if (!isSounding) {
@@ -994,7 +954,7 @@ export default function AdditiveSynthLab() {
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.72;
       masterGain.gain.setValueAtTime(
-        masterVolumeRef.current * getChordMixScale(activeNotesRef.current.size),
+        DEFAULT_MASTER_VOLUME * getChordMixScale(activeNotesRef.current.size),
         context.currentTime,
       );
       masterGain.connect(analyser);
@@ -1385,7 +1345,6 @@ export default function AdditiveSynthLab() {
     setHarmonics(nextHarmonics);
     setEnvelope(INITIAL_ENVELOPE);
     saveCustomRecipe(nextHarmonics, INITIAL_ENVELOPE);
-    setMasterVolume(0.28);
     setKeyboardRootOctave(INITIAL_KEYBOARD_ROOT_OCTAVE);
     releaseAllNotes();
   };
@@ -1414,15 +1373,15 @@ export default function AdditiveSynthLab() {
     releaseNote(noteId);
   };
 
-  const shiftKeyboardOctave = (direction: -1 | 1) => {
+  const shiftKeyboardOctave = useCallback((direction: -1 | 1) => {
     setKeyboardRootOctave((current) => clamp(
       current + direction,
       KEYBOARD_ROOT_MIN_OCTAVE,
       KEYBOARD_ROOT_MAX_OCTAVE,
     ));
-  };
+  }, []);
 
-  const noteFromComputerKey = (key: string) => {
+  const noteFromComputerKey = useCallback((key: string) => {
     const offset = COMPUTER_KEY_OFFSETS[key];
 
     if (typeof offset !== 'number') {
@@ -1436,10 +1395,16 @@ export default function AdditiveSynthLab() {
     }
 
     return PIANO_KEY_BY_ID.get(noteLabelFromMidi(midi)) ?? null;
-  };
+  }, [keyboardRootMidi]);
 
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.repeat || isTextEditingTarget(event.target)) {
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    if (
+      event.repeat ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      isTextEditingTarget(event.target)
+    ) {
       return;
     }
 
@@ -1459,9 +1424,9 @@ export default function AdditiveSynthLab() {
     event.preventDefault();
     keyboardNotesRef.current.set(key, note.id);
     void startNote(note);
-  };
+  }, [noteFromComputerKey, shiftKeyboardOctave, startNote]);
 
-  const handleKeyUp = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+  const handleKeyUp = useCallback((event: KeyboardEvent) => {
     const key = event.key.toLowerCase();
     const noteId = keyboardNotesRef.current.get(key);
     if (!noteId) {
@@ -1471,7 +1436,17 @@ export default function AdditiveSynthLab() {
     event.preventDefault();
     keyboardNotesRef.current.delete(key);
     releaseNote(noteId);
-  };
+  }, [releaseNote]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleKeyDown, handleKeyUp]);
 
   return (
     <div
@@ -1479,8 +1454,6 @@ export default function AdditiveSynthLab() {
       className="grid h-full min-h-[56rem] grid-cols-1 gap-6 bg-[var(--sim-bg)] p-4 text-[color:var(--text-primary)] xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)] xl:p-5"
       style={{ overflowAnchor: 'none' }}
       tabIndex={0}
-      onKeyDown={handleKeyDown}
-      onKeyUp={handleKeyUp}
     >
       <div className="space-y-5">
         <div className="overflow-hidden rounded-[1.7rem] border border-[var(--grid-line)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_42%),var(--bg-primary)] shadow-sm">
@@ -1869,16 +1842,6 @@ export default function AdditiveSynthLab() {
           </div>
 
           <div className="space-y-5">
-            <ControlSlider
-              label="Volume"
-              value={masterVolume}
-              valueLabel={`${Math.round(masterVolume * 100)}%`}
-              min={0.04}
-              max={0.56}
-              step={0.01}
-              onChange={setMasterVolume}
-            />
-
             <EnvelopeEditor
               envelope={envelope}
               onChange={(nextEnvelope) => {

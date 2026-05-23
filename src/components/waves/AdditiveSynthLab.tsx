@@ -7,6 +7,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Music2,
@@ -40,8 +41,10 @@ type SynthVoice = {
   noteId: string;
   label: string;
   frequency: number;
-  oscillator: OscillatorNode;
+  oscillators: OscillatorNode[];
   gain: GainNode;
+  vibratoOscillator: OscillatorNode;
+  vibratoGain: GainNode;
   status: VoiceStatus;
   releaseTimer: number | null;
 };
@@ -49,6 +52,8 @@ type SynthVoice = {
 type AudioGraph = {
   context: AudioContext;
   masterGain: GainNode;
+  toneFilter: BiquadFilterNode;
+  compressor: DynamicsCompressorNode;
   analyser: AnalyserNode;
 };
 
@@ -65,6 +70,14 @@ type CustomRecipe = {
   envelope: Envelope;
 };
 
+type ExtrasSettings = {
+  tone: number;
+  unisonSpread: number;
+  vibratoDepth: number;
+  vibratoRate: number;
+  softLimit: boolean;
+};
+
 const HARMONIC_COUNT = 16;
 const WAVE_SAMPLE_COUNT = 640;
 const LIVE_WAVE_REFERENCE_FREQUENCY = 500;
@@ -74,6 +87,8 @@ const LIVE_WAVE_WINDOW_MS = 1000 / LIVE_WAVE_REFERENCE_FREQUENCY;
 const DEFAULT_MASTER_VOLUME = 0.3;
 const THREE_NOTE_LOUDNESS_TARGET = 1.5;
 const CHORD_LOUDNESS_EXPONENT = Math.log(THREE_NOTE_LOUDNESS_TARGET) / Math.log(3);
+const MAX_UNISON_SPREAD_CENTS = 16;
+const MAX_VIBRATO_DEPTH_CENTS = 12;
 const WHITE_KEY_HEIGHT = 168;
 const BLACK_KEY_WIDTH = 31;
 const BLACK_KEY_HEIGHT = 104;
@@ -125,6 +140,14 @@ const INITIAL_ENVELOPE: Envelope = {
   decay: 0.16,
   sustain: 0.66,
   release: 0.34,
+};
+
+const INITIAL_EXTRAS: ExtrasSettings = {
+  tone: 1,
+  unisonSpread: 0,
+  vibratoDepth: 0,
+  vibratoRate: 5.2,
+  softLimit: false,
 };
 
 const PRESETS: Preset[] = [
@@ -196,6 +219,23 @@ const formatAxisMilliseconds = (value: number) =>
 
 const getChordMixScale = (voiceCount: number) =>
   voiceCount <= 1 ? 1 : voiceCount ** (CHORD_LOUDNESS_EXPONENT - 1);
+
+const getToneFilterFrequency = (tone: number) => 520 + tone ** 2.15 * 15480;
+
+const getUnisonDetunes = (spread: number) =>
+  spread <= 0.05 ? [0] : [-spread, 0, spread];
+
+const configureDynamicsCompressor = (
+  compressor: DynamicsCompressorNode,
+  settings: ExtrasSettings,
+  now: number,
+) => {
+  compressor.threshold.setTargetAtTime(settings.softLimit ? -18 : 0, now, 0.02);
+  compressor.knee.setTargetAtTime(settings.softLimit ? 18 : 0, now, 0.02);
+  compressor.ratio.setTargetAtTime(settings.softLimit ? 6 : 1, now, 0.02);
+  compressor.attack.setTargetAtTime(settings.softLimit ? 0.003 : 0.001, now, 0.02);
+  compressor.release.setTargetAtTime(settings.softLimit ? 0.14 : 0.08, now, 0.02);
+};
 
 const midiToFrequency = (midi: number) => 440 * 2 ** ((midi - 69) / 12);
 
@@ -795,18 +835,71 @@ function MetricCard({
   );
 }
 
+function ExtraRangeControl({
+  label,
+  value,
+  valueLabel,
+  min,
+  max,
+  step,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: number;
+  valueLabel: string;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className={`block py-3 ${disabled ? 'opacity-55' : ''}`}>
+      <span className="mb-2 flex items-center justify-between gap-4 text-sm">
+        <span className="font-semibold text-[color:var(--text-primary)]">{label}</span>
+        <span className="font-mono text-[color:var(--text-muted)]">{valueLabel}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(parseFloat(event.currentTarget.value))}
+        className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-slate-200 accent-slate-700 disabled:cursor-not-allowed"
+      />
+    </label>
+  );
+}
+
 function isTextEditingTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
 
   const tagName = target.tagName.toLowerCase();
-  return tagName === 'input' || tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
+  if (target instanceof HTMLInputElement) {
+    return [
+      'email',
+      'number',
+      'password',
+      'search',
+      'tel',
+      'text',
+      'url',
+    ].includes(target.type);
+  }
+
+  return tagName === 'textarea' || tagName === 'select' || target.isContentEditable;
 }
 
 export default function AdditiveSynthLab() {
   const [harmonics, setHarmonics] = useState<number[]>(() => normalizeHarmonics(INITIAL_HARMONICS));
   const [envelope, setEnvelope] = useState<Envelope>(INITIAL_ENVELOPE);
+  const [extras, setExtras] = useState<ExtrasSettings>(INITIAL_EXTRAS);
+  const [extrasOpen, setExtrasOpen] = useState(false);
   const [activePresetKey, setActivePresetKey] = useState('custom');
   const [customRecipe, setCustomRecipe] = useState<CustomRecipe>(() => ({
     harmonics: normalizeHarmonics(INITIAL_HARMONICS),
@@ -830,6 +923,7 @@ export default function AdditiveSynthLab() {
   const lastSpectrogramScaleRef = useRef<SpectrogramScale | null>(null);
   const harmonicsRef = useRef(harmonics);
   const envelopeRef = useRef(envelope);
+  const extrasRef = useRef(extras);
 
   const effectiveHarmonics = useMemo(
     () => getEffectiveHarmonics(harmonics),
@@ -885,6 +979,24 @@ export default function AdditiveSynthLab() {
   useEffect(() => {
     envelopeRef.current = envelope;
   }, [envelope]);
+
+  useEffect(() => {
+    extrasRef.current = extras;
+
+    const graph = graphRef.current;
+    if (graph) {
+      const now = graph.context.currentTime;
+      graph.toneFilter.frequency.setTargetAtTime(getToneFilterFrequency(extras.tone), now, 0.04);
+      graph.toneFilter.Q.setTargetAtTime(0.72 + (1 - extras.tone) * 0.65, now, 0.04);
+      configureDynamicsCompressor(graph.compressor, extras, now);
+    }
+
+    activeNotesRef.current.forEach((voice) => {
+      const graphNow = graphRef.current?.context.currentTime ?? 0;
+      voice.vibratoGain.gain.setTargetAtTime(extras.vibratoDepth, graphNow, 0.04);
+      voice.vibratoOscillator.frequency.setTargetAtTime(extras.vibratoRate, graphNow, 0.04);
+    });
+  }, [extras]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -949,18 +1061,27 @@ export default function AdditiveSynthLab() {
 
       const context = new AudioContextConstructor();
       const masterGain = context.createGain();
+      const toneFilter = context.createBiquadFilter();
+      const compressor = context.createDynamicsCompressor();
       const analyser = context.createAnalyser();
+      const currentExtras = extrasRef.current;
 
+      toneFilter.type = 'lowpass';
+      toneFilter.frequency.setValueAtTime(getToneFilterFrequency(currentExtras.tone), context.currentTime);
+      toneFilter.Q.setValueAtTime(0.72 + (1 - currentExtras.tone) * 0.65, context.currentTime);
+      configureDynamicsCompressor(compressor, currentExtras, context.currentTime);
       analyser.fftSize = 2048;
       analyser.smoothingTimeConstant = 0.72;
       masterGain.gain.setValueAtTime(
         DEFAULT_MASTER_VOLUME * getChordMixScale(activeNotesRef.current.size),
         context.currentTime,
       );
-      masterGain.connect(analyser);
+      masterGain.connect(toneFilter);
+      toneFilter.connect(compressor);
+      compressor.connect(analyser);
       analyser.connect(context.destination);
 
-      graphRef.current = { context, masterGain, analyser };
+      graphRef.current = { context, masterGain, toneFilter, compressor, analyser };
     }
 
     if (graphRef.current.context.state === 'suspended') {
@@ -981,13 +1102,16 @@ export default function AdditiveSynthLab() {
     }
 
     try {
-      voice.oscillator.stop();
+      voice.oscillators.forEach((oscillator) => oscillator.stop());
+      voice.vibratoOscillator.stop();
     } catch {
       // Oscillators can only be stopped once.
     }
 
     try {
-      voice.oscillator.disconnect();
+      voice.oscillators.forEach((oscillator) => oscillator.disconnect());
+      voice.vibratoOscillator.disconnect();
+      voice.vibratoGain.disconnect();
       voice.gain.disconnect();
     } catch {
       // The node may already be disconnected by a scheduled release.
@@ -1019,28 +1143,49 @@ export default function AdditiveSynthLab() {
       const { context, masterGain } = graph;
       const now = context.currentTime;
       const voiceGain = context.createGain();
-      const oscillator = context.createOscillator();
+      const currentExtras = extrasRef.current;
+      const unisonDetunes = getUnisonDetunes(currentExtras.unisonSpread);
+      const vibratoOscillator = context.createOscillator();
+      const vibratoGain = context.createGain();
       const currentEnvelope = envelopeRef.current;
       const attackEnd = now + Math.max(currentEnvelope.attack, 0.002);
       const decayEnd = attackEnd + Math.max(currentEnvelope.decay, 0.001);
       const sustainLevel = clamp(currentEnvelope.sustain, 0.02, 1);
       const periodicWave = createCurrentWave(context);
+      const voicePeakGain = 0.82 / unisonDetunes.length;
 
-      oscillator.frequency.setValueAtTime(note.frequency, now);
-      oscillator.setPeriodicWave(periodicWave);
+      vibratoOscillator.type = 'sine';
+      vibratoOscillator.frequency.setValueAtTime(currentExtras.vibratoRate, now);
+      vibratoGain.gain.setValueAtTime(currentExtras.vibratoDepth, now);
+      vibratoOscillator.connect(vibratoGain);
+
+      const oscillators = unisonDetunes.map((detune) => {
+        const oscillator = context.createOscillator();
+
+        oscillator.frequency.setValueAtTime(note.frequency, now);
+        oscillator.detune.setValueAtTime(detune, now);
+        oscillator.setPeriodicWave(periodicWave);
+        vibratoGain.connect(oscillator.detune);
+        oscillator.connect(voiceGain);
+
+        return oscillator;
+      });
+
       voiceGain.gain.setValueAtTime(0.0001, now);
-      voiceGain.gain.exponentialRampToValueAtTime(0.82, attackEnd);
-      voiceGain.gain.exponentialRampToValueAtTime(sustainLevel, decayEnd);
-      oscillator.connect(voiceGain);
+      voiceGain.gain.exponentialRampToValueAtTime(voicePeakGain, attackEnd);
+      voiceGain.gain.exponentialRampToValueAtTime(sustainLevel * voicePeakGain, decayEnd);
       voiceGain.connect(masterGain);
-      oscillator.start(now);
+      oscillators.forEach((oscillator) => oscillator.start(now));
+      vibratoOscillator.start(now);
 
       const voice: SynthVoice = {
         noteId: note.id,
         label: note.label,
         frequency: note.frequency,
-        oscillator,
+        oscillators,
         gain: voiceGain,
+        vibratoOscillator,
+        vibratoGain,
         status: 'held',
         releaseTimer: null,
       };
@@ -1080,21 +1225,24 @@ export default function AdditiveSynthLab() {
         voice.gain.gain.cancelScheduledValues(now);
         voice.gain.gain.setValueAtTime(Math.max(voice.gain.gain.value, 0.0001), now);
         voice.gain.gain.exponentialRampToValueAtTime(0.0001, now + release);
-        voice.oscillator.stop(now + release + 0.03);
+        voice.oscillators.forEach((oscillator) => oscillator.stop(now + release + 0.03));
+        voice.vibratoOscillator.stop(now + release + 0.03);
       } catch {
         // The note may already be inside its shutdown path.
       }
 
       const releaseTimer = window.setTimeout(() => {
         try {
-          voice.oscillator.disconnect();
+          voice.oscillators.forEach((oscillator) => oscillator.disconnect());
+          voice.vibratoOscillator.disconnect();
+          voice.vibratoGain.disconnect();
           voice.gain.disconnect();
         } catch {
           // The browser may have already released the node graph.
         }
 
         updateActiveNotes((current) => {
-          if (current.get(noteId)?.oscillator !== voice.oscillator) {
+          if (current.get(noteId)?.oscillators[0] !== voice.oscillators[0]) {
             return current;
           }
 
@@ -1163,7 +1311,7 @@ export default function AdditiveSynthLab() {
     const wave = createCurrentWave(graph.context);
     activeNotesRef.current.forEach((voice) => {
       try {
-        voice.oscillator.setPeriodicWave(wave);
+        voice.oscillators.forEach((oscillator) => oscillator.setPeriodicWave(wave));
       } catch {
         // A voice may be shutting down while the timbre changes.
       }
@@ -1344,9 +1492,14 @@ export default function AdditiveSynthLab() {
     envelopeRef.current = INITIAL_ENVELOPE;
     setHarmonics(nextHarmonics);
     setEnvelope(INITIAL_ENVELOPE);
+    setExtras(INITIAL_EXTRAS);
     saveCustomRecipe(nextHarmonics, INITIAL_ENVELOPE);
     setKeyboardRootOctave(INITIAL_KEYBOARD_ROOT_OCTAVE);
     releaseAllNotes();
+  };
+
+  const updateExtras = (patch: Partial<ExtrasSettings>) => {
+    setExtras((current) => ({ ...current, ...patch }));
   };
 
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>, note: NoteKey) => {
@@ -1851,6 +2004,89 @@ export default function AdditiveSynthLab() {
               }}
             />
           </div>
+        </div>
+
+        <div className="overflow-hidden rounded-[1.7rem] border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm">
+          <button
+            type="button"
+            onClick={() => setExtrasOpen((current) => !current)}
+            aria-expanded={extrasOpen}
+            aria-controls="synth-extras-panel"
+            className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-[color-mix(in_srgb,var(--accent-blue)_7%,transparent)]"
+          >
+            <span>
+              <span className="block text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: SYNTH_ACCENT }}>
+                Extras
+              </span>
+              <span className="mt-2 block text-sm text-[color:var(--text-muted)]">
+                Tone, motion, thickness, and peak control.
+              </span>
+            </span>
+            <ChevronDown
+              className={`h-5 w-5 shrink-0 text-[color:var(--text-muted)] transition-transform ${extrasOpen ? 'rotate-180' : ''}`}
+              aria-hidden="true"
+            />
+          </button>
+
+          {extrasOpen && (
+            <div id="synth-extras-panel" className="border-t border-[var(--grid-line)] px-5 pb-5 pt-2">
+              <div className="divide-y divide-[var(--grid-line)]">
+                <ExtraRangeControl
+                  label="Tone filter"
+                  value={extras.tone}
+                  valueLabel={`${Math.round(extras.tone * 100)}% open`}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  onChange={(tone) => updateExtras({ tone })}
+                />
+                <ExtraRangeControl
+                  label="Unison spread"
+                  value={extras.unisonSpread}
+                  valueLabel={`${formatNumber(extras.unisonSpread, 1)} cents`}
+                  min={0}
+                  max={MAX_UNISON_SPREAD_CENTS}
+                  step={0.5}
+                  onChange={(unisonSpread) => updateExtras({ unisonSpread })}
+                />
+                <ExtraRangeControl
+                  label="Vibrato depth"
+                  value={extras.vibratoDepth}
+                  valueLabel={`${formatNumber(extras.vibratoDepth, 1)} cents`}
+                  min={0}
+                  max={MAX_VIBRATO_DEPTH_CENTS}
+                  step={0.25}
+                  onChange={(vibratoDepth) => updateExtras({ vibratoDepth })}
+                />
+                <ExtraRangeControl
+                  label="Vibrato rate"
+                  value={extras.vibratoRate}
+                  valueLabel={`${formatNumber(extras.vibratoRate, 1)} Hz`}
+                  min={2.5}
+                  max={8}
+                  step={0.1}
+                  disabled={extras.vibratoDepth <= 0}
+                  onChange={(vibratoRate) => updateExtras({ vibratoRate })}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => updateExtras({ softLimit: !extras.softLimit })}
+                aria-pressed={extras.softLimit}
+                className={`mt-3 flex w-full items-center justify-between gap-3 rounded-[1rem] border px-3 py-3 text-left text-sm font-semibold transition-colors ${
+                  extras.softLimit
+                    ? 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_10%,var(--bg-primary))] text-[var(--accent-blue)]'
+                    : 'border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] hover:border-[var(--accent-blue)]'
+                }`}
+              >
+                <span>Soft limiter</span>
+                <span className="font-mono text-xs text-[color:var(--text-muted)]">
+                  {extras.softLimit ? 'on' : 'off'}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

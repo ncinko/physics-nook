@@ -1,0 +1,39 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import AdditiveSynthLab from '../../components/waves/AdditiveSynthLab';
+import { wavesAndOscillationsPath } from '../../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/sound-synthesis" />
+
+<div id="page-content"></div>
+
+# Sound Synthesis
+
+The overall sound quality of an instrument, or **timbre**, is shaped by a variety of factors.  These include the mixture of frequencies present in a sound wave, as well as the wave's intensity over time.
+
+Additive synthesis builds this mixture by adding pure sine waves together:
+
+$$
+x(t)=A_1\sin(2\pi f t)+A_2\sin(2\pi(2f)t)+A_3\sin(2\pi(3f)t)+\cdots
+$$
+
+The amplitudes $A_1, A_2, A_3, \ldots$ shape the harmonic content of the sound.  The pitch of a particular note is largely determined by the **fundamental frequency** $f$, but the higher harmonics (aka overtones) $2f, 3f, ...$ also effect the sound quality.
+
+Below, you also have access to the sound's ADSR envelope (attack, decay, sustain, release).  Together, these shape the volume as a function of time for each note played.
+
+<SimulationBlock
+  title="Additive Synthesizer"
+  description="Shape harmonic amplitudes, play chords on the piano keyboard, and compare the live waveform with a spectrogram."
+  width="full"
+>
+  <AdditiveSynthLab client:only="react" />
+</SimulationBlock>
+
+
+## What the Graphs Mean
+
+The composite waveform shows one repeating cycle of the recipe you are shaping. The live waveform uses a fixed scrolling speed and fixed display scale, so pitch shows up as spatial spacing. The spectrogram turns that same sound into a moving frequency picture: lower notes sit near the bottom, higher harmonics stack above them, and brighter colors mean stronger frequency components.

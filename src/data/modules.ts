@@ -302,6 +302,21 @@ export const modules: ModuleMeta[] = [
           image: '/social/physics-nook-card.svg',
         },
       },
+      {
+        id: 'waves-sound-synthesis',
+        href: '/waves/sound-synthesis',
+        title: 'Sound Synthesis',
+        shortTitle: 'Sound Synthesis',
+        description:
+          'Shape harmonic amplitudes, play a piano keyboard, and watch sound as a waveform or spectrogram.',
+        seo: {
+          title: 'Sound Synthesis',
+          description:
+            'Learn how additive synthesis builds musical timbre from harmonics with a playable piano keyboard, waveform display, and live spectrogram.',
+          canonicalPath: '/waves/sound-synthesis',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
     ],
   },
   {

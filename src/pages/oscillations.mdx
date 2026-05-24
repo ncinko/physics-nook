@@ -8,6 +8,7 @@ import OscillationCyclePanel from '../components/oscillations/OscillationCyclePa
 import PendulumFieldSection from '../components/oscillations/PendulumFieldSection';
 import SinusoidEquationExplorer from '../components/oscillations/SinusoidEquationExplorer.jsx';
 import SpringOscillator from '../components/simulations/SpringOscillator.jsx';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
@@ -32,6 +33,8 @@ $$
 In this case, $x=0$ is the **equilibrium point** of the system.  
 If the mass is displaced by $x$, the spring pulls back with a force proportional to how far it has been stretched or compressed.  The minus sign matters: it reminds us that the force points back toward equilibrium. This type of force is called a **restoring force**.
 
+
+<InteractiveAnchor id="period-frequency-pendulums" />
 
 <PendulumFieldSection
   client:visible
@@ -68,6 +71,8 @@ In ideal simple harmonic motion, position and velocity follow simple trigonometr
 Here $A$ is the amplitude, $\omega$ is the angular frequency, and $\phi$ sets the starting phase. 
 Click either equation below to open a plot and see how those three parameters reshape the curve.
 
+<InteractiveAnchor id="sinusoid-equation-explorer" />
+
 <SinusoidEquationExplorer client:visible />
 
 Due to the restoring force, the acceleration is proportional to displacement and directed back toward equilibrium:
@@ -99,6 +104,8 @@ As you explore the simulation below, try this sequence:
 1. Set damping to zero and compare how changing $m$ and $k$ changes the cycle time.
 2. Watch the energy bars at the center crossing and at the turning points.
 3. Raise the damping and notice how the amplitude envelope shrinks as mechanical energy leaves the system.
+
+<InteractiveAnchor id="spring-mass-oscillator" />
 
 <SimulationBlock
   title="Spring-Mass Oscillator"

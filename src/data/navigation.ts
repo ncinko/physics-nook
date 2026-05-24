@@ -30,6 +30,15 @@ const homeNavItem: NavItem = {
   match: 'exact',
 };
 
+const interactivesNavItem: NavItem = {
+  label: 'Interactives',
+  href: '/interactives',
+  section: 'primary',
+  visibility: 'primary',
+  match: 'exact',
+  description: 'A compact catalog of inline demos, standalone labs, and immersive physics sandboxes.',
+};
+
 export const menuNavSections: NavSectionWithItems[] = exploreModuleGroups.map((group) => ({
   id: group.id,
   label: group.navLabel,
@@ -56,6 +65,7 @@ const hiddenNavItems: NavItem[] = [
 
 export const navItems: NavItem[] = [
   homeNavItem,
+  interactivesNavItem,
   ...menuNavSections.flatMap((section) => section.items),
   ...hiddenNavItems,
 ];
@@ -74,4 +84,4 @@ export const isNavItemActive = (item: NavItem, currentPath: string) => {
   return normalizedCurrentPath === normalizedHref;
 };
 
-export const primaryNavItems = [homeNavItem];
+export const primaryNavItems = [homeNavItem, interactivesNavItem];

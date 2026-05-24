@@ -8,6 +8,7 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import StandingWaveHarmonicsExplorer from '../../components/waves/StandingWaveHarmonicsExplorer.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
 
 <ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/standing-waves" />
@@ -77,6 +78,8 @@ As you explore the standing-wave animations below, try this sequence:
 2. Switch to the flute pipe and compare the endpoint labels.
 3. Switch to the clarinet pipe and notice how the ladder jumps through odd harmonics.
 4. Change the length and wave speed separately to see how each one shifts the whole set of frequencies.
+
+<InteractiveAnchor id="standing-wave-harmonics" />
 
 <SimulationBlock
   title="Standing Wave Harmonics Explorer"

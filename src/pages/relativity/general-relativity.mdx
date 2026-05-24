@@ -9,6 +9,7 @@ import EquivalenceElevatorFieldSection from '../../components/relativity/Equival
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { featuredModule } from '../../data/modules';
 
 <ModuleHero module={featuredModule} currentPath="/relativity/general-relativity" />
@@ -19,6 +20,8 @@ import { featuredModule } from '../../data/modules';
 
 Special relativity explains physics in flat spacetime. General relativity asks the next question: what happens when spacetime itself is curved? Einstein's answer is that gravity is not an ordinary force pulling on objects across empty space. Instead, **matter and energy curve spacetime, and free-falling objects follow the straightest paths in that geometry**.
 
+
+<InteractiveAnchor id="equivalence-elevator" />
 
 <EquivalenceElevatorFieldSection client:visible>
   ## The Equivalence Principle
@@ -38,6 +41,8 @@ To make that idea more tangible, consider the motion of ants along the surface o
 
 This is an analogy, not the full Einstein equations. The surface of an apple is an example of extrinsic curvature.  It's a 2D surface that bends/curves in a third spatial dimension.  Spacetime is a 4D manifold with intrinsic curvature.  Not only is it mind-bending to consider time as a geometric dimension, but there's actually no need for a fifth embedding dimension.  The math gets tricky, so let's instead build intuition for curvature by watching how nearby paths fail to stay perfectly parallel.
 
+
+<InteractiveAnchor id="apple-geodesics" />
 
 <SimulationBlock
   title="Apple Geodesics"

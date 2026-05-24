@@ -25,6 +25,13 @@ export const homePageMeta: PageMeta = {
 
 export const standalonePages: PageMeta[] = [
   {
+    title: 'Interactives',
+    description:
+      'Open Physics Nook inline demos, standalone labs, and immersive physics sandboxes from one compact catalog.',
+    canonicalPath: '/interactives',
+    image: '/social/physics-nook-card.svg',
+  },
+  {
     title: 'Pendulum Peg Challenge',
     description:
       'A hidden pendulum game about timing, wrapping a string around a peg, and cutting for the closest landing.',

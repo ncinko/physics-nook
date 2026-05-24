@@ -7,6 +7,7 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import BoundaryReflectionExplorer from '../../components/waves/BoundaryReflectionExplorer.jsx';
 import PulseSuperpositionInline from '../../components/waves/PulseSuperpositionInline.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
 
 <ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/reflection-transmission" />
@@ -22,6 +23,8 @@ $$
 $$
 
 That means wave amplitudes add point by point, and two waves can amplify or cancel one another locally. 
+
+<InteractiveAnchor id="pulse-superposition" />
 
 <PulseSuperpositionInline client:visible />
 
@@ -46,6 +49,8 @@ The two descriptions are related, but they do not peak in the same place.  Press
 When starting, pick whichever is more intuitive; in the long run both descriptions give equivalent results.  For example, a closed pipe wall stops the air motion.  This means a closed end is a displacement node and a pressure antinode. An open pipe end does almost the opposite: the pressure variation near the opening stays close to the outside atmospheric pressure, so the open end is a pressure node and a displacement antinode.
 
 It is tempting to think an open end should simply let the wave leave. Some energy really does radiate outward as sound. But an open end is still a sharp change from a narrow guided air column to a large outside space.
+
+<InteractiveAnchor id="boundary-reflection" />
 
 <BoundaryReflectionExplorer client:visible />
 

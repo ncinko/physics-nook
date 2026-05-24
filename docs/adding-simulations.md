@@ -8,8 +8,17 @@ Interactive simulations should be easy to test, easy to embed in lessons, and is
 - Put shared multiplayer protocol, validation, and deterministic helpers in `packages/shared/src`.
 - Put React islands in `src/components/<domain>` or `src/components/simulations`.
 - Put focused tests in `tests/<domain>`.
+- Register reachable demos and labs in `src/data/interactives.ts` so `/interactives` stays complete.
 
 For new work, prefer TypeScript and TSX. Existing JSX files do not need to be converted just because they were touched, but new shared logic should have types.
+
+## Inline vs Standalone
+
+Use an inline demo when the interaction teaches one local concept inside the reading flow. Inline demos should feel like touchable illustrations: minimal controls, direct manipulation where possible, small overlays instead of full panels, direct MDX placement instead of `SimulationBlock`, and usually `client:visible`.
+
+Use a standalone lab when the interaction is a larger tool: multiple tasks, many adjustable parameters, audio, games, fullscreen needs, broad comparison workflows, or enough controls that the prose should step aside. Standalone labs should use `SimulationBlock` on lesson pages or `ImmersiveLayout` for full-screen tools.
+
+When adding either kind, place an `InteractiveAnchor` immediately before the mounted component and point the catalog entry at that anchor.
 
 ## Component Boundaries
 

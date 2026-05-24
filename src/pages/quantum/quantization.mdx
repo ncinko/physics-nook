@@ -8,6 +8,7 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import QuantizationExplorer from '../../components/simulations/QuantizationExplorer.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { quantumModuleMeta } from '../../data/modules';
 
 <ModuleHero module={quantumModuleMeta} currentPath="/quantum/quantization" />
@@ -100,6 +101,8 @@ As you explore the diagram below, try this sequence:
 4. Compare the probability view in all three systems and look for how nodes in the amplitude create dips in the probability density.
 
 Note that it's convention to overlay the wavefunction $\psi(x)$ on the same plot describing the allowed energies of a system.  Below, the potential energy function is also drawn in black.  It's a lot at first, but helpful once you start to see the connection between things like frequency and energy.
+
+<InteractiveAnchor id="quantization-explorer" />
 
 <SimulationBlock
   title="Quantization Explorer"

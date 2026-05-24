@@ -12,6 +12,7 @@ import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import VelocityExplorer from '../components/kinematics/VelocityExplorer';
 import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import { mechanicsPath } from '../data/modules';
 
@@ -44,6 +45,8 @@ v(t) = \frac{dx}{dt}.
 $$
 
 Graphically, average velocity is the slope of a secant line on a position versus time plot. Instantaneous velocity is the slope of the tangent line at a single point.
+
+<InteractiveAnchor id="velocity-explorer" />
 
 <SimulationBlock
   title="Position and Velocity"
@@ -88,6 +91,8 @@ The slope idea repeats: acceleration is the slope of a velocity versus time plot
 </DerivationPanel>
 
 The challenge below turns the sign conventions into a control problem. Apply acceleration left or right, watch the position and velocity traces, and stop inside each target zone.
+
+<InteractiveAnchor id="zone-challenge" />
 
 <SimulationBlock
   title="Zone Challenge"

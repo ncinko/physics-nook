@@ -9,6 +9,7 @@ import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSecti
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import WavePacketMeasurementInline from '../../components/simulations/WavePacketMeasurementInline.jsx';
 import WavefunctionMixer from '../../components/simulations/WavefunctionMixer.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { quantumModuleMeta } from '../../data/modules';
 
 <ModuleHero module={quantumModuleMeta} currentPath="/quantum/wavefunctions" />
@@ -41,6 +42,8 @@ $$
 $$
 
 
+
+<InteractiveAnchor id="wave-packet-measurement" />
 
 <WavePacketMeasurementInline client:visible />
 

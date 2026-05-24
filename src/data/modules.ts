@@ -645,7 +645,7 @@ export const gamesPath = {
   summary:
     'Shared multiplayer physics sandboxes and experimental game pages.',
   cardEyebrow: 'Games',
-  navVisibility: 'menu',
+  navVisibility: 'hidden',
   pages: [
     {
       id: 'orbitals',

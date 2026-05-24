@@ -13,6 +13,7 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import LaunchDecomposition from '../../components/kinematics/LaunchDecomposition';
 import ProjectileLauncher from '../../components/kinematics/ProjectileLauncher';
 import Kinematics2DSandbox from '../../components/kinematics/Kinematics2DSandbox';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import { mechanicsPath } from '../../data/modules';
 
@@ -76,6 +77,8 @@ v_{0x} = v_0\cos\theta,
 \qquad
 v_{0y} = v_0\sin\theta.
 $$
+
+<InteractiveAnchor id="launch-decomposition" />
 
 <SimulationBlock
   title="Launch Decomposition"
@@ -142,6 +145,8 @@ The horizontal component of velocity stays constant while the vertical component
   That is a quadratic function of $x$, so the trajectory is a parabola.
 </DerivationPanel>
 
+<InteractiveAnchor id="projectile-launcher" />
+
 <SimulationBlock
   title="Projectile Launcher"
   description="Aim, launch, and compare the predicted range with the actual path. Add drag to see where the ideal equations stop being exact."
@@ -160,6 +165,8 @@ $$
 $$
 
 This equation can be interpreted as "acceleration changes the velocity vector".  If the acceleration and velocity vectors are aligned, the velocity gets larger in time: the object speeds up. If acceleration points opposite the velocity, the velocity gets smaller: the object slows down.  What happens when acceleration is perpendicular to velocity?
+
+<InteractiveAnchor id="acceleration-sandbox" />
 
 <SimulationBlock
   title="2D Acceleration Sandbox"

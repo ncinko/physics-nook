@@ -10,6 +10,7 @@ import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import { mechanicsPath } from '../data/modules';
 
 <ModuleHero module={mechanicsPath} currentPath="/collisions" />
@@ -61,6 +62,8 @@ Total energy is always conserved, but **kinetic energy is not always conserved b
 
 So when we classify collisions, we are really asking whether the kinetic energy remains kinetic after the interaction.
 
+<InteractiveAnchor id="elastic-collision-field" />
+
 <CollisionFieldSection mode="elastic" client:visible>
   ## Elastic Collisions
 
@@ -75,6 +78,8 @@ So when we classify collisions, we are really asking whether the kinetic energy 
   These collisions are good models for idealized billiard balls, gas particles, and many microscopic scattering processes. 
   In an elastic collision, the objects separate after the collision, and no kinetic energy is "lost" to heat or deformation.
 </CollisionFieldSection>
+
+<InteractiveAnchor id="inelastic-collision-field" />
 
 <CollisionFieldSection mode="inelastic" client:visible>
   ## Inelastic Collisions
@@ -93,6 +98,8 @@ So when we classify collisions, we are really asking whether the kinetic energy 
   m_1 v_{1,i} + m_2 v_{2,i} = (m_1 + m_2) v_f.
   $$
 </CollisionFieldSection>
+
+<InteractiveAnchor id="collision-1d" />
 
 <SimulationBlock
   title="1D Collisions"

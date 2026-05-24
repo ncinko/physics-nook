@@ -7,6 +7,7 @@ import QuestionSequence from '../../components/interactive/QuestionSequence.jsx'
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import CoupledResonanceExplorer from '../../components/simulations/CoupledResonanceExplorer.jsx';
 import ResonanceResponseInline from '../../components/simulations/ResonanceResponseInline.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
@@ -29,6 +30,8 @@ The system's response to a periodic driving force is often represented with a **
 The resonance peak occurs when the driving frequency matches a natural frequency of the system.  Without damping, energy can be added to the system without limit and the peak is theoretically infinite in height.  In real systems with damping, the peak is finite and widened over a range of frequencies.
 
 
+<InteractiveAnchor id="resonance-response" />
+
 <ResonanceResponseInline client:visible />
 
 ## Normal Modes
@@ -47,6 +50,8 @@ As you explore the simulation below, try this sequence:
 2. Switch to `2 oscillators`, then compare `lower mode` and `higher mode`. The pair should flip between mostly same-direction and opposite-direction motion.
 3. Move to `5 oscillators` and reuse the presets. Notice how the same coupling idea now organizes several neighbors at once.
 4. Finish in `chain` mode and wait for the larger pattern to emerge.
+
+<InteractiveAnchor id="coupled-resonance" />
 
 <SimulationBlock
   title="Coupled Resonance Explorer"

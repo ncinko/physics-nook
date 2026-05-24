@@ -8,6 +8,7 @@ import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import { featuredModule } from '../data/modules';
 
 <ModuleHero module={featuredModule} currentPath="/relativity" />
@@ -87,6 +88,8 @@ As you explore the diagram below, try this sequence:
 3. Place an event on the graph and compare its coordinates in both frames.
 4. Select the event to see its projections onto both sets of axes.
 5. Turn the light cone, grids, and ticks on and off to isolate the geometric idea you want to study.
+
+<InteractiveAnchor id="spacetime-diagram" />
 
 <SimulationBlock
   title="Spacetime Diagram"

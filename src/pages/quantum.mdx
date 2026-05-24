@@ -8,6 +8,7 @@ import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import { quantumModuleMeta } from '../data/modules';
 
 <ModuleHero module={quantumModuleMeta} currentPath="/quantum" />
@@ -57,6 +58,8 @@ eV_{\text{stop}} = K_{\max} = hf - \Phi.
 $$
 
 
+<InteractiveAnchor id="photoelectric-effect" />
+
 <PhotoelectricInlineLab client:visible />
 
 ## Matter Waves and the Double Slit
@@ -73,6 +76,8 @@ $$
 $$
 
 Careful analysis of double-slit experiments over the 20th century shows that this mixed description is closer to the truth: very dim light sources produce the interference pattern one "hit" at a time, and electrons also form the same double-slit interference pattern.
+
+<InteractiveAnchor id="double-slit" />
 
 <DoubleSlitInlineLab client:visible />
 

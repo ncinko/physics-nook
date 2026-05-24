@@ -6,6 +6,7 @@ import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import EnergyLedgerPanel from '../../components/energy/EnergyLedgerPanel.astro';
 import EnergyTrackExplorer from '../../components/simulations/EnergyTrackExplorer.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 
@@ -77,6 +78,8 @@ As you explore the track below, try this sequence:
 2. Keep the same release height but increase the mass. Notice that the energy values grow, yet the frictionless speed reached near the bottom stays the same.
 3. Add track friction and compare the shrinking mechanical energy with the growing thermal-energy bar.
 4. Change the gravity preset to compare how the same track shape behaves on the Moon, Earth, and Jupiter.
+
+<InteractiveAnchor id="energy-track" />
 
 <SimulationBlock
   title="Energy Track Explorer"

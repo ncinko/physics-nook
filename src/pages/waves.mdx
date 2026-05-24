@@ -11,6 +11,7 @@ import WaveFieldSection from '../components/waves/WaveFieldSection.astro';
 import WavePoolSection from '../components/waves/WavePoolSection';
 import WaveQuickReference from '../components/waves/WaveQuickReference.astro';
 import WaveSimulator from '../components/simulations/WaveSimulator.jsx';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import { wavesAndOscillationsPath } from '../data/modules';
 
 <ModuleHero module={wavesAndOscillationsPath} currentPath="/waves" />
@@ -18,6 +19,8 @@ import { wavesAndOscillationsPath } from '../data/modules';
 <div id="page-content"></div>
 
 # Waves
+
+<InteractiveAnchor id="wave-pool" />
 
 <WavePoolSection
   client:visible
@@ -47,6 +50,8 @@ Waves are often classified by how the medium moves in relation to the waveform.
 - In a **longitudinal wave**, the medium oscillates parallel to the direction of propagation. Sound in air is the classic case, with alternating compressions and rarefactions.
 
 The geometry looks different, but the bookkeeping is the same: the pattern advances, while each local part of the medium mainly moves back and forth about equilibrium.
+
+<InteractiveAnchor id="wave-motion-comparison" />
 
 <WaveFieldSection />
 
@@ -104,6 +109,8 @@ As you explore the simulation below, try the following:
 3. Switch between transverse and longitudinal modes and compare what the medium itself is doing.
 4. **Careful**: wavelength and frequency affect the wave speed, but it's usually the speed that's constant IRL.
 
+
+<InteractiveAnchor id="wave-propagation" />
 
 <SimulationBlock
   title="Wave Propagation Explorer"

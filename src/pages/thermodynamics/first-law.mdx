@@ -8,6 +8,7 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import GasPistonEnergyLedger from '../../components/simulations/GasPistonEnergyLedger.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { thermodynamicsPath } from '../../data/modules';
 
 <ModuleHero module={thermodynamicsPath} currentPath="/thermodynamics/first-law" />
@@ -56,6 +57,8 @@ $$
 $$
 
 This equation says the system's internal energy increases when heat is added and decreases when the system does work on the surroundings. With our convention, subtracting a negative work during compression correctly increases the internal energy.
+
+<InteractiveAnchor id="gas-piston-energy" />
 
 <SimulationBlock
   title="Gas Piston Energy Ledger"

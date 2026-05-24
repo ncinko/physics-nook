@@ -5,6 +5,7 @@ layout: ../../layouts/TextbookLayout.astro
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import AdditiveSynthLab from '../../components/waves/AdditiveSynthLab';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
 
 <ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/sound-synthesis" />
@@ -24,6 +25,8 @@ $$
 The amplitudes $A_1, A_2, A_3, \ldots$ shape the harmonic content of the sound.  The pitch of a particular note is largely determined by the **fundamental frequency** $f$, but the higher harmonics (aka overtones) $2f, 3f, ...$ also effect the sound quality.
 
 Below, you also have access to the sound's ADSR envelope (attack, decay, sustain, release).  Together, these shape the volume as a function of time for each note played.
+
+<InteractiveAnchor id="additive-synthesizer" />
 
 <SimulationBlock
   title="Additive Synthesizer"

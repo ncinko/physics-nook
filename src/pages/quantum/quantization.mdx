@@ -5,6 +5,7 @@ layout: ../../layouts/TextbookLayout.astro
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import QuantizationExplorer from '../../components/simulations/QuantizationExplorer.jsx';
@@ -57,6 +58,100 @@ $$
 
 The allowed energies are therefore **quantized**, not continuous. There is no $n=0$ bound state in this model, so even the lowest state carries nonzero energy. 
 
+
+<DerivationPanel
+  title="Solving the Infinite Well"
+  >
+  In the ideal infinite well,
+
+  $$
+  V(x) =
+  \begin{cases}
+  0, & 0 < x < L \\
+  \infty, & x \le 0 \text{ or } x \ge L
+  \end{cases}
+  $$
+
+  so the wavefunction must vanish outside the box and at the walls:
+
+  $$
+  \psi(0)=0,
+  \qquad
+  \psi(L)=0.
+  $$
+
+  Inside the box, $V=0$, so the time-independent Schrodinger equation becomes
+
+  $$
+  -\frac{\hbar^2}{2m}\frac{d^2\psi}{dx^2}=E\psi.
+  $$
+
+  Rearrange it as
+
+  $$
+  \frac{d^2\psi}{dx^2}+k^2\psi=0,
+  \qquad
+  k^2=\frac{2mE}{\hbar^2}.
+  $$
+
+  The general interior solution is
+
+  $$
+  \psi(x)=A\sin(kx)+B\cos(kx).
+  $$
+
+  The first boundary condition gives
+
+  $$
+  \psi(0)=B=0,
+  $$
+
+  leaving $\psi(x)=A\sin(kx)$. The second boundary condition then gives
+
+  $$
+  \psi(L)=A\sin(kL)=0.
+  $$
+
+  A nonzero wavefunction needs
+
+  $$
+  kL=n\pi,
+  \qquad
+  n=1,2,3,\dots
+  $$
+
+  so
+
+  $$
+  k_n=\frac{n\pi}{L}.
+  $$
+
+  Using $E=\hbar^2 k^2/(2m)$,
+
+  $$
+  E_n=\frac{\hbar^2}{2m}\left(\frac{n\pi}{L}\right)^2
+  =\frac{n^2\pi^2\hbar^2}{2mL^2}
+  =\frac{n^2 h^2}{8mL^2}.
+  $$
+
+  Finally normalize:
+
+  $$
+  1=\int_0^L |\psi_n(x)|^2\,dx
+  =|A|^2\int_0^L \sin^2\!\left(\frac{n\pi x}{L}\right)\,dx
+  =|A|^2\frac{L}{2}.
+  $$
+
+  Choosing a real positive constant gives
+
+  $$
+  A=\sqrt{\frac{2}{L}},
+  \qquad
+  \psi_n(x)=\sqrt{\frac{2}{L}}\sin\!\left(\frac{n\pi x}{L}\right).
+  $$
+</DerivationPanel>
+
+
 ## Quantization Beyond Hard Walls
 
 The rigid box is the cleanest example, but discrete energies are not unique to hard-wall boundaries.
@@ -75,7 +170,102 @@ E_n = \left(n + \frac{1}{2}\right)\hbar\omega,
 n = 0, 1, 2, \dots
 $$
 
-The ground state already has the nonzero zero-point energy $\frac{1}{2}\hbar\omega$, and each excited state adds another node.
+The ground state already has the zero-point energy $\frac{1}{2}\hbar\omega$, and each excited state adds another $\hbar \omega$ of energy.
+
+
+
+<DerivationPanel
+  title="Solving the QHO"
+>
+  The 1D quantum harmonic oscillator is defined by the potential function
+
+  $$
+  V(x)=\frac{1}{2}m\omega^2x^2,
+  $$
+
+  so the time-independent Schrodinger equation is
+
+  $$
+  -\frac{\hbar^2}{2m}\frac{d^2\psi}{dx^2}
+  +\frac{1}{2}m\omega^2x^2\psi
+  =E\psi.
+  $$
+
+  Introduce the dimensionless coordinate
+
+  $$
+  \xi=\sqrt{\frac{m\omega}{\hbar}}x,
+  \qquad
+  \epsilon=\frac{2E}{\hbar\omega}.
+  $$
+
+  Since $d/dx=\sqrt{m\omega/\hbar}\,d/d\xi$, the equation becomes
+
+  $$
+  \frac{d^2\psi}{d\xi^2}+(\epsilon-\xi^2)\psi=0.
+  $$
+
+  For large $|\xi|$, the $\xi^2$ term dominates, and a normalizable solution must behave like a decaying Gaussian. Factor that part out:
+
+  $$
+  \psi(\xi)=e^{-\xi^2/2}H(\xi).
+  $$
+
+  Substitution gives
+
+  $$
+  \frac{d^2H}{d\xi^2}
+  -2\xi\frac{dH}{d\xi}
+  +(\epsilon-1)H=0.
+  $$
+
+  Now try a power series,
+
+  $$
+  H(\xi)=\sum_{j=0}^{\infty}a_j\xi^j.
+  $$
+
+  Matching equal powers of $\xi$ gives the recurrence
+
+  $$
+  a_{j+2}
+  =
+  \frac{2j+1-\epsilon}{(j+2)(j+1)}a_j.
+  $$
+
+  If the series never terminates, the large-$\xi$ behavior eventually ruins normalizability. The acceptable solutions occur when the numerator becomes zero for some nonnegative integer $n$:
+
+  $$
+  2n+1-\epsilon=0.
+  $$
+
+  Therefore
+
+  $$
+  \epsilon=2n+1,
+  \qquad
+  E_n=\left(n+\frac{1}{2}\right)\hbar\omega,
+  \qquad
+  n=0,1,2,\dots
+  $$
+
+  The terminating polynomials are the Hermite polynomials $H_n(\xi)$, so the stationary states have the form
+
+  $$
+  \psi_n(x)=N_nH_n(\xi)e^{-\xi^2/2}.
+  $$
+
+  Normalization fixes
+
+  $$
+  N_n=
+  \frac{1}{\sqrt{2^n n!}}
+  \left(\frac{m\omega}{\pi\hbar}\right)^{1/4},
+  $$
+
+  which gives the normalized oscillator wavefunctions.
+</DerivationPanel>
+
 
 For the **hydrogen atom**, the potential comes from the Coulomb attraction between the proton and electron. 
 $$
@@ -83,13 +273,92 @@ V(r) = -\frac{e^2}{4\pi\varepsilon_0 r},
 $$
 
 
-As a more complex system, we can expect the wavefunction to require more than one integer $n$ to describe the allowed states.  The hydrogen atom states are labeled with three quantum numbers $n$, $l$, and $m$. We do not need the full derivation here to see the main quantization pattern:
+As a more complex system, we can expect the wavefunction to require more than one integer $n$ to describe the allowed states.  The hydrogen atom states are labeled with three quantum numbers $n$, $l$, and $m$. The primary quantization pattern is determined by the principal quantum number $n$:
 
 $$
 E_n = -\frac{13.6\ \text{eV}}{n^2},
 \qquad
 n = 1, 2, 3, \dots
 $$
+
+<DerivationPanel
+  title="Starting the Hydrogen Atom"
+  accent="red"
+>
+  The full hydrogen problem starts with the three-dimensional time-independent Schrodinger equation,
+
+  $$
+  \left[
+  -\frac{\hbar^2}{2\mu}\nabla^2
+  -\frac{e^2}{4\pi\varepsilon_0r}
+  \right]\psi(r,\theta,\phi)
+  =E\psi(r,\theta,\phi),
+  $$
+
+  where $\mu$ is the electron-proton reduced mass. Because the potential depends only on $r$, spherical coordinates are the natural choice.
+
+  Separate the wavefunction as
+
+  $$
+  \psi(r,\theta,\phi)=R(r)Y_l^m(\theta,\phi).
+  $$
+
+  The angular part gives spherical harmonics, which introduce the quantum numbers
+
+  $$
+  l=0,1,2,\dots,
+  \qquad
+  m=-l,-l+1,\dots,l.
+  $$
+
+  For the radial part, it is useful to write
+
+  $$
+  u(r)=rR(r).
+  $$
+
+  The radial equation becomes a one-dimensional-looking bound-state equation:
+
+  $$
+  -\frac{\hbar^2}{2\mu}\frac{d^2u}{dr^2}
+  +
+  \left[
+  \frac{l(l+1)\hbar^2}{2\mu r^2}
+  -\frac{e^2}{4\pi\varepsilon_0r}
+  \right]u
+  =Eu.
+  $$
+
+  The new term
+
+  $$
+  \frac{l(l+1)\hbar^2}{2\mu r^2}
+  $$
+
+  acts like an angular-momentum barrier, while the Coulomb term attracts the electron inward. The remaining work is to solve this radial equation with two physical requirements:
+
+  - $u(r)$ must stay finite near $r=0$.
+  - $u(r)$ must be normalizable as $r\to\infty$.
+
+  Those requirements make the radial series terminate, producing associated Laguerre polynomials and the principal quantum number
+
+  $$
+  n=1,2,3,\dots,
+  \qquad
+  l=0,1,\dots,n-1.
+  $$
+
+  Carrying that longer series solution through gives
+
+  $$
+  E_n
+  =
+  -\frac{\mu e^4}{2(4\pi\varepsilon_0)^2\hbar^2}
+  \frac{1}{n^2}
+  \approx
+  -\frac{13.6\ \text{eV}}{n^2}.
+  $$
+</DerivationPanel>
 
 The radial part of the hydrogen wavefunction depends on both $n$ and $l$, while the angular part is carried by spherical harmonics. In the explorer below, the hydrogen panel focuses on that **radial component** so you can compare its nodes and radial probability pattern with the box and oscillator states.
 

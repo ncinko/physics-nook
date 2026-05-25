@@ -73,6 +73,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['vectors', 'acceleration', 'sandbox'],
   },
   {
+    id: 'forces-with-newt',
+    title: 'Forces With Newt',
+    description: 'Explore spring, normal, tension, gravity, friction, and net force diagrams with Newt the physics frog.',
+    href: '/forces#force-free-newt',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['forces', 'newton', 'free-body diagrams'],
+  },
+  {
     id: 'elastic-collision-field',
     title: 'Elastic Collision Field',
     description: 'Watch elastic collisions as a moving backdrop for momentum and kinetic-energy conservation.',

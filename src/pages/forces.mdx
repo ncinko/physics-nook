@@ -1,0 +1,111 @@
+---
+layout: ../layouts/TextbookLayout.astro
+title: Forces
+description: Explore common mechanics forces with Newt the physics frog, from spring-like contact forces to gravity and friction.
+canonicalPath: /forces
+---
+
+import ModuleHero from '../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
+import DerivationPanel from '../components/textbook/DerivationPanel.astro';
+import {
+  ForceFreeNewt,
+  FrictionForceNewt,
+  GravityForceNewt,
+  NormalForceNewt,
+  SpringForceNewt,
+  TongueTensionNewt,
+} from '../components/forces/ForcesNewtInteractives';
+import { mechanicsPath } from '../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/forces" />
+
+<div id="page-content"></div>
+
+# Forces
+
+A **force** is a push or pull that can change motion. More precisely, the sum of all forces acting on an object determines its acceleration:
+
+$$
+\sum \vec{F} = m\vec{a}.
+$$
+
+Newt the physics frog will help us build the idea from the ground up: first with no forces at all, then with spring-like forces and weight, and finally with the everyday contact forces that show up in free-body diagrams.
+
+## Force-Free Motion
+
+If no force acts on an object, its velocity does not need to be zero.  Zero acceleration simply means the velocity remains as it was.  A short push can change Newt's velocity, but otherwise Newt moves at constant velocity until the next force is applied.
+
+$$
+\sum \vec{F} = 0 \ \Rightarrow \ \vec{v} = \text{constant}.
+$$
+
+<InteractiveAnchor id="force-free-newt" />
+
+<ForceFreeNewt client:visible />
+
+
+
+## Springs
+
+Springs are a clean place to start because their force depends on displacement. In the ideal model, the force points back toward the relaxed position:
+
+$$
+\vec{F}_s = -k\vec{x}.
+$$
+
+The constant $k$, called the **spring constant**, measures the stiffness.  A larger displacement or a stiffer spring produces a larger restoring force.
+
+<InteractiveAnchor id="spring-force-newt" />
+
+<SpringForceNewt client:visible />
+
+This spring picture will become our microscopic model for contact forces. Atoms in a solid do not pass freely through one another. Push them a little too close and electric interactions push back; pull neighboring bits slightly apart and they tug back together. For small distortions, that push or pull often behaves like a tiny spring.
+
+## Gravity
+
+Gravity does not require contact. Near Earth's surface, we usually model it as a steady downward force:
+
+$$
+\vec{F}_g = m\vec{g}.
+$$
+
+The magnitude of this force $mg$ is known as the **weight** of the object.  In the following diagrams, the force of gravity is then drawn as a weight arrow.
+
+<InteractiveAnchor id="gravity-force-newt" />
+
+<GravityForceNewt client:visible />
+
+
+
+## Normal Force
+
+The **normal force** is the contact force perpendicular to a surface. A table does not decide to push upward as a separate magic rule. Newt compresses the surface very slightly, and the surface's microscopic spring-like structure pushes back.
+
+<InteractiveAnchor id="normal-force-newt" />
+
+<NormalForceNewt client:visible />
+
+On a flat surface with no vertical acceleration, the normal force usually balances weight:
+
+$$
+N = mg.
+$$
+
+On a ramp or in an accelerating system, the normal force may be smaller or larger than $mg$. What stays true is the direction: the normal force is perpendicular to the contact surface.
+
+## Tension
+
+Tension can also be modeled as a spring-like contact force, but now the microscopic pieces are stretched instead of compressed. A rope can pull because neighboring bits of rope are tugged slightly apart, and those internal bonds pull back toward their relaxed spacing.
+
+Newt has an unusually useful rope: his tongue.
+
+<InteractiveAnchor id="tongue-tension-newt" />
+
+<TongueTensionNewt client:visible />
+
+A slack rope, string, cable, or tongue does not apply a tension force.  Once it becomes taut, it can pull only along its own length. That is why tension arrows in free-body diagrams point away from the object along the rope.
+
+
+
+

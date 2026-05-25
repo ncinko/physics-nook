@@ -1,0 +1,187 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import FiniteBarrierScatteringInline from '../../components/simulations/FiniteBarrierScatteringInline.jsx';
+import QuantumTimeEvolution2DSimulator from '../../components/simulations/QuantumTimeEvolution2DSimulator.jsx';
+import WavePacketDispersionInline from '../../components/simulations/WavePacketDispersionInline.jsx';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import { quantumModuleMeta } from '../../data/modules';
+
+<ModuleHero module={quantumModuleMeta} currentPath="/quantum/time-evolution" />
+
+<div id="page-content"></div>
+
+# Time Evolution
+
+We introduced $\psi(x)$ as a probability amplitude, and the time-independent Schrodinger equation gave us specific allowed states. The next question is how a wavefunction $\psi(x,t)$ evolves over time.
+
+In nonrelativistic quantum mechanics, wavefunction dynamics are given by the **time-dependent Schrodinger equation**:
+
+$$
+i\hbar \frac{\partial \psi}{\partial t}
+=
+\left(-\frac{\hbar^2}{2m}\nabla^2 + V\right)\psi.
+$$
+
+This particular combination of spatial and temporal derivatives can seem a bit strange, especially if you haven't encountered classical Hamiltonian mechanics.  
+
+The expression in parentheses is the **Hamiltonian operator**.    At a high level, there is a kinetic energy term determined by curvature in the wavefunction and a potential energy term $V$. Once you know the initial wavefunction and the potential landscape, the equation predicts the full future wavefunction.
+
+## Free Packets Spread
+
+A localized wave packet is built from many momentum components. Even when no force acts ($V=0$), those component waves propagate at different rates. The net result is that the packet's center moves with the group velocity, while the envelope spreads.
+
+For a free Gaussian packet in the dimensionless units, the spatial width follows
+
+$$
+\sigma(t)=\sigma_0\sqrt{1+\left(\frac{t}{2\sigma_0^2}\right)^2}.
+$$
+
+The narrower the packet starts (smaller uncertainty in position), the faster it spreads. This is Heisenberg's uncertainty principle naturally arising from wave dynamics.
+
+<InteractiveAnchor id="wave-packet-dispersion" />
+
+<WavePacketDispersionInline client:visible />
+
+<DerivationPanel
+  title="Why Free Packets Spread"
+  prompt="Show how the zero-potential Schrodinger equation makes each momentum component accumulate a different phase."
+>
+  With $V=0$ in one dimension, the time-dependent Schrodinger equation becomes
+
+  $$
+  i\hbar \frac{\partial \psi}{\partial t}
+  =
+  -\frac{\hbar^2}{2m}\frac{\partial^2 \psi}{\partial x^2}.
+  $$
+
+  Try one momentum component,
+
+  $$
+  \psi_k(x,t)=A e^{i(kx-\omega t)}.
+  $$
+
+  Substitution gives
+
+  $$
+  \hbar \omega = \frac{\hbar^2 k^2}{2m},
+  \qquad
+  \omega(k)=\frac{\hbar k^2}{2m}.
+  $$
+
+  So the component evolves as
+
+  $$
+  \psi_k(x,t)=A e^{i\left(kx-\frac{\hbar k^2}{2m}t\right)}.
+  $$
+
+  A localized packet is a sum of many nearby $k$ values:
+
+  $$
+  \psi(x,t)=\int a(k)e^{i(kx-\omega(k)t)}\,dk.
+  $$
+
+  Because $\omega(k)$ is quadratic, nearby momentum components do not keep the same relative phase. The center moves at the group velocity $v_g=d\omega/dk=\hbar k/m$, while the changing relative phases make the envelope spread.
+</DerivationPanel>
+
+## Scattering From A Barrier
+
+When a packet reaches a finite potential barrier, 
+$$
+V(x) = \begin{cases} 
+      V_0 & a < x < b \\
+      0 & \text{otherwise}
+   \end{cases}
+$$
+
+we would expect a classical particle to either be reflected or transmitted, dependent on the particle's kinetic energy.  In quantum mechanics, the wavefunction has both a reflected and transmitted component after interaction with the barrier.  When the barrier is higher than the packet's energy scale, the transmitted part is an example of **tunneling**.
+
+<InteractiveAnchor id="finite-barrier-scattering" />
+
+<FiniteBarrierScatteringInline client:visible />
+
+## Two-Dimensional Evolution
+
+In two dimensions, the time dependent Schrodinger equation becomes
+
+$$
+i\frac{\partial \psi(x,y,t)}{\partial t}
+=
+\left[-\frac{1}{2}\left(\frac{\partial^2}{\partial x^2}+\frac{\partial^2}{\partial y^2}\right)+V(x,y)\right]\psi.
+$$
+
+The simulator below uses a split-step Fourier method in dimensionless units with $\hbar=1$ and $m=1$. It alternates between the potential update in position space and the kinetic update in momentum space. Wavelike phenomena like diffraction, reflection, transmission, spreading, and interference emerge naturally from the dynamics described by this equation.
+
+Note that it's difficult to handle boundaries in a finite simulation, so there are some non-physical effects once the wavefunction begins "interacting" with the screen edges.
+
+
+<InteractiveAnchor id="quantum-2d-time-evolution" />
+
+<SimulationBlock
+  title="2D Time Evolution Simulator"
+  description="Evolve a wavefunction through slits, free space, and finite barriers using the time-dependent Schrodinger equation."
+  width="full"
+>
+  <QuantumTimeEvolution2DSimulator client:only="react" />
+</SimulationBlock>
+
+<ProblemSolvingSection>
+  <WorkedExampleCard
+    title="Packet Spreading Estimate"
+    accent="blue"
+  >
+    #### Problem
+
+    A free Gaussian packet begins with width $\sigma_0=0.50$ in dimensionless units. Estimate the width at $t=1.0$.
+
+    #### Use
+
+    $$
+    \sigma(t)=\sigma_0\sqrt{1+\left(\frac{t}{2\sigma_0^2}\right)^2}.
+    $$
+
+    #### Solve
+
+    $$
+    \sigma(1)=0.50\sqrt{1+\left(\frac{1}{2(0.50)^2}\right)^2}
+    =0.50\sqrt{1+2^2}
+    \approx 1.12.
+    $$
+
+    #### Check
+
+    The packet more than doubles in width because it began tightly localized.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Time Evolution Checkpoint"
+  questions={[
+    {
+      id: 'packet-spreading',
+      question: 'Why does a free localized wave packet spread over time?',
+      options: [
+        { id: 'C', text: 'Because the potential energy pushes it outward.', isCorrect: false, explanation: 'The packet can spread even with $V=0$. The spreading comes from the kinetic term and the range of momentum components.' },
+        { id: 'A', text: 'Because it contains multiple momentum components that accumulate phase at different rates.', isCorrect: true, explanation: 'Right. Localization requires a spread of momenta, and those components evolve differently.' },
+        { id: 'B', text: 'Because total probability is not conserved.', isCorrect: false, explanation: 'In a closed system, total probability is conserved. The packet spreads by redistributing probability over space.' }
+      ]
+    },
+    {
+      id: 'finite-barrier',
+      question: 'In the finite-barrier simulation, why can some probability appear beyond a barrier that is higher than the packet energy scale?',
+      options: [
+        { id: 'A', text: 'Because the wavefunction can penetrate the barrier region and leave a transmitted tail.', isCorrect: true, explanation: 'Exactly. That partial transmission through a classically forbidden region is the basic tunneling effect.' },
+        { id: 'B', text: 'Because the particle secretly jumps over the barrier in a classical arc.', isCorrect: false, explanation: 'The simulation is not a hidden classical trajectory. It evolves the wavefunction amplitude.' },
+        { id: 'C', text: 'Because the solver creates probability from nothing.', isCorrect: false, explanation: 'The split-step evolution moves amplitude through the potential landscape; transmission comes from the wavefunction, not from creating extra probability.' }
+      ]
+    }
+  ]}
+/>

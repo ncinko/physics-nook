@@ -325,7 +325,7 @@ export const modules: ModuleMeta[] = [
     title: 'Quantum',
     navLabel: 'Quantum',
     summary:
-      'Move from key experiments into wavefunctions, and quantized states.',
+      'Move from key experiments into wavefunctions, quantized states, and time evolution.',
     audience: 'Self-learners building a first modern-physics intuition before a formal quantum course.',
     prerequisites: [
       'Core wave vocabulary such as wavelength, frequency, and interference',
@@ -336,6 +336,7 @@ export const modules: ModuleMeta[] = [
       'Use the photoelectric effect and double-slit interference to explain why classical pictures break down',
       'Interpret a wavefunction through amplitudes, probabilities, normalization, and measurement',
       'Connect boundary conditions and normalizable solutions to quantized energy levels in the infinite well, harmonic oscillator, and hydrogen atom',
+      'Use the time-dependent Schrodinger equation to explain phase evolution, spreading, scattering, and interference',
     ],
     status: 'active',
     navVisibility: 'hidden',
@@ -385,6 +386,21 @@ export const modules: ModuleMeta[] = [
           description:
             'Explore the Schrodinger equation, the infinite well, the harmonic oscillator, and hydrogen radial states.',
           canonicalPath: '/quantum/quantization',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'quantum-time-evolution',
+        href: '/quantum/time-evolution',
+        title: 'Time Evolution',
+        shortTitle: 'Time Evolution',
+        description:
+          'Evolve wavefunctions through free spreading, finite barriers, and two-dimensional interference.',
+        seo: {
+          title: 'Quantum Time Evolution',
+          description:
+            'Learn the time-dependent Schrodinger equation with wave-packet spreading, finite-barrier scattering, and a two-dimensional split-step simulator.',
+          canonicalPath: '/quantum/time-evolution',
           image: '/social/physics-nook-card.svg',
         },
       },

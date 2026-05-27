@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Interactive Calcifer & Spectrometer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0a0c;
+            background-image: radial-gradient(circle at center, #211317 0%, #050405 100%);
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+        
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #ui {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 200, 150, 0.4);
+            pointer-events: none;
+            user-select: none;
+            animation: pulse 3s infinite alternate;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+            z-index: 10;
+        }
+
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        button {
+            background: rgba(10, 5, 5, 0.8);
+            color: #ff5722;
+            border: 1px solid #ff5722;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-family: 'Courier New', Courier, monospace;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 87, 34, 0.3);
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            background: #ff5722;
+            color: #000;
+            box-shadow: 0 0 20px rgba(255, 87, 34, 0.8);
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.2; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <button id="spectroBtn">SPECTROMETER</button>
+    </div>
+    <canvas id="simulation"></canvas>
+
+    <script>
+        const canvas = document.getElementById('simulation');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let time = 0;
+        let isSpectrometerActive = false;
+
+        const mouse = { x: -1000, y: -1000, isDown: false, vx: 0, vy: 0 };
+        let draggedPoint = null;
+
+        // UI Listeners
+        const spectroBtn = document.getElementById('spectroBtn');
+        spectroBtn.addEventListener('click', () => {
+            isSpectrometerActive = true;
+            spectroBtn.style.display = 'none';
+            
+            if (isSpectrometerActive) {
+                mouse.isDown = false;
+                draggedPoint = null;
+                document.getElementById('ui').innerText = "Hover over objects to analyze their light spectrum";
+            }
+        });
+
+        // --- Physics Engine (Verlet Integration) ---
+
+        class Point {
+            constructor(x, y, isPinned = false) {
+                this.x = x;
+                this.y = y;
+                this.oldX = x;
+                this.oldY = y;
+                this.isPinned = isPinned;
+                this.baseX = x;
+                this.baseY = y;
+            }
+
+            update(friction, gravity) {
+                if (this.isPinned) return;
+                
+                let vx = (this.x - this.oldX) * friction;
+                let vy = (this.y - this.oldY) * friction;
+                
+                this.oldX = this.x;
+                this.oldY = this.y;
+                
+                this.x += vx;
+                this.y += vy + gravity;
+            }
+        }
+
+        class Constraint {
+            constructor(p1, p2, length, stiffness = 0.5) {
+                this.p1 = p1;
+                this.p2 = p2;
+                this.length = length || this.getDistance();
+                this.stiffness = stiffness;
+            }
+
+            getDistance() {
+                let dx = this.p2.x - this.p1.x;
+                let dy = this.p2.y - this.p1.y;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            resolve() {
+                let dx = this.p2.x - this.p1.x;
+                let dy = this.p2.y - this.p1.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist === 0) return;
+                
+                let diff = (this.length - dist) / dist;
+                let offsetX = dx * diff * 0.5 * this.stiffness;
+                let offsetY = dy * diff * 0.5 * this.stiffness;
+
+                if (!this.p1.isPinned) {
+                    this.p1.x -= offsetX;
+                    this.p1.y -= offsetY;
+                }
+                if (!this.p2.isPinned) {
+                    this.p2.x += offsetX;
+                    this.p2.y += offsetY;
+                }
+            }
+        }
+
+        // --- Particle System (Sparks) ---
+        
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 3;
+                this.vy = Math.random() * -5 - 1;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.02 + 0.015;
+                this.size = Math.random() * 3 + 1.5;
+                this.color = Math.random() > 0.4 ? '#fff176' : '#ff9800';
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx += (Math.random() - 0.5) * 0.4;
+                this.life -= this.decay;
+            }
+
+            draw(ctx) {
+                if (this.life <= 0) return;
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // --- Calcifer Entity ---
+
+        class Calcifer {
+            constructor(centerX, centerY) {
+                this.centerX = centerX;
+                this.centerY = centerY;
+                this.points = [];
+                this.constraints = [];
+                this.particles = [];
+                
+                this.numNodes = 24;
+                this.radius = 95;
+                
+                this.initBody();
+                this.initLogs();
+            }
+
+            initLogs() {
+                this.cracks = [];
+                let logWidth = 280;
+                let startX = this.centerX - logWidth / 2;
+                let logY = this.centerY + this.radius * 0.4;
+                
+                let cols = 18;
+                let rows = 6;
+                let pts = [];
+
+                for(let r=0; r<=rows; r++) {
+                    let row = [];
+                    for(let c=0; c<=cols; c++) {
+                        let x = startX + (c/cols)*logWidth + (Math.random()-0.5)*15;
+                        let y = logY - 15 + (r/rows)*60 + (Math.random()-0.5)*10;
+                        row.push({x, y});
+                    }
+                    pts.push(row);
+                }
+
+                for(let r=0; r<rows; r++) {
+                    for(let c=0; c<cols; c++) {
+                        let distToCenter = Math.abs((pts[r][c].x + pts[r][c+1].x)/2 - this.centerX);
+                        let heat = Math.max(0, 1 - (distToCenter / 130)); 
+
+                        if (heat > 0.05) {
+                            if(Math.random() < 0.8) {
+                                this.cracks.push({
+                                    x1: pts[r][c].x, y1: pts[r][c].y,
+                                    x2: pts[r][c+1].x, y2: pts[r][c+1].y,
+                                    phase: Math.random() * Math.PI * 2,
+                                    speed: 0.02 + Math.random() * 0.05,
+                                    heat: heat * (0.5 + Math.random()*0.5),
+                                    width: 1 + Math.random() * 2.5
+                                });
+                            }
+                            if(Math.random() < 0.8) {
+                                this.cracks.push({
+                                    x1: pts[r][c].x, y1: pts[r][c].y,
+                                    x2: pts[r+1][c].x + (Math.random()-0.5)*10, y2: pts[r+1][c].y,
+                                    phase: Math.random() * Math.PI * 2,
+                                    speed: 0.02 + Math.random() * 0.05,
+                                    heat: heat * (0.5 + Math.random()*0.5),
+                                    width: 1 + Math.random() * 2.5
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+
+            initBody() {
+                this.centerPoint = new Point(this.centerX, this.centerY - 10);
+                
+                for (let i = 0; i < this.numNodes; i++) {
+                    let angle = (i / this.numNodes) * Math.PI * 2;
+                    let r = this.radius;
+                    
+                    let x = this.centerX + Math.cos(angle) * r;
+                    let y = this.centerY + Math.sin(angle) * r;
+                    
+                    let isBottom = false;
+
+                    if (Math.sin(angle) > 0.2) {
+                        y = this.centerY + r * 0.4;
+                        x = this.centerX + Math.cos(angle) * r * 1.35;
+                        if(Math.sin(angle) > 0.8) isBottom = true;
+                    } else if (Math.sin(angle) < 0) {
+                        let upFactor = Math.abs(Math.sin(angle));
+                        y -= upFactor * 65; 
+                        x -= Math.sin(angle) * 35;
+                        if (angle > Math.PI && angle < Math.PI * 1.4) {
+                            x += 15 * upFactor;
+                        }
+                    }
+
+                    let point = new Point(x, y, isBottom);
+                    point.offsetX = x - this.centerPoint.x;
+                    point.offsetY = y - this.centerPoint.y;
+                    
+                    this.points.push(point);
+                }
+
+                for (let i = 0; i < this.numNodes; i++) {
+                    let p1 = this.points[i];
+                    let p2 = this.points[(i + 1) % this.numNodes];
+                    this.constraints.push(new Constraint(p1, p2, null, 0.5));
+                }
+
+                for (let i = 0; i < this.numNodes; i++) {
+                    let stiffness = (i > this.numNodes/2 && i < this.numNodes*0.8) ? 0.03 : 0.06;
+                    this.constraints.push(new Constraint(this.points[i], this.centerPoint, null, stiffness));
+                }
+
+                for (let i = 0; i < this.numNodes; i++) {
+                    let p1 = this.points[i];
+                    let p2 = this.points[(i + Math.floor(this.numNodes/2)) % this.numNodes];
+                    this.constraints.push(new Constraint(p1, p2, null, 0.02));
+                }
+            }
+
+            update() {
+                const friction = 0.82; 
+                const buoyancy = -0.7; 
+
+                if (!mouse.isDown || draggedPoint !== this.centerPoint) {
+                    this.centerPoint.oldX = this.centerPoint.x;
+                    this.centerPoint.oldY = this.centerPoint.y;
+                    this.centerPoint.x += (this.centerX - this.centerPoint.x) * 0.05;
+                    this.centerPoint.y += ((this.centerY - 20) - this.centerPoint.y) * 0.05;
+                }
+
+                this.points.forEach((p, i) => {
+                    if (p.isPinned) {
+                        if (p !== draggedPoint) {
+                            p.x += (p.baseX - p.x) * 0.4;
+                            p.y += (p.baseY - p.y) * 0.4;
+                        }
+                        return; 
+                    }
+
+                    let angle = (i / this.numNodes) * Math.PI * 2;
+                    let targetX = this.centerPoint.x + p.offsetX;
+                    let targetY = this.centerPoint.y + p.offsetY;
+
+                    if (p !== draggedPoint) {
+                        p.x += (targetX - p.x) * 0.1; 
+                        p.y += (targetY - p.y) * 0.1;
+                    }
+
+                    if (Math.sin(angle) < 0 && p !== draggedPoint) {
+                        p.x += Math.sin(time * 0.1 + i) * 1.5;
+                        p.y += buoyancy; 
+                    }
+                    
+                    p.update(friction, 0); 
+                });
+
+                for (let iter = 0; iter < 6; iter++) {
+                    this.constraints.forEach(c => c.resolve());
+                }
+
+                if (mouse.isDown && draggedPoint && !isSpectrometerActive) {
+                    draggedPoint.x = mouse.x;
+                    draggedPoint.y = mouse.y;
+                    if (Math.random() < 0.25) {
+                        this.particles.push(new Particle(mouse.x + (Math.random()-0.5)*15, mouse.y));
+                    }
+                }
+
+                if (Math.random() < 0.08) {
+                    let topPoint = this.points[Math.floor(this.numNodes * 0.8)]; 
+                    this.particles.push(new Particle(topPoint.x + (Math.random()-0.5)*20, topPoint.y));
+                }
+
+                this.particles.forEach(p => p.update());
+                this.particles = this.particles.filter(p => p.life > 0);
+            }
+
+            drawLogs(ctx) {
+                let logY = this.centerY + this.radius * 0.4;
+                let logWidth = 280;
+                let startX = this.centerX - logWidth / 2;
+                
+                ctx.save();
+                
+                ctx.fillStyle = '#050201';
+                ctx.beginPath();
+                ctx.ellipse(this.centerX, logY + 20, 150, 25, 0, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(startX, logY);
+
+                for (let i = 0; i <= logWidth; i += 15) {
+                    let x = startX + i;
+                    let distFromCenter = Math.abs(this.centerX - x);
+                    let burnCrater = Math.max(0, 22 - distFromCenter * 0.25);
+                    let roughness = Math.sin(i * 0.7) * 4;
+                    ctx.lineTo(x, logY - 8 + burnCrater + roughness);
+                }
+
+                ctx.lineTo(startX + logWidth + 10, logY + 30);
+                
+                for (let i = logWidth; i >= 0; i -= 20) {
+                    let x = startX + i;
+                    let roughness = Math.sin(i * 0.4) * 4;
+                    ctx.lineTo(x, logY + 38 + roughness);
+                }
+                
+                ctx.lineTo(startX - 10, logY + 20);
+                ctx.closePath();
+
+                ctx.fillStyle = '#0d0402'; 
+                ctx.fill();
+
+                ctx.save();
+                ctx.clip();
+
+                ctx.globalCompositeOperation = 'screen';
+                ctx.lineCap = 'round';
+
+                this.cracks.forEach(crack => {
+                    let pulse = (Math.sin(time * crack.speed + crack.phase) + 1) / 2;
+                    let intensity = crack.heat * (0.3 + pulse * 0.7);
+
+                    if (intensity > 0.05) {
+                        ctx.strokeStyle = `rgba(255, 60, 0, ${intensity * 0.8})`;
+                        ctx.lineWidth = crack.width * 3.5;
+                        ctx.shadowBlur = 12;
+                        ctx.shadowColor = '#ff2a00';
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(crack.x1, crack.y1);
+                        ctx.lineTo(crack.x2, crack.y2);
+                        ctx.stroke();
+
+                        if (intensity > 0.4) {
+                            ctx.strokeStyle = `rgba(255, 210, 80, ${intensity})`;
+                            ctx.lineWidth = crack.width * 0.8;
+                            ctx.shadowBlur = 0;
+                            
+                            ctx.beginPath();
+                            ctx.moveTo(crack.x1, crack.y1);
+                            ctx.lineTo(crack.x2, crack.y2);
+                            ctx.stroke();
+                        }
+                    }
+                });
+
+                ctx.restore(); 
+                ctx.restore(); 
+            }
+
+            draw(ctx) {
+                this.drawLogs(ctx);
+
+                ctx.save();
+                
+                let minX = this.points[0].x, maxX = this.points[0].x;
+                let minY = this.points[0].y, maxY = this.points[0].y;
+                let cx = 0, cy = 0;
+
+                ctx.beginPath();
+                ctx.moveTo(this.points[0].x, this.points[0].y);
+                for (let i = 0; i < this.numNodes; i++) {
+                    let p = this.points[i];
+                    let nextP = this.points[(i + 1) % this.numNodes];
+                    let xc = (p.x + nextP.x) / 2;
+                    let yc = (p.y + nextP.y) / 2;
+                    ctx.quadraticCurveTo(p.x, p.y, xc, yc);
+                    
+                    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
+                    minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
+                    cx += p.x; cy += p.y;
+                }
+                cx /= this.numNodes; cy /= this.numNodes;
+                ctx.closePath();
+
+                ctx.fillStyle = '#bf1c02';
+                ctx.shadowBlur = 40;
+                ctx.shadowColor = '#ff2a00';
+                ctx.fill();
+                ctx.shadowBlur = 0; 
+
+                ctx.globalCompositeOperation = 'screen';
+                
+                let gradient = ctx.createRadialGradient(
+                    cx, cy + 15, 0,
+                    cx, cy - 10, (maxY - minY) * 0.65
+                );
+                gradient.addColorStop(0, '#ffffff');       
+                gradient.addColorStop(0.15, '#ffeb3b');    
+                gradient.addColorStop(0.5, '#ff5722');     
+                gradient.addColorStop(0.85, '#d81b60');    
+                gradient.addColorStop(1, 'rgba(150, 0, 0, 0)');
+
+                ctx.fillStyle = gradient;
+                ctx.fill();
+
+                ctx.globalCompositeOperation = 'source-over';
+                ctx.shadowBlur = 0;
+
+                this.drawFace(ctx, cx, cy);
+
+                ctx.restore();
+
+                ctx.globalCompositeOperation = 'screen';
+                this.particles.forEach(p => p.draw(ctx));
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            drawFace(ctx, cx, cy) {
+                let lookDirX = 0, lookDirY = 0;
+                if (mouse.x > -1000) {
+                    let distToMouse = Math.sqrt(Math.pow(mouse.x - cx, 2) + Math.pow(mouse.y - cy, 2));
+                    lookDirX = (mouse.x - cx) / distToMouse * 4;
+                    lookDirY = (mouse.y - cy) / distToMouse * 4;
+                    lookDirX = Math.max(-4, Math.min(4, lookDirX));
+                    lookDirY = Math.max(-4, Math.min(4, lookDirY));
+                }
+
+                let eyeOffsetX = 44;
+                let eyeY = cy + 12; 
+                let eyeRadius = 11.5;
+
+                ctx.fillStyle = '#f2efe9'; 
+                
+                ctx.beginPath();
+                ctx.arc(cx - eyeOffsetX, eyeY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(cx + eyeOffsetX, eyeY, eyeRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = '#140a05';
+                let pupilRadius = 2.5;
+
+                ctx.beginPath();
+                ctx.arc(cx - eyeOffsetX + lookDirX, eyeY + lookDirY, pupilRadius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(cx + eyeOffsetX + lookDirX, eyeY + lookDirY, pupilRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                let mouthY = cy + 38; 
+                
+                ctx.strokeStyle = '#380e00';
+                ctx.lineWidth = 3.5;
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                
+                if (mouse.isDown && !isSpectrometerActive) {
+                    ctx.fillStyle = '#380e00';
+                    ctx.ellipse(cx, mouthY + 2, 4, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    ctx.moveTo(cx - 11, mouthY + 2);
+                    ctx.quadraticCurveTo(cx, mouthY - 2, cx + 11, mouthY + 2);
+                    ctx.stroke();
+                }
+            }
+
+            findClosestPoint(x, y) {
+                let closest = null;
+                let minDist = 60; 
+
+                this.points.forEach(p => {
+                    let dx = p.x - x;
+                    let dy = p.y - y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        closest = p;
+                    }
+                });
+
+                if (!closest) {
+                    let dxC = this.centerPoint.x - x;
+                    let dyC = this.centerPoint.y - y;
+                    if (Math.sqrt(dxC*dxC + dyC*dyC) < 120) {
+                        return this.centerPoint;
+                    }
+                }
+                
+                return closest;
+            }
+        }
+
+        // --- Educational Additions ---
+
+        let neonSignRect = {x: 0, y: 0, w: 200, h: 100};
+        let moonRect = {x: 0, y: 0, r: 40};
+
+        function drawNeonLetters(ctx, startX, startY) {
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            let x = startX;
+            let y = startY;
+            let h = 50;
+            let w = 35;
+            let gap = 18;
+
+            ctx.beginPath();
+            ctx.moveTo(x, y + h); ctx.lineTo(x, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y);
+            x += w + gap;
+
+            ctx.moveTo(x + w, y); ctx.lineTo(x, y); ctx.lineTo(x, y + h/2); ctx.lineTo(x + w - 8, y + h/2);
+            ctx.moveTo(x, y + h/2); ctx.lineTo(x, y + h); ctx.lineTo(x + w, y + h);
+            x += w + gap;
+
+            ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, -Math.PI*1.2, Math.PI*0.8);
+            x += w + gap;
+
+            ctx.moveTo(x, y + h); ctx.lineTo(x, y); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y);
+            ctx.stroke();
+        }
+
+        function drawNeonSign(ctx) {
+            ctx.save();
+            let signX = 45;
+            let signY = 65; 
+            
+            neonSignRect = {x: signX - 15, y: signY - 15, w: 220, h: 80};
+            
+            ctx.globalCompositeOperation = 'screen';
+            
+            ctx.strokeStyle = '#1a1a1a';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(signX + 15, 0); ctx.lineTo(signX + 15, signY);
+            ctx.moveTo(signX + 180, 0); ctx.lineTo(signX + 180, signY);
+            ctx.stroke();
+
+            let neonColor = 'rgba(255, 60, 10, 0.6)';
+            let neonCore = '#ffded6';
+            
+            let pulse = Math.sin(time * 0.05) * 5 + 25;
+            ctx.shadowBlur = pulse;
+            ctx.shadowColor = '#ff3b1a';
+            
+            ctx.lineWidth = 8;
+            ctx.strokeStyle = neonColor;
+            drawNeonLetters(ctx, signX, signY);
+            
+            ctx.shadowBlur = 10;
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = neonCore;
+            drawNeonLetters(ctx, signX, signY);
+            
+            ctx.restore();
+        }
+
+        function drawMoon(ctx) {
+            ctx.save();
+            moonRect.x = width - 100;
+            moonRect.y = 100;
+            
+            ctx.translate(moonRect.x, moonRect.y);
+
+            // Construct the Waxing Gibbous path
+            ctx.beginPath();
+            // Right side fully illuminated
+            ctx.arc(0, 0, moonRect.r, -Math.PI/2, Math.PI/2, false);
+            // Left side partially illuminated (terminator line)
+            ctx.ellipse(0, 0, moonRect.r * 0.4, moonRect.r, 0, Math.PI/2, -Math.PI/2, false);
+            ctx.closePath();
+
+            // Outer glow and base color
+            ctx.shadowBlur = 30;
+            ctx.shadowColor = 'rgba(255, 255, 230, 0.4)';
+            ctx.fillStyle = '#ffffe0'; 
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawGround(ctx) {
+            if (!calcifer) return;
+            // Align the ground with the bottom edge of the log
+            let groundY = calcifer.centerY + calcifer.radius * 0.4 + 38;
+            
+            ctx.save();
+            ctx.fillStyle = '#060305'; // Very dark, barely visible floor
+            
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            // Slight unevenness in the ground line
+            for (let x = 0; x <= width; x += 50) {
+                ctx.lineTo(x, groundY + Math.sin(x * 0.02) * 2);
+            }
+            ctx.lineTo(width, height);
+            ctx.lineTo(0, height);
+            ctx.fill();
+
+            // Ground edge highlight / shadow
+            ctx.beginPath();
+            ctx.moveTo(0, groundY);
+            for (let x = 0; x <= width; x += 50) {
+                ctx.lineTo(x, groundY + Math.sin(x * 0.02) * 2);
+            }
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#11090c';
+            ctx.stroke();
+            
+            ctx.restore();
+        }
+
+        // --- Fireflies ---
+        class Firefly {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * window.innerWidth;
+                this.y = Math.random() * (window.innerHeight - 100);
+                this.tx = this.x;
+                this.ty = this.y;
+                this.vx = 0;
+                this.vy = 0;
+                this.life = Math.random() * 1000;
+                this.state = 'flying'; // 'flying' or 'landed'
+                this.timer = 0;
+                this.blinkSpeed = 0.02 + Math.random() * 0.03;
+                this.phase = Math.random() * Math.PI * 2;
+                this.color = '#ccff00';
+            }
+
+            update(groundY) {
+                this.groundY = groundY;
+                this.timer--;
+                this.life++;
+
+                if (this.state === 'flying') {
+                    // Pick a new random target location occasionally
+                    if (this.timer <= 0) {
+                        this.tx = this.x + (Math.random() - 0.5) * 400;
+                        this.ty = this.y + (Math.random() - 0.5) * 300;
+                        
+                        // Keep within bounds
+                        this.tx = Math.max(20, Math.min(width - 20, this.tx));
+                        this.ty = Math.max(20, Math.min(this.groundY - 10, this.ty));
+
+                        // 15% chance to aim for the ground to land
+                        if (Math.random() < 0.15) {
+                            this.ty = this.groundY; 
+                        }
+                        this.timer = 100 + Math.random() * 150;
+                    }
+
+                    // Steer towards target
+                    let dx = this.tx - this.x;
+                    let dy = this.ty - this.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist > 0) {
+                        this.vx += (dx / dist) * 0.05;
+                        this.vy += (dy / dist) * 0.05;
+                    }
+
+                    // Air friction/speed limit
+                    this.vx *= 0.95;
+                    this.vy *= 0.95;
+
+                    // Add organic wiggle to flight path
+                    this.x += this.vx + Math.sin(this.life * 0.08) * 0.6;
+                    this.y += this.vy + Math.cos(this.life * 0.11) * 0.6;
+
+                    // Prevent falling through floor & trigger landing
+                    if (this.y >= this.groundY - 3) {
+                        this.y = this.groundY - 3;
+                        if (dy > 0) { // If it was heading downwards, commit to landing
+                            this.state = 'landed';
+                            this.timer = 150 + Math.random() * 300; // Stay landed for a while
+                            this.vx = 0;
+                            this.vy = 0;
+                        }
+                    }
+                } else {
+                    // Landed state
+                    if (this.timer <= 0) {
+                        this.state = 'flying';
+                        this.timer = 0;
+                        this.vy = -3; // Jump up to take off
+                    }
+                }
+            }
+
+            draw(ctx) {
+                // Blink slower when resting
+                let currentBlinkSpeed = this.state === 'landed' ? this.blinkSpeed * 0.5 : this.blinkSpeed;
+                let blink = (Math.sin(this.life * currentBlinkSpeed + this.phase) + 1) / 2;
+                let alpha = blink * 0.9;
+
+                if (alpha > 0.05) {
+                    ctx.save();
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = this.color;
+                    ctx.shadowBlur = 12;
+                    ctx.shadowColor = this.color;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+
+        let fireflies = [];
+        for (let i = 0; i < 3; i++) {
+            fireflies.push(new Firefly());
+        }
+
+        // Helper to map 400-700nm to visible RGB color for rendering the spectrum diagram
+        function wavelengthToColor(wavelength, intensity=1) {
+            let r, g, b;
+            if (wavelength >= 380 && wavelength < 440) {
+                r = -(wavelength - 440) / (440 - 380); g = 0; b = 1;
+            } else if (wavelength >= 440 && wavelength < 490) {
+                r = 0; g = (wavelength - 440) / (490 - 440); b = 1;
+            } else if (wavelength >= 490 && wavelength < 510) {
+                r = 0; g = 1; b = -(wavelength - 510) / (510 - 490);
+            } else if (wavelength >= 510 && wavelength < 580) {
+                r = (wavelength - 510) / (580 - 510); g = 1; b = 0;
+            } else if (wavelength >= 580 && wavelength < 645) {
+                r = 1; g = -(wavelength - 645) / (645 - 580); b = 0;
+            } else if (wavelength >= 645 && wavelength <= 780) {
+                r = 1; g = 0; b = 0;
+            } else {
+                r = 0; g = 0; b = 0;
+            }
+            
+            let factor = 1;
+            if (wavelength >= 380 && wavelength < 420) factor = 0.3 + 0.7 * (wavelength - 380) / (420 - 380);
+            else if (wavelength >= 700 && wavelength <= 780) factor = 0.3 + 0.7 * (780 - wavelength) / (780 - 700);
+            
+            let R = Math.round(r * factor * intensity * 255);
+            let G = Math.round(g * factor * intensity * 255);
+            let B = Math.round(b * factor * intensity * 255);
+            return `rgb(${R},${G},${B})`;
+        }
+
+        function drawSpectrometerTool(ctx) {
+            if (mouse.x < 0 || mouse.x > width || mouse.y < 0 || mouse.y > height) return;
+
+            // Draw Reticle
+            ctx.save();
+            ctx.strokeStyle = '#00ffcc';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#00ffcc';
+            ctx.beginPath();
+            ctx.arc(mouse.x, mouse.y, 20, 0, Math.PI*2);
+            ctx.moveTo(mouse.x - 30, mouse.y); ctx.lineTo(mouse.x + 30, mouse.y);
+            ctx.moveTo(mouse.x, mouse.y - 30); ctx.lineTo(mouse.x, mouse.y + 30);
+            ctx.stroke();
+
+            // Sample the underlying screen pixel
+            let pixel = ctx.getImageData(mouse.x, mouse.y, 1, 1).data;
+            let pR = pixel[0], pG = pixel[1], pB = pixel[2];
+            let brightness = (pR + pG + pB) / 3;
+
+            // Determine light source logically
+            let source = 'dark';
+            let targetedStar = null;
+
+            // 1. Check Moon
+            if (Math.hypot(mouse.x - moonRect.x, mouse.y - moonRect.y) < moonRect.r + 10) {
+                source = 'moon';
+            } 
+            // 2. Check Stars (Generous 15px hitbox for tiny stars)
+            else {
+                for (let i = 0; i < stars.length; i++) {
+                    if (Math.hypot(mouse.x - stars[i].x, mouse.y - stars[i].y) < 15) {
+                        source = 'star';
+                        targetedStar = stars[i];
+                        break;
+                    }
+                }
+            }
+            
+            // Check Fireflies
+            if (source === 'dark') {
+                for (let i = 0; i < fireflies.length; i++) {
+                    if (Math.hypot(mouse.x - fireflies[i].x, mouse.y - fireflies[i].y) < 25) {
+                        source = 'firefly';
+                        break;
+                    }
+                }
+            }
+
+            // 3. Check Neon & Fire
+            if (source === 'dark') {
+                let distToCenter = Math.hypot(mouse.x - calcifer.centerX, mouse.y - calcifer.centerY);
+                let logY = calcifer.centerY + calcifer.radius * 0.4;
+                let isLogArea = (mouse.y > logY - 15) && (mouse.y < logY + 45) && (Math.abs(mouse.x - calcifer.centerX) < 145);
+
+                if (mouse.x >= neonSignRect.x && mouse.x <= neonSignRect.x + neonSignRect.w && 
+                    mouse.y >= neonSignRect.y && mouse.y <= neonSignRect.y + neonSignRect.h && brightness > 30) {
+                    source = 'neon';
+                } else if (brightness > 10) { 
+                    if (isLogArea && !(Math.abs(mouse.x - calcifer.centerX) < 45 && brightness > 180)) {
+                        source = 'ember';
+                    } else if (distToCenter < calcifer.radius * 1.8) {
+                        source = 'flame';
+                    }
+                }
+            }
+
+            // Draw Spectrogram UI Panel
+            let panelW = 450;
+            let panelH = 180;
+            let panelX = width - panelW - 20;
+            let panelY = height - panelH - 20; // Anchored to the bottom right exactly where the button was
+
+            ctx.fillStyle = 'rgba(10, 10, 15, 0.9)';
+            ctx.strokeStyle = '#00ffcc';
+            ctx.lineWidth = 1;
+            ctx.shadowBlur = 0;
+            ctx.fillRect(panelX, panelY, panelW, panelH);
+            ctx.strokeRect(panelX, panelY, panelW, panelH);
+
+            // Draw Close Button (X)
+            let closeBtnSize = 24;
+            let closeBtnX = panelX + panelW - closeBtnSize - 8;
+            let closeBtnY = panelY + 8;
+            ctx.fillStyle = 'rgba(255, 50, 50, 0.1)';
+            ctx.strokeStyle = '#ff3366';
+            ctx.fillRect(closeBtnX, closeBtnY, closeBtnSize, closeBtnSize);
+            ctx.strokeRect(closeBtnX, closeBtnY, closeBtnSize, closeBtnSize);
+            
+            ctx.fillStyle = '#ff3366';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText("X", closeBtnX + closeBtnSize / 2, closeBtnY + closeBtnSize / 2);
+            
+            // Reset text settings
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+
+            ctx.fillStyle = '#fff';
+            ctx.font = '14px "Segoe UI", sans-serif';
+            ctx.fillText("SPECTROMETER ANALYSIS", panelX + 15, panelY + 25);
+
+            let typeText = "NO SIGNIFICANT LIGHT DETECTED";
+            let typeColor = "#888";
+            
+            if (source === 'ember') { typeText = "THERMAL BLACKBODY"; typeColor = "#ff5500"; } 
+            else if (source === 'flame') { typeText = "COMBUSTION PLASMA"; typeColor = "#ffcc00"; } 
+            else if (source === 'neon') { typeText = "NEON GAS"; typeColor = "#ff3366"; }
+            else if (source === 'moon') { typeText = "REFLECTED SUNLIGHT"; typeColor = "#ffffcc"; }
+            else if (source === 'firefly') { typeText = "BIOLUMINESCENCE"; typeColor = "#ccff00"; }
+            else if (source === 'star') {
+                if(targetedStar.type === 'blue') { typeText = "O/B-CLASS STAR"; typeColor = "#aaccff"; }
+                if(targetedStar.type === 'white') { typeText = "G-CLASS STAR"; typeColor = "#ffffff"; }
+                if(targetedStar.type === 'red') { typeText = "M-CLASS STAR"; typeColor = "#ffaa88"; }
+            }
+
+            ctx.fillStyle = typeColor;
+            ctx.font = 'bold 13px sans-serif';
+            ctx.fillText(typeText, panelX + 15, panelY + 45);
+
+            // Draw Spectrum Box
+            let specX = panelX + 15;
+            let specY = panelY + 60;
+            let specW = panelW - 30;
+            let specH = panelH - 100;
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(specX, specY, specW, specH);
+            
+            ctx.fillStyle = '#aaa';
+            ctx.font = '10px sans-serif';
+            for (let wl = 400; wl <= 700; wl += 50) {
+                let x = specX + ((wl - 400) / 300) * specW;
+                ctx.fillText(wl + " nm", x - 12, specY + specH + 18);
+            }
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(specX, specY, specW, specH);
+            ctx.clip();
+
+            if (source === 'neon') {
+                const neonLines = [
+                    {wl: 540.1, intensity: 0.3}, {wl: 585.2, intensity: 0.8}, {wl: 588.2, intensity: 0.6},
+                    {wl: 603.0, intensity: 0.9}, {wl: 607.4, intensity: 1.0}, {wl: 614.3, intensity: 0.8},
+                    {wl: 626.6, intensity: 0.9}, {wl: 633.4, intensity: 0.9}, {wl: 640.2, intensity: 1.0},
+                    {wl: 650.6, intensity: 0.8}, {wl: 692.9, intensity: 0.5}, {wl: 703.2, intensity: 0.4}
+                ];
+                ctx.globalCompositeOperation = 'screen';
+                neonLines.forEach(line => {
+                    let x = specX + ((line.wl - 400) / 300) * specW;
+                    ctx.fillStyle = wavelengthToColor(line.wl, line.intensity);
+                    ctx.shadowBlur = 8;
+                    ctx.shadowColor = ctx.fillStyle;
+                    ctx.fillRect(x - 1, specY, 2.5, specH);
+                });
+            } else if (source === 'ember') {
+                ctx.globalCompositeOperation = 'screen';
+                let peakIntensity = Math.max(0.6, (pR / 255) * 4.0); 
+                for (let x = 0; x < specW; x++) {
+                    let wl = 400 + (x / specW) * 300;
+                    let relativeIntensity = Math.pow(Math.max(0, (wl - 450) / 250), 2);
+                    let intensity = Math.min(1.0, Math.max(0.08 * peakIntensity, relativeIntensity * peakIntensity));
+                    if (intensity > 0.02) {
+                        ctx.fillStyle = wavelengthToColor(wl, intensity);
+                        ctx.fillRect(specX + x, specY, 1.5, specH);
+                    }
+                }
+                ctx.globalCompositeOperation = 'source-over';
+            } else if (source === 'flame') {
+                ctx.globalCompositeOperation = 'screen';
+                for (let x = 0; x < specW; x++) {
+                    let wl = 400 + (x / specW) * 300;
+                    let rCont = Math.exp(-Math.pow(wl - 630, 2) / 6000) * (pR/255);
+                    let gCont = Math.exp(-Math.pow(wl - 550, 2) / 5000) * (pG/255);
+                    let bCont = Math.exp(-Math.pow(wl - 480, 2) / 3000) * (pB/255);
+                    let intensity = Math.max(brightness / 255 * 0.1, Math.min(1.0, rCont + gCont + bCont));
+
+                    if (Math.abs(wl - 589) < 1.5) intensity += 0.5; 
+                    if (Math.abs(wl - 516) < 1.5) intensity += 0.3; 
+                    if (Math.abs(wl - 431) < 1.5) intensity += 0.2; 
+
+                    if (Math.min(1.0, intensity) > 0.02) {
+                        ctx.fillStyle = wavelengthToColor(wl, Math.min(1.0, intensity));
+                        ctx.fillRect(specX + x, specY, 1.5, specH);
+                    }
+                }
+                ctx.globalCompositeOperation = 'source-over';
+            } else if (source === 'moon' || source === 'star') {
+                ctx.globalCompositeOperation = 'screen';
+                for (let x = 0; x < specW; x++) {
+                    let wl = 400 + (x / specW) * 300;
+                    let intensity = 0;
+                    
+                    // Render idealized continuous blackbody curves
+                    if (source === 'moon' || (source === 'star' && targetedStar.type === 'white')) {
+                        // Solar spectrum (peaks around 500-550nm)
+                        intensity = Math.exp(-Math.pow(wl - 520, 2) / 40000);
+                    } else if (source === 'star' && targetedStar.type === 'blue') {
+                        // Hot star (peaks in UV, falls through visible)
+                        intensity = Math.exp(-Math.pow(wl - 400, 2) / 35000);
+                    } else if (source === 'star' && targetedStar.type === 'red') {
+                        // Cool star (peaks in IR, rises through visible)
+                        intensity = Math.exp(-Math.pow(wl - 750, 2) / 30000);
+                    }
+
+                    // Add faint Fraunhofer absorption lines for realism on Stars/Moon
+                    if (Math.abs(wl - 656) < 1) intensity *= 0.2; // H-alpha
+                    if (Math.abs(wl - 486) < 1) intensity *= 0.2; // H-beta
+                    if (Math.abs(wl - 589) < 1.5) intensity *= 0.4; // Sodium
+
+                    if (intensity > 0.05) {
+                        ctx.fillStyle = wavelengthToColor(wl, intensity * 0.9);
+                        ctx.fillRect(specX + x, specY, 1.5, specH);
+                    }
+                }
+                ctx.globalCompositeOperation = 'source-over';
+            } else if (source === 'firefly') {
+                ctx.globalCompositeOperation = 'screen';
+                for (let x = 0; x < specW; x++) {
+                    let wl = 400 + (x / specW) * 300;
+                    // Fireflies emit a relatively narrow band around 560nm (luciferin)
+                    let intensity = Math.exp(-Math.pow(wl - 560, 2) / 800);
+                    if (intensity > 0.05) {
+                        ctx.fillStyle = wavelengthToColor(wl, intensity * 0.9);
+                        ctx.fillRect(specX + x, specY, 1.5, specH);
+                    }
+                }
+                ctx.globalCompositeOperation = 'source-over';
+            }
+
+            ctx.restore(); 
+            ctx.restore(); 
+        }
+
+        // --- Setup and Engine Loop ---
+
+        let calcifer;
+        let stars = [];
+
+        function initStars() {
+            stars = [];
+            // Dramatically fewer stars to make them distinct targets
+            const numStars = Math.floor((width * height) / 15000); 
+            const types = ['blue', 'white', 'white', 'red']; // Weight towards white/yellow
+            
+            for (let i = 0; i < numStars; i++) {
+                let sType = types[Math.floor(Math.random() * types.length)];
+                let sColor = '#ffffff';
+                if (sType === 'blue') sColor = '#aaccff';
+                if (sType === 'red') sColor = '#ffccaa';
+
+                // Keep stars away from the moon and UI to avoid clutter
+                let sx, sy;
+                do {
+                    sx = Math.random() * width;
+                    sy = Math.random() * (height - 200); // Keep out of bottom UI
+                } while (sx > width - 200 && sy < 200); // Keep out of top right (Moon area)
+
+                stars.push({
+                    x: sx,
+                    y: sy,
+                    r: Math.random() * 1.5 + 0.8, // Slightly larger to click easily
+                    phase: Math.random() * Math.PI * 2,
+                    speed: 0.01 + Math.random() * 0.04,
+                    type: sType,
+                    color: sColor
+                });
+            }
+        }
+
+        function drawStars(ctx) {
+            ctx.save();
+            stars.forEach(star => {
+                let alpha = 0.2 + (Math.sin(time * star.speed + star.phase) + 1) * 0.4; 
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = star.color;
+                
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Extra glow for brightness
+                if (alpha > 0.6) {
+                    ctx.shadowBlur = 4;
+                    ctx.shadowColor = star.color;
+                    ctx.fill();
+                }
+            });
+            ctx.restore();
+        }
+
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            
+            initStars();
+
+            if (!calcifer) {
+                calcifer = new Calcifer(width / 2, height / 2 + 30);
+            } else {
+                let dx = (width / 2) - calcifer.centerX;
+                let dy = (height / 2 + 30) - calcifer.centerY;
+                calcifer.centerX += dx;
+                calcifer.centerY += dy;
+                calcifer.points.forEach(p => { p.x += dx; p.oldX += dx; p.baseX += dx; p.baseY += dy; });
+                calcifer.centerPoint.x += dx; calcifer.centerPoint.oldX += dx;
+                
+                if (calcifer.cracks) {
+                    calcifer.cracks.forEach(c => {
+                        c.x1 += dx; c.y1 += dy; c.x2 += dx; c.y2 += dy;
+                    });
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+            
+            drawStars(ctx);
+            drawMoon(ctx);
+            drawNeonSign(ctx);
+            drawGround(ctx);
+
+            let groundY = calcifer ? calcifer.centerY + calcifer.radius * 0.4 + 38 : height;
+
+            // Handle Fireflies
+            fireflies.forEach(f => {
+                f.update(groundY);
+                f.draw(ctx);
+            });
+
+            calcifer.update();
+            calcifer.draw(ctx);
+            
+            if (isSpectrometerActive) {
+                drawSpectrometerTool(ctx);
+            }
+
+            time++;
+            requestAnimationFrame(animate);
+        }
+
+        // --- Inputs ---
+
+        function handlePointerDown(e) {
+            updateMousePos(e);
+            
+            if (isSpectrometerActive) {
+                // Check if the canvas drawn close button was clicked
+                let panelW = 450;
+                let panelH = 180;
+                let panelX = width - panelW - 20;
+                let panelY = height - panelH - 20;
+                let closeBtnSize = 24;
+                let closeBtnX = panelX + panelW - closeBtnSize - 8;
+                let closeBtnY = panelY + 8;
+                
+                if (mouse.x >= closeBtnX && mouse.x <= closeBtnX + closeBtnSize &&
+                    mouse.y >= closeBtnY && mouse.y <= closeBtnY + closeBtnSize) {
+                    isSpectrometerActive = false;
+                    document.getElementById('spectroBtn').style.display = 'block';
+                }
+                return; 
+            }
+
+            mouse.isDown = true;
+            draggedPoint = calcifer.findClosestPoint(mouse.x, mouse.y);
+            
+            if(draggedPoint) {
+                 for(let i=0; i<8; i++) {
+                     calcifer.particles.push(new Particle(mouse.x, mouse.y));
+                 }
+            }
+        }
+
+        function handlePointerMove(e) {
+            updateMousePos(e);
+        }
+
+        function handlePointerUp() {
+            mouse.isDown = false;
+            draggedPoint = null;
+        }
+
+        function updateMousePos(e) {
+            if (e.touches && e.touches.length > 0) {
+                mouse.x = e.touches[0].clientX;
+                mouse.y = e.touches[0].clientY;
+            } else {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+            }
+        }
+
+        window.addEventListener('resize', resize);
+        
+        canvas.addEventListener('mousedown', handlePointerDown);
+        window.addEventListener('mousemove', handlePointerMove);
+        window.addEventListener('mouseup', handlePointerUp);
+        canvas.addEventListener('mouseleave', handlePointerUp);
+        
+        canvas.addEventListener('touchstart', handlePointerDown, {passive: false});
+        window.addEventListener('touchmove', (e) => { e.preventDefault(); handlePointerMove(e); }, {passive: false});
+        window.addEventListener('touchend', handlePointerUp);
+
+        resize();
+        animate();
+
+    </script>
+</body>
+</html>

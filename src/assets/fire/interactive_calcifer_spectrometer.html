@@ -89,6 +89,158 @@
 
         const mouse = { x: -1000, y: -1000, isDown: false, vx: 0, vy: 0 };
         let draggedPoint = null;
+        const LOG_WIDTH = 280;
+        const LOG_HALF_WIDTH = LOG_WIDTH / 2;
+        const EMBER_MIN_TEMPERATURE_K = 850;
+        const EMBER_MAX_TEMPERATURE_K = 2050;
+        const PLANCK_SECOND_RADIATION_CONSTANT = 1.438777e-2;
+        const LUNAR_MONTH_DAYS = 29.530588853;
+        const KNOWN_NEW_MOON_UTC = Date.UTC(2000, 0, 6, 18, 14);
+
+        function clamp01(value) {
+            return Math.max(0, Math.min(1, value));
+        }
+
+        function smoothstep(edge0, edge1, value) {
+            let t = clamp01((value - edge0) / (edge1 - edge0));
+            return t * t * (3 - 2 * t);
+        }
+
+        function getEmberSampleAt(x, y) {
+            if (!calcifer) {
+                return { heat: 0, temperatureK: EMBER_MIN_TEMPERATURE_K };
+            }
+
+            let logY = calcifer.centerY + calcifer.radius * 0.4;
+            let dx = Math.abs(x - calcifer.centerX);
+            let normalizedX = clamp01(dx / LOG_HALF_WIDTH);
+            let charEdgeY = logY - 8 + Math.max(0, 22 - dx * 0.25);
+            let burnProximity = 1 - clamp01(Math.abs(y - (charEdgeY + 15)) / 46);
+            let lowerCooling = 1 - smoothstep(logY + 20, logY + 50, y) * 0.35;
+            let centerHeat = Math.pow(1 - normalizedX, 1.55);
+            let hiddenTexture = (
+                Math.sin(x * 0.047 + y * 0.083) *
+                Math.sin(x * 0.019 - y * 0.061)
+            ) * 0.08;
+            let heat = clamp01(centerHeat * (0.62 + burnProximity * 0.38) * lowerCooling + hiddenTexture * centerHeat);
+            let flicker = Math.sin(time * 0.035 + x * 0.031 + y * 0.019) * 35 * heat;
+            let temperatureK = EMBER_MIN_TEMPERATURE_K + Math.pow(heat, 0.82) * (EMBER_MAX_TEMPERATURE_K - EMBER_MIN_TEMPERATURE_K) + flicker;
+
+            return { heat, temperatureK };
+        }
+
+        function blackbodyRadiance(wavelengthNm, temperatureK) {
+            let wavelengthM = wavelengthNm * 1e-9;
+            let exponent = PLANCK_SECOND_RADIATION_CONSTANT / (wavelengthM * temperatureK);
+            return 1 / (Math.pow(wavelengthM, 5) * (Math.exp(exponent) - 1));
+        }
+
+        function visibleBlackbodyIntensity(wavelengthNm, temperatureK) {
+            let redReference = blackbodyRadiance(700, temperatureK);
+            if (!Number.isFinite(redReference) || redReference <= 0) return 0;
+            return clamp01(blackbodyRadiance(wavelengthNm, temperatureK) / redReference);
+        }
+
+        function positiveModulo(value, modulo) {
+            return ((value % modulo) + modulo) % modulo;
+        }
+
+        function getMoonLighting(date = new Date()) {
+            let daysSinceKnownNew = (date.getTime() - KNOWN_NEW_MOON_UTC) / 86400000;
+            let phase = positiveModulo(daysSinceKnownNew, LUNAR_MONTH_DAYS) / LUNAR_MONTH_DAYS;
+            let illumination = (1 - Math.cos(phase * Math.PI * 2)) / 2;
+            let phaseAngle = Math.acos(illumination * 2 - 1);
+            let waxing = phase < 0.5;
+
+            return {
+                phase,
+                illumination,
+                waxing,
+                sunX: (waxing ? 1 : -1) * Math.sin(phaseAngle),
+                sunZ: Math.cos(phaseAngle)
+            };
+        }
+
+        function getGroundYAt(x) {
+            if (!calcifer) return height;
+            let groundY = calcifer.centerY + calcifer.radius * 0.4 + 38;
+            return groundY + Math.sin(x * 0.02) * 2;
+        }
+
+        function isGroundAt(x, y) {
+            return Boolean(calcifer) && y >= getGroundYAt(x) - 1;
+        }
+
+        function isLogAreaAt(x, y) {
+            if (!calcifer) return false;
+            let logY = calcifer.centerY + calcifer.radius * 0.4;
+            return y > logY - 15 && y < logY + 45 && Math.abs(x - calcifer.centerX) < 145;
+        }
+
+        function isFlameCoreAt(x, y, brightness) {
+            if (!calcifer) return false;
+
+            let inside = false;
+            for (let i = 0, j = calcifer.points.length - 1; i < calcifer.points.length; j = i++) {
+                let pi = calcifer.points[i];
+                let pj = calcifer.points[j];
+                if (((pi.y > y) !== (pj.y > y)) && x < (pj.x - pi.x) * (y - pi.y) / (pj.y - pi.y) + pi.x) {
+                    inside = !inside;
+                }
+            }
+
+            let distToCenter = Math.hypot(x - calcifer.centerX, y - calcifer.centerY);
+            return inside || (brightness > 10 && distToCenter < calcifer.radius * 1.8);
+        }
+
+        function getMoonLocalPoint(x, y) {
+            let dx = (x - moonRect.x) / moonRect.r;
+            let dy = (y - moonRect.y) / moonRect.r;
+            let radiusSquared = dx * dx + dy * dy;
+
+            return { dx, dy, radiusSquared };
+        }
+
+        function isMoonDiskAt(x, y) {
+            return getMoonLocalPoint(x, y).radiusSquared <= 1;
+        }
+
+        function isMoonLitAt(x, y, lighting = getMoonLighting()) {
+            let point = getMoonLocalPoint(x, y);
+            if (point.radiusSquared > 1) return false;
+
+            let z = Math.sqrt(Math.max(0, 1 - point.radiusSquared));
+            return lighting.sunX * point.dx + lighting.sunZ * z > -0.02;
+        }
+
+        function addMoonLitPath(ctx, radius, lighting) {
+            if (lighting.illumination <= 0.005) return false;
+
+            ctx.beginPath();
+
+            if (lighting.illumination >= 0.995 || Math.abs(lighting.sunX) < 0.001) {
+                ctx.arc(0, 0, radius, 0, Math.PI * 2);
+                return true;
+            }
+
+            let waxing = lighting.sunX > 0;
+            let terminatorSign = Math.abs(lighting.sunZ) < 0.001 ? 0 : -Math.sign(lighting.sunX * lighting.sunZ);
+            let terminatorWidth = Math.abs(lighting.sunZ);
+            let steps = 96;
+
+            ctx.moveTo(0, -radius);
+            ctx.arc(0, 0, radius, -Math.PI / 2, Math.PI / 2, !waxing);
+
+            for (let i = steps; i >= 0; i--) {
+                let y = -radius + (i / steps) * radius * 2;
+                let normalizedY = y / radius;
+                let x = terminatorSign * terminatorWidth * Math.sqrt(Math.max(0, 1 - normalizedY * normalizedY)) * radius;
+                ctx.lineTo(x, y);
+            }
+
+            ctx.closePath();
+            return true;
+        }
 
         // UI Listeners
         const spectroBtn = document.getElementById('spectroBtn');
@@ -99,7 +251,8 @@
             if (isSpectrometerActive) {
                 mouse.isDown = false;
                 draggedPoint = null;
-                document.getElementById('ui').innerText = "Hover over objects to analyze their light spectrum";
+                let ui = document.getElementById('ui');
+                if (ui) ui.innerText = "Hover over objects to analyze their light spectrum";
             }
         });
 
@@ -655,39 +808,47 @@
             ctx.save();
             moonRect.x = width - 100;
             moonRect.y = 100;
+            let lighting = getMoonLighting();
             
             ctx.translate(moonRect.x, moonRect.y);
 
-            // Construct the Waxing Gibbous path
-            ctx.beginPath();
-            // Right side fully illuminated
-            ctx.arc(0, 0, moonRect.r, -Math.PI/2, Math.PI/2, false);
-            // Left side partially illuminated (terminator line)
-            ctx.ellipse(0, 0, moonRect.r * 0.4, moonRect.r, 0, Math.PI/2, -Math.PI/2, false);
-            ctx.closePath();
-
-            // Outer glow and base color
             ctx.shadowBlur = 30;
-            ctx.shadowColor = 'rgba(255, 255, 230, 0.4)';
-            ctx.fillStyle = '#ffffe0'; 
+            ctx.shadowColor = 'rgba(255, 255, 230, 0.25)';
+            ctx.fillStyle = '#0b0d14';
+            ctx.beginPath();
+            ctx.arc(0, 0, moonRect.r, 0, Math.PI * 2);
             ctx.fill();
+
+            ctx.shadowBlur = 0;
+            if (addMoonLitPath(ctx, moonRect.r, lighting)) {
+                let glow = ctx.createRadialGradient(-lighting.sunX * 8, -8, 2, 0, 0, moonRect.r);
+                glow.addColorStop(0, '#fffdf0');
+                glow.addColorStop(0.72, '#ffffd8');
+                glow.addColorStop(1, '#d6d3aa');
+                ctx.fillStyle = glow;
+                ctx.fill();
+            }
+
+            ctx.strokeStyle = 'rgba(255, 255, 230, 0.25)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.arc(0, 0, moonRect.r, 0, Math.PI * 2);
+            ctx.stroke();
 
             ctx.restore();
         }
 
         function drawGround(ctx) {
             if (!calcifer) return;
-            // Align the ground with the bottom edge of the log
-            let groundY = calcifer.centerY + calcifer.radius * 0.4 + 38;
             
             ctx.save();
             ctx.fillStyle = '#060305'; // Very dark, barely visible floor
             
             ctx.beginPath();
-            ctx.moveTo(0, groundY);
+            ctx.moveTo(0, getGroundYAt(0));
             // Slight unevenness in the ground line
             for (let x = 0; x <= width; x += 50) {
-                ctx.lineTo(x, groundY + Math.sin(x * 0.02) * 2);
+                ctx.lineTo(x, getGroundYAt(x));
             }
             ctx.lineTo(width, height);
             ctx.lineTo(0, height);
@@ -695,9 +856,9 @@
 
             // Ground edge highlight / shadow
             ctx.beginPath();
-            ctx.moveTo(0, groundY);
+            ctx.moveTo(0, getGroundYAt(0));
             for (let x = 0; x <= width; x += 50) {
-                ctx.lineTo(x, groundY + Math.sin(x * 0.02) * 2);
+                ctx.lineTo(x, getGroundYAt(x));
             }
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#11090c';
@@ -864,46 +1025,39 @@
             // Determine light source logically
             let source = 'dark';
             let targetedStar = null;
+            let emberSample = getEmberSampleAt(mouse.x, mouse.y);
+            let moonLighting = getMoonLighting();
+            let isMoonDisk = isMoonDiskAt(mouse.x, mouse.y);
+            let isLogArea = isLogAreaAt(mouse.x, mouse.y);
+            let isNeonArea = mouse.x >= neonSignRect.x && mouse.x <= neonSignRect.x + neonSignRect.w &&
+                mouse.y >= neonSignRect.y && mouse.y <= neonSignRect.y + neonSignRect.h;
+            let isCenterFlameOverLog = calcifer && Math.abs(mouse.x - calcifer.centerX) < 45 && brightness > 180;
 
-            // 1. Check Moon
-            if (Math.hypot(mouse.x - moonRect.x, mouse.y - moonRect.y) < moonRect.r + 10) {
+            if (isNeonArea && brightness > 30) {
+                source = 'neon';
+            } else if (isLogArea && !isCenterFlameOverLog) {
+                source = 'ember';
+            } else if (isFlameCoreAt(mouse.x, mouse.y, brightness)) {
+                source = 'flame';
+            } else if (isGroundAt(mouse.x, mouse.y)) {
+                source = 'dark';
+            } else if (isMoonDisk && isMoonLitAt(mouse.x, mouse.y, moonLighting)) {
                 source = 'moon';
-            } 
-            // 2. Check Stars (Generous 15px hitbox for tiny stars)
-            else {
-                for (let i = 0; i < stars.length; i++) {
-                    if (Math.hypot(mouse.x - stars[i].x, mouse.y - stars[i].y) < 15) {
-                        source = 'star';
-                        targetedStar = stars[i];
-                        break;
-                    }
-                }
-            }
-            
-            // Check Fireflies
-            if (source === 'dark') {
+            } else if (!isMoonDisk) {
                 for (let i = 0; i < fireflies.length; i++) {
                     if (Math.hypot(mouse.x - fireflies[i].x, mouse.y - fireflies[i].y) < 25) {
                         source = 'firefly';
                         break;
                     }
                 }
-            }
 
-            // 3. Check Neon & Fire
-            if (source === 'dark') {
-                let distToCenter = Math.hypot(mouse.x - calcifer.centerX, mouse.y - calcifer.centerY);
-                let logY = calcifer.centerY + calcifer.radius * 0.4;
-                let isLogArea = (mouse.y > logY - 15) && (mouse.y < logY + 45) && (Math.abs(mouse.x - calcifer.centerX) < 145);
-
-                if (mouse.x >= neonSignRect.x && mouse.x <= neonSignRect.x + neonSignRect.w && 
-                    mouse.y >= neonSignRect.y && mouse.y <= neonSignRect.y + neonSignRect.h && brightness > 30) {
-                    source = 'neon';
-                } else if (brightness > 10) { 
-                    if (isLogArea && !(Math.abs(mouse.x - calcifer.centerX) < 45 && brightness > 180)) {
-                        source = 'ember';
-                    } else if (distToCenter < calcifer.radius * 1.8) {
-                        source = 'flame';
+                if (source === 'dark') {
+                    for (let i = 0; i < stars.length; i++) {
+                        if (Math.hypot(mouse.x - stars[i].x, mouse.y - stars[i].y) < 15) {
+                            source = 'star';
+                            targetedStar = stars[i];
+                            break;
+                        }
                     }
                 }
             }
@@ -1000,11 +1154,12 @@
                 });
             } else if (source === 'ember') {
                 ctx.globalCompositeOperation = 'screen';
-                let peakIntensity = Math.max(0.6, (pR / 255) * 4.0); 
+                let peakIntensity = 0.35 + Math.pow(emberSample.heat, 1.25) * 0.95 + Math.max(0, pR - 40) / 255 * 0.3;
                 for (let x = 0; x < specW; x++) {
                     let wl = 400 + (x / specW) * 300;
-                    let relativeIntensity = Math.pow(Math.max(0, (wl - 450) / 250), 2);
-                    let intensity = Math.min(1.0, Math.max(0.08 * peakIntensity, relativeIntensity * peakIntensity));
+                    let thermalCurve = visibleBlackbodyIntensity(wl, emberSample.temperatureK);
+                    let redTail = smoothstep(610, 700, wl) * 0.06 * (1 - emberSample.heat);
+                    let intensity = Math.min(1.0, thermalCurve * peakIntensity + redTail);
                     if (intensity > 0.02) {
                         ctx.fillStyle = wavelengthToColor(wl, intensity);
                         ctx.fillRect(specX + x, specY, 1.5, specH);
@@ -1204,6 +1359,8 @@
                     mouse.y >= closeBtnY && mouse.y <= closeBtnY + closeBtnSize) {
                     isSpectrometerActive = false;
                     document.getElementById('spectroBtn').style.display = 'block';
+                    let ui = document.getElementById('ui');
+                    if (ui) ui.innerText = "";
                     }
                 return; 
             }

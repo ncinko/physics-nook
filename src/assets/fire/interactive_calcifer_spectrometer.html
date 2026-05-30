@@ -1361,8 +1361,13 @@
                     document.getElementById('spectroBtn').style.display = 'block';
                     let ui = document.getElementById('ui');
                     if (ui) ui.innerText = "";
-                    }
+                }
                 return; 
+            }
+
+            if (isMoonDiskAt(mouse.x, mouse.y)) {
+                window.location.href = 'http://moonlander.seb.ly/';
+                return;
             }
 
             mouse.isDown = true;

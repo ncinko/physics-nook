@@ -255,6 +255,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['sound', 'synthesis', 'harmonics'],
   },
   {
+    id: 'fire-spectrometer',
+    title: 'Fire Spectrometer',
+    description: 'Probe firelight, embers, moonlight, stars, neon, and fireflies with an in-scene spectrometer.',
+    href: '/fire',
+    module: 'Featured',
+    kind: 'standalone',
+    tags: ['spectra', 'blackbody', 'light'],
+  },
+  {
     id: 'photoelectric-effect',
     title: 'Photoelectric Effect',
     description: 'Tune light frequency and intensity in an inline photon-emission scene.',

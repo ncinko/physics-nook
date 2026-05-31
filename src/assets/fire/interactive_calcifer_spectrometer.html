@@ -94,6 +94,7 @@
         const EMBER_MIN_TEMPERATURE_K = 850;
         const EMBER_MAX_TEMPERATURE_K = 2050;
         const PLANCK_SECOND_RADIATION_CONSTANT = 1.438777e-2;
+        const FIREFLY_TARGET_RADIUS = 25;
         const LUNAR_MONTH_DAYS = 29.530588853;
         const KNOWN_NEW_MOON_UTC = Date.UTC(2000, 0, 6, 18, 14);
 
@@ -177,7 +178,7 @@
             return y > logY - 15 && y < logY + 45 && Math.abs(x - calcifer.centerX) < 145;
         }
 
-        function isFlameCoreAt(x, y, brightness) {
+        function isFlameCoreAt(x, y) {
             if (!calcifer) return false;
 
             let inside = false;
@@ -189,8 +190,7 @@
                 }
             }
 
-            let distToCenter = Math.hypot(x - calcifer.centerX, y - calcifer.centerY);
-            return inside || (brightness > 10 && distToCenter < calcifer.radius * 1.8);
+            return inside;
         }
 
         function getMoonLocalPoint(x, y) {
@@ -850,6 +850,7 @@
             for (let x = 0; x <= width; x += 50) {
                 ctx.lineTo(x, getGroundYAt(x));
             }
+            ctx.lineTo(width, getGroundYAt(width));
             ctx.lineTo(width, height);
             ctx.lineTo(0, height);
             ctx.fill();
@@ -860,6 +861,7 @@
             for (let x = 0; x <= width; x += 50) {
                 ctx.lineTo(x, getGroundYAt(x));
             }
+            ctx.lineTo(width, getGroundYAt(width));
             ctx.lineWidth = 2;
             ctx.strokeStyle = '#11090c';
             ctx.stroke();
@@ -948,11 +950,14 @@
                 }
             }
 
-            draw(ctx) {
-                // Blink slower when resting
+            getApparentBrightness() {
                 let currentBlinkSpeed = this.state === 'landed' ? this.blinkSpeed * 0.5 : this.blinkSpeed;
                 let blink = (Math.sin(this.life * currentBlinkSpeed + this.phase) + 1) / 2;
-                let alpha = blink * 0.9;
+                return blink * 0.9;
+            }
+
+            draw(ctx) {
+                let alpha = this.getApparentBrightness();
 
                 if (alpha > 0.05) {
                     ctx.save();
@@ -1025,28 +1030,30 @@
             // Determine light source logically
             let source = 'dark';
             let targetedStar = null;
+            let targetedFirefly = null;
             let emberSample = getEmberSampleAt(mouse.x, mouse.y);
             let moonLighting = getMoonLighting();
             let isMoonDisk = isMoonDiskAt(mouse.x, mouse.y);
             let isLogArea = isLogAreaAt(mouse.x, mouse.y);
+            let isFlameCore = isFlameCoreAt(mouse.x, mouse.y);
             let isNeonArea = mouse.x >= neonSignRect.x && mouse.x <= neonSignRect.x + neonSignRect.w &&
                 mouse.y >= neonSignRect.y && mouse.y <= neonSignRect.y + neonSignRect.h;
-            let isCenterFlameOverLog = calcifer && Math.abs(mouse.x - calcifer.centerX) < 45 && brightness > 180;
 
             if (isNeonArea && brightness > 30) {
                 source = 'neon';
-            } else if (isLogArea && !isCenterFlameOverLog) {
-                source = 'ember';
-            } else if (isFlameCoreAt(mouse.x, mouse.y, brightness)) {
+            } else if (isFlameCore) {
                 source = 'flame';
+            } else if (isLogArea) {
+                source = 'ember';
             } else if (isGroundAt(mouse.x, mouse.y)) {
                 source = 'dark';
             } else if (isMoonDisk && isMoonLitAt(mouse.x, mouse.y, moonLighting)) {
                 source = 'moon';
             } else if (!isMoonDisk) {
                 for (let i = 0; i < fireflies.length; i++) {
-                    if (Math.hypot(mouse.x - fireflies[i].x, mouse.y - fireflies[i].y) < 25) {
+                    if (Math.hypot(mouse.x - fireflies[i].x, mouse.y - fireflies[i].y) < FIREFLY_TARGET_RADIUS) {
                         source = 'firefly';
+                        targetedFirefly = fireflies[i];
                         break;
                     }
                 }
@@ -1216,12 +1223,13 @@
                 ctx.globalCompositeOperation = 'source-over';
             } else if (source === 'firefly') {
                 ctx.globalCompositeOperation = 'screen';
+                let fireflyScale = targetedFirefly ? targetedFirefly.getApparentBrightness() : brightness / 255;
                 for (let x = 0; x < specW; x++) {
                     let wl = 400 + (x / specW) * 300;
                     // Fireflies emit a relatively narrow band around 560nm (luciferin)
-                    let intensity = Math.exp(-Math.pow(wl - 560, 2) / 800);
+                    let intensity = Math.exp(-Math.pow(wl - 560, 2) / 800) * fireflyScale;
                     if (intensity > 0.05) {
-                        ctx.fillStyle = wavelengthToColor(wl, intensity * 0.9);
+                        ctx.fillStyle = wavelengthToColor(wl, intensity);
                         ctx.fillRect(specX + x, specY, 1.5, specH);
                     }
                 }

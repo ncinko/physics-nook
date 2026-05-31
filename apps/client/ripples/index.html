@@ -108,6 +108,19 @@
           </button>
         </div>
       </aside>
+
+      <aside id="onboardingPanel" class="onboarding-panel" aria-labelledby="onboardingTitle" aria-live="polite" hidden>
+        <div class="tray-heading">
+          <strong id="onboardingTitle">Ripple basics</strong>
+          <button id="onboardingDismissButton" class="panel-close-button" type="button" aria-label="Dismiss ripple tank tips">&times;</button>
+        </div>
+        <p id="onboardingCopy" class="onboarding-copy"></p>
+        <div class="onboarding-actions">
+          <span id="onboardingStepLabel" class="onboarding-step-label">1 of 4</span>
+          <button id="onboardingBackButton" class="onboarding-secondary-button" type="button">Back</button>
+          <button id="onboardingNextButton" class="onboarding-primary-button" type="button">Next</button>
+        </div>
+      </aside>
     </main>
 
     <script type="module" src="/src/ripple-main.ts"></script>

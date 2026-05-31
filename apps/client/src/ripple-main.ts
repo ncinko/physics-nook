@@ -66,6 +66,14 @@ type PendingObjectPreview = {
   y: number;
 };
 
+type OnboardingTarget = 'canvas' | 'emitters' | 'objects' | 'tanks';
+
+type OnboardingStep = {
+  title: string;
+  copy: string;
+  target: OnboardingTarget;
+};
+
 const canvas = document.getElementById('rippleCanvas') as HTMLCanvasElement | null;
 const roomLabel = document.getElementById('roomLabel');
 const playerCount = document.getElementById('playerCount');
@@ -94,6 +102,14 @@ const objectGapInput = document.getElementById('objectGapInput') as HTMLInputEle
 const objectSpacingControl = document.getElementById('objectSpacingControl') as HTMLElement | null;
 const objectSpacingInput = document.getElementById('objectSpacingInput') as HTMLInputElement | null;
 const deleteButton = document.getElementById('deleteButton') as HTMLButtonElement | null;
+const objectTray = document.querySelector<HTMLElement>('.object-tray');
+const onboardingPanel = document.getElementById('onboardingPanel') as HTMLElement | null;
+const onboardingTitle = document.getElementById('onboardingTitle');
+const onboardingCopy = document.getElementById('onboardingCopy');
+const onboardingStepLabel = document.getElementById('onboardingStepLabel');
+const onboardingDismissButton = document.getElementById('onboardingDismissButton') as HTMLButtonElement | null;
+const onboardingBackButton = document.getElementById('onboardingBackButton') as HTMLButtonElement | null;
+const onboardingNextButton = document.getElementById('onboardingNextButton') as HTMLButtonElement | null;
 
 if (
   !canvas ||
@@ -123,7 +139,15 @@ if (
   !objectGapInput ||
   !objectSpacingControl ||
   !objectSpacingInput ||
-  !deleteButton
+  !deleteButton ||
+  !objectTray ||
+  !onboardingPanel ||
+  !onboardingTitle ||
+  !onboardingCopy ||
+  !onboardingStepLabel ||
+  !onboardingDismissButton ||
+  !onboardingBackButton ||
+  !onboardingNextButton
 ) {
   throw new Error('Ripple Tank markup is missing required elements.');
 }
@@ -170,6 +194,7 @@ const MAX_SIMULATION_STEPS_PER_FRAME = 1;
 const THEME_STORAGE_KEY = 'physics-nook-ripple-theme';
 const SENSITIVITY_STORAGE_KEY = 'physics-nook-ripple-display-sensitivity';
 const GRADIENT_DRAW_STORAGE_KEY = 'physics-nook-ripple-gradient-draw';
+const ONBOARDING_STORAGE_KEY = 'physics-nook-ripple-onboarding-v1';
 const DISPLAY_SENSITIVITY_NEUTRAL = 72;
 const DEFAULT_DISPLAY_SENSITIVITY = 0;
 const DISPLAY_SENSITIVITY_MAX = 160;
@@ -178,6 +203,29 @@ const DEFAULT_DISPLAY_THRESHOLD = 0.00872;
 const MAX_DISPLAY_THRESHOLD = 0.048;
 const MAX_SLIT_OBJECT_WIDTH = 0.08;
 const OBJECT_HOVER_PADDING_PX = 10;
+
+const onboardingSteps: OnboardingStep[] = [
+  {
+    title: 'Make a splash',
+    copy: 'Click or drag across the water to drop ripples anywhere in the tank.',
+    target: 'canvas',
+  },
+  {
+    title: 'Move emitters',
+    copy: 'Grab a colored emitter dot to reposition a steady source. Select one to tune its amplitude and frequency.',
+    target: 'emitters',
+  },
+  {
+    title: 'Add slits and barriers',
+    copy: 'Drag an object button into the tank, or tap one to place it in the middle. Select it to resize, rotate, or delete.',
+    target: 'objects',
+  },
+  {
+    title: 'Switch tanks',
+    copy: 'Open the tank label to move between shared tanks. If a shared tank is unavailable, your local tank keeps running.',
+    target: 'tanks',
+  },
+];
 
 const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env ?? {};
 const searchParams = new URLSearchParams(window.location.search);
@@ -271,6 +319,9 @@ let roomSummaries: RippleRoomSummary[] = RIPPLE_CONFIG.persistentRoomCodes.map((
 }));
 const keyState = new Set<string>();
 const camera = { xScreens: 0, yScreens: 0, zoom: 1 };
+let onboardingActive = false;
+let onboardingStepIndex = 0;
+let tankSwitcherOpenedByOnboarding = false;
 
 const size: PoolSize = {
   width: 0,
@@ -356,6 +407,69 @@ const setRoomSummaries = (summaries: RippleRoomSummary[]): void => {
 const setTankSwitcherOpen = (open: boolean): void => {
   tankSwitcher.hidden = !open;
   tankSwitcherButton.setAttribute('aria-expanded', String(open));
+};
+
+const clearOnboardingTarget = (): void => {
+  canvas.classList.remove('onboarding-highlight');
+  objectTray.classList.remove('onboarding-highlight');
+  tankSwitcherButton.classList.remove('onboarding-highlight');
+  tankSwitcher.classList.remove('onboarding-highlight');
+
+  if (tankSwitcherOpenedByOnboarding) {
+    setTankSwitcherOpen(false);
+    tankSwitcherOpenedByOnboarding = false;
+  }
+};
+
+const setOnboardingStep = (index: number): void => {
+  onboardingStepIndex = Math.trunc(clamp(index, 0, onboardingSteps.length - 1));
+  const step = onboardingSteps[onboardingStepIndex];
+  onboardingTitle.textContent = step.title;
+  onboardingCopy.textContent = step.copy;
+  onboardingStepLabel.textContent = `${onboardingStepIndex + 1} of ${onboardingSteps.length}`;
+  onboardingBackButton.disabled = onboardingStepIndex === 0;
+  onboardingNextButton.textContent = onboardingStepIndex === onboardingSteps.length - 1 ? 'Done' : 'Next';
+  onboardingPanel.dataset.target = step.target;
+
+  clearOnboardingTarget();
+  if (step.target === 'objects') {
+    objectTray.classList.add('onboarding-highlight');
+  } else if (step.target === 'tanks') {
+    tankSwitcherButton.classList.add('onboarding-highlight');
+    tankSwitcher.classList.add('onboarding-highlight');
+    if (tankSwitcher.hidden) {
+      setTankSwitcherOpen(true);
+      tankSwitcherOpenedByOnboarding = true;
+    }
+  } else {
+    canvas.classList.add('onboarding-highlight');
+  }
+};
+
+const startOnboarding = (): void => {
+  if (localStorage.getItem(ONBOARDING_STORAGE_KEY) === 'dismissed') return;
+  onboardingActive = true;
+  onboardingPanel.hidden = false;
+  setOnboardingStep(0);
+};
+
+const dismissOnboarding = (): void => {
+  localStorage.setItem(ONBOARDING_STORAGE_KEY, 'dismissed');
+  onboardingActive = false;
+  onboardingPanel.hidden = true;
+  clearOnboardingTarget();
+};
+
+const advanceOnboarding = (): void => {
+  if (onboardingStepIndex >= onboardingSteps.length - 1) {
+    dismissOnboarding();
+    return;
+  }
+  setOnboardingStep(onboardingStepIndex + 1);
+};
+
+const retreatOnboarding = (): void => {
+  setOnboardingStep(onboardingStepIndex - 1);
 };
 
 const localizeTankState = (): void => {
@@ -1823,14 +1937,17 @@ pauseButton.addEventListener('click', togglePaused);
 resetButton.addEventListener('click', resetTank);
 themeButton.addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'));
 tankSwitcherButton.addEventListener('click', () => setTankSwitcherOpen(tankSwitcher.hidden !== false));
+onboardingDismissButton.addEventListener('click', dismissOnboarding);
+onboardingBackButton.addEventListener('click', retreatOnboarding);
+onboardingNextButton.addEventListener('click', advanceOnboarding);
 
 document.addEventListener('pointerdown', (event) => {
   const target = event.target;
   if (!(target instanceof Node)) return;
-  if (!tankSwitcher.hidden && !tankSwitcher.contains(target) && !tankSwitcherButton.contains(target)) {
+  if (!tankSwitcher.hidden && !tankSwitcher.contains(target) && !tankSwitcherButton.contains(target) && !onboardingPanel.contains(target)) {
     setTankSwitcherOpen(false);
   }
-  if (!selectionPanel.hidden && !selectionPanel.contains(target) && !canvas.contains(target)) {
+  if (!selectionPanel.hidden && !selectionPanel.contains(target) && !canvas.contains(target) && !onboardingPanel.contains(target)) {
     clearSelection();
   }
 });
@@ -1873,6 +1990,11 @@ window.visualViewport?.addEventListener('resize', resize);
 const resizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(resize);
 resizeObserver?.observe(canvas.parentElement ?? canvas);
 window.addEventListener('keydown', (event) => {
+  if (event.code === 'Escape' && onboardingActive) {
+    dismissOnboarding();
+    return;
+  }
+
   if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyA', 'KeyD', 'KeyW', 'KeyS'].includes(event.code)) {
     event.preventDefault();
     keyState.add(event.code);
@@ -1937,4 +2059,5 @@ renderTankSwitcher();
 updateBrowserRoom();
 resize();
 connect();
+startOnboarding();
 window.requestAnimationFrame(draw);

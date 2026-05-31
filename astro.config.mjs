@@ -8,6 +8,13 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
 const site = process.env.PUBLIC_SITE_URL ?? process.env.SITE_URL ?? 'https://physicsnook.com';
+const ignoredDevWatchFiles = [
+  '**/apps/client/dist/**',
+  '**/dist/**',
+  '**/apps/client/tsconfig*.json',
+  '**/apps/server/tsconfig*.json',
+  '**/packages/shared/tsconfig*.json',
+];
 
 // https://astro.build/config
 export default defineConfig({
@@ -21,6 +28,12 @@ export default defineConfig({
   ],
 
   vite: {
+    cacheDir: 'node_modules/.vite-astro',
     plugins: [tailwindcss()],
-  }
+    server: {
+      watch: {
+        ignored: ignoredDevWatchFiles,
+      },
+    },
+  },
 });

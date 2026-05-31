@@ -3,6 +3,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
+const sharedRoot = fileURLToPath(new URL('../../packages/shared', import.meta.url));
+const cacheDir = fileURLToPath(new URL('../../node_modules/.vite-game', import.meta.url));
 const mainEntry = fileURLToPath(new URL('./index.html', import.meta.url));
 const orbitalsEntry = fileURLToPath(new URL('./orbitals/index.html', import.meta.url));
 const ripplesEntry = fileURLToPath(new URL('./ripples/index.html', import.meta.url));
@@ -12,13 +14,14 @@ const outDir = process.env.CF_PAGES === '1'
 
 export default defineConfig({
   root,
+  cacheDir,
   envDir: workspaceRoot,
   envPrefix: ['VITE_', 'PUBLIC_'],
   server: {
     host: '0.0.0.0',
     port: 5173,
     fs: {
-      allow: [root, workspaceRoot],
+      allow: [root, sharedRoot],
     },
   },
   preview: {

@@ -2,11 +2,16 @@
   "extends": "astro/tsconfigs/strict",
   "include": [
     ".astro/types.d.ts",
-    "**/*"
+    "astro.config.mjs",
+    "tailwind.config.mjs",
+    "src/**/*",
+    "functions/**/*"
   ],
   "exclude": [
+    "apps",
     "dist",
-    "apps/client/dist",
+    "packages",
+    "server",
     "tests",
     "node_modules"
   ],

@@ -16,6 +16,7 @@ import {
   voyageLevels,
   type Rect,
 } from '../../lib/math/vectorVoyage';
+import { BunnySprite } from './BunnySprite';
 
 const VIEW_WIDTH = 640;
 const VIEW_HEIGHT = 420;
@@ -501,26 +502,13 @@ function BlockedHint({ start, end }: { start: Vector2; end: Vector2 }) {
 }
 
 function VoyageBunny({ x, y, lift, dir }: { x: number; y: number; lift: number; dir: number }) {
-  const stretch = 1 + Math.min(lift, 48) * 0.005;
-  const earLean = Math.min(lift, 48) * 0.2;
+  // Side-on leaping pose while airborne, front-facing sit when grounded.
+  const frame = lift > 0.5 ? 'hop' : 'sit';
   return (
     <g transform={`translate(${x}, ${y - lift}) scale(${dir}, 1)`}>
       {/* shadow on the ground, shrinking as the bunny rises */}
       <ellipse cx={0} cy={lift} rx={9 - lift * 0.06} ry={3} fill="#000000" opacity={0.14} />
-      <g transform={`scale(1, ${stretch})`}>
-        {/* ears */}
-        <ellipse cx={-4} cy={-30} rx={2.6} ry={9} fill="var(--bg-primary)" stroke={COLORS.start} strokeWidth={1.8} transform={`rotate(${-earLean} -4 -24)`} />
-        <ellipse cx={4} cy={-30} rx={2.6} ry={9} fill="var(--bg-primary)" stroke={COLORS.start} strokeWidth={1.8} transform={`rotate(${-earLean} 4 -24)`} />
-        {/* body */}
-        <ellipse cx={0} cy={-6} rx={8.5} ry={7} fill="var(--bg-primary)" stroke={COLORS.start} strokeWidth={1.8} />
-        {/* tail */}
-        <circle cx={-8} cy={-5} r={2.4} fill="var(--bg-primary)" stroke={COLORS.start} strokeWidth={1.4} />
-        {/* head */}
-        <circle cx={2} cy={-18} r={7} fill="var(--bg-primary)" stroke={COLORS.start} strokeWidth={1.8} />
-        {/* eye + nose */}
-        <circle cx={4.5} cy={-19} r={1.1} fill={COLORS.start} />
-        <circle cx={7.5} cy={-16.5} r={1.3} fill={COLORS.target} />
-      </g>
+      <BunnySprite frame={frame} cell={2.5} />
     </g>
   );
 }

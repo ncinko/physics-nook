@@ -13,7 +13,10 @@ import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro
 import { VectorAdditionDemo, VectorReaderDemo } from '../../components/math/VectorDemos';
 import { VectorVoyage } from '../../components/math/VectorVoyage';
 import { BunnyNumberLine } from '../../components/math/BunnyNumberLine';
+import { BunnyCompanion } from '../../components/math/BunnyCompanion';
 import { mathPath } from '../../data/modules';
+
+<BunnyCompanion client:only="react" />
 
 <ModuleHero module={mathPath} currentPath="/math/vectors" />
 

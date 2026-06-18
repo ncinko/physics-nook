@@ -6,6 +6,7 @@ import {
   hopStaysOnLine,
   totalHop,
 } from '../../lib/math/bunnyHops';
+import { BunnySprite } from './BunnySprite';
 
 const VIEW_WIDTH = 640;
 const VIEW_HEIGHT = 260;
@@ -348,25 +349,11 @@ function Carrot({ value, reached }: { value: number; reached: boolean }) {
 
 function Bunny({ x, lift, dir }: { x: number; lift: number; dir: number }) {
   const footY = BASELINE_Y - 2 - lift;
-  // Stretch upward while airborne and lean the ears back into the hop.
-  const stretch = 1 + Math.min(lift, 64) * 0.004;
-  const earLean = Math.min(lift, 64) * 0.18;
+  // Side-on leaping pose while airborne, front-facing sit when grounded.
+  const frame = lift > 0.5 ? 'hop' : 'sit';
   return (
     <g transform={`translate(${x}, ${footY}) scale(${dir}, 1)`}>
-      <g transform={`scale(1, ${stretch})`}>
-        {/* ears */}
-        <ellipse cx={-5 - earLean * 0.3} cy={-46} rx={3.5} ry={12} fill="var(--bg-primary)" stroke={COLORS.bunny} strokeWidth={2} transform={`rotate(${-earLean} -5 -40)`} />
-        <ellipse cx={5 - earLean * 0.3} cy={-46} rx={3.5} ry={12} fill="var(--bg-primary)" stroke={COLORS.bunny} strokeWidth={2} transform={`rotate(${-earLean} 5 -40)`} />
-        {/* body */}
-        <ellipse cx={0} cy={-8} rx={11} ry={9} fill="var(--bg-primary)" stroke={COLORS.bunny} strokeWidth={2} />
-        {/* tail */}
-        <circle cx={-10} cy={-7} r={3} fill="var(--bg-primary)" stroke={COLORS.bunny} strokeWidth={1.5} />
-        {/* head */}
-        <circle cx={2} cy={-26} r={9} fill="var(--bg-primary)" stroke={COLORS.bunny} strokeWidth={2} />
-        {/* eye + nose */}
-        <circle cx={5} cy={-27} r={1.4} fill={COLORS.bunny} />
-        <circle cx={9} cy={-24} r={1.6} fill={COLORS.carrot} />
-      </g>
+      <BunnySprite frame={frame} cell={3} />
     </g>
   );
 }

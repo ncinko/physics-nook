@@ -1,19 +1,28 @@
 import assert from 'node:assert/strict';
 import { createRng } from '../../src/lib/caerbannog/rng.ts';
 import {
-  UPGRADES,
-  applyUpgrade,
-  type UpgradeId,
+  BLESSINGS,
+  SHOP,
+  applyBlessing,
+  canBuy,
+  type BlessingId,
 } from '../../src/lib/caerbannog/upgrades.ts';
-import { waveConfig } from '../../src/lib/caerbannog/waves.ts';
+import { isBlessingWave, waveConfig } from '../../src/lib/caerbannog/waves.ts';
 import {
   WORLD,
-  chooseUpgrade,
+  blastDamage,
+  buyDefense,
+  caltropsDps,
+  caltropsSlow,
+  chooseBlessing,
   createGame,
+  goldForKill,
   landingPoint,
-  offerUpgrades,
+  nextWave,
+  offerBlessings,
   startGame,
   step,
+  timStats,
   throwGrenade,
   timeToGround,
   trajectoryPoints,
@@ -116,7 +125,11 @@ const rabbitAt = (x: number, hp = 1): Rabbit => ({
   speed: 0,
 });
 
-// --- Blast hit vs miss ---
+// --- Blast proximity damage, hit, and miss ---
+near(blastDamage(2, 0, 10), 3);
+near(blastDamage(2, 5, 10), 2);
+near(blastDamage(2, 10, 10), 1);
+near(blastDamage(2, 10.1, 10), 0);
 {
   const hit = playing({
     rabbits: [rabbitAt(50)],
@@ -125,7 +138,14 @@ const rabbitAt = (x: number, hp = 1): Rabbit => ({
   const after = step(hit, 50);
   assert.equal(after.rabbits.length, 0, 'rabbit in the blast radius is destroyed');
   assert.equal(after.score, 1, 'destroying a rabbit scores');
+  assert.equal(after.gold, goldForKill(1), 'destroying a rabbit awards gold');
   assert.equal(after.explosions.length, 1, 'a blast leaves an explosion flash');
+
+  const hoppingHit = playing({
+    rabbits: [{ ...rabbitAt(50, 1.5), y: 2 }],
+    grenades: [{ id: 2, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  assert.equal(step(hoppingHit, 50).rabbits.length, 0, 'visual hop height does not weaken a direct hit');
 
   const miss = playing({
     rabbits: [rabbitAt(80)],
@@ -166,19 +186,30 @@ const rabbitAt = (x: number, hp = 1): Rabbit => ({
   assert.equal(reloading.stats.ammo, 1, 'reload regenerates a grenade');
 }
 
-// --- Wave clear -> intermission -> next wave ---
+// --- Wave clear -> blessing/shop intermission -> next wave ---
 {
   const cleared = playing({ pending: 0 });
   const inter = step(cleared, 16);
   assert.equal(inter.phase, 'intermission', 'clearing a wave starts intermission');
-  assert.equal(inter.offer.length, 3, 'intermission offers three upgrades');
-  assert.equal(new Set(inter.offer).size, 3, 'upgrade offers are distinct');
+  assert.ok(inter.gold > 0, 'clearing a wave awards a gold purse');
+  assert.equal(inter.blessingPending, true, 'wave 1 grants a blessing');
+  assert.equal(inter.offer.length, 3, 'blessing intermission offers three choices');
+  assert.equal(new Set(inter.offer).size, 3, 'blessing offers are distinct');
   assert.equal(inter.bestWave, 1, 'best wave is recorded');
 
-  const next = chooseUpgrade(inter, inter.offer[0]);
-  assert.equal(next.phase, 'playing', 'choosing an upgrade resumes play');
+  assert.equal(nextWave(inter), inter, 'next wave is blocked until the blessing is chosen');
+  const blessed = chooseBlessing(inter, inter.offer[0]);
+  assert.equal(blessed.phase, 'intermission', 'choosing a blessing leaves time to shop');
+  assert.equal(blessed.blessingPending, false, 'blessing requirement is satisfied');
+  const next = nextWave(blessed);
+  assert.equal(next.phase, 'playing', 'continue starts play after shopping');
   assert.equal(next.wave, 2, 'the next wave begins');
   assert.equal(next.pending, waveConfig(2).count, 'the next wave is armed');
+
+  const ordinary = step(playing({ wave: 2, pending: 0 }), 16);
+  assert.equal(ordinary.phase, 'intermission');
+  assert.equal(ordinary.blessingPending, false, 'wave 2 does not grant a blessing');
+  assert.deepEqual(ordinary.offer, [], 'ordinary intermissions have no blessing cards');
 }
 
 // --- Game over when the keep falls ---
@@ -195,10 +226,10 @@ const rabbitAt = (x: number, hp = 1): Rabbit => ({
 
 console.log('Caerbannog game step tests passed.');
 
-// --- Upgrades apply to the right field ---
+// --- Blessings affect grenades only ---
 {
   const base = () => ({ ...startGame(createGame(7)).stats });
-  const checks: Record<UpgradeId, (after: ReturnType<typeof base>, before: ReturnType<typeof base>) => void> = {
+  const checks: Record<BlessingId, (after: ReturnType<typeof base>, before: ReturnType<typeof base>) => void> = {
     'bigger-blast': (a, b) => near(a.blastRadius, b.blastRadius + 3),
     'faster-reload': (a, b) => assert.ok(a.reload < b.reload, 'reload speeds up'),
     'extra-ammo': (a, b) => {
@@ -206,30 +237,67 @@ console.log('Caerbannog game step tests passed.');
       assert.equal(a.ammo, b.ammo + 1);
     },
     'short-fuse': (a, b) => assert.ok(a.fuseTime < b.fuseTime, 'fuse shortens'),
-    'repair-wall': (a, b) => {
-      assert.equal(a.maxCastleHp, b.maxCastleHp + 1);
-      assert.equal(a.castleHp, a.maxCastleHp);
-    },
     'holy-shrapnel': (a, b) => assert.equal(a.damage, b.damage + 1),
-    caltrops: (a, b) => assert.ok(a.rabbitSpeedMult < b.rabbitSpeedMult, 'rabbits slow down'),
   };
-  for (const upgrade of UPGRADES) {
+  for (const blessing of BLESSINGS) {
     const before = base();
     const after = base();
-    applyUpgrade(after, upgrade.id);
-    checks[upgrade.id](after, before);
+    applyBlessing(after, blessing.id);
+    checks[blessing.id](after, before);
   }
-  // Every offerable upgrade has a check above.
-  assert.equal(Object.keys(checks).length, UPGRADES.length, 'all upgrades are covered');
+  assert.equal(Object.keys(checks).length, BLESSINGS.length, 'all blessings are covered');
 }
 
-// offerUpgrades only returns real upgrade ids.
+// offerBlessings only returns real, distinct blessing ids.
 {
-  const ids = new Set(UPGRADES.map((u) => u.id));
-  const offered = offerUpgrades(createRng(99));
+  const ids = new Set(BLESSINGS.map((item) => item.id));
+  const offered = offerBlessings(createRng(99));
+  assert.equal(new Set(offered).size, offered.length);
   for (const id of offered) {
-    assert.ok(ids.has(id), 'offered upgrade exists');
+    assert.ok(ids.has(id), 'offered blessing exists');
   }
 }
 
-console.log('Caerbannog upgrade tests passed.');
+// --- Gold shop and static-defense behavior ---
+{
+  const intermission = { ...startGame(createGame(4)), phase: 'intermission' as const, gold: 100 };
+  for (const item of SHOP) {
+    assert.ok(canBuy(intermission.stats, intermission.gold, item.id), `${item.id} is purchasable`);
+    const bought = buyDefense(intermission, item.id);
+    assert.equal(item.level(bought.stats), 1, `${item.id} gains a level`);
+    assert.equal(bought.gold, intermission.gold - item.cost(0), `${item.id} deducts its cost`);
+  }
+  assert.equal(buyDefense(startGame(createGame(4)), 'tim').stats.timLevel, 0, 'shop is closed during a wave');
+  assert.equal(buyDefense({ ...intermission, gold: 0 }, 'tim').stats.timLevel, 0, 'unaffordable purchase is blocked');
+
+  assert.ok(caltropsSlow(2) < caltropsSlow(1));
+  assert.ok(caltropsDps(2) > caltropsDps(1));
+  const trapped = playing({
+    rabbits: [rabbitAt(WORLD.keepX + 8, 10)],
+    stats: { ...startGame(createGame(7)).stats, caltropsLevel: 2 },
+  });
+  const afterTrap = step(trapped, 50);
+  assert.ok(afterTrap.rabbits[0].hp < 10, 'caltrops bleed rabbits in their zone');
+
+  const defended = playing({
+    rabbits: [rabbitAt(50, 10)],
+    stats: { ...startGame(createGame(7)).stats, timLevel: 1, timCooldown: 0 },
+  });
+  const afterTim = step(defended, 16);
+  assert.equal(afterTim.zaps.length, 1, 'Tim casts at the frontmost rabbit');
+  near(afterTim.rabbits[0].hp, 10 - timStats(1).damage);
+}
+
+// --- Difficulty grows smoothly alongside the player's upgrade opportunities ---
+{
+  let previousHp = 0;
+  for (let wave = 1; wave <= 30; wave += 1) {
+    const cfg = waveConfig(wave);
+    assert.ok(cfg.hp > previousHp, `wave ${wave} HP grows continuously`);
+    previousHp = cfg.hp;
+    assert.equal(isBlessingWave(wave), [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].includes(wave));
+  }
+  assert.ok(waveConfig(20).hp > waveConfig(10).hp * 1.7, 'late-game toughness keeps climbing');
+}
+
+console.log('Caerbannog progression tests passed.');

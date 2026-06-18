@@ -16,16 +16,24 @@ import {
 } from '../../../lib/math/vectors';
 import {
   WORLD,
-  chooseUpgrade,
+  buyDefense,
+  chooseBlessing,
   createGame,
   landingPoint,
+  nextWave,
   startGame,
   step,
   throwGrenade,
   trajectoryPoints,
   type GameState,
 } from '../../../lib/caerbannog/game';
-import { UPGRADES, type UpgradeId } from '../../../lib/caerbannog/upgrades';
+import {
+  BLESSINGS,
+  SHOP,
+  canBuy,
+  type BlessingId,
+  type ShopId,
+} from '../../../lib/caerbannog/upgrades';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
 import { GRENADE_SPRITE, KEEP_SPRITE, type PixelSprite } from './sprites';
 
@@ -41,8 +49,9 @@ const W_MIN_Y = 0;
 const W_MAX_Y = 45;
 
 const SX = PLOT_W / (W_MAX_X - W_MIN_X); // screen px per world unit (x)
+const SY = PLOT_H / (W_MAX_Y - W_MIN_Y); // screen px per world unit (y)
 const sx = (wx: number) => MARGIN + (wx - W_MIN_X) * SX;
-const sy = (wy: number) => MARGIN + ((W_MAX_Y - wy) / (W_MAX_Y - W_MIN_Y)) * PLOT_H;
+const sy = (wy: number) => MARGIN + (W_MAX_Y - wy) * SY;
 
 const MAX_POWER = 80; // clamp on the drawn launch velocity
 const STORAGE_KEY = 'caerbannog:bestWave';
@@ -165,7 +174,9 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   };
 
   const begin = () => setGame((prev) => startGame(prev));
-  const pick = (id: UpgradeId) => setGame((prev) => chooseUpgrade(prev, id));
+  const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
+  const purchase = (id: ShopId) => setGame((prev) => buyDefense(prev, id));
+  const continueSiege = () => setGame((prev) => nextWave(prev));
   const restart = () => {
     seedRef.current = Math.floor(Math.random() * 1e9);
     setGame(() => startGame(createGame(seedRef.current)));
@@ -185,7 +196,11 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
         <Hud state={state} best={best} />
       </div>
 
-      <div className="relative overflow-hidden rounded-xl border border-[var(--grid-line)] shadow-inner">
+      <div
+        className={`relative overflow-hidden rounded-xl border border-[var(--grid-line)] shadow-inner ${
+          state.phase === 'playing' ? '' : 'min-h-[70vh] sm:min-h-0'
+        }`}
+      >
         <svg
           viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
           role="img"
@@ -203,26 +218,71 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           <g transform={`translate(${sx(WORLD.keepX - 4)}, ${sy(0) - (KEEP_SPRITE.rows / 2) * 3})`}>
             <Pixels sprite={KEEP_SPRITE} cell={3} />
           </g>
+          {stats.maxCastleHp > 5 && <KeepReinforcements level={stats.maxCastleHp - 5} />}
+          {stats.caltropsLevel > 0 && <Caltrops level={stats.caltropsLevel} />}
+          {stats.timLevel > 0 && <Tim level={stats.timLevel} />}
           <Catapult />
 
-          {/* Explosions (behind rabbits/grenades so sprites stay readable). */}
+          {/* Explosions (behind rabbits/grenades so sprites stay readable).
+              Drawn at the TRUE kill radius from frame one — a world circle, which
+              is an ellipse on screen because x/y use different scales — so the
+              visible blast matches exactly what took damage at detonation. The
+              outer ring marks the kill boundary; the whole thing just fades out. */}
           {state.explosions.map((boom) => {
             const t = boom.age / boom.ttl;
-            const r = boom.radius * SX * (0.4 + 0.6 * t);
+            const cx = sx(boom.pos.x);
+            const cy = sy(boom.pos.y);
+            const rx = boom.radius * SX;
+            const ry = boom.radius * SY;
+            const ring = 1 + 0.18 * t; // a shockwave that expands slightly as it fades
             return (
-              <g key={boom.id} opacity={1 - t}>
-                <circle cx={sx(boom.pos.x)} cy={sy(boom.pos.y)} r={r} fill={COLORS.blast} opacity={0.5} />
-                <circle cx={sx(boom.pos.x)} cy={sy(boom.pos.y)} r={r * 0.6} fill="#fde68a" />
+              <g key={boom.id}>
+                <ellipse cx={cx} cy={cy} rx={rx * ring} ry={ry * ring} fill="none" stroke={COLORS.blast} strokeWidth={2.5} opacity={(1 - t) * 0.85} />
+                <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={COLORS.blast} opacity={(1 - t) * 0.5} />
+                <ellipse cx={cx} cy={cy} rx={rx * 0.5} ry={ry * 0.5} fill="#fde68a" opacity={1 - t} />
               </g>
             );
           })}
 
-          {state.rabbits.map((rabbit) => (
-            <g
-              key={rabbit.id}
-              transform={`translate(${sx(rabbit.x)}, ${sy(rabbit.y)}) scale(-1, 1)`}
-            >
-              <BunnySprite frame="hop" cell={2} palette={KILLER_PALETTE} />
+          {state.rabbits.map((rabbit) => {
+            const px = sx(rabbit.x);
+            const py = sy(rabbit.y);
+            // Tougher rabbits (more max hp) are drawn a little bigger.
+            const cell = 2 + Math.min(rabbit.maxHp - 1, 3) * 0.25;
+            return (
+              <g key={rabbit.id}>
+                {/* scaled -1 to face the keep; sprite is authored facing right */}
+                <g transform={`translate(${px}, ${py}) scale(-1, 1)`}>
+                  <BunnySprite frame="hop" cell={cell} palette={KILLER_PALETTE} />
+                </g>
+                {rabbit.maxHp > 1 && (
+                  <RabbitHealth x={px} topY={py - 16 * cell - 6} hp={rabbit.hp} maxHp={rabbit.maxHp} />
+                )}
+              </g>
+            );
+          })}
+
+          {state.zaps.map((zap) => (
+            <g key={zap.id} opacity={1 - zap.age / zap.ttl}>
+              <line
+                x1={sx(zap.from.x)}
+                y1={sy(zap.from.y)}
+                x2={sx(zap.to.x)}
+                y2={sy(zap.to.y)}
+                stroke="#fb923c"
+                strokeWidth={6}
+                strokeLinecap="round"
+                opacity={0.45}
+              />
+              <line
+                x1={sx(zap.from.x)}
+                y1={sy(zap.from.y)}
+                x2={sx(zap.to.x)}
+                y2={sy(zap.to.y)}
+                stroke="#fde68a"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
             </g>
           ))}
 
@@ -270,7 +330,8 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               That&apos;s no ordinary rabbit. Waves of the beasts pour from the Cave of
               Caerbannog toward Arthur&apos;s keep. Lob the Holy Hand Grenade of Antioch by
               dragging a launch <em>vector</em> from the catapult — angle and power both
-              matter. Survive each wave to claim a blessing.
+              matter. Close blasts hit hardest. Spend gold between waves on the keep&apos;s
+              defenses; sacred blessings improve only your grenades.
             </p>
             <button type="button" onClick={begin} className={primaryBtn}>
               Begin the Siege
@@ -280,29 +341,74 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
         {state.phase === 'intermission' && (
           <Overlay>
-            <p className="m-0 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
-              Wave {state.wave} repelled
-            </p>
-            <h2 className="mt-1 mb-0 text-2xl font-black text-white">Choose a Blessing</h2>
-            <div className="mt-4 grid w-full max-w-2xl gap-3 sm:grid-cols-3">
-              {state.offer.map((id) => {
-                const upgrade = UPGRADES.find((u) => u.id === id)!;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => pick(id)}
-                    className="flex flex-col gap-1 rounded-xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 text-left text-[var(--text-primary)] transition hover:border-[var(--accent-blue)] hover:shadow-md"
-                  >
-                    <span className="text-sm font-bold text-[var(--text-primary)]">
-                      {upgrade.name}
-                    </span>
-                    <span className="text-xs leading-5 text-[var(--text-muted)]">
-                      {upgrade.description}
-                    </span>
-                  </button>
-                );
-              })}
+            <div className="mx-auto flex w-full max-w-3xl flex-col items-center py-3">
+              <p className="m-0 text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">
+                Wave {state.wave} repelled · {state.gold} gold
+              </p>
+              {state.blessingPending && (
+                <>
+                  <h2 className="mt-1 mb-0 text-xl font-black text-white">Choose a grenade blessing</h2>
+                  <p className="mt-1 mb-0 text-xs text-slate-300">Blessings arrive after waves 1, 4, 7, …</p>
+                  <div className="mt-3 grid w-full gap-2 sm:grid-cols-3">
+                    {state.offer.map((id) => {
+                      const blessing = BLESSINGS.find((item) => item.id === id)!;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => pickBlessing(id)}
+                          className="flex flex-col gap-1 rounded-xl border border-amber-400/50 bg-amber-950/80 p-3 text-left transition hover:border-amber-300 hover:bg-amber-900/80"
+                        >
+                          <span className="text-sm font-bold text-amber-100">{blessing.name}</span>
+                          <span className="text-xs leading-5 text-amber-50/75">{blessing.description}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              <div className="mt-3 flex w-full items-end justify-between gap-3 text-left">
+                <div>
+                  <h2 className="m-0 text-lg font-black text-white">Fortify the keep</h2>
+                  <p className="m-0 text-xs text-slate-300">Static defenses remain for the whole run.</p>
+                </div>
+                <span className="shrink-0 font-mono text-sm font-bold text-amber-300">{state.gold} gold</span>
+              </div>
+              <div className="mt-2 grid w-full gap-2 sm:grid-cols-3">
+                {SHOP.map((item) => {
+                  const level = item.level(stats);
+                  const maxed = level >= item.maxLevel;
+                  const cost = item.cost(level);
+                  const affordable = canBuy(stats, state.gold, item.id);
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => purchase(item.id)}
+                      disabled={!affordable}
+                      className="flex min-h-28 flex-col rounded-xl border border-slate-500/70 bg-slate-950/80 p-3 text-left transition enabled:hover:border-sky-300 enabled:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
+                    >
+                      <span className="flex items-center justify-between gap-2 text-sm font-bold text-white">
+                        {item.name}
+                        <span className="font-mono text-[11px] text-slate-300">Lv {level}/{item.maxLevel}</span>
+                      </span>
+                      <span className="mt-1 text-[11px] leading-4 text-slate-300">{item.detail(level)}</span>
+                      <span className="mt-auto pt-2 font-mono text-xs font-bold text-amber-300">
+                        {maxed ? 'MAXED' : `${cost} gold`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                onClick={continueSiege}
+                disabled={state.blessingPending}
+                className={`${primaryBtn} disabled:cursor-not-allowed disabled:opacity-45`}
+              >
+                {state.blessingPending ? 'Choose a blessing first' : `Begin wave ${state.wave + 1}`}
+              </button>
             </div>
           </Overlay>
         )}
@@ -341,9 +447,73 @@ const ghostBtn =
 
 function Overlay({ children }: { children: ReactNode }) {
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/55 p-4 text-center text-white backdrop-blur-sm">
-      {children}
+    <div className="absolute inset-0 flex flex-col items-center overflow-y-auto bg-black/65 p-4 text-center text-white backdrop-blur-sm">
+      <div className="my-auto flex w-full flex-col items-center">{children}</div>
     </div>
+  );
+}
+
+// A fixed-width, continuous bar remains readable when late-wave HP reaches the
+// double digits. Fractional damage is represented by the exact fill width.
+function RabbitHealth({ x, topY, hp, maxHp }: { x: number; topY: number; hp: number; maxHp: number }) {
+  const width = 38;
+  const height = 4;
+  const startX = x - width / 2;
+  const ratio = Math.max(0, Math.min(1, hp / maxHp));
+  const fill = ratio > 0.6 ? '#4ade80' : ratio > 0.3 ? '#facc15' : '#f87171';
+  return (
+    <g shapeRendering="crispEdges">
+      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="rgba(15,23,42,0.75)" />
+      <rect x={startX} y={topY} width={width * ratio} height={height} rx={1} fill={fill} />
+      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="none" stroke="#0f172a" strokeWidth={0.75} />
+    </g>
+  );
+}
+
+function KeepReinforcements({ level }: { level: number }) {
+  return (
+    <g aria-label={`Keep reinforcement level ${level}`}>
+      <rect
+        x={sx(0.8)}
+        y={sy(6.8)}
+        width={sx(7.4) - sx(0.8)}
+        height={sy(0) - sy(6.8)}
+        fill="none"
+        stroke="#cbd5e1"
+        strokeWidth={Math.min(5, 1.5 + level * 0.55)}
+        opacity={0.45 + Math.min(level, 4) * 0.1}
+      />
+    </g>
+  );
+}
+
+function Caltrops({ level }: { level: number }) {
+  const count = 8 + level * 3;
+  const edge = WORLD.keepX + WORLD.caltropsZone;
+  return (
+    <g aria-label={`Caltrops level ${level}`} stroke="#d1d5db" strokeWidth={1 + level * 0.15} opacity={0.8}>
+      {Array.from({ length: count }, (_, i) => {
+        const x = WORLD.keepX + 1.2 + ((i * 7.1) % (WORLD.caltropsZone - 2));
+        const px = sx(Math.min(x, edge));
+        const py = sy(0) - 1 - (i % 2) * 2;
+        return <path key={i} d={`M ${px - 4} ${py} L ${px} ${py - 7} L ${px + 4} ${py}`} fill="none" />;
+      })}
+    </g>
+  );
+}
+
+function Tim({ level }: { level: number }) {
+  const x = sx(WORLD.tim.x);
+  const y = sy(WORLD.tim.y);
+  return (
+    <g aria-label={`Tim the Enchanter level ${level}`} transform={`translate(${x}, ${y})`}>
+      <path d="M -12 10 Q 0 -12 12 10 Z" fill="#7c3aed" stroke="#312e81" strokeWidth={2} />
+      <circle cx={0} cy={-8} r={6} fill="#fed7aa" />
+      <path d="M -10 -11 L 0 -27 L 10 -11 Z" fill="#1d4ed8" stroke="#172554" strokeWidth={2} />
+      <circle cx={2} cy={-20} r={1.8 + level * 0.35} fill="#fbbf24" />
+      <line x1={9} y1={4} x2={17} y2={-19} stroke="#78350f" strokeWidth={3} strokeLinecap="round" />
+      <circle cx={18} cy={-21} r={2.5 + level * 0.4} fill="#fb923c" />
+    </g>
   );
 }
 
@@ -448,6 +618,9 @@ function Hud({ state, best }: { state: GameState; best: number }) {
       </span>
       <span className="text-[var(--text-muted)]">
         felled <span className="font-semibold text-[var(--text-primary)]">{state.score}</span>
+      </span>
+      <span title="Gold available for defenses" className="font-semibold text-amber-500">
+        {state.gold} gold
       </span>
       {best > 0 && <span className="text-[var(--text-muted)]">best W{best}</span>}
     </div>

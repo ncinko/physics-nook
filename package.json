@@ -20,13 +20,14 @@
     "game:server": "node --experimental-strip-types apps/server/src/server.ts",
     "game:server:watch": "node --experimental-strip-types --watch apps/server/src/server.ts",
     "test:kinematics": "node --experimental-strip-types tests/kinematics/run-tests.ts",
+    "test:math": "node --experimental-strip-types tests/math/run-tests.ts",
     "test:forces": "node --experimental-strip-types tests/forces/run-tests.ts",
     "test:quantum": "node --experimental-strip-types tests/quantum/run-tests.ts",
     "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
     "test:oscillations": "node --experimental-strip-types tests/oscillations/run-tests.ts",
     "test:ripple": "node --experimental-strip-types tests/ripple/run-tests.ts",
     "test:solar": "node --experimental-strip-types tests/solar/run-tests.ts",
-    "test:all": "npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:oscillations && npm run test:ripple && npm run test:solar"
+    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:oscillations && npm run test:ripple && npm run test:solar"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

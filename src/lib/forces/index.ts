@@ -1,7 +1,27 @@
-export interface Vector2 {
-  x: number;
-  y: number;
-}
+import {
+  add,
+  dot,
+  magnitude,
+  normalize,
+  scale,
+  subtract,
+  ZERO_VECTOR,
+  type Vector2,
+} from '../math/vectors.ts';
+
+export {
+  add,
+  clampMagnitude,
+  dot,
+  magnitude,
+  normalize,
+  project,
+  reject,
+  scale,
+  subtract,
+  ZERO_VECTOR,
+  type Vector2,
+} from '../math/vectors.ts';
 
 export interface BodyState {
   position: Vector2;
@@ -23,51 +43,8 @@ export interface WallImpulse {
   normal: Vector2;
 }
 
-export const ZERO_VECTOR: Vector2 = { x: 0, y: 0 };
-
-export const add = (a: Vector2, b: Vector2): Vector2 => ({ x: a.x + b.x, y: a.y + b.y });
-
-export const subtract = (a: Vector2, b: Vector2): Vector2 => ({ x: a.x - b.x, y: a.y - b.y });
-
-export const scale = (vector: Vector2, scalar: number): Vector2 => ({
-  x: vector.x * scalar,
-  y: vector.y * scalar,
-});
-
-export const dot = (a: Vector2, b: Vector2) => a.x * b.x + a.y * b.y;
-
-export const magnitude = (vector: Vector2) => Math.hypot(vector.x, vector.y);
-
-export const normalize = (vector: Vector2, fallback: Vector2 = { x: 1, y: 0 }): Vector2 => {
-  const length = magnitude(vector);
-
-  if (length === 0) {
-    return fallback;
-  }
-
-  return scale(vector, 1 / length);
-};
-
 export const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
-
-export const clampMagnitude = (vector: Vector2, maxMagnitude: number): Vector2 => {
-  const length = magnitude(vector);
-
-  if (length <= maxMagnitude || length === 0) {
-    return vector;
-  }
-
-  return scale(vector, maxMagnitude / length);
-};
-
-export const project = (vector: Vector2, axis: Vector2): Vector2 => {
-  const unit = normalize(axis);
-  return scale(unit, dot(vector, unit));
-};
-
-export const reject = (vector: Vector2, axis: Vector2): Vector2 =>
-  subtract(vector, project(vector, axis));
 
 export const netForce = (forces: Vector2[]): Vector2 =>
   forces.reduce((total, force) => add(total, force), ZERO_VECTOR);

@@ -19,6 +19,7 @@ export const interactiveKindLabels: Record<InteractiveKind, string> = {
 
 export const interactiveModuleOrder = [
   'Featured',
+  'Math',
   'Mechanics',
   'Relativity',
   'Oscillations',
@@ -27,6 +28,42 @@ export const interactiveModuleOrder = [
 ];
 
 export const interactiveEntries: InteractiveEntry[] = [
+  {
+    id: 'bunny-number-line',
+    title: 'Bunny on the Number Line',
+    description: 'Hop a bunny along a number line to meet vectors as one-dimensional hops that add up.',
+    href: '/math/vectors#bunny-number-line',
+    module: 'Math',
+    kind: 'inline',
+    tags: ['vectors', 'addition', 'number-line'],
+  },
+  {
+    id: 'vector-reader',
+    title: 'Vector Reader',
+    description: 'Drag a vector on a grid and read its components, magnitude, and direction.',
+    href: '/math/vectors#vector-reader',
+    module: 'Math',
+    kind: 'inline',
+    tags: ['vectors', 'components', 'magnitude'],
+  },
+  {
+    id: 'vector-addition',
+    title: 'Vector Addition',
+    description: 'Compare head-to-tail vector addition with symbolic component addition.',
+    href: '/math/vectors#vector-addition',
+    module: 'Math',
+    kind: 'inline',
+    tags: ['vectors', 'addition', 'components'],
+  },
+  {
+    id: 'vector-voyage',
+    title: 'Bunny Hops Cross-Country',
+    description: 'Chain head-to-tail hop vectors to guide a bunny around hedges to the carrot.',
+    href: '/math/vectors#vector-voyage',
+    module: 'Math',
+    kind: 'inline',
+    tags: ['vectors', 'addition', 'head-to-tail', 'puzzle'],
+  },
   {
     id: 'velocity-explorer',
     title: 'Velocity Explorer',

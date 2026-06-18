@@ -1,0 +1,162 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Vectors
+description: Learn to read vectors by their components, magnitude, and direction, and to add them head-to-tail, starting from hops on a number line.
+canonicalPath: /math/vectors
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { VectorAdditionDemo, VectorReaderDemo } from '../../components/math/VectorDemos';
+import { VectorVoyage } from '../../components/math/VectorVoyage';
+import { BunnyNumberLine } from '../../components/math/BunnyNumberLine';
+import { mathPath } from '../../data/modules';
+
+<ModuleHero module={mathPath} currentPath="/math/vectors" />
+
+<div id="page-content"></div>
+
+# Vectors
+
+A **scalar** is described by one number. Mass, temperature, and time are scalars. A **vector** needs both a size and a direction. Displacement, velocity, acceleration, and force are vectors.
+
+You have actually been working with vectors since grade school. When you first learned addition, a bunny hopped along a number line: start at $0$, hop $+3$, then hop $+2$, and land on $5$. Each hop has a **size** (how far) and a **direction** (right for positive, left for negative). That is already a vector — it just lives on a one-dimensional line.
+
+<InteractiveAnchor id="bunny-number-line" />
+
+<BunnyNumberLine client:visible />
+
+Give the bunny a second way to hop — up and down as well as left and right — and a one-dimensional hop becomes a two-dimensional **vector**. The rest of this page is really the bunny learning to hop anywhere on the plane.
+
+We draw a vector as an arrow. The tail marks where the arrow starts, the tip marks where it ends, and the arrow's length represents the vector's magnitude. Moving the whole arrow without turning or stretching it does not change the vector.
+
+<InteractiveAnchor id="vector-reader" />
+
+<VectorReaderDemo client:visible />
+
+## Components
+
+In two dimensions, a vector can be described by its horizontal and vertical pieces:
+
+$$
+\vec{a} = \langle a_x, a_y \rangle.
+$$
+
+The same vector can also be written with unit vectors:
+
+$$
+\vec{a} = a_x\hat{i} + a_y\hat{j}.
+$$
+
+Here, $\hat{i}$ points in the positive $x$ direction and $\hat{j}$ points in the positive $y$ direction. The components tell you how far the vector goes sideways and how far it goes vertically.
+
+The magnitude of a vector is the length of the arrow:
+
+$$
+\lVert \vec{a} \rVert = \sqrt{a_x^2 + a_y^2}.
+$$
+
+The direction angle is usually measured counterclockwise from the positive $x$ axis. For free-body diagrams, the most important habit is to keep the components and the drawn arrow consistent.
+
+## Addition
+
+To add vectors graphically, place the tail of the second vector at the tip of the first. The sum points from the original tail to the final tip. This is called **head-to-tail addition**.
+
+Symbolically, add matching components:
+
+$$
+\vec{a} + \vec{b}
+= \langle a_x, a_y \rangle + \langle b_x, b_y \rangle
+= \langle a_x + b_x, a_y + b_y \rangle.
+$$
+
+<InteractiveAnchor id="vector-addition" />
+
+<VectorAdditionDemo client:visible />
+
+Head-to-tail addition is just the bunny taking several hops in a row. In the puzzle below, each hop is a vector, and the bunny only reaches the carrot when the hops' components sum to the burrow-to-carrot displacement. The hedges make a single straight hop impossible, so you have to plan the route.
+
+<InteractiveAnchor id="vector-voyage" />
+
+<VectorVoyage client:visible />
+
+<ProblemSolvingSection
+  title="Vector Practice"
+  intro="Use the same component bookkeeping for displacement, velocity, acceleration, and force."
+>
+  <WorkedExampleCard
+    title="Reading a Vector"
+    accent="blue"
+  >
+    #### Problem
+
+    A vector has components $\vec{a} = \langle 3, 4 \rangle$. Find its magnitude.
+
+    #### Use
+
+    $$
+    \lVert \vec{a} \rVert = \sqrt{a_x^2 + a_y^2}.
+    $$
+
+    #### Solve
+
+    $$
+    \lVert \vec{a} \rVert = \sqrt{3^2 + 4^2}
+    = \sqrt{25}
+    = 5.
+    $$
+
+    #### Check
+
+    A vector that moves $3$ units sideways and $4$ units vertically forms a $3$-$4$-$5$ right triangle, so a magnitude of $5$ is reasonable.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Adding Two Hops"
+    accent="blue"
+  >
+    #### Problem
+
+    A bunny hops $\vec{a} = \langle 2, 5 \rangle$, then hops $\vec{b} = \langle -1, 3 \rangle$. Where does it land relative to the start?
+
+    #### Add
+
+    $$
+    \vec{a} + \vec{b}
+    = \langle 2 + (-1), 5 + 3 \rangle
+    = \langle 1, 8 \rangle.
+    $$
+
+    #### Check
+
+    Add matching components: the $x$ values partly cancel to $1$, and the $y$ values build to $8$, so the bunny ends up $\langle 1, 8 \rangle$ from where it started.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Vectors Checkpoint"
+  questions={[
+    {
+      id: 'component-meaning',
+      question: 'What does the vector $\\langle -3, 2 \\rangle$ mean graphically?',
+      options: [
+        { id: 'A', text: 'Move 3 units left and 2 units up.', isCorrect: true, explanation: 'The negative $x$ component points left. The positive $y$ component points up.' },
+        { id: 'B', text: 'Move 3 units right and 2 units down.', isCorrect: false, explanation: 'That would match $\\langle 3, -2 \\rangle$, not $\\langle -3, 2 \\rangle$.' },
+        { id: 'C', text: 'The vector has magnitude $-3 + 2 = -1$.', isCorrect: false, explanation: 'Magnitude is a length, so it is not found by simply adding signed components.' }
+      ]
+    },
+    {
+      id: 'vector-addition-components',
+      question: 'If $\\vec{a}=\\langle 2, 1 \\rangle$ and $\\vec{b}=\\langle -4, 3 \\rangle$, what is $\\vec{a}+\\vec{b}$?',
+      options: [
+        { id: 'B', text: '$\\langle -2, 4 \\rangle$', isCorrect: true, explanation: 'Add matching components: $2 + (-4) = -2$ and $1 + 3 = 4$.' },
+        { id: 'A', text: '$\\langle 6, 4 \\rangle$', isCorrect: false, explanation: 'The $x$ components have opposite signs, so they partially cancel rather than add to $6$.' },
+        { id: 'C', text: '$\\langle -2, -2 \\rangle$', isCorrect: false, explanation: 'The $y$ components are both positive, so the $y$ component of the sum is $4$.' }
+      ]
+    }
+  ]}
+/>

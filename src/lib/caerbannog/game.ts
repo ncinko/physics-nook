@@ -37,15 +37,29 @@ export const WORLD = {
 };
 
 export type GamePhase = 'intro' | 'playing' | 'intermission' | 'gameover';
+export type RabbitKind = 'common' | 'runner' | 'brute' | 'boss';
+
+export interface RabbitTraits {
+  hpMultiplier: number;
+  speedMultiplier: number;
+  staticDamageMultiplier: number;
+  grenadeDamageMultiplier: number;
+  keepDamage: number;
+  bounty: number;
+  scale: number;
+}
 
 export interface Rabbit {
   id: number;
+  kind: RabbitKind;
   x: number; // world x; decreases as it advances on the keep
   y: number; // small visual hop height above the ground
   hopPhase: number; // animation phase for the hop bob
   hp: number; // fractional — proximity damage and DoT are continuous
   maxHp: number;
   speed: number; // world units/sec (before the caltrops slow)
+  keepDamage: number;
+  precisionKill: boolean;
 }
 
 export interface Grenade {
@@ -73,6 +87,15 @@ export interface Zap {
   ttl: number;
 }
 
+export interface RewardPopup {
+  id: number;
+  pos: Vector2;
+  text: string;
+  tone: 'precision' | 'boss';
+  age: number;
+  ttl: number;
+}
+
 export interface GameStats {
   castleHp: number;
   maxCastleHp: number;
@@ -93,10 +116,13 @@ export interface GameState {
   wave: number;
   score: number;
   gold: number; // currency for the static-defense shop
+  waveGoldEarned: number;
+  precisionKillsThisWave: number;
   rabbits: Rabbit[];
   grenades: Grenade[];
   explosions: Explosion[];
   zaps: Zap[];
+  rewardPopups: RewardPopup[];
   stats: GameStats;
   pending: number; // rabbits left to spawn this wave
   spawnTimer: number; // seconds until the next spawn
@@ -105,6 +131,7 @@ export interface GameState {
   rng: Rng;
   nextId: number;
   bestWave: number;
+  announcementTimer: number;
 }
 
 const MAX_DT_MS = 50; // clamp dt so a stalled tab can't tunnel rabbits/grenades
@@ -114,10 +141,13 @@ export const createGame = (seed = 1): GameState => ({
   wave: 0,
   score: 0,
   gold: 0,
+  waveGoldEarned: 0,
+  precisionKillsThisWave: 0,
   rabbits: [],
   grenades: [],
   explosions: [],
   zaps: [],
+  rewardPopups: [],
   stats: {
     castleHp: 5,
     maxCastleHp: 5,
@@ -139,6 +169,7 @@ export const createGame = (seed = 1): GameState => ({
   rng: createRng(seed),
   nextId: 1,
   bestWave: 0,
+  announcementTimer: 0,
 });
 
 // --- Defense tuning ---------------------------------------------------------
@@ -157,6 +188,62 @@ export const timStats = (level: number): { interval: number; damage: number; spl
   splash: 4,
 });
 
+/** Fixed archetype tuning. Wave is used only for the milestone boss bounty. */
+export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
+  if (kind === 'runner') {
+    return {
+      hpMultiplier: 0.65,
+      speedMultiplier: 1.65,
+      staticDamageMultiplier: 1,
+      grenadeDamageMultiplier: 1,
+      keepDamage: 1,
+      bounty: 1,
+      scale: 0.9,
+    };
+  }
+  if (kind === 'brute') {
+    return {
+      hpMultiplier: 2.4,
+      speedMultiplier: 0.72,
+      staticDamageMultiplier: 0.35,
+      grenadeDamageMultiplier: 1.2,
+      keepDamage: 2,
+      bounty: 3,
+      scale: 1.25,
+    };
+  }
+  if (kind === 'boss') {
+    const milestone = Math.max(1, Math.floor(wave / 5));
+    return {
+      hpMultiplier: 4 + milestone * 0.25,
+      speedMultiplier: 0.55,
+      staticDamageMultiplier: 0.15,
+      grenadeDamageMultiplier: 1.25,
+      keepDamage: 3,
+      bounty: 10 + milestone * 2,
+      scale: 1.7,
+    };
+  }
+  return {
+    hpMultiplier: 1,
+    speedMultiplier: 1,
+    staticDamageMultiplier: 1,
+    grenadeDamageMultiplier: 1,
+    keepDamage: 1,
+    bounty: 1,
+    scale: 1,
+  };
+};
+
+/** Learnable one-based spawn pattern: boss, then brute, runner, common. */
+export const rabbitKindForSpawn = (wave: number, spawnIndex: number, count: number): RabbitKind => {
+  const ordinal = spawnIndex + 1;
+  if (wave % 5 === 0 && spawnIndex === count - 1) return 'boss';
+  if (wave >= 7 && ordinal % 6 === 0) return 'brute';
+  if (wave >= 4 && ordinal % 5 === 0) return 'runner';
+  return 'common';
+};
+
 /**
  * Blast damage as a function of how close the rabbit is to the centre: a
  * dead-centre hit deals 1.5× the base, fading linearly to 0.5× at the very
@@ -171,10 +258,14 @@ export const blastDamage = (base: number, dist: number, radius: number): number 
 };
 
 /** Gold awarded for felling a rabbit — tougher rabbits pay out more. */
-export const goldForKill = (maxHp: number): number => 1 + Math.floor(maxHp / 2);
+export const goldForKill = (kind: RabbitKind, wave: number, precision = false): number =>
+  rabbitTraits(kind, wave).bounty + (precision ? 1 : 0);
 
 /** Gold bonus for clearing a wave outright. */
-export const waveClearGold = (wave: number): number => 6 + wave * 3;
+export const waveClearGold = (wave: number): number => 5 + Math.floor(wave / 5) * 2;
+
+/** Repeatable price to repair one lost keep heart between waves. */
+export const repairCost = (wave: number): number => 12 + Math.floor(wave / 5) * 2;
 
 // --- Wave / phase control ---------------------------------------------------
 
@@ -186,6 +277,10 @@ const beginWave = (state: GameState, wave: number): GameState => ({
   spawnTimer: 0.5, // small beat before the first rabbit appears
   offer: [],
   blessingPending: false,
+  waveGoldEarned: 0,
+  precisionKillsThisWave: 0,
+  rewardPopups: [],
+  announcementTimer: wave % 5 === 0 ? 2.8 : 0,
   // Give a short lead-in so Tim doesn't dump a cast the instant the wave opens.
   stats: { ...state.stats, timCooldown: state.stats.timLevel > 0 ? 0.6 : 0 },
 });
@@ -215,6 +310,21 @@ export const buyDefense = (state: GameState, id: ShopId): GameState => {
   return { ...state, stats, gold: state.gold - cost };
 };
 
+export const canRepairKeep = (state: GameState): boolean =>
+  state.phase === 'intermission' &&
+  state.stats.castleHp < state.stats.maxCastleHp &&
+  state.gold >= repairCost(state.wave);
+
+/** Spend gold to restore exactly one heart without increasing maximum health. */
+export const repairKeep = (state: GameState): GameState => {
+  if (!canRepairKeep(state)) return state;
+  return {
+    ...state,
+    gold: state.gold - repairCost(state.wave),
+    stats: { ...state.stats, castleHp: state.stats.castleHp + 1 },
+  };
+};
+
 /** Begin the next wave (blocked until any pending blessing is chosen). */
 export const nextWave = (state: GameState): GameState => {
   if (state.phase !== 'intermission' || state.blessingPending) {
@@ -223,15 +333,29 @@ export const nextWave = (state: GameState): GameState => {
   return beginWave(state, state.wave + 1);
 };
 
-const spawnRabbit = (id: number, cfg: WaveConfig, rng: Rng): Rabbit => ({
-  id,
-  x: WORLD.spawnX + rng.range(0, 6),
-  y: 0,
-  hopPhase: rng.range(0, Math.PI * 2),
-  hp: cfg.hp,
-  maxHp: cfg.hp,
-  speed: cfg.speed * rng.range(0.9, 1.1),
-});
+const spawnRabbit = (
+  id: number,
+  cfg: WaveConfig,
+  wave: number,
+  spawnIndex: number,
+  rng: Rng,
+): Rabbit => {
+  const kind = rabbitKindForSpawn(wave, spawnIndex, cfg.count);
+  const traits = rabbitTraits(kind, wave);
+  const hp = Math.round(cfg.hp * traits.hpMultiplier * 10) / 10;
+  return {
+    id,
+    kind,
+    x: WORLD.spawnX + rng.range(0, 6),
+    y: 0,
+    hopPhase: rng.range(0, Math.PI * 2),
+    hp,
+    maxHp: hp,
+    speed: cfg.speed * traits.speedMultiplier * rng.range(0.9, 1.1),
+    keepDamage: traits.keepDamage,
+    precisionKill: false,
+  };
+};
 
 /** Pick three distinct blessing choices for a blessing intermission. */
 export const offerBlessings = (rng: Rng): BlessingId[] => {
@@ -253,7 +377,13 @@ export const step = (state: GameState, dtMs: number): GameState => {
   const stats = { ...state.stats };
   let score = state.score;
   let gold = state.gold;
+  let waveGoldEarned = state.waveGoldEarned;
+  let precisionKillsThisWave = state.precisionKillsThisWave;
   let nextId = state.nextId;
+  let announcementTimer = Math.max(0, state.announcementTimer - dt);
+  const rewardPopups = state.rewardPopups
+    .map((popup) => ({ ...popup, age: popup.age + dt }))
+    .filter((popup) => popup.age < popup.ttl);
 
   // 1. Reload one grenade at a time.
   if (stats.ammo < stats.maxAmmo) {
@@ -272,7 +402,8 @@ export const step = (state: GameState, dtMs: number): GameState => {
   const cfg = waveConfig(state.wave);
   let rabbits = state.rabbits.map((r) => ({ ...r }));
   if (pending > 0 && spawnTimer <= 0) {
-    rabbits.push(spawnRabbit(nextId, cfg, rng));
+    const spawnIndex = cfg.count - pending;
+    rabbits.push(spawnRabbit(nextId, cfg, state.wave, spawnIndex, rng));
     nextId += 1;
     pending -= 1;
     spawnTimer = cfg.spawnInterval;
@@ -293,7 +424,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   let castleHp = stats.castleHp;
   rabbits = rabbits.filter((r) => {
     if (r.x <= WORLD.keepX) {
-      castleHp -= 1;
+      castleHp -= r.keepDamage;
       return false;
     }
     return true;
@@ -304,7 +435,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   if (dps > 0) {
     for (const r of rabbits) {
       if (r.x <= caltropsEdge) {
-        r.hp -= dps * dt;
+        r.hp -= dps * dt * rabbitTraits(r.kind, state.wave).staticDamageMultiplier;
       }
     }
   }
@@ -347,7 +478,12 @@ export const step = (state: GameState, dtMs: number): GameState => {
       // landed the grenade, not which frame of the rabbit's bob happened to be
       // showing when the fuse expired.
       const dist = Math.abs(r.x - blast.pos.x);
-      r.hp -= blastDamage(stats.damage, dist, blast.radius);
+      const wasAlive = r.hp > 0;
+      const traits = rabbitTraits(r.kind, state.wave);
+      r.hp -= blastDamage(stats.damage, dist, blast.radius) * traits.grenadeDamageMultiplier;
+      if (wasAlive && r.hp <= 0 && dist <= blast.radius * 0.25) {
+        r.precisionKill = true;
+      }
     }
   }
 
@@ -367,7 +503,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
       }
       for (const r of rabbits) {
         if (Math.abs(r.x - target.x) <= tim.splash) {
-          r.hp -= tim.damage;
+          r.hp -= tim.damage * rabbitTraits(r.kind, state.wave).staticDamageMultiplier;
         }
       }
       zaps.push({
@@ -386,7 +522,32 @@ export const step = (state: GameState, dtMs: number): GameState => {
   rabbits = rabbits.filter((r) => {
     if (r.hp <= 0) {
       score += 1;
-      gold += goldForKill(r.maxHp);
+      const reward = goldForKill(r.kind, state.wave, r.precisionKill);
+      gold += reward;
+      waveGoldEarned += reward;
+      if (r.precisionKill) {
+        precisionKillsThisWave += 1;
+        rewardPopups.push({
+          id: nextId,
+          pos: { x: r.x, y: r.y + 5 },
+          text: '+1 PRECISION',
+          tone: 'precision',
+          age: 0,
+          ttl: 0.9,
+        });
+        nextId += 1;
+      }
+      if (r.kind === 'boss') {
+        rewardPopups.push({
+          id: nextId,
+          pos: { x: r.x, y: r.y + 10 },
+          text: `WHITE RABBIT +${rabbitTraits('boss', state.wave).bounty} GOLD`,
+          tone: 'boss',
+          age: 0,
+          ttl: 1.4,
+        });
+        nextId += 1;
+      }
       return false;
     }
     return true;
@@ -403,7 +564,9 @@ export const step = (state: GameState, dtMs: number): GameState => {
     bestWave = Math.max(bestWave, state.wave);
   } else if (pending === 0 && rabbits.length === 0) {
     phase = 'intermission';
-    gold += waveClearGold(state.wave);
+    const clearReward = waveClearGold(state.wave);
+    gold += clearReward;
+    waveGoldEarned += clearReward;
     blessingPending = isBlessingWave(state.wave);
     offer = blessingPending ? offerBlessings(rng) : [];
     bestWave = Math.max(bestWave, state.wave);
@@ -414,10 +577,13 @@ export const step = (state: GameState, dtMs: number): GameState => {
     phase,
     score,
     gold,
+    waveGoldEarned,
+    precisionKillsThisWave,
     rabbits,
     grenades,
     explosions,
     zaps,
+    rewardPopups,
     stats,
     pending,
     spawnTimer,
@@ -425,6 +591,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     blessingPending,
     nextId,
     bestWave,
+    announcementTimer,
   };
 };
 

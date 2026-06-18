@@ -28,13 +28,12 @@ const BASE_SPEED = 7; // world units/sec at wave 1 (field is ~90 units wide)
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 export const waveConfig = (wave: number): WaveConfig => ({
-  count: 3 + Math.floor(wave * 1.2),
-  // Smooth, ever-climbing toughness. ~1.5 hp at wave 1, ~6.5 by wave 10,
-  // ~12 by wave 20 — always a little ahead of a single un-upgraded blast so
-  // the player has to lean on accuracy, blessings, and hired defenses.
-  hp: round1(1.5 + (wave - 1) * 0.55),
-  speed: BASE_SPEED * (1 + (wave - 1) * 0.06),
-  spawnInterval: Math.max(0.4, 1.4 - wave * 0.05),
+  count: 3 + Math.floor(wave),
+  // The quadratic term is gentle early and meaningful after wave 20; enemy
+  // archetypes create the sharper, readable milestone spikes.
+  hp: round1(1.5 + (wave - 1) * 0.45 + (wave - 1) ** 2 * 0.008),
+  speed: Math.min(14, BASE_SPEED * (1 + (wave - 1) * 0.045)),
+  spawnInterval: Math.max(0.45, 1.35 - wave * 0.04),
 });
 
 /** Blessings (grenade upgrades) are granted after waves 1, 4, 7, 10, … */

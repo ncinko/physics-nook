@@ -98,13 +98,19 @@ export interface ShopItem {
   apply: (stats: GameStats) => void;
 }
 
+export const SHOP_COSTS: Record<ShopId, number[]> = {
+  tim: [30, 60, 105, 165],
+  caltrops: [20, 45, 80, 130],
+  keep: [25, 50, 80, 120, 170, 230],
+};
+
 export const SHOP: ShopItem[] = [
   {
     id: 'tim',
     name: 'Tim the Enchanter',
     level: (s) => s.timLevel,
     maxLevel: 4,
-    cost: (level) => 24 + level * 22,
+    cost: (level) => SHOP_COSTS.tim[level] ?? Number.POSITIVE_INFINITY,
     blurb: 'A sorcerer atop the keep who hurls fire at the nearest beast.',
     detail: (level) =>
       level === 0
@@ -119,7 +125,7 @@ export const SHOP: ShopItem[] = [
     name: 'Caltrops',
     level: (s) => s.caltropsLevel,
     maxLevel: 4,
-    cost: (level) => 12 + level * 14,
+    cost: (level) => SHOP_COSTS.caltrops[level] ?? Number.POSITIVE_INFINITY,
     blurb: 'Spikes strewn before the gate: rabbits crossing them slow and bleed.',
     detail: (level) =>
       level === 0
@@ -134,7 +140,7 @@ export const SHOP: ShopItem[] = [
     name: 'Shore Up the Keep',
     level: (s) => s.maxCastleHp - INITIAL_CASTLE_HP,
     maxLevel: 6,
-    cost: (level) => 18 + level * 18,
+    cost: (level) => SHOP_COSTS.keep[level] ?? Number.POSITIVE_INFINITY,
     blurb: 'Masons reinforce the wall and patch the breaches.',
     detail: () => 'Repair the keep to full and add a heart.',
     apply: (s) => {

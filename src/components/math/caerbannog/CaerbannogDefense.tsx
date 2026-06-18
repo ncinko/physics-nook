@@ -17,15 +17,20 @@ import {
 import {
   WORLD,
   buyDefense,
+  canRepairKeep,
   chooseBlessing,
   createGame,
   landingPoint,
   nextWave,
+  rabbitTraits,
+  repairCost,
+  repairKeep,
   startGame,
   step,
   throwGrenade,
   trajectoryPoints,
   type GameState,
+  type RabbitKind,
 } from '../../../lib/caerbannog/game';
 import {
   BLESSINGS,
@@ -64,6 +69,13 @@ const COLORS = {
   cave: '#0f172a',
   aim: '#fbbf24',
   blast: '#f97316',
+};
+
+const RABBIT_PALETTES: Record<RabbitKind, Record<string, string>> = {
+  common: KILLER_PALETTE,
+  runner: { ...KILLER_PALETTE, '#': '#713f12', o: '#fde68a', p: '#fb923c' },
+  brute: { ...KILLER_PALETTE, '#': '#1e293b', o: '#94a3b8', p: '#64748b' },
+  boss: { ...KILLER_PALETTE, '#': '#7f1d1d', o: '#fff7ed', p: '#fca5a5', n: '#dc2626' },
 };
 
 const pointerToWorld = (event: PointerEvent<SVGElement>): Vector2 => {
@@ -176,6 +188,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   const begin = () => setGame((prev) => startGame(prev));
   const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
   const purchase = (id: ShopId) => setGame((prev) => buyDefense(prev, id));
+  const repair = () => setGame((prev) => repairKeep(prev));
   const continueSiege = () => setGame((prev) => nextWave(prev));
   const restart = () => {
     seedRef.current = Math.floor(Math.random() * 1e9);
@@ -247,18 +260,44 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           {state.rabbits.map((rabbit) => {
             const px = sx(rabbit.x);
             const py = sy(rabbit.y);
-            // Tougher rabbits (more max hp) are drawn a little bigger.
-            const cell = 2 + Math.min(rabbit.maxHp - 1, 3) * 0.25;
+            const cell = 2 * rabbitTraits(rabbit.kind, state.wave).scale;
             return (
               <g key={rabbit.id}>
                 {/* scaled -1 to face the keep; sprite is authored facing right */}
                 <g transform={`translate(${px}, ${py}) scale(-1, 1)`}>
-                  <BunnySprite frame="hop" cell={cell} palette={KILLER_PALETTE} />
+                  <BunnySprite frame="hop" cell={cell} palette={RABBIT_PALETTES[rabbit.kind]} />
                 </g>
                 {rabbit.maxHp > 1 && (
-                  <RabbitHealth x={px} topY={py - 16 * cell - 6} hp={rabbit.hp} maxHp={rabbit.maxHp} />
+                  <RabbitHealth
+                    x={px}
+                    topY={py - 16 * cell - 6}
+                    hp={rabbit.hp}
+                    maxHp={rabbit.maxHp}
+                    kind={rabbit.kind}
+                  />
                 )}
               </g>
+            );
+          })}
+
+          {state.rewardPopups.map((popup) => {
+            const t = popup.age / popup.ttl;
+            return (
+              <text
+                key={popup.id}
+                x={sx(popup.pos.x)}
+                y={sy(popup.pos.y) - t * 24}
+                textAnchor="middle"
+                fontSize={popup.tone === 'boss' ? 15 : 12}
+                fontWeight="900"
+                fill={popup.tone === 'boss' ? '#fca5a5' : '#fde68a'}
+                stroke="#0f172a"
+                strokeWidth={3}
+                paintOrder="stroke"
+                opacity={1 - t}
+              >
+                {popup.text}
+              </text>
             );
           })}
 
@@ -321,6 +360,17 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           )}
         </svg>
 
+        {state.phase === 'playing' && state.announcementTimer > 0 && (
+          <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center px-4">
+            <div className="rounded-xl border border-red-400/70 bg-red-950/90 px-5 py-2 text-center text-white shadow-xl">
+              <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-red-200">
+                Milestone wave {state.wave}
+              </p>
+              <p className="m-0 text-base font-black">The White Rabbit approaches</p>
+            </div>
+          </div>
+        )}
+
         {state.phase === 'intro' && (
           <Overlay>
             <h2 className="m-0 text-2xl font-black tracking-tight text-white">
@@ -344,6 +394,10 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             <div className="mx-auto flex w-full max-w-3xl flex-col items-center py-3">
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">
                 Wave {state.wave} repelled · {state.gold} gold
+              </p>
+              <p className="mt-1 mb-0 text-xs text-slate-300">
+                This wave: <strong className="text-amber-300">+{state.waveGoldEarned} gold</strong>
+                {' · '}{state.precisionKillsThisWave} precision {state.precisionKillsThisWave === 1 ? 'kill' : 'kills'}
               </p>
               {state.blessingPending && (
                 <>
@@ -403,6 +457,19 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               </div>
               <button
                 type="button"
+                onClick={repair}
+                disabled={!canRepairKeep(state)}
+                className="mt-2 flex w-full items-center justify-between rounded-lg border border-emerald-500/60 bg-emerald-950/70 px-3 py-2 text-left text-xs text-emerald-100 transition enabled:hover:border-emerald-300 enabled:hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>
+                  <strong>Patch one breach</strong> · restore one keep heart
+                </span>
+                <span className="font-mono font-bold text-amber-300">
+                  {stats.castleHp >= stats.maxCastleHp ? 'KEEP FULL' : `${repairCost(state.wave)} gold`}
+                </span>
+              </button>
+              <button
+                type="button"
                 onClick={continueSiege}
                 disabled={state.blessingPending}
                 className={`${primaryBtn} disabled:cursor-not-allowed disabled:opacity-45`}
@@ -455,17 +522,31 @@ function Overlay({ children }: { children: ReactNode }) {
 
 // A fixed-width, continuous bar remains readable when late-wave HP reaches the
 // double digits. Fractional damage is represented by the exact fill width.
-function RabbitHealth({ x, topY, hp, maxHp }: { x: number; topY: number; hp: number; maxHp: number }) {
-  const width = 38;
-  const height = 4;
+function RabbitHealth({
+  x,
+  topY,
+  hp,
+  maxHp,
+  kind,
+}: {
+  x: number;
+  topY: number;
+  hp: number;
+  maxHp: number;
+  kind: RabbitKind;
+}) {
+  const width = kind === 'boss' ? 68 : kind === 'brute' ? 48 : 38;
+  const height = kind === 'boss' ? 7 : 4;
   const startX = x - width / 2;
   const ratio = Math.max(0, Math.min(1, hp / maxHp));
-  const fill = ratio > 0.6 ? '#4ade80' : ratio > 0.3 ? '#facc15' : '#f87171';
+  const healthy = kind === 'boss' ? '#f87171' : kind === 'brute' ? '#60a5fa' : '#4ade80';
+  const fill = ratio > 0.6 ? healthy : ratio > 0.3 ? '#facc15' : '#fb7185';
+  const stroke = kind === 'boss' ? '#fef2f2' : '#0f172a';
   return (
     <g shapeRendering="crispEdges">
       <rect x={startX} y={topY} width={width} height={height} rx={1} fill="rgba(15,23,42,0.75)" />
       <rect x={startX} y={topY} width={width * ratio} height={height} rx={1} fill={fill} />
-      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="none" stroke="#0f172a" strokeWidth={0.75} />
+      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="none" stroke={stroke} strokeWidth={kind === 'boss' ? 1.5 : 0.75} />
     </g>
   );
 }

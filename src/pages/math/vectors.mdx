@@ -14,9 +14,13 @@ import { VectorAdditionDemo, VectorReaderDemo } from '../../components/math/Vect
 import { VectorVoyage } from '../../components/math/VectorVoyage';
 import { BunnyNumberLine } from '../../components/math/BunnyNumberLine';
 import { BunnyCompanion } from '../../components/math/BunnyCompanion';
+import { CaerbannogLauncher } from '../../components/math/caerbannog/CaerbannogLauncher';
 import { mathPath } from '../../data/modules';
 
 <BunnyCompanion client:only="react" />
+{/* Hidden easter egg: click the companion bunny during its rare red-eyed glare
+    to open the "Rabbit of Caerbannog" defense game. Intentionally unregistered. */}
+<CaerbannogLauncher client:only="react" />
 
 <ModuleHero module={mathPath} currentPath="/math/vectors" />
 

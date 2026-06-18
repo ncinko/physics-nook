@@ -29,6 +29,9 @@ export function BunnyCompanion() {
   const yPxRef = useRef(20); // resting height above the bottom edge
   const liftRef = useRef(0); // extra height while airborne
   const fleeRef = useRef<(() => void) | null>(null); // set by the scheduler; fired on click
+  // True only during the rare red-eyed "glare" window. Clicking the bunny while
+  // this is set opens the hidden Caerbannog defense game instead of fleeing.
+  const glaringRef = useRef(false);
 
   const pixels = useMemo(() => BUNNY_FRAME_PIXELS[frame], [frame]);
 
@@ -55,6 +58,7 @@ export function BunnyCompanion() {
     let fleeing = false;
     let run = 0; // bumped to invalidate the idle loop's pending hops/timers (e.g. on click)
     let rafId: number | null = null;
+    let glareTimer: ReturnType<typeof setTimeout> | null = null;
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
     const later = (fn: () => void, delay: number) => {
@@ -78,6 +82,9 @@ export function BunnyCompanion() {
       const toY = clamp(fromY + rand(-10, 10), 12, 64);
       const dist = Math.abs(toX - fromX);
 
+      // Any movement cancels a glare in progress so a mid-hop click can't open
+      // the game while the bunny no longer looks like it's glaring.
+      glaringRef.current = false;
       setFacing(toX >= fromX ? 1 : -1);
       setFrame('hop');
 
@@ -197,16 +204,50 @@ export function BunnyCompanion() {
     };
     fleeRef.current = flee;
 
+    // The glare runs on its own timer (not the `run`-token hop loop, which
+    // `flee()` invalidates) so it keeps recurring for the whole visit. Every
+    // 10-20s, if the bunny is sitting on the ground, it flashes red eyes for
+    // 1.5s; clicking during that window opens the hidden game (see onClick).
+    const scheduleGlare = () => {
+      glareTimer = setTimeout(runGlare, rand(10000, 20000));
+    };
+    function runGlare() {
+      if (!alive) {
+        return;
+      }
+      if (fleeing || liftRef.current > 0.5) {
+        scheduleGlare(); // busy hopping/fleeing — try again later
+        return;
+      }
+      glaringRef.current = true;
+      setFrame('glare');
+      glareTimer = setTimeout(() => {
+        if (!alive) {
+          return;
+        }
+        if (glaringRef.current) {
+          glaringRef.current = false;
+          // Only drop the glare frame if a hop hasn't already taken over.
+          setFrame((f) => (f === 'glare' ? 'sit' : f));
+        }
+        scheduleGlare();
+      }, 1500);
+    }
+
     const onResize = () => applyTransform();
     window.addEventListener('resize', onResize);
 
     later(startBurst, 900);
+    scheduleGlare();
 
     return () => {
       alive = false;
       fleeRef.current = null;
       if (rafId) {
         cancelAnimationFrame(rafId);
+      }
+      if (glareTimer) {
+        clearTimeout(glareTimer);
       }
       timers.forEach(clearTimeout);
       window.removeEventListener('resize', onResize);
@@ -217,7 +258,16 @@ export function BunnyCompanion() {
     <div
       ref={wrapRef}
       aria-hidden="true"
-      onClick={() => fleeRef.current?.()}
+      onClick={() => {
+        // Easter egg: a click landing during the rare glare opens the hidden
+        // Caerbannog defense game; any other click just makes the bunny flee.
+        if (glaringRef.current) {
+          glaringRef.current = false;
+          window.dispatchEvent(new CustomEvent('caerbannog:open'));
+        } else {
+          fleeRef.current?.();
+        }
+      }}
       style={{
         position: 'fixed',
         pointerEvents: 'none',

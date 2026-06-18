@@ -10,7 +10,13 @@ export const BUNNY_PALETTE: Record<string, string> = {
   p: '#f9a8d4', // inner ear (pink)
   e: '#1f2937', // eye
   n: '#fb7185', // nose (rose)
+  r: '#ef4444', // glaring red eye (killer-rabbit easter egg)
 };
+
+// Same bunny, menacing red eyes. Passed as the `palette` override to BunnySprite
+// so the hidden Caerbannog defense game can reuse every frame without authoring
+// duplicate "killer" pixel art.
+export const KILLER_PALETTE: Record<string, string> = { ...BUNNY_PALETTE, e: '#ef4444' };
 
 // Front-facing sitting bunny: ears up, two feet. Used while paused / grounded.
 const SIT = [
@@ -36,6 +42,10 @@ const SIT = [
 const WIGGLE_R = ['.....###..###...', '.....#p#..#p#...', ...SIT.slice(2)];
 const WIGGLE_L = ['...###..###.....', '...#p#..#p#.....', ...SIT.slice(2)];
 
+// Sitting bunny with red eyes: the rare "glare" the companion flashes to signal
+// that clicking it now opens the hidden game.
+const GLARE = SIT.map((row) => row.replace(/e/g, 'r'));
+
 // Side-on leaping bunny (authored facing right; flip horizontally for left).
 const HOP = [
   '........#####...',
@@ -56,15 +66,18 @@ const HOP = [
   '................',
 ];
 
-export type BunnyFrameName = 'sit' | 'wiggleR' | 'wiggleL' | 'hop';
+export type BunnyFrameName = 'sit' | 'wiggleR' | 'wiggleL' | 'hop' | 'glare';
 export const BUNNY_FRAMES: Record<BunnyFrameName, string[]> = {
   sit: SIT,
   wiggleR: WIGGLE_R,
   wiggleL: WIGGLE_L,
   hop: HOP,
+  glare: GLARE,
 };
 
-export type BunnyPixel = { x: number; y: number; fill: string };
+// `char` is kept alongside the resolved default `fill` so callers can recolor a
+// frame through a palette override (e.g. KILLER_PALETTE) without re-flattening.
+export type BunnyPixel = { x: number; y: number; char: string; fill: string };
 
 // Flatten each frame to its filled pixels once, at module load.
 export const BUNNY_FRAME_PIXELS: Record<BunnyFrameName, BunnyPixel[]> = Object.fromEntries(
@@ -72,9 +85,10 @@ export const BUNNY_FRAME_PIXELS: Record<BunnyFrameName, BunnyPixel[]> = Object.f
     const pixels: BunnyPixel[] = [];
     BUNNY_FRAMES[name].forEach((row, y) => {
       for (let x = 0; x < row.length; x += 1) {
-        const fill = BUNNY_PALETTE[row[x]];
+        const char = row[x];
+        const fill = BUNNY_PALETTE[char];
         if (fill) {
-          pixels.push({ x, y, fill });
+          pixels.push({ x, y, char, fill });
         }
       }
     });
@@ -88,7 +102,16 @@ export const BUNNY_FRAME_PIXELS: Record<BunnyFrameName, BunnyPixel[]> = Object.f
  * matching the convention used by the existing interactives. Callers position
  * and flip it with their own outer `translate(...) scale(dir, 1)` transform.
  */
-export function BunnySprite({ frame = 'sit', cell = 3 }: { frame?: BunnyFrameName; cell?: number }) {
+export function BunnySprite({
+  frame = 'sit',
+  cell = 3,
+  palette,
+}: {
+  frame?: BunnyFrameName;
+  cell?: number;
+  /** Optional palette override (e.g. KILLER_PALETTE) keyed by sprite char. */
+  palette?: Record<string, string>;
+}) {
   const pixels = BUNNY_FRAME_PIXELS[frame];
   return (
     <g shapeRendering="crispEdges">
@@ -99,7 +122,7 @@ export function BunnySprite({ frame = 'sit', cell = 3 }: { frame?: BunnyFrameNam
           y={(px.y - (BUNNY_ROWS - 1)) * cell}
           width={cell}
           height={cell}
-          fill={px.fill}
+          fill={palette?.[px.char] ?? px.fill}
         />
       ))}
     </g>

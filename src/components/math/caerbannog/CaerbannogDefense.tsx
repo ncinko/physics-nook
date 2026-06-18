@@ -40,7 +40,7 @@ import {
   type ShopId,
 } from '../../../lib/caerbannog/upgrades';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
-import { GRENADE_SPRITE, KEEP_SPRITE, type PixelSprite } from './sprites';
+import { GRENADE_SPRITE, KEEP_SPRITE, TIM_SPRITE, type PixelSprite } from './sprites';
 
 // --- World <-> screen mapping ---------------------------------------------
 const VIEW_W = 900;
@@ -588,12 +588,7 @@ function Tim({ level }: { level: number }) {
   const y = sy(WORLD.tim.y);
   return (
     <g aria-label={`Tim the Enchanter level ${level}`} transform={`translate(${x}, ${y})`}>
-      <path d="M -12 10 Q 0 -12 12 10 Z" fill="#7c3aed" stroke="#312e81" strokeWidth={2} />
-      <circle cx={0} cy={-8} r={6} fill="#fed7aa" />
-      <path d="M -10 -11 L 0 -27 L 10 -11 Z" fill="#1d4ed8" stroke="#172554" strokeWidth={2} />
-      <circle cx={2} cy={-20} r={1.8 + level * 0.35} fill="#fbbf24" />
-      <line x1={9} y1={4} x2={17} y2={-19} stroke="#78350f" strokeWidth={3} strokeLinecap="round" />
-      <circle cx={18} cy={-21} r={2.5 + level * 0.4} fill="#fb923c" />
+      <Pixels sprite={TIM_SPRITE} cell={2} />
     </g>
   );
 }

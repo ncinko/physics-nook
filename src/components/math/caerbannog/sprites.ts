@@ -71,5 +71,59 @@ const KEEP_PALETTE: Record<string, string> = {
   d: '#7c2d12', // door
 };
 
+// Tim the Enchanter: horned hood, long beard, crook staff, ceremonial stole,
+// purple-edged black robes, and a flame held aloft. The compact silhouette is
+// based on the supplied reference while matching the game's chunky pixel grid.
+const TIM_WIDTH = 30;
+const TIM = [
+  '..............................',
+  '........HHH.....HHH...........',
+  '.......HhhhH...HhhhH..........',
+  '......Hhh.HH###HH.hhH.........',
+  '..bbb.Hhh.#kkkkk#.hhH.........',
+  '.bb.b.Hh.##kkkkk##.hH.........',
+  '.b..b..H.#ksssssk#.H....f.....',
+  '.b.....H.#kswswsk#.H...fff....',
+  '.b......##kssSssk##...ffFff...',
+  '.b......#kkggGggkk#....fFf....',
+  '.b.....##kggGGGggk##...fWf....',
+  '.b....#rrkkgGGGgkkrr#...s.....',
+  '.b...#ryrkkggGggkkryr#..sss...',
+  'Bbss#kkrrkkgGgkkrrkk#...s.....',
+  'Bbss#kpkkrkkGkkkpkkk#.........',
+  '.b..#kppkrkkrrrkkppkk#........',
+  '.b..#kppkrkkryrkkppkk#........',
+  '.b..#kppkrkkrrrkkppkk#........',
+  '.b..#kppkrkkryrkkppkk#........',
+  '.b.#kkppkrkkrrkkppkkkk#.......',
+  '.b.#kpppkrkkrykkpppkkk#.......',
+  '.b#kkpppkrkkrrkkpppkkkk#......',
+  '.b#kppppkrkkrykkppppkkk#......',
+  '.b#kkkkkkrrkyyrrkkkkkkkk#......',
+  '.b.##kkk###kkkk###kkk##........',
+  '.b...bbb..##..##...............',
+].map((row) => row.padEnd(TIM_WIDTH, '.'));
+
+const TIM_PALETTE: Record<string, string> = {
+  '#': '#111827', // near-black outline
+  k: '#1f2937', // black robe and hood
+  p: '#6b2d83', // purple robe trim
+  r: '#991b1b', // red ceremonial stole
+  y: '#f59e0b', // gold embroidery
+  h: '#7c4a21', // horn shadow
+  H: '#d6a75c', // horn highlight
+  g: '#57534e', // beard
+  G: '#a8a29e', // beard highlight
+  s: '#c26d3a', // skin
+  S: '#f0a35e', // skin highlight
+  w: '#f8fafc', // eyes
+  b: '#4a2a15', // staff
+  B: '#8b5a2b', // staff highlight
+  f: '#ea580c', // outer flame
+  F: '#fbbf24', // inner flame
+  W: '#fff7ae', // flame core
+};
+
 export const GRENADE_SPRITE = buildSprite(GRENADE, GRENADE_PALETTE);
 export const KEEP_SPRITE = buildSprite(KEEP, KEEP_PALETTE);
+export const TIM_SPRITE = buildSprite(TIM, TIM_PALETTE);

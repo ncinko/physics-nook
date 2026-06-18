@@ -49,7 +49,7 @@ export const interactiveEntries: InteractiveEntry[] = [
   {
     id: 'vector-addition',
     title: 'Vector Addition',
-    description: 'Compare head-to-tail vector addition with symbolic component addition.',
+    description: 'Hop a bunny head-to-tail along two vectors in either order to see they sum to the same resultant.',
     href: '/math/vectors#vector-addition',
     module: 'Math',
     kind: 'inline',

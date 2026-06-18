@@ -1,4 +1,4 @@
-import { useMemo, useState, type PointerEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
 import {
   add,
   directionDegrees,
@@ -7,6 +7,7 @@ import {
   magnitude,
   type Vector2,
 } from '../../lib/math/vectors';
+import { BunnySprite, type BunnyFrameName } from './BunnySprite';
 
 const VIEW_WIDTH = 640;
 const VIEW_HEIGHT = 360;
@@ -24,6 +25,8 @@ const COLORS = {
   result: '#16a34a',
   scaled: '#7c3aed',
   muted: '#64748b',
+  carrot: '#ea580c',
+  carrotLeaf: '#16a34a',
 };
 
 const clamp = (value: number, min: number, max: number) =>
@@ -107,33 +110,181 @@ export function VectorReaderDemo() {
   );
 }
 
+type BunnyState = { x: number; y: number; dir: number; frame: BunnyFrameName };
+
 export function VectorAdditionDemo() {
   const [a, setA] = useState<Vector2>({ x: 3, y: 1.5 });
   const [b, setB] = useState<Vector2>({ x: 1.5, y: 2 });
+  const [firstHop, setFirstHop] = useState<'hop1' | 'hop2'>('hop1');
+  const [phase, setPhase] = useState<'idle' | 'hopping' | 'landed'>('idle');
   const sum = add(a, b);
   const dragA = useMemo(() => makeDragHandlers(setA), []);
   const dragB = useMemo(() => makeDragHandlers(setB), []);
 
+  // The bunny shows the sum by actually taking the two hops, instead of the
+  // resultant being drawn the moment the tips move.
+  const [bunny, setBunny] = useState<BunnyState>(() => {
+    const origin = toScreen(ZERO_VECTOR);
+    return { x: origin.x, y: origin.y, dir: 1, frame: 'sit' };
+  });
+  const rafRef = useRef<number | null>(null);
+
+  // Changing the hops or the order sends the bunny back to the start so the
+  // resultant is re-discovered by hopping rather than pre-drawn.
+  useEffect(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const origin = toScreen(ZERO_VECTOR);
+    setPhase('idle');
+    setBunny({ x: origin.x, y: origin.y, dir: 1, frame: 'sit' });
+  }, [a, b, firstHop]);
+
+  useEffect(
+    () => () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    },
+    [],
+  );
+
+  const hop = () => {
+    if (phase === 'hopping') {
+      return;
+    }
+    // Two waypoints between three corners: start → first hop's tip → carrot.
+    const lead = firstHop === 'hop1' ? a : b;
+    const route = [ZERO_VECTOR, lead, sum].map(toScreen);
+    setPhase('hopping');
+
+    const segDuration = 460;
+    let seg = 0;
+    let segStart = performance.now();
+
+    const step = (now: number) => {
+      const p0 = route[seg];
+      const p1 = route[seg + 1];
+      const span = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      const hopHeight = Math.min(72, 22 + span * 0.18);
+      const t = Math.min(1, (now - segStart) / segDuration);
+      const lift = Math.sin(Math.PI * t) * hopHeight;
+      const dir = p1.x - p0.x >= 0 ? 1 : -1;
+      setBunny({
+        x: p0.x + (p1.x - p0.x) * t,
+        y: p0.y + (p1.y - p0.y) * t - lift,
+        dir,
+        frame: lift > 1 ? 'hop' : 'sit',
+      });
+
+      if (t >= 1) {
+        seg += 1;
+        if (seg >= route.length - 1) {
+          const landing = route[route.length - 1];
+          rafRef.current = null;
+          setBunny({ x: landing.x, y: landing.y, dir, frame: 'sit' });
+          setPhase('landed');
+          return;
+        }
+        segStart = now;
+      }
+      rafRef.current = requestAnimationFrame(step);
+    };
+
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(step);
+  };
+
+  const first = firstHop === 'hop1' ? a : b;
+  const second = firstHop === 'hop1' ? b : a;
+  const firstColor = firstHop === 'hop1' ? COLORS.a : COLORS.b;
+  const secondColor = firstHop === 'hop1' ? COLORS.b : COLORS.a;
+  const firstLabel = firstHop === 'hop1' ? 'hop 1' : 'hop 2';
+  const secondLabel = firstHop === 'hop1' ? 'hop 2' : 'hop 1';
+  const carrot = toScreen(sum);
+
   return (
     <DemoShell
-      title="Add Vectors"
-      description="Move either tip. The green vector is the graphical and symbolic sum."
+      title="Add Two Hops"
+      description="Drag each hop, then press Hop! to send the bunny along hop 1 then hop 2. Swap the order — either route lands on the same carrot."
     >
       <ReadoutGrid>
-        <Readout label="a" value={formatVector(a)} accent={COLORS.a} />
-        <Readout label="b" value={formatVector(b)} accent={COLORS.b} />
-        <Readout label="a + b" value={`${formatVector(a)} + ${formatVector(b)} = ${formatVector(sum)}`} accent={COLORS.result} />
+        <Readout label="hop 1" value={formatVector(a)} accent={COLORS.a} />
+        <Readout label="hop 2" value={formatVector(b)} accent={COLORS.b} />
+        <Readout
+          label="hop 1 + hop 2"
+          value={
+            phase === 'landed'
+              ? `${formatVector(a)} + ${formatVector(b)} = ${formatVector(sum)}`
+              : 'Press Hop! to combine the hops'
+          }
+          accent={phase === 'landed' ? COLORS.result : COLORS.muted}
+        />
       </ReadoutGrid>
 
-      <VectorSvg ariaLabel="Interactive vector addition diagram">
+      <VectorSvg ariaLabel="Interactive bunny vector addition diagram">
         <Grid />
-        <Arrow start={{ x: 0, y: 0 }} vector={a} color={COLORS.a} label="a" />
-        <Arrow start={a} vector={b} color={COLORS.b} label="copy of b" dashed labelOffset={{ x: -68, y: -34 }} />
-        <Arrow start={{ x: 0, y: 0 }} vector={b} color={COLORS.b} label="b" faded />
-        <Arrow start={{ x: 0, y: 0 }} vector={sum} color={COLORS.result} label="a + b" width={3.4} />
-        <Handle point={a} color={COLORS.a} label="drag vector a" {...dragA} />
-        <Handle point={b} color={COLORS.b} label="drag vector b" {...dragB} />
+        <Carrot point={carrot} reached={phase === 'landed'} />
+        {/* Alternate order, faded: the other hop first, completing the parallelogram. */}
+        <Arrow start={ZERO_VECTOR} vector={second} color={secondColor} label="" faded />
+        <Arrow start={second} vector={first} color={firstColor} label="" faded />
+        {/* Active order, solid: the route the bunny is about to take. */}
+        <Arrow start={ZERO_VECTOR} vector={first} color={firstColor} label={firstLabel} />
+        <Arrow start={first} vector={second} color={secondColor} label={secondLabel} labelOffset={{ x: -4, y: 0 }} />
+        {phase === 'landed' && (
+          <Arrow
+            start={ZERO_VECTOR}
+            vector={sum}
+            color={COLORS.result}
+            label="hop 1 + hop 2"
+            width={3.4}
+            labelOffset={{ x: 0, y: 20 }}
+          />
+        )}
+        <Handle point={a} color={COLORS.a} label="drag hop 1 tip" {...dragA} />
+        <Handle point={b} color={COLORS.b} label="drag hop 2 tip" {...dragB} />
+        <g transform={`translate(${bunny.x}, ${bunny.y}) scale(${bunny.dir}, 1)`}>
+          <BunnySprite frame={bunny.frame} cell={2.5} />
+        </g>
       </VectorSvg>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={hop}
+          disabled={phase === 'hopping'}
+          className="rounded-lg border border-[var(--accent-blue)] bg-[var(--accent-blue)] px-3 py-2 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {phase === 'landed' ? 'Hop again' : 'Hop!'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setFirstHop((current) => (current === 'hop1' ? 'hop2' : 'hop1'))}
+          className="rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] transition hover:border-[var(--accent-blue)]"
+        >
+          Swap order
+        </button>
+        <span className="font-mono text-xs text-[var(--text-muted)]">
+          hopping {firstLabel} → {secondLabel}
+        </span>
+      </div>
+
+      {phase === 'landed' && (
+        <p
+          className="m-0 rounded-lg border px-3 py-2 text-sm font-semibold"
+          style={{
+            color: COLORS.result,
+            borderColor: COLORS.result,
+            background: 'color-mix(in srgb, #16a34a 12%, var(--bg-primary))',
+          }}
+        >
+          Munch! Hop 1 then hop 2 — or hop 2 then hop 1 — both land on the carrot at {formatVector(sum)}. One
+          combined hop of {formatVector(sum)} gets there directly.
+        </p>
+      )}
     </DemoShell>
   );
 }
@@ -360,14 +511,16 @@ function Handle({
 }) {
   const screen = toScreen(point);
 
+  // Open ring (transparent fill) so the arrow tip stays visible through it while
+  // the whole disc remains grabbable.
   return (
     <circle
       cx={screen.x}
       cy={screen.y}
-      r="9"
-      fill="var(--bg-primary)"
+      r="10"
+      fill="transparent"
       stroke={color}
-      strokeWidth="4"
+      strokeWidth="3"
       className="cursor-grab"
       aria-label={label}
       onPointerDown={onPointerDown}
@@ -375,6 +528,22 @@ function Handle({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     />
+  );
+}
+
+function Carrot({ point, reached }: { point: Vector2; reached: boolean }) {
+  const { x, y } = point;
+  return (
+    <g opacity={reached ? 0.3 : 1}>
+      <polygon points={`${x - 7},${y - 30} ${x + 7},${y - 30} ${x},${y}`} fill={COLORS.carrot} />
+      <path
+        d={`M ${x} ${y - 30} l -7 -8 M ${x} ${y - 30} l 0 -11 M ${x} ${y - 30} l 7 -8`}
+        stroke={COLORS.carrotLeaf}
+        strokeWidth={3}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </g>
   );
 }
 

@@ -66,7 +66,7 @@ The direction angle is usually measured counterclockwise from the positive $x$ a
 
 ## Addition
 
-To add vectors graphically, place the tail of the second vector at the tip of the first. The sum points from the original tail to the final tip. This is called **head-to-tail addition**.
+Adding vectors is just letting the bunny take more than one hop. Think of $\vec{a}$ as **hop 1** and $\vec{b}$ as **hop 2**. To find where the bunny ends up, place the tail of hop 2 at the tip of hop 1. The sum points from the original tail to the final tip. This is called **head-to-tail addition**.
 
 Symbolically, add matching components:
 
@@ -76,9 +76,19 @@ $$
 = \langle a_x + b_x, a_y + b_y \rangle.
 $$
 
+The order of the hops does not matter. Hopping hop 1 then hop 2 lands in exactly the same place as hopping hop 2 then hop 1, because addition adds the same components either way:
+
+$$
+\vec{a} + \vec{b} = \vec{b} + \vec{a}.
+$$
+
+The two routes trace the two sides of a parallelogram that meet at the same far corner — the carrot.
+
 <InteractiveAnchor id="vector-addition" />
 
 <VectorAdditionDemo client:visible />
+
+Press **Hop!** to send the bunny along hop 1 and then hop 2; the green resultant only appears once it lands, showing that two successive hops are equivalent to one combined hop. Swap the order to confirm the bunny still reaches the same carrot.
 
 Head-to-tail addition is just the bunny taking several hops in a row. In the puzzle below, each hop is a vector, and the bunny only reaches the carrot when the hops' components sum to the burrow-to-carrot displacement. The hedges make a single straight hop impossible, so you have to plan the route.
 

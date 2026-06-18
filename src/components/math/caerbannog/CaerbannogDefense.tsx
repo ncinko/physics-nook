@@ -7,10 +7,10 @@ import {
   type ReactNode,
 } from 'react';
 import {
+  add,
   clampMagnitude,
-  directionDegrees,
-  formatVector,
   magnitude,
+  scale,
   subtract,
   type Vector2,
 } from '../../../lib/math/vectors';
@@ -20,7 +20,6 @@ import {
   canRepairKeep,
   chooseBlessing,
   createGame,
-  landingPoint,
   nextWave,
   rabbitTraits,
   repairCost,
@@ -28,7 +27,6 @@ import {
   startGame,
   step,
   throwGrenade,
-  trajectoryPoints,
   type GameState,
   type RabbitKind,
 } from '../../../lib/caerbannog/game';
@@ -58,8 +56,20 @@ const SY = PLOT_H / (W_MAX_Y - W_MIN_Y); // screen px per world unit (y)
 const sx = (wx: number) => MARGIN + (wx - W_MIN_X) * SX;
 const sy = (wy: number) => MARGIN + (W_MAX_Y - wy) * SY;
 
-const MAX_POWER = 80; // clamp on the drawn launch velocity
+const MAX_POWER = 80; // clamp on the launch velocity (same reach as before)
+// The slingshot maps full launch power to a short pull-back, so the cursor
+// never has to travel far enough to leave the viewport while aiming.
+const MAX_DRAW = 8; // world units of draw-back that reach MAX_POWER
+const DRAW_SCALE = MAX_POWER / MAX_DRAW;
 const STORAGE_KEY = 'caerbannog:bestWave';
+
+// Slingshot frame geometry (screen px), shared by the prongs and the bands.
+const LAUNCH_PX = sx(WORLD.launch.x);
+const LAUNCH_PY = sy(WORLD.launch.y);
+const FORK_DX = 9; // half the gap between the two prongs
+const FORK_DY = 16; // how far the prongs rise above the pouch
+const FORK_LEFT = { x: LAUNCH_PX - FORK_DX, y: LAUNCH_PY - FORK_DY };
+const FORK_RIGHT = { x: LAUNCH_PX + FORK_DX, y: LAUNCH_PY - FORK_DY };
 
 const COLORS = {
   skyTop: '#1e293b',
@@ -87,6 +97,16 @@ const pointerToWorld = (event: PointerEvent<SVGElement>): Vector2 => {
   const wy = W_MAX_Y - ((py - MARGIN) / PLOT_H) * (W_MAX_Y - W_MIN_Y);
   return { x: wx, y: wy };
 };
+
+// Pull back to fire: the grenade flies opposite the drag, harder the further it
+// is drawn. Clamping in world space matches the (non-uniform) screen mapping, so
+// the visible pouch position lines up with the launch power it produces.
+const pullToVelocity = (pointer: Vector2): Vector2 =>
+  clampMagnitude(scale(subtract(WORLD.launch, pointer), DRAW_SCALE), MAX_POWER);
+
+// Where the drawn-back grenade sits, clamped to the maximum draw length.
+const pouchPoint = (pointer: Vector2): Vector2 =>
+  add(WORLD.launch, clampMagnitude(subtract(pointer, WORLD.launch), MAX_DRAW));
 
 const readBest = (): number => {
   if (typeof window === 'undefined') {
@@ -148,8 +168,6 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     return () => cancelAnimationFrame(raf);
   }, [state.phase, setGame]);
 
-  const aimVel = aim ? clampMagnitude(subtract(aim, WORLD.launch), MAX_POWER) : null;
-
   const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
     if (state.phase !== 'playing') {
       return;
@@ -178,7 +196,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     aimRef.current = null;
     setAim(null);
     if (target) {
-      const velocity = clampMagnitude(subtract(target, WORLD.launch), MAX_POWER);
+      const velocity = pullToVelocity(target);
       if (magnitude(velocity) > 1) {
         setGame((prev) => throwGrenade(prev, velocity));
       }
@@ -203,7 +221,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
         <div>
           <h3 className="m-0 text-lg font-semibold">The Rabbit of Caerbannog</h3>
           <p className="m-0 text-sm text-[var(--text-muted)]">
-            Drag from the keep to aim the Holy Hand Grenade. Release to lob it.
+            Pull back from the slingshot to aim the Holy Hand Grenade. Release to fling it.
           </p>
         </div>
         <Hud state={state} best={best} />
@@ -219,7 +237,10 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           role="img"
           aria-label="Killer rabbit siege"
           className="block h-auto w-full select-none"
-          style={{ touchAction: 'none', cursor: state.phase === 'playing' ? 'crosshair' : 'default' }}
+          style={{
+            touchAction: 'none',
+            cursor: state.phase === 'playing' ? (aim ? 'grabbing' : 'grab') : 'default',
+          }}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -234,7 +255,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           {stats.maxCastleHp > 5 && <KeepReinforcements level={stats.maxCastleHp - 5} />}
           {stats.caltropsLevel > 0 && <Caltrops level={stats.caltropsLevel} />}
           {stats.timLevel > 0 && <Tim level={stats.timLevel} />}
-          <Catapult />
+          <Slingshot />
 
           {/* Explosions (behind rabbits/grenades so sprites stay readable).
               Drawn at the TRUE kill radius from frame one — a world circle, which
@@ -354,10 +375,8 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             );
           })}
 
-          {/* Aim preview while dragging. */}
-          {aimVel && state.phase === 'playing' && (
-            <AimPreview velocity={aimVel} canFire={stats.ammo > 0} />
-          )}
+          {/* Loaded grenade resting in the sling, drawn back as the player pulls. */}
+          {state.phase === 'playing' && <SlingPull aim={aim} canFire={stats.ammo > 0} />}
         </svg>
 
         {state.phase === 'playing' && state.announcementTimer > 0 && (
@@ -378,10 +397,10 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             </h2>
             <p className="mt-3 mb-0 max-w-md text-sm leading-6 text-slate-200">
               That&apos;s no ordinary rabbit. Waves of the beasts pour from the Cave of
-              Caerbannog toward Arthur&apos;s keep. Lob the Holy Hand Grenade of Antioch by
-              dragging a launch <em>vector</em> from the catapult — angle and power both
-              matter. Close blasts hit hardest. Spend gold between waves on the keep&apos;s
-              defenses; sacred blessings improve only your grenades.
+              Caerbannog toward Arthur&apos;s keep. Draw back the holy slingshot and release
+              to fling the Holy Hand Grenade of Antioch — the launch is a <em>vector</em>,
+              so angle and draw both matter. Close blasts hit hardest. Spend gold between
+              waves on the keep&apos;s defenses; sacred blessings improve only your grenades.
             </p>
             <button type="button" onClick={begin} className={primaryBtn}>
               Begin the Siege
@@ -632,44 +651,44 @@ function Scenery() {
   );
 }
 
-function Catapult() {
-  const x = sx(WORLD.launch.x);
-  const y = sy(WORLD.launch.y);
+// The wooden slingshot frame: a trunk rising from the ground that splits into
+// two prongs. The elastic bands and the grenade are drawn separately (SlingPull)
+// so they can render on top of the rabbits.
+function Slingshot() {
   const base = sy(0);
+  const forkY = LAUNCH_PY - 2; // where the trunk splits, just below the prongs
   return (
-    <g>
-      <line x1={x} y1={y} x2={x - 10} y2={base} stroke="#78350f" strokeWidth={4} strokeLinecap="round" />
-      <line x1={x} y1={y} x2={x + 10} y2={base} stroke="#78350f" strokeWidth={4} strokeLinecap="round" />
-      <circle cx={x} cy={y} r={6} fill="#92400e" stroke="#78350f" strokeWidth={2} />
+    <g stroke="#78350f" strokeLinecap="round" fill="none">
+      <line x1={LAUNCH_PX} y1={base} x2={LAUNCH_PX} y2={forkY} strokeWidth={5} />
+      <line x1={LAUNCH_PX} y1={forkY} x2={FORK_LEFT.x} y2={FORK_LEFT.y} strokeWidth={4} />
+      <line x1={LAUNCH_PX} y1={forkY} x2={FORK_RIGHT.x} y2={FORK_RIGHT.y} strokeWidth={4} />
     </g>
   );
 }
 
-function AimPreview({ velocity, canFire }: { velocity: Vector2; canFire: boolean }) {
-  const points = trajectoryPoints(WORLD.launch, velocity)
-    .map((p) => `${sx(p.x)},${sy(p.y)}`)
-    .join(' ');
-  const land = landingPoint(WORLD.launch, velocity);
-  const stroke = canFire ? COLORS.aim : '#94a3b8';
+// The loaded grenade and the two elastic bands. At rest the grenade sits in the
+// pouch at the launch point; while the player pulls, it is drawn back (clamped to
+// MAX_DRAW) and the bands stretch with it. No trajectory, arrow, or label — the
+// pull itself is the aim.
+function SlingPull({ aim, canFire }: { aim: Vector2 | null; canFire: boolean }) {
+  const pouch = aim ? pouchPoint(aim) : WORLD.launch;
+  const cx = sx(pouch.x);
+  const cy = sy(pouch.y);
+  const dir = subtract(WORLD.launch, pouch); // launch direction (world, y-up)
+  const angle = aim ? (Math.atan2(-dir.y, dir.x) * 180) / Math.PI : 0;
+  const drawn = aim ? magnitude(dir) / MAX_DRAW : 0; // 0..1 fraction of full power
+  const band = canFire ? COLORS.aim : '#94a3b8';
   return (
-    <g opacity={canFire ? 1 : 0.5}>
-      <polyline points={points} fill="none" stroke={stroke} strokeWidth={2.5} strokeDasharray="6 6" />
-      <line
-        x1={sx(WORLD.launch.x)}
-        y1={sy(WORLD.launch.y)}
-        x2={sx(WORLD.launch.x + velocity.x * 0.25)}
-        y2={sy(WORLD.launch.y + velocity.y * 0.25)}
-        stroke={stroke}
-        strokeWidth={3}
-        strokeLinecap="round"
-      />
-      <g>
-        <line x1={sx(land.x) - 7} y1={sy(0) - 7} x2={sx(land.x) + 7} y2={sy(0) + 7} stroke={stroke} strokeWidth={2.5} />
-        <line x1={sx(land.x) - 7} y1={sy(0) + 7} x2={sx(land.x) + 7} y2={sy(0) - 7} stroke={stroke} strokeWidth={2.5} />
-      </g>
-      <text x={sx(WORLD.launch.x) + 14} y={sy(WORLD.launch.y) - 10} fontSize="13" fontWeight="700" fill={stroke}>
-        {formatVector(velocity, 0)} · |v| {magnitude(velocity).toFixed(0)} · {directionDegrees(velocity).toFixed(0)}°
-      </text>
+    <g>
+      <line x1={FORK_LEFT.x} y1={FORK_LEFT.y} x2={cx} y2={cy} stroke={band} strokeWidth={3} strokeLinecap="round" />
+      <line x1={FORK_RIGHT.x} y1={FORK_RIGHT.y} x2={cx} y2={cy} stroke={band} strokeWidth={3} strokeLinecap="round" />
+      {canFire && (
+        <g transform={`translate(${cx}, ${cy})`} opacity={aim ? 0.6 + 0.4 * drawn : 1}>
+          <g transform={`rotate(${angle})`}>
+            <Pixels sprite={GRENADE_SPRITE} cell={2} />
+          </g>
+        </g>
+      )}
     </g>
   );
 }

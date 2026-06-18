@@ -9,8 +9,9 @@ import {
 // A small pixel-art bunny that lives in the page background. It hops to random
 // spots near the bottom of the viewport, pauses, and now and then wiggles its
 // ears. Purely decorative: pointer events pass through and it is hidden from
-// assistive tech. Honors prefers-reduced-motion by sitting still. Shares its
-// sprite with the vector-page interactives via BunnySprite.
+// assistive tech. Animates for all visitors regardless of prefers-reduced-motion
+// (an intentional product choice for this whimsical element). Shares its sprite
+// with the vector-page interactives via BunnySprite.
 
 const CELL = 3; // pixels per sprite cell
 const SPRITE_W = BUNNY_COLS * CELL;
@@ -27,6 +28,7 @@ export function BunnyCompanion() {
   const xFracRef = useRef(0.12); // horizontal position as fraction of viewport width
   const yPxRef = useRef(20); // resting height above the bottom edge
   const liftRef = useRef(0); // extra height while airborne
+  const fleeRef = useRef<(() => void) | null>(null); // set by the scheduler; fired on click
 
   const pixels = useMemo(() => BUNNY_FRAME_PIXELS[frame], [frame]);
 
@@ -49,45 +51,42 @@ export function BunnyCompanion() {
   });
 
   useEffect(() => {
-    const reduce =
-      typeof window !== 'undefined' &&
-      window.matchMedia &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (reduce) {
-      return;
-    }
-
     let alive = true;
+    let fleeing = false;
+    let run = 0; // bumped to invalidate the idle loop's pending hops/timers (e.g. on click)
     let rafId: number | null = null;
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
     const later = (fn: () => void, delay: number) => {
+      const myRun = run;
       const id = setTimeout(() => {
         timers.delete(id);
-        if (alive) {
+        if (alive && myRun === run) {
           fn();
         }
       }, delay);
       timers.add(id);
     };
 
-    // Play a one-shot hop arc to a target fraction, then resolve.
-    const hopTo = (targetFrac: number, done: () => void) => {
+    // Play a one-shot hop arc to a target fraction, then resolve. The clamp range
+    // widens past the screen edges so the flee animation can exit the viewport.
+    const hopTo = (targetFrac: number, done: () => void, minF = 0.05, maxF = 0.95) => {
+      const myRun = run;
       const fromX = xFracRef.current;
-      const toX = clamp(targetFrac, 0.05, 0.95);
+      const toX = clamp(targetFrac, minF, maxF);
       const fromY = yPxRef.current;
-      const toY = clamp(rand(12, 96), 12, 96);
+      const toY = clamp(fromY + rand(-10, 10), 12, 64);
       const dist = Math.abs(toX - fromX);
 
       setFacing(toX >= fromX ? 1 : -1);
       setFrame('hop');
 
-      const hopHeight = clamp(34 + dist * 260, 34, 96);
-      const duration = 300 + dist * 520;
+      const hopHeight = clamp(12 + dist * 180, 12, 34);
+      const duration = 200 + dist * 500;
       const start = performance.now();
 
       const tick = (now: number) => {
-        if (!alive) {
+        if (!alive || myRun !== run) {
           return;
         }
         const p = Math.min(1, (now - start) / duration);
@@ -107,18 +106,19 @@ export function BunnyCompanion() {
       rafId = requestAnimationFrame(tick);
     };
 
-    // A burst of 1–3 hops to a fresh spot, then a pause.
-    const doHopBurst = (remaining: number) => {
-      const reach = rand(0.12, 0.4) * (Math.random() < 0.5 ? -1 : 1);
-      const target = clamp(xFracRef.current + reach, 0.06, 0.94);
+    // A burst of tiny hops in one direction — hop-hop or hop-hop-hop — then rest.
+    const doHopBurst = (remaining: number, dirSign = Math.random() < 0.5 ? -1 : 1) => {
+      const target = clamp(xFracRef.current + dirSign * rand(0.02, 0.05), 0.06, 0.94);
       hopTo(target, () => {
-        if (remaining > 1 && Math.random() < 0.6) {
-          later(() => doHopBurst(remaining - 1), rand(120, 260));
+        if (remaining > 1) {
+          later(() => doHopBurst(remaining - 1, dirSign), rand(90, 200));
         } else {
           rest();
         }
       });
     };
+
+    const startBurst = () => doHopBurst(2 + Math.floor(rand(0, 2)));
 
     // Wiggle the ears: a quick flop right/left while sitting.
     const wiggleEars = (onDone: () => void) => {
@@ -131,29 +131,80 @@ export function BunnyCompanion() {
         }
         setFrame(steps[i]);
         i += 1;
-        later(step, 110);
+        later(step, 120);
       };
       step();
     };
 
-    // Sit a while, occasionally wiggle, then hop again.
+    // Sit still for a good while, sometimes wiggle, then hop again.
     const rest = () => {
       setFrame('sit');
-      const pause = rand(1400, 3800);
+      const pause = rand(3000, 7000);
       if (Math.random() < 0.4) {
-        later(() => wiggleEars(() => later(() => doHopBurst(1 + Math.floor(rand(0, 3))), rand(500, 1400))), pause * 0.5);
+        later(() => wiggleEars(() => later(startBurst, rand(700, 1800))), pause * 0.6);
       } else {
-        later(() => doHopBurst(1 + Math.floor(rand(0, 3))), pause);
+        later(startBurst, pause);
       }
     };
+
+    // After hiding off-screen, hop back into view and resume the idle loop.
+    const returnFromFlee = () => {
+      hopTo(
+        clamp(rand(0.2, 0.8), 0.06, 0.94),
+        () => {
+          fleeing = false;
+          rest();
+        },
+        -0.35,
+        1.35,
+      );
+    };
+
+    // Click handler: the bunny panics, hops off the nearest edge in quick little
+    // leaps, then hides for 30 seconds before hopping back in.
+    const flee = () => {
+      if (fleeing) {
+        return;
+      }
+      fleeing = true;
+      run += 1; // invalidate the idle loop's pending hops/timers
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      timers.forEach(clearTimeout);
+      timers.clear();
+
+      const dirSign = xFracRef.current < 0.5 ? -1 : 1;
+      const exit = dirSign < 0 ? -0.3 : 1.3;
+      const hopOut = () => {
+        const next = xFracRef.current + dirSign * rand(0.14, 0.22);
+        const reachedEdge = dirSign < 0 ? next <= -0.2 : next >= 1.2;
+        hopTo(
+          reachedEdge ? exit : next,
+          () => {
+            if (reachedEdge) {
+              later(returnFromFlee, 30000);
+            } else {
+              later(hopOut, rand(60, 120));
+            }
+          },
+          -0.35,
+          1.35,
+        );
+      };
+      hopOut();
+    };
+    fleeRef.current = flee;
 
     const onResize = () => applyTransform();
     window.addEventListener('resize', onResize);
 
-    later(() => doHopBurst(1 + Math.floor(rand(0, 3))), 900);
+    later(startBurst, 900);
 
     return () => {
       alive = false;
+      fleeRef.current = null;
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
@@ -166,6 +217,7 @@ export function BunnyCompanion() {
     <div
       ref={wrapRef}
       aria-hidden="true"
+      onClick={() => fleeRef.current?.()}
       style={{
         position: 'fixed',
         pointerEvents: 'none',
@@ -183,7 +235,16 @@ export function BunnyCompanion() {
       >
         <g transform={facing < 0 ? `translate(${SPRITE_W},0) scale(-1,1)` : undefined}>
           {pixels.map((px, i) => (
-            <rect key={i} x={px.x * CELL} y={px.y * CELL} width={CELL} height={CELL} fill={px.fill} />
+            <rect
+              key={i}
+              x={px.x * CELL}
+              y={px.y * CELL}
+              width={CELL}
+              height={CELL}
+              fill={px.fill}
+              // Only the bunny's pixels are clickable; transparent gaps pass clicks through.
+              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+            />
           ))}
         </g>
       </svg>

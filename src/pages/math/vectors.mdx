@@ -28,49 +28,47 @@ import { mathPath } from '../../data/modules';
 
 # Vectors
 
-A **scalar** is described by one number. Mass, temperature, and time are scalars. A **vector** needs both a size and a direction. Displacement, velocity, acceleration, and force are vectors.
+In physics, we quantify most things with either a scalar or a vector.  A **scalar** is described by one number; mass, temperature, and time are scalars. A **vector** is said to have both magnitude and direction; displacement, velocity, acceleration, and force are vectors.  Note that if you ever study linear algebra, there are more rigorous definitions for these mathematical objects. 
 
-You have actually been working with vectors since grade school. When you first learned addition, a bunny hopped along a number line: start at $0$, hop $+3$, then hop $+2$, and land on $5$. Each hop has a **size** (how far) and a **direction** (right for positive, left for negative). That is already a vector — it just lives on a one-dimensional line.
+But, for now, let's turn to a familiar one-dimensional vector: the displacement of a bunny along a number line.  When you first learned arithmetic, a bunny hopped along a number line: $3 - 5$ is evaluated by starting at $0$, hopping $3$ to the right, then hopping $5$ to the left, and landing on $-2$. Each hop has a **magnitude** (how far) and a **direction** (right for positive, left for negative).
 
 <InteractiveAnchor id="bunny-number-line" />
 
 <BunnyNumberLine client:visible />
 
-Give the bunny a second way to hop — up and down as well as left and right — and a one-dimensional hop becomes a two-dimensional **vector**. The rest of this page is really the bunny learning to hop anywhere on the plane.
+Give the bunny a second way to hop — up and down as well as left and right — and we now have a two-dimensional "hop vector".
 
-We draw a vector as an arrow. The tail marks where the arrow starts, the tip marks where it ends, and the arrow's length represents the vector's magnitude. Moving the whole arrow without turning or stretching it does not change the vector.
-
-<InteractiveAnchor id="vector-reader" />
-
-<VectorReaderDemo client:visible />
 
 ## Components
 
-In two dimensions, a vector can be described by its horizontal and vertical pieces:
+To work with vectors algebraically, we must express the individual components of each vector.  In two dimensions, we may write a vector as:
 
 $$
 \vec{a} = \langle a_x, a_y \rangle.
 $$
 
-The same vector can also be written with unit vectors:
-
-$$
-\vec{a} = a_x\hat{i} + a_y\hat{j}.
-$$
-
-Here, $\hat{i}$ points in the positive $x$ direction and $\hat{j}$ points in the positive $y$ direction. The components tell you how far the vector goes sideways and how far it goes vertically.
-
-The magnitude of a vector is the length of the arrow:
+The magnitude, i.e. the length of the arrow representation shown below, can be found using the Pythagorean theorem:
 
 $$
 \lVert \vec{a} \rVert = \sqrt{a_x^2 + a_y^2}.
 $$
 
-The direction angle is usually measured counterclockwise from the positive $x$ axis. For free-body diagrams, the most important habit is to keep the components and the drawn arrow consistent.
+The direction angle is then (usually) measured counterclockwise from the positive $x$ axis:
+
+$$
+\theta = \tan^{-1}\Big(\frac{a_y}{a_x}\Big).
+$$
+
+To work with vectors graphically, we draw them using an arrow. The starting point is often called the "tail" of the vector, and the ending point is called the "tip" (arrowhead).  The length of the arrow represents the vector's **magnitude**, while the direction is simply captured by the orientation of the arrow.
+
+<InteractiveAnchor id="vector-reader" />
+
+<VectorReaderDemo client:visible />
+
 
 ## Addition
 
-Adding vectors is just letting the bunny take more than one hop. Think of $\vec{a}$ as **hop 1** and $\vec{b}$ as **hop 2**. To find where the bunny ends up, place the tail of hop 2 at the tip of hop 1. The sum points from the original tail to the final tip. This is called **head-to-tail addition**.
+Adding vectors is simply letting the bunny hop multiple times, and then looking at the combined effect of the hops. For example, in evaluating $\vec{a} + \vec{b}$, think of $\vec{a}$ as **hop 1** and $\vec{b}$ as **hop 2**. To find where the bunny ends up, place the tail of hop 2 at the tip of hop 1. The sum points from the original tail to the final tip. This is called **tip-to-tail addition**.
 
 Symbolically, add matching components:
 
@@ -80,21 +78,16 @@ $$
 = \langle a_x + b_x, a_y + b_y \rangle.
 $$
 
-The order of the hops does not matter. Hopping hop 1 then hop 2 lands in exactly the same place as hopping hop 2 then hop 1, because addition adds the same components either way:
+The order of the hops does not matter. Hopping hop 1 then hop 2 lands in exactly the same place as hopping hop 2 then hop 1:
 
 $$
 \vec{a} + \vec{b} = \vec{b} + \vec{a}.
 $$
 
-The two routes trace the two sides of a parallelogram that meet at the same far corner — the carrot.
-
 <InteractiveAnchor id="vector-addition" />
 
 <VectorAdditionDemo client:visible />
 
-Press **Hop!** to send the bunny along hop 1 and then hop 2; the green resultant only appears once it lands, showing that two successive hops are equivalent to one combined hop. Swap the order to confirm the bunny still reaches the same carrot.
-
-Head-to-tail addition is just the bunny taking several hops in a row. In the puzzle below, each hop is a vector, and the bunny only reaches the carrot when the hops' components sum to the burrow-to-carrot displacement. The hedges make a single straight hop impossible, so you have to plan the route.
 
 <InteractiveAnchor id="vector-voyage" />
 
@@ -102,7 +95,6 @@ Head-to-tail addition is just the bunny taking several hops in a row. In the puz
 
 <ProblemSolvingSection
   title="Vector Practice"
-  intro="Use the same component bookkeeping for displacement, velocity, acceleration, and force."
 >
   <WorkedExampleCard
     title="Reading a Vector"

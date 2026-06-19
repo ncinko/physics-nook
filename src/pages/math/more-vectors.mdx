@@ -13,9 +13,12 @@ import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro
 import { ScalarScaler } from '../../components/math/ScalarScaler';
 import { BunnyField } from '../../components/math/BunnyField';
 import { BunnyCompanion } from '../../components/math/BunnyCompanion';
+import { CaerbannogLauncher } from '../../components/math/caerbannog/CaerbannogLauncher';
 import { mathPath } from '../../data/modules';
 
 <BunnyCompanion client:only="react" />
+{/* Reuse the same hidden game and leaderboard as the first vectors page. */}
+<CaerbannogLauncher client:only="react" />
 
 <ModuleHero module={mathPath} currentPath="/math/more-vectors" />
 

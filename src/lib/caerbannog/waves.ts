@@ -27,11 +27,24 @@ const BASE_SPEED = 7; // world units/sec at wave 1 (field is ~90 units wide)
 /** Round to one decimal so HP and the health bar read cleanly. */
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
+/**
+ * Preserve the gentle opening, then steepen the horde after wave 20 so the
+ * wave-30/40 special enhancements do not outrun ordinary rabbit toughness.
+ * Late-game anchors: 15 HP at wave 20, 25 at 30, 40 at 40, and 60 at 50.
+ */
+const swarmHp = (wave: number): number => {
+  if (wave >= 20) {
+    const lateWave = wave - 20;
+    return 15 + lateWave * 0.75 + lateWave ** 2 * 0.025;
+  }
+
+  const progress = Math.max(0, wave - 1) / 19;
+  return 1.5 + (wave - 1) * 0.45 + (wave - 1) ** 2 * 0.008 + progress ** 2 * 2.1;
+};
+
 export const waveConfig = (wave: number): WaveConfig => ({
   count: 3 + Math.floor(wave),
-  // The quadratic term is gentle early and meaningful after wave 20; enemy
-  // archetypes create the sharper, readable milestone spikes.
-  hp: round1(1.5 + (wave - 1) * 0.45 + (wave - 1) ** 2 * 0.008),
+  hp: round1(swarmHp(wave)),
   speed: Math.min(14, BASE_SPEED * (1 + (wave - 1) * 0.045)),
   spawnInterval: Math.max(0.45, 1.35 - wave * 0.04),
 });

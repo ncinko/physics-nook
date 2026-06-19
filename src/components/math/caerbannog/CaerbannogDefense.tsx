@@ -159,7 +159,7 @@ const SPECIAL_INFO: Record<SpecialId, SpecialInfo> = {
     blurb: 'A blast may call lightning onto the toughest rabbit on screen, searing away a share of its full health.',
     tracks: {
       freq: { label: 'Trigger chance', describe: (lvl) => pct(specialChance(lvl)) },
-      power: { label: 'Strike damage', describe: (lvl) => `${pct(lightningPct(lvl))} of full health` },
+      power: { label: 'Strike damage', describe: (lvl) => `Up to ${pct(lightningPct(lvl))} of full health` },
     },
     enhancement: {
       name: 'Chain Arc',

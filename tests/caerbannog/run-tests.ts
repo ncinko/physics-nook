@@ -38,6 +38,7 @@ import {
   knightLegs,
   knightLimbs,
   landingPoint,
+  lateGameElementalDamageMultiplier,
   lightningPct,
   nextWave,
   offerBlessings,
@@ -429,15 +430,34 @@ console.log('Caerbannog game step tests passed.');
   assert.equal(rabbitTraits('boss', 20).keepDamage, 3);
   assert.equal(rabbitTraits('boss', 20).bounty, 18);
 
+  // Elemental resistance leaves the well-tuned opening intact, then ramps up
+  // after wave 20. Bosses never take the full percentage-based strike.
+  assert.equal(lateGameElementalDamageMultiplier(20), 1);
+  near(lateGameElementalDamageMultiplier(30), 0.875);
+  near(lateGameElementalDamageMultiplier(40), 0.75);
+  near(lateGameElementalDamageMultiplier(50), 0.65);
+  assert.equal(rabbitTraits('common', 20).lightningDamageMultiplier, 1);
+  near(rabbitTraits('common', 40).holyFireDamageMultiplier, 0.75);
+  near(rabbitTraits('brute', 50).lightningDamageMultiplier, 0.65);
+  near(rabbitTraits('boss', 20).lightningDamageMultiplier, 0.3);
+  near(rabbitTraits('boss', 40).holyFireDamageMultiplier, 0.375);
+  near(rabbitTraits('knight', 40).lightningDamageMultiplier, 0.225);
+
   let previousHp = 0;
-  for (let wave = 1; wave <= 30; wave += 1) {
+  for (let wave = 1; wave <= FINAL_WAVE; wave += 1) {
     const cfg = waveConfig(wave);
     assert.ok(cfg.hp > previousHp, `wave ${wave} HP grows continuously`);
     assert.ok(cfg.speed <= 14, 'base speed remains aimable');
     assert.ok(cfg.spawnInterval >= 0.45, 'spawn cadence remains bounded');
     previousHp = cfg.hp;
-    assert.equal(isBlessingWave(wave), [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].includes(wave));
+    if (wave <= 30) {
+      assert.equal(isBlessingWave(wave), [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].includes(wave));
+    }
   }
+  assert.equal(waveConfig(20).hp, 15);
+  assert.equal(waveConfig(30).hp, 25);
+  assert.equal(waveConfig(40).hp, 40);
+  assert.equal(waveConfig(50).hp, 60);
 }
 
 // --- Black Knight: progressive limb loss, tuning, and reward ---
@@ -653,6 +673,19 @@ console.log('Caerbannog game step tests passed.');
   const weak = seeking.rabbits.find((r) => r.id === 1)!;
   near(tough.hp, 20 - lightningPct(2) * 20, 1e-6);
   assert.equal(weak.hp, 4, 'lightning ignores the weaker rabbit');
+
+  // A late White Rabbit takes the strike percentage through both its boss
+  // resistance and the resistance earned by the late-game horde.
+  const bossFight = playing({
+    wave: 30,
+    rng: createRng(lowSeed),
+    rabbits: [{ ...rabbitAt(90, 20, 'boss'), id: 1 }],
+    stats: ownsOnly('lightning', 1, 2),
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const bossStruck = step(bossFight, 50).rabbits[0];
+  const bossResistance = rabbitTraits('boss', 30).lightningDamageMultiplier;
+  near(bossStruck.hp, 20 - lightningPct(2) * 20 * bossResistance, 1e-6);
 }
 
 // --- Starting satchel holds two grenades ---
@@ -787,12 +820,26 @@ console.log('Caerbannog game step tests passed.');
     rabbits: [rabbitAt(40, 10)],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
   });
-  assert.ok(step(burning, 50).rabbits[0].hp < 10, 'a rabbit in holy fire burns');
+  near(step(burning, 50).rabbits[0].hp, 10 - 0.35 * 0.05, 1e-6);
   const safe = playing({
     rabbits: [rabbitAt(80, 10)],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
   });
   assert.equal(step(safe, 50).rabbits[0].hp, 10, 'fire only burns rabbits within the patch');
+
+  // Late enemies resist the reduced burn, with a further reduction for bosses.
+  const lateBurning = playing({
+    wave: 40,
+    rabbits: [rabbitAt(40, 10)],
+    firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
+  });
+  near(step(lateBurning, 50).rabbits[0].hp, 10 - 0.35 * 0.05 * 0.75, 1e-6);
+  const bossBurning = playing({
+    wave: 40,
+    rabbits: [rabbitAt(40, 10, 'boss')],
+    firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
+  });
+  near(step(bossBurning, 50).rabbits[0].hp, 10 - 0.35 * 0.05 * 0.375, 1e-6);
 
   // Spent patches burn out.
   const fading = playing({ firePatches: [{ id: 1, x: 40, radius: 6, age: 2.49, ttl: 2.5 }] });
@@ -859,7 +906,7 @@ const runUntilPhaseChange = (initial: GameState, maxSeconds = 120): GameState =>
   const afterFodder = runUntilPhaseChange(fodderWave);
   assert.equal(afterFodder.phase, 'intermission');
   assert.ok(afterFodder.score >= cfg.count * 0.8, 'static defenses clear at least 80% of late fodder');
-  assert.ok(afterFodder.stats.castleHp >= 8, 'fodder alone does not seriously threaten the keep');
+  assert.ok(afterFodder.stats.castleHp >= 7, 'maxed defenses preserve most of the keep against fodder');
 
   let passive = startGame(createGame(77));
   passive = {
@@ -886,8 +933,9 @@ const runUntilPhaseChange = (initial: GameState, maxSeconds = 120): GameState =>
   assert.ok(failedWave <= 15, `passive-only play should fail by wave 15, failed at ${failedWave}`);
 }
 
-// A damage-focused grenade path has enough accurate shots to stop every boss
-// before it reaches the gate, even after reserving a second for flight/fuse.
+// A damage-focused path has enough accurate shots to stop every boss before it
+// reaches the gate. After wave 10, include one conservative level-one lightning
+// proc: the stronger late-game horde should require using its unlocked kit.
 for (const wave of [5, 10, 15, 20, 25, 30]) {
   const cfg = waveConfig(wave);
   const traits = rabbitTraits('boss', wave);
@@ -895,7 +943,9 @@ for (const wave of [5, 10, 15, 20, 25, 30]) {
   const milestone = wave / 5;
   const grenadeDamage = 2 + milestone;
   const directDamage = blastDamage(grenadeDamage, 0, 9) * traits.grenadeDamageMultiplier;
-  const shotsNeeded = Math.ceil(bossHp / directDamage);
+  const lightningDamage =
+    wave >= 15 ? bossHp * lightningPct(1) * traits.lightningDamageMultiplier : 0;
+  const shotsNeeded = Math.ceil((bossHp - lightningDamage) / directDamage);
   const travelTime = (WORLD.spawnX - WORLD.keepX) / (cfg.speed * traits.speedMultiplier) - 1;
   const shotsAvailable = 3 + Math.floor(travelTime / 1.6);
   assert.ok(shotsNeeded <= shotsAvailable, `wave ${wave} boss is beatable with accurate grenades`);

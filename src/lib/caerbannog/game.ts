@@ -110,7 +110,20 @@ export const LIGHTNING_ARC_RANGE = 16; // world units a bolt will chain across
 export const LIGHTNING_ARC_MAX_TARGETS = 2; // extra rabbits a single bolt arcs to
 const LIGHTNING_ARC_FALLOFF = 0.5; // arced rabbits take this share of the strike %
 const CLUSTER_FIRE_TTL = 2.5; // seconds a scorched patch keeps burning
-const CLUSTER_FIRE_DPS_SCALE = 0.6; // burn dps as a share of base grenade damage
+const CLUSTER_FIRE_DPS_SCALE = 0.35; // burn dps as a share of base grenade damage
+
+// Elemental damage is deliberately steady through wave 20, then loses some of
+// its bite as the horde adapts. At wave 50, ordinary late-game rabbits take 65%
+// of lightning and holy-fire damage; milestone bosses reduce it further.
+const LATE_GAME_ELEMENTAL_START = 20;
+const LATE_GAME_ELEMENTAL_FLOOR = 0.65;
+const LATE_GAME_ELEMENTAL_DROP_PER_WAVE = 0.0125;
+
+export const lateGameElementalDamageMultiplier = (wave: number): number =>
+  Math.max(
+    LATE_GAME_ELEMENTAL_FLOOR,
+    1 - Math.max(0, wave - LATE_GAME_ELEMENTAL_START) * LATE_GAME_ELEMENTAL_DROP_PER_WAVE,
+  );
 
 /** Per-special upgrade state: ownership, a level on each track, and the one-time enhancement. */
 export interface SpecialState {
@@ -140,6 +153,8 @@ export interface RabbitTraits {
   speedMultiplier: number;
   staticDamageMultiplier: number;
   grenadeDamageMultiplier: number;
+  holyFireDamageMultiplier: number;
+  lightningDamageMultiplier: number;
   keepDamage: number;
   bounty: number;
   scale: number;
@@ -316,12 +331,15 @@ export const timStats = (level: number): { interval: number; damage: number; spl
 
 /** Fixed archetype tuning. Wave is used only for the milestone boss bounty. */
 export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
+  const elemental = lateGameElementalDamageMultiplier(wave);
   if (kind === 'runner') {
     return {
       hpMultiplier: 0.65,
       speedMultiplier: 1.65,
       staticDamageMultiplier: 1,
       grenadeDamageMultiplier: 1,
+      holyFireDamageMultiplier: elemental,
+      lightningDamageMultiplier: elemental,
       keepDamage: 1,
       bounty: 1,
       scale: 0.9,
@@ -333,6 +351,8 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
       speedMultiplier: 0.72,
       staticDamageMultiplier: 0.35,
       grenadeDamageMultiplier: 1.2,
+      holyFireDamageMultiplier: elemental,
+      lightningDamageMultiplier: elemental,
       keepDamage: 2,
       bounty: 3,
       scale: 1.25,
@@ -345,6 +365,8 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
       speedMultiplier: 0.55,
       staticDamageMultiplier: 0.15,
       grenadeDamageMultiplier: 1.25,
+      holyFireDamageMultiplier: 0.5 * elemental,
+      lightningDamageMultiplier: 0.3 * elemental,
       keepDamage: 3,
       bounty: 10 + milestone * 2,
       scale: 1.7,
@@ -360,6 +382,8 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
       speedMultiplier: 0.3 + 0.15 * legs,
       staticDamageMultiplier: 0.3,
       grenadeDamageMultiplier: 1.15,
+      holyFireDamageMultiplier: 0.6 * elemental,
+      lightningDamageMultiplier: 0.3 * elemental,
       keepDamage: 2,
       bounty: 12 + milestone * 4, // a tougher prize than the White Rabbit boss
       scale: 1.5,
@@ -370,6 +394,8 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
     speedMultiplier: 1,
     staticDamageMultiplier: 1,
     grenadeDamageMultiplier: 1,
+    holyFireDamageMultiplier: elemental,
+    lightningDamageMultiplier: elemental,
     keepDamage: 1,
     bounty: 1,
     scale: 1,
@@ -721,7 +747,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     for (const r of rabbits) {
       for (const p of firePatches) {
         if (Math.abs(r.x - p.x) <= p.radius) {
-          r.hp -= burn * dt * rabbitTraits(r.kind, state.wave).grenadeDamageMultiplier;
+          r.hp -= burn * dt * rabbitTraits(r.kind, state.wave).holyFireDamageMultiplier;
         }
       }
     }
@@ -839,7 +865,8 @@ export const step = (state: GameState, dtMs: number): GameState => {
         }
         if (target) {
           const hub = target;
-          hub.hp -= lightningPct(lightning.powerLevel) * hub.maxHp;
+          const hubLightningMultiplier = rabbitTraits(hub.kind, state.wave).lightningDamageMultiplier;
+          hub.hp -= lightningPct(lightning.powerLevel) * hub.maxHp * hubLightningMultiplier;
           zaps.push({
             id: nextId,
             from: { x: hub.x, y: LIGHTNING_SKY_Y },
@@ -858,7 +885,8 @@ export const step = (state: GameState, dtMs: number): GameState => {
               .sort((a, b) => Math.abs(a.x - hub.x) - Math.abs(b.x - hub.x))
               .slice(0, LIGHTNING_ARC_MAX_TARGETS);
             for (const r of chained) {
-              r.hp -= arcShare * r.maxHp;
+              const arcLightningMultiplier = rabbitTraits(r.kind, state.wave).lightningDamageMultiplier;
+              r.hp -= arcShare * r.maxHp * arcLightningMultiplier;
               zaps.push({
                 id: nextId,
                 from: { x: hub.x, y: hub.y },

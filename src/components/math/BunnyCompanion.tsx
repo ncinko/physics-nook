@@ -207,7 +207,7 @@ export function BunnyCompanion() {
     // The glare runs on its own timer (not the `run`-token hop loop, which
     // `flee()` invalidates) so it keeps recurring for the whole visit. Every
     // 10-20s, if the bunny is sitting on the ground, it flashes red eyes for
-    // 1.5s; clicking during that window opens the hidden game (see onClick).
+    // 3s; clicking during that window opens the hidden game (see onClick).
     const scheduleGlare = () => {
       glareTimer = setTimeout(runGlare, rand(10000, 20000));
     };
@@ -231,7 +231,7 @@ export function BunnyCompanion() {
           setFrame((f) => (f === 'glare' ? 'sit' : f));
         }
         scheduleGlare();
-      }, 1500);
+      }, 3000);
     }
 
     const onResize = () => applyTransform();

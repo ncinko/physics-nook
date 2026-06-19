@@ -303,20 +303,32 @@ function HopArc({ from, to, hop }: { from: number; to: number; hop: number }) {
   const apexY = BASELINE_Y - 24 - span * 0.32;
   const midX = (x1 + x2) / 2;
   // Quadratic arc cresting above the line, with an arrowhead at the landing.
-  const ux = x2 >= x1 ? 1 : -1;
+  const tipY = BASELINE_Y - 4;
+  // At the end of a quadratic Bezier, the tangent points from its control
+  // point to its endpoint. Build the arrowhead in that local direction so it
+  // continues the curve instead of sitting horizontally across it.
+  const tangentX = x2 - midX;
+  const tangentY = tipY - apexY;
+  const tangentLength = Math.hypot(tangentX, tangentY);
+  const unitX = tangentX / tangentLength;
+  const unitY = tangentY / tangentLength;
   const headLength = 10;
-  const tipX = x2 - ux * 2;
+  const headWidth = 5;
+  const baseX = x2 - unitX * headLength;
+  const baseY = tipY - unitY * headLength;
+  const normalX = -unitY * headWidth;
+  const normalY = unitX * headWidth;
   return (
     <g>
       <path
-        d={`M ${x1} ${BASELINE_Y - 4} Q ${midX} ${apexY} ${tipX} ${BASELINE_Y - 4}`}
+        d={`M ${x1} ${BASELINE_Y - 4} Q ${midX} ${apexY} ${x2} ${tipY}`}
         fill="none"
         stroke={color}
         strokeWidth={2.5}
         strokeLinecap="round"
       />
       <polygon
-        points={`${x2},${BASELINE_Y - 2} ${tipX - ux * headLength},${BASELINE_Y - 4 - 5} ${tipX - ux * headLength},${BASELINE_Y - 4 + 5}`}
+        points={`${x2},${tipY} ${baseX + normalX},${baseY + normalY} ${baseX - normalX},${baseY - normalY}`}
         fill={color}
       />
       <text x={midX} y={apexY - 6} textAnchor="middle" fill={color} fontSize="13" fontWeight="800">

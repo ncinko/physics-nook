@@ -259,9 +259,6 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="m-0 text-lg font-semibold">The Rabbit of Caerbannog</h3>
-          <p className="m-0 text-sm text-[var(--text-muted)]">
-            Pull back from the slingshot to aim the Holy Hand Grenade. Release to fling it.
-          </p>
         </div>
         <Hud state={state} best={best} />
       </div>
@@ -441,7 +438,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               </p>
               <p className="m-0 text-base font-black">
                 {state.wave % 10 === 0
-                  ? 'The Black Knight bars the way'
+                  ? 'The Black Knight approaches'
                   : 'The White Rabbit approaches'}
               </p>
             </div>
@@ -450,15 +447,10 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
         {state.phase === 'intro' && (
           <Overlay>
-            <h2 className="m-0 text-2xl font-black tracking-tight text-white">
-              The Tale of the Killer Rabbit
-            </h2>
             <p className="mt-3 mb-0 max-w-md text-sm leading-6 text-slate-200">
               That&apos;s no ordinary rabbit. Waves of the beasts pour from the Cave of
               Caerbannog toward Arthur&apos;s keep. Draw back the holy slingshot and release
-              to fling the Holy Hand Grenade of Antioch — the launch is a <em>vector</em>,
-              so angle and draw both matter. Close blasts hit hardest. Spend gold between
-              waves on the keep&apos;s defenses; sacred blessings improve only your grenades.
+              to fling the Holy Hand Grenade of Antioch. 
             </p>
             <button type="button" onClick={begin} className={primaryBtn}>
               Begin the Siege

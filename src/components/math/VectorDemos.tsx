@@ -92,7 +92,7 @@ export function VectorReaderDemo() {
   return (
     <DemoShell
       title="Read a Vector"
-      description="Drag the tip. The same arrow can be described by its components, magnitude, and direction."
+      description="This graphical representation can also be described by its components, magnitude, and direction."
     >
       <ReadoutGrid>
         <Readout label="components" value={formatVector(vector)} accent={COLORS.a} />
@@ -209,7 +209,7 @@ export function VectorAdditionDemo() {
   return (
     <DemoShell
       title="Add Two Hops"
-      description="Drag each hop, then press Hop! to send the bunny along hop 1 then hop 2. Swap the order — either route lands on the same carrot."
+      description="Adjust the hop vectors, and then press Hop! to send the bunny on its way. Swap the order — either route lands on the same carrot."
     >
       <ReadoutGrid>
         <Readout label="hop 1" value={formatVector(a)} accent={COLORS.a} />

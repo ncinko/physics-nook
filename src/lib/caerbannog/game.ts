@@ -29,7 +29,10 @@ export const WORLD = {
   width: 100,
   keepX: 8, // rabbits at or past this x have reached the keep
   spawnX: 98, // rabbits enter here and advance left
-  launch: { x: 10, y: 8 } as Vector2, // catapult muzzle on the keep
+  // Slingshot emplacement beside the keep. Kept up and to the right of the
+  // bottom-left corner so the player has room to pull the sling back down-left
+  // without the cursor crowding the edge of the play area.
+  launch: { x: 12, y: 11 } as Vector2,
   tim: { x: 4, y: 9 } as Vector2, // where Tim the Enchanter stands to cast
   caltropsZone: 16, // caltrops cover the ground from keepX out to keepX + this
   gravity: 60, // world units / s^2 (pulls -y)
@@ -37,7 +40,30 @@ export const WORLD = {
 };
 
 export type GamePhase = 'intro' | 'playing' | 'intermission' | 'gameover';
-export type RabbitKind = 'common' | 'runner' | 'brute' | 'boss';
+export type RabbitKind = 'common' | 'runner' | 'brute' | 'boss' | 'knight';
+
+/** Seconds a Tim staff-swing animation plays after each cast (purely visual). */
+export const TIM_SWING_TIME = 0.4;
+
+/** The Black Knight starts whole with four limbs (two arms, two legs). */
+export const KNIGHT_MAX_LIMBS = 4;
+
+/**
+ * The Black Knight is a mini-boss that returns every tenth wave (10, 20, 30, …)
+ * and — true to Monty Python — loses one limb on each appearance: first his
+ * arms, then his legs. Returns the number of limbs he still has (0–4). Off the
+ * milestone waves he is notionally whole.
+ */
+export const knightLimbs = (wave: number): number => {
+  if (wave <= 0 || wave % 10 !== 0) {
+    return KNIGHT_MAX_LIMBS;
+  }
+  const appearance = wave / 10; // 1 at wave 10, 2 at wave 20, …
+  return Math.max(0, KNIGHT_MAX_LIMBS - (appearance - 1));
+};
+
+/** Legs still attached for a given limb count (arms are lost before legs). */
+export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, limbs));
 
 export interface RabbitTraits {
   hpMultiplier: number;
@@ -109,6 +135,7 @@ export interface GameStats {
   caltropsLevel: number; // 0 = none; higher slows + bleeds rabbits near the keep
   timLevel: number; // 0 = not summoned; higher = stronger/faster casts
   timCooldown: number; // seconds until Tim's next cast
+  timSwing: number; // seconds left on Tim's staff-swing animation (visual only)
 }
 
 export interface GameState {
@@ -132,6 +159,7 @@ export interface GameState {
   nextId: number;
   bestWave: number;
   announcementTimer: number;
+  clock: number; // seconds elapsed while playing; drives idle animation
 }
 
 const MAX_DT_MS = 50; // clamp dt so a stalled tab can't tunnel rabbits/grenades
@@ -161,6 +189,7 @@ export const createGame = (seed = 1): GameState => ({
     caltropsLevel: 0,
     timLevel: 0,
     timCooldown: 0,
+    timSwing: 0,
   },
   pending: 0,
   spawnTimer: 0,
@@ -170,6 +199,7 @@ export const createGame = (seed = 1): GameState => ({
   nextId: 1,
   bestWave: 0,
   announcementTimer: 0,
+  clock: 0,
 });
 
 // --- Defense tuning ---------------------------------------------------------
@@ -224,6 +254,21 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
       scale: 1.7,
     };
   }
+  if (kind === 'knight') {
+    // Armoured mini-boss. Fewer legs (later appearances) drag him slower, but he
+    // never gives up. Bounty climbs with each return.
+    const milestone = Math.max(1, Math.floor(wave / 10));
+    const legs = knightLegs(knightLimbs(wave));
+    return {
+      hpMultiplier: 3.5 + milestone * 0.2,
+      speedMultiplier: 0.3 + 0.15 * legs,
+      staticDamageMultiplier: 0.3,
+      grenadeDamageMultiplier: 1.15,
+      keepDamage: 2,
+      bounty: 12 + milestone * 4, // a tougher prize than the White Rabbit boss
+      scale: 1.5,
+    };
+  }
   return {
     hpMultiplier: 1,
     speedMultiplier: 1,
@@ -235,10 +280,15 @@ export const rabbitTraits = (kind: RabbitKind, wave: number): RabbitTraits => {
   };
 };
 
-/** Learnable one-based spawn pattern: boss, then brute, runner, common. */
+/** Learnable one-based spawn pattern: knight/boss finale, then brute, runner, common. */
 export const rabbitKindForSpawn = (wave: number, spawnIndex: number, count: number): RabbitKind => {
   const ordinal = spawnIndex + 1;
-  if (wave % 5 === 0 && spawnIndex === count - 1) return 'boss';
+  if (spawnIndex === count - 1) {
+    // Every tenth wave the Black Knight headlines; the other milestone waves
+    // (5, 15, 25, …) send the White Rabbit.
+    if (wave % 10 === 0) return 'knight';
+    if (wave % 5 === 0) return 'boss';
+  }
   if (wave >= 7 && ordinal % 6 === 0) return 'brute';
   if (wave >= 4 && ordinal % 5 === 0) return 'runner';
   return 'common';
@@ -381,6 +431,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   let precisionKillsThisWave = state.precisionKillsThisWave;
   let nextId = state.nextId;
   let announcementTimer = Math.max(0, state.announcementTimer - dt);
+  const clock = state.clock + dt;
   const rewardPopups = state.rewardPopups
     .map((popup) => ({ ...popup, age: popup.age + dt }))
     .filter((popup) => popup.age < popup.ttl);
@@ -413,11 +464,15 @@ export const step = (state: GameState, dtMs: number): GameState => {
   //    the caltrops zone near the keep are slowed.
   const slow = caltropsSlow(stats.caltropsLevel);
   const caltropsEdge = WORLD.keepX + WORLD.caltropsZone;
+  // A limbless Black Knight has nothing left to march on, so he hops along like
+  // the famous torso; otherwise the knight gets a small marching bob rather than
+  // a bunny hop.
+  const knightHop = knightLimbs(state.wave) === 0 ? 2.4 : 0.6;
   for (const r of rabbits) {
     const inCaltrops = r.x <= caltropsEdge;
     r.x -= r.speed * (inCaltrops ? slow : 1) * dt;
     r.hopPhase += dt * 7;
-    r.y = Math.abs(Math.sin(r.hopPhase)) * 2;
+    r.y = Math.abs(Math.sin(r.hopPhase)) * (r.kind === 'knight' ? knightHop : 2);
   }
 
   // 4. Rabbits that reach the keep bite the wall and are removed.
@@ -491,6 +546,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   const zaps = state.zaps
     .map((z) => ({ ...z, age: z.age + dt }))
     .filter((z) => z.age < z.ttl);
+  stats.timSwing = Math.max(0, stats.timSwing - dt);
   if (stats.timLevel > 0) {
     stats.timCooldown -= dt;
     if (stats.timCooldown <= 0 && rabbits.length > 0) {
@@ -515,6 +571,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
       });
       nextId += 1;
       stats.timCooldown = tim.interval;
+      stats.timSwing = TIM_SWING_TIME; // kick off the staff-swing animation
     }
   }
 
@@ -542,6 +599,17 @@ export const step = (state: GameState, dtMs: number): GameState => {
           id: nextId,
           pos: { x: r.x, y: r.y + 10 },
           text: `WHITE RABBIT +${rabbitTraits('boss', state.wave).bounty} GOLD`,
+          tone: 'boss',
+          age: 0,
+          ttl: 1.4,
+        });
+        nextId += 1;
+      }
+      if (r.kind === 'knight') {
+        rewardPopups.push({
+          id: nextId,
+          pos: { x: r.x, y: r.y + 10 },
+          text: `BLACK KNIGHT FALLS +${rabbitTraits('knight', state.wave).bounty} GOLD`,
           tone: 'boss',
           age: 0,
           ttl: 1.4,
@@ -592,6 +660,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     nextId,
     bestWave,
     announcementTimer,
+    clock,
   };
 };
 

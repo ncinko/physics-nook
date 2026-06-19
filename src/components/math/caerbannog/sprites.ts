@@ -127,3 +127,162 @@ const TIM_PALETTE: Record<string, string> = {
 export const GRENADE_SPRITE = buildSprite(GRENADE, GRENADE_PALETTE);
 export const KEEP_SPRITE = buildSprite(KEEP, KEEP_PALETTE);
 export const TIM_SPRITE = buildSprite(TIM, TIM_PALETTE);
+
+// --- The Black Knight (mini-boss) -----------------------------------------
+// Authored front-on as separate limb layers over one shared 16×26 canvas so the
+// game can drop a limb each appearance (Monty Python style) and substitute a
+// bloody stump in its place. A great helm with a cross-slit visor, a black
+// surcoat bearing a red device, a belt, and a longsword held point-down.
+export const KNIGHT_COLS = 16;
+export const KNIGHT_ROWS = 26;
+
+const knightLayer = (rows: string[]): string[] => {
+  const padded = rows.map((row) => row.padEnd(KNIGHT_COLS, '.'));
+  while (padded.length < KNIGHT_ROWS) {
+    padded.push('.'.repeat(KNIGHT_COLS));
+  }
+  return padded;
+};
+
+const KNIGHT_BODY = knightLayer([
+  '......kkkk......',
+  '.....kKKKKk.....',
+  '.....kMMMMk.....',
+  '.....keeeek.....',
+  '.....kMMMMk.....',
+  '.....kMeeMk.....',
+  '.....kMMMMk.....',
+  '.....kkKKkk.....',
+  '......kKKk......',
+  '....kKKKKKKk....',
+  '...kKKKKKKKKk...',
+  '...kKrKKKKrKk...',
+  '...kKrRKKRrKk...',
+  '...kKKrRRrKKk...',
+  '...kKKrRRrKKk...',
+  '...kKKKrrKKKk...',
+  '...kKKKMMKKKk...',
+  '...kKKKKKKKKk...',
+  '...kKKKKKKKKk...',
+  '..kKKKKKKKKKKk..',
+  '..kKKKKKKKKKKk..',
+]);
+
+const KNIGHT_ARM_L = knightLayer([
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '.kKKk...........',
+  'kKKKk...........',
+  '.kKKk...........',
+  '.kKMk...........',
+  '.kKMk...........',
+  '.kKMk...........',
+  '.kKKk...........',
+  '.kKKk...........',
+  '..kKk...........',
+  '..kKk...........',
+]);
+
+const KNIGHT_ARM_R = knightLayer([
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '................',
+  '...........kKKk.',
+  '..........kKKKk.',
+  '...........kKKk.',
+  '...........kMKk.',
+  '...........kMKk.',
+  '...........kMKk.',
+  '...........kKKk.',
+  '...........kKKk.',
+  '..........ggggg.',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............sS..',
+  '............ss..',
+]);
+
+const KNIGHT_LEG_L = knightLayer([
+  ...Array.from({ length: 21 }, () => ''),
+  '...kKKk.........',
+  '...kKKk.........',
+  '...kKKk.........',
+  '..kKKKk.........',
+  '..kkkkk.........',
+]);
+
+const KNIGHT_LEG_R = knightLayer([
+  ...Array.from({ length: 21 }, () => ''),
+  '.........kKKk...',
+  '.........kKKk...',
+  '.........kKKk...',
+  '.........kKKKk..',
+  '.........kkkkk..',
+]);
+
+const KNIGHT_PALETTE: Record<string, string> = {
+  k: '#0b0f17', // deepest outline / near-black
+  K: '#1f2937', // armour base
+  m: '#374151', // armour mid
+  M: '#4b5563', // bright metal edge
+  r: '#7f1d1d', // dark red device
+  R: '#dc2626', // bright red device
+  e: '#020617', // helm slit (cross visor)
+  s: '#64748b', // sword blade
+  S: '#cbd5e1', // sword highlight
+  g: '#475569', // crossguard
+};
+
+export type KnightPartName = 'body' | 'armL' | 'armR' | 'legL' | 'legR';
+
+export const KNIGHT_PARTS: Record<KnightPartName, PixelSprite> = {
+  body: buildSprite(KNIGHT_BODY, KNIGHT_PALETTE),
+  armL: buildSprite(KNIGHT_ARM_L, KNIGHT_PALETTE),
+  armR: buildSprite(KNIGHT_ARM_R, KNIGHT_PALETTE),
+  legL: buildSprite(KNIGHT_LEG_L, KNIGHT_PALETTE),
+  legR: buildSprite(KNIGHT_LEG_R, KNIGHT_PALETTE),
+};
+
+// A few red pixels marking where a severed limb used to attach. '"Tis but a
+// scratch."' Drawn in place of the missing arm/leg.
+export const KNIGHT_STUMPS: Record<
+  Exclude<KnightPartName, 'body'>,
+  Array<{ x: number; y: number; fill: string }>
+> = {
+  armL: [
+    { x: 3, y: 9, fill: '#7f1d1d' },
+    { x: 2, y: 10, fill: '#dc2626' },
+    { x: 3, y: 10, fill: '#7f1d1d' },
+  ],
+  armR: [
+    { x: 12, y: 9, fill: '#7f1d1d' },
+    { x: 13, y: 10, fill: '#dc2626' },
+    { x: 12, y: 10, fill: '#7f1d1d' },
+  ],
+  legL: [
+    { x: 4, y: 21, fill: '#7f1d1d' },
+    { x: 5, y: 21, fill: '#dc2626' },
+    { x: 4, y: 22, fill: '#7f1d1d' },
+  ],
+  legR: [
+    { x: 10, y: 21, fill: '#7f1d1d' },
+    { x: 11, y: 21, fill: '#dc2626' },
+    { x: 11, y: 22, fill: '#7f1d1d' },
+  ],
+};

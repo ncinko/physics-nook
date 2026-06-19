@@ -199,11 +199,9 @@ export function VectorVoyage() {
     <section className="not-prose my-8 overflow-hidden rounded-2xl border border-[var(--grid-line)] bg-[var(--sim-bg)] p-4 text-[var(--text-primary)] shadow-sm">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="m-0 text-lg font-semibold">Bunny Hops Cross-Country</h3>
+          <h3 className="m-0 text-lg font-semibold">Bunny Hops</h3>
           <p className="mt-1 mb-0 text-sm leading-6 text-[var(--text-muted)]">
-            Now the bunny hops on a grid, not just a line. Click to add each hop from the burrow to
-            the carrot. The hops must sum to the trip head-to-tail — and the bunny can&apos;t hop
-            through a hedge.
+            Click to hop from the burrow to the carrot. Each successive hop adds an additional vector to the sum.
           </p>
         </div>
         <div className="inline-flex rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] p-1">
@@ -228,7 +226,7 @@ export function VectorVoyage() {
             <span className="ml-2 font-normal text-[var(--text-muted)]">{level.hint}</span>
           </p>
           <p className="m-0 font-mono text-[var(--text-muted)]">
-            hops {moves.length} · par {level.par}
+            hops {moves.length} 
           </p>
         </div>
 
@@ -295,8 +293,7 @@ export function VectorVoyage() {
             }}
           >
             Munch! The bunny reached the carrot in {moves.length}{' '}
-            {moves.length === 1 ? 'hop' : 'hops'}
-            {moves.length <= level.par ? ' — par or better!' : '.'} The hops added up to the trip{' '}
+            {moves.length === 1 ? 'hop' : 'hops'} The hops added up to the trip{' '}
             {formatVector(net)}.
           </p>
         ) : invalidTip ? (

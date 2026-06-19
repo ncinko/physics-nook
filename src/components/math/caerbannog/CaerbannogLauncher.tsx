@@ -38,11 +38,8 @@ export function CaerbannogLauncher() {
       role="dialog"
       aria-modal="true"
       aria-label="Hidden game: the Rabbit of Caerbannog"
-      onClick={(event) => {
-        if (event.target === event.currentTarget) {
-          setOpen(false);
-        }
-      }}
+      // Intentionally no backdrop-click-to-close: an errant click outside the
+      // board shouldn't abandon a run. The × button (or Escape) closes it.
       style={{
         position: 'fixed',
         inset: 0,

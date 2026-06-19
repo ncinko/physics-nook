@@ -10,6 +10,8 @@ import {
 } from '../../src/lib/caerbannog/upgrades.ts';
 import { isBlessingWave, waveConfig } from '../../src/lib/caerbannog/waves.ts';
 import {
+  KNIGHT_MAX_LIMBS,
+  TIM_SWING_TIME,
   WORLD,
   blastDamage,
   buyDefense,
@@ -19,6 +21,8 @@ import {
   chooseBlessing,
   createGame,
   goldForKill,
+  knightLegs,
+  knightLimbs,
   landingPoint,
   nextWave,
   offerBlessings,
@@ -394,6 +398,10 @@ console.log('Caerbannog game step tests passed.');
   assert.equal(rabbitKindForSpawn(12, 11, waveConfig(12).count), 'brute');
   // Wave 15's final spawn is also divisible by six; boss priority wins.
   assert.equal(rabbitKindForSpawn(15, waveConfig(15).count - 1, waveConfig(15).count), 'boss');
+  // Every tenth wave the finale is the Black Knight instead of the White Rabbit.
+  assert.equal(rabbitKindForSpawn(10, waveConfig(10).count - 1, waveConfig(10).count), 'knight');
+  assert.equal(rabbitKindForSpawn(20, waveConfig(20).count - 1, waveConfig(20).count), 'knight');
+  assert.notEqual(rabbitKindForSpawn(10, 0, waveConfig(10).count), 'knight');
 
   assert.equal(rabbitTraits('runner', 10).hpMultiplier, 0.65);
   assert.equal(rabbitTraits('brute', 10).staticDamageMultiplier, 0.35);
@@ -410,6 +418,61 @@ console.log('Caerbannog game step tests passed.');
     previousHp = cfg.hp;
     assert.equal(isBlessingWave(wave), [1, 4, 7, 10, 13, 16, 19, 22, 25, 28].includes(wave));
   }
+}
+
+// --- Black Knight: progressive limb loss, tuning, and reward ---
+{
+  // Whole on his debut, then one limb fewer each return (arms before legs).
+  assert.equal(knightLimbs(10), KNIGHT_MAX_LIMBS);
+  assert.equal(knightLimbs(20), 3);
+  assert.equal(knightLimbs(30), 2);
+  assert.equal(knightLimbs(40), 1);
+  assert.equal(knightLimbs(50), 0);
+  assert.equal(knightLimbs(60), 0, 'never goes below zero limbs');
+  assert.equal(knightLimbs(25), KNIGHT_MAX_LIMBS, 'whole off the milestone waves');
+
+  assert.equal(knightLegs(4), 2);
+  assert.equal(knightLegs(2), 2, 'arms are lost before legs');
+  assert.equal(knightLegs(1), 1);
+  assert.equal(knightLegs(0), 0);
+
+  // Fewer legs => slower; bounty climbs with each appearance.
+  assert.ok(rabbitTraits('knight', 50).speedMultiplier < rabbitTraits('knight', 10).speedMultiplier);
+  assert.equal(rabbitTraits('knight', 10).scale, 1.5);
+  assert.equal(rabbitTraits('knight', 20).bounty, 12 + 2 * 4);
+
+  // Felling the knight pays his bounty and announces it.
+  const knightFight = playing({
+    wave: 10,
+    rabbits: [rabbitAt(50, 1, 'knight')],
+    grenades: [{ id: 2, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const afterKnight = step(knightFight, 50);
+  assert.equal(afterKnight.rabbits.length, 0, 'the Black Knight can be felled');
+  assert.equal(afterKnight.gold, goldForKill('knight', 10, true));
+  assert.ok(
+    afterKnight.rewardPopups.some((popup) => /BLACK KNIGHT/.test(popup.text)),
+    'a knight kill announces the Black Knight',
+  );
+}
+
+// --- Animation clock and Tim's cast swing ---
+{
+  const s0 = startGame(createGame(7));
+  assert.equal(s0.clock, 0);
+  const s1 = step(s0, 50);
+  near(s1.clock, 0.05); // 50ms advances the idle-animation clock
+  assert.equal(step(createGame(7), 50).clock, 0, 'the clock is frozen outside play');
+
+  const casting = playing({
+    rabbits: [rabbitAt(50, 10)],
+    stats: { ...startGame(createGame(7)).stats, timLevel: 1, timCooldown: 0 },
+  });
+  const swung = step(casting, 16);
+  assert.equal(swung.zaps.length, 1, 'Tim casts');
+  assert.equal(swung.stats.timSwing, TIM_SWING_TIME, 'a cast starts the staff-swing animation');
+  const settling = step(swung, 50);
+  assert.ok(settling.stats.timSwing < TIM_SWING_TIME, 'the swing animation winds down');
 }
 
 // --- Economy remains alive through the wave-30 arc ---

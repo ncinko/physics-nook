@@ -112,10 +112,10 @@ export function BunnyNumberLine() {
   return (
     <section className="not-prose my-8 overflow-hidden rounded-2xl border border-[var(--grid-line)] bg-[var(--sim-bg)] p-4 text-[var(--text-primary)] shadow-sm">
       <div className="mb-4">
-        <h3 className="m-0 text-lg font-semibold">Bunny on the Number Line</h3>
+        <h3 className="m-0 text-lg font-semibold">Bunny Arithmetic</h3>
         <p className="mt-1 mb-0 text-sm leading-6 text-[var(--text-muted)]">
-          Hop the bunny onto the carrot. Each hop is a one-dimensional vector: a size (how far) and
-          a direction (the sign). The hops add up to the trip, exactly like vector addition.
+          Hop to the carrot. Each hop is a one-dimensional vector: a size (how far) and
+          a direction (the sign). The hops sum up to the total displacement, exactly like vector addition.
         </p>
       </div>
 

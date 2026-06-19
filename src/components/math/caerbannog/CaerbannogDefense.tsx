@@ -15,11 +15,13 @@ import {
   type Vector2,
 } from '../../../lib/math/vectors';
 import {
+  TIM_SWING_TIME,
   WORLD,
   buyDefense,
   canRepairKeep,
   chooseBlessing,
   createGame,
+  knightLimbs,
   nextWave,
   rabbitTraits,
   repairCost,
@@ -38,7 +40,17 @@ import {
   type ShopId,
 } from '../../../lib/caerbannog/upgrades';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
-import { GRENADE_SPRITE, KEEP_SPRITE, TIM_SPRITE, type PixelSprite } from './sprites';
+import {
+  GRENADE_SPRITE,
+  KEEP_SPRITE,
+  KNIGHT_COLS,
+  KNIGHT_PARTS,
+  KNIGHT_ROWS,
+  KNIGHT_STUMPS,
+  TIM_SPRITE,
+  type KnightPartName,
+  type PixelSprite,
+} from './sprites';
 
 // --- World <-> screen mapping ---------------------------------------------
 const VIEW_W = 900;
@@ -86,6 +98,9 @@ const RABBIT_PALETTES: Record<RabbitKind, Record<string, string>> = {
   runner: { ...KILLER_PALETTE, '#': '#713f12', o: '#fde68a', p: '#fb923c' },
   brute: { ...KILLER_PALETTE, '#': '#1e293b', o: '#94a3b8', p: '#64748b' },
   boss: { ...KILLER_PALETTE, '#': '#7f1d1d', o: '#fff7ed', p: '#fca5a5', n: '#dc2626' },
+  // The Black Knight renders from its own part sprites, not BunnySprite; this
+  // entry only satisfies the palette record's exhaustiveness.
+  knight: KILLER_PALETTE,
 };
 
 const pointerToWorld = (event: PointerEvent<SVGElement>): Vector2 => {
@@ -254,7 +269,9 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           </g>
           {stats.maxCastleHp > 5 && <KeepReinforcements level={stats.maxCastleHp - 5} />}
           {stats.caltropsLevel > 0 && <Caltrops level={stats.caltropsLevel} />}
-          {stats.timLevel > 0 && <Tim level={stats.timLevel} />}
+          {stats.timLevel > 0 && (
+            <Tim level={stats.timLevel} clock={state.clock} swing={stats.timSwing} />
+          )}
           <Slingshot />
 
           {/* Explosions (behind rabbits/grenades so sprites stay readable).
@@ -282,16 +299,25 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             const px = sx(rabbit.x);
             const py = sy(rabbit.y);
             const cell = 2 * rabbitTraits(rabbit.kind, state.wave).scale;
+            const isKnight = rabbit.kind === 'knight';
+            const spriteRows = isKnight ? KNIGHT_ROWS : 16;
             return (
               <g key={rabbit.id}>
-                {/* scaled -1 to face the keep; sprite is authored facing right */}
-                <g transform={`translate(${px}, ${py}) scale(-1, 1)`}>
-                  <BunnySprite frame="hop" cell={cell} palette={RABBIT_PALETTES[rabbit.kind]} />
-                </g>
+                {isKnight ? (
+                  // Front-facing, anchored at the feet — no horizontal flip.
+                  <g transform={`translate(${px}, ${py})`}>
+                    <KnightFigure limbs={knightLimbs(state.wave)} phase={rabbit.hopPhase} cell={cell} />
+                  </g>
+                ) : (
+                  // scaled -1 to face the keep; sprite is authored facing right
+                  <g transform={`translate(${px}, ${py}) scale(-1, 1)`}>
+                    <BunnySprite frame="hop" cell={cell} palette={RABBIT_PALETTES[rabbit.kind]} />
+                  </g>
+                )}
                 {rabbit.maxHp > 1 && (
                   <RabbitHealth
                     x={px}
-                    topY={py - 16 * cell - 6}
+                    topY={py - spriteRows * cell - 6}
                     hp={rabbit.hp}
                     maxHp={rabbit.maxHp}
                     kind={rabbit.kind}
@@ -385,7 +411,11 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-red-200">
                 Milestone wave {state.wave}
               </p>
-              <p className="m-0 text-base font-black">The White Rabbit approaches</p>
+              <p className="m-0 text-base font-black">
+                {state.wave % 10 === 0
+                  ? 'The Black Knight bars the way'
+                  : 'The White Rabbit approaches'}
+              </p>
             </div>
           </div>
         )}
@@ -554,18 +584,88 @@ function RabbitHealth({
   maxHp: number;
   kind: RabbitKind;
 }) {
-  const width = kind === 'boss' ? 68 : kind === 'brute' ? 48 : 38;
-  const height = kind === 'boss' ? 7 : 4;
+  const big = kind === 'boss' || kind === 'knight';
+  const width = kind === 'boss' ? 68 : kind === 'knight' ? 60 : kind === 'brute' ? 48 : 38;
+  const height = big ? 7 : 4;
   const startX = x - width / 2;
   const ratio = Math.max(0, Math.min(1, hp / maxHp));
-  const healthy = kind === 'boss' ? '#f87171' : kind === 'brute' ? '#60a5fa' : '#4ade80';
+  const healthy =
+    kind === 'boss'
+      ? '#f87171'
+      : kind === 'knight'
+        ? '#dc2626'
+        : kind === 'brute'
+          ? '#60a5fa'
+          : '#4ade80';
   const fill = ratio > 0.6 ? healthy : ratio > 0.3 ? '#facc15' : '#fb7185';
-  const stroke = kind === 'boss' ? '#fef2f2' : '#0f172a';
+  const stroke = big ? '#fef2f2' : '#0f172a';
   return (
     <g shapeRendering="crispEdges">
       <rect x={startX} y={topY} width={width} height={height} rx={1} fill="rgba(15,23,42,0.75)" />
       <rect x={startX} y={topY} width={width * ratio} height={height} rx={1} fill={fill} />
-      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="none" stroke={stroke} strokeWidth={kind === 'boss' ? 1.5 : 0.75} />
+      <rect x={startX} y={topY} width={width} height={height} rx={1} fill="none" stroke={stroke} strokeWidth={big ? 1.5 : 0.75} />
+    </g>
+  );
+}
+
+// The Black Knight, assembled from its limb parts so each can be dropped (and
+// replaced with a bloody stump) on later appearances. Legs alternate and the
+// whole figure sways as he marches; a limbless torso just hops in on `phase`.
+function KnightPart({ part, cell, dy = 0 }: { part: KnightPartName; cell: number; dy?: number }) {
+  const sprite = KNIGHT_PARTS[part];
+  return (
+    <g transform={dy ? `translate(0, ${dy})` : undefined} shapeRendering="crispEdges">
+      {sprite.pixels.map((px, i) => (
+        <rect
+          key={i}
+          x={(px.x - KNIGHT_COLS / 2) * cell}
+          y={(px.y - (KNIGHT_ROWS - 1)) * cell}
+          width={cell}
+          height={cell}
+          fill={px.fill}
+        />
+      ))}
+    </g>
+  );
+}
+
+function KnightStump({ part, cell }: { part: keyof typeof KNIGHT_STUMPS; cell: number }) {
+  return (
+    <g shapeRendering="crispEdges">
+      {KNIGHT_STUMPS[part].map((px, i) => (
+        <rect
+          key={i}
+          x={(px.x - KNIGHT_COLS / 2) * cell}
+          y={(px.y - (KNIGHT_ROWS - 1)) * cell}
+          width={cell}
+          height={cell}
+          fill={px.fill}
+        />
+      ))}
+    </g>
+  );
+}
+
+function KnightFigure({ limbs, phase, cell }: { limbs: number; phase: number; cell: number }) {
+  // Removal order matches the sketch: left arm, right arm, then the legs.
+  const present = {
+    armL: limbs >= 4,
+    armR: limbs >= 3,
+    legL: limbs >= 2,
+    legR: limbs >= 1,
+  };
+  const stepCycle = Math.sin(phase);
+  const sway = stepCycle * 2.4; // degrees of marching sway about the feet
+  const lift = cell * 0.55; // how far the trailing boot lifts each step
+  const legLDy = present.legL && stepCycle > 0 ? -lift : 0;
+  const legRDy = present.legR && stepCycle < 0 ? -lift : 0;
+  return (
+    <g transform={`rotate(${sway})`}>
+      {present.legL ? <KnightPart part="legL" cell={cell} dy={legLDy} /> : <KnightStump part="legL" cell={cell} />}
+      {present.legR ? <KnightPart part="legR" cell={cell} dy={legRDy} /> : <KnightStump part="legR" cell={cell} />}
+      <KnightPart part="body" cell={cell} />
+      {present.armL ? <KnightPart part="armL" cell={cell} /> : <KnightStump part="armL" cell={cell} />}
+      {present.armR ? <KnightPart part="armR" cell={cell} /> : <KnightStump part="armR" cell={cell} />}
     </g>
   );
 }
@@ -602,12 +702,23 @@ function Caltrops({ level }: { level: number }) {
   );
 }
 
-function Tim({ level }: { level: number }) {
+function Tim({ level, clock, swing }: { level: number; clock: number; swing: number }) {
   const x = sx(WORLD.tim.x);
-  const y = sy(WORLD.tim.y);
+  const baseY = sy(WORLD.tim.y);
+  const bob = Math.sin(clock * 2.2) * 3; // gentle hover, as if levitating
+  // `swing` counts down from TIM_SWING_TIME, so p runs 0 -> 1 across one cast.
+  const p = swing > 0 ? 1 - swing / TIM_SWING_TIME : 0;
+  const arc = Math.sin(p * Math.PI); // 0 -> 1 -> 0 over the swing
+  const swingAngle = -14 * arc; // lean into the swing and back
   return (
-    <g aria-label={`Tim the Enchanter level ${level}`} transform={`translate(${x}, ${y})`}>
-      <Pixels sprite={TIM_SPRITE} cell={2} />
+    <g aria-label={`Tim the Enchanter level ${level}`} transform={`translate(${x}, ${baseY + bob})`}>
+      <g transform={`rotate(${swingAngle})`}>
+        <Pixels sprite={TIM_SPRITE} cell={2} />
+      </g>
+      {swing > 0 && (
+        // A spark of magic flaring at the staff's flame as he casts.
+        <circle cx={16} cy={-8} r={3 + 5 * arc} fill="#fff7ae" opacity={0.85 * arc} />
+      )}
     </g>
   );
 }

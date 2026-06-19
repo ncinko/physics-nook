@@ -16,6 +16,7 @@ import {
   validateCaerbannogScoreSubmission,
 } from '../../src/lib/caerbannog/leaderboard.ts';
 import {
+  FINAL_WAVE,
   KNIGHT_MAX_LIMBS,
   MAX_SPECIAL_LEVEL,
   SPECIAL_IDS,
@@ -28,6 +29,7 @@ import {
   canRepairKeep,
   canUpgradeSpecial,
   chooseBlessing,
+  chooseEnhancement,
   chooseSpecial,
   clusterBomblets,
   createGame,
@@ -39,6 +41,7 @@ import {
   lightningPct,
   nextWave,
   offerBlessings,
+  offerableEnhancements,
   offerableSpecials,
   rabbitKindForSpawn,
   rabbitTraits,
@@ -650,6 +653,150 @@ console.log('Caerbannog game step tests passed.');
   const weak = seeking.rabbits.find((r) => r.id === 1)!;
   near(tough.hp, 20 - lightningPct(2) * 20, 1e-6);
   assert.equal(weak.hp, 4, 'lightning ignores the weaker rabbit');
+}
+
+// --- Starting satchel holds two grenades ---
+{
+  const fresh = createGame(1).stats;
+  assert.equal(fresh.ammo, 2, 'a run starts with two grenades in hand');
+  assert.equal(fresh.maxAmmo, 2, 'the starting satchel holds two grenades');
+  assert.equal(fresh.specials.cluster.enhanced, false, 'specials start unenhanced');
+  assert.equal(fresh.specials.lightning.enhanced, false);
+}
+
+// --- Clearing the final wave wins the siege ---
+{
+  const won = step(playing({ wave: FINAL_WAVE, pending: 0 }), 16);
+  assert.equal(won.phase, 'victory', 'clearing the final wave ends the run in victory');
+  assert.equal(won.blessingPending, false, 'no blessing is owed on victory');
+  assert.equal(won.specialPending, false, 'no special is owed on victory');
+  assert.equal(won.enhancementPending, false, 'no enhancement is owed on victory');
+  assert.ok(won.gold > 0, 'the final clear still pays its purse');
+  assert.equal(won.bestWave, FINAL_WAVE, 'the winning wave is recorded');
+  // The penultimate clear is still an ordinary intermission.
+  assert.equal(step(playing({ wave: FINAL_WAVE - 1, pending: 0 }), 16).phase, 'intermission');
+}
+
+// --- Wave-30/40 enhancements: offer, choice, and gating ---
+{
+  const bothOwned = () => ({
+    ...startGame(createGame(7)).stats,
+    specials: {
+      cluster: { owned: true, freqLevel: 1, powerLevel: 1, enhanced: false },
+      lightning: { owned: true, freqLevel: 1, powerLevel: 1, enhanced: false },
+    },
+  });
+
+  // Wave 30 offers a choice of both enhancements; no special weapon is owed.
+  const k30 = step(playing({ wave: 30, pending: 0, stats: bothOwned() }), 16);
+  assert.equal(k30.phase, 'intermission');
+  assert.equal(k30.enhancementPending, true, 'wave 30 owes an enhancement choice');
+  assert.equal(k30.specialPending, false, 'both weapons are already owned by wave 30');
+  assert.deepEqual(offerableEnhancements(k30.stats).sort(), [...SPECIAL_IDS].sort());
+
+  // The pick is gated, sets `enhanced`, and clears the obligation; the other waits.
+  assert.equal(chooseEnhancement(k30, 'none'), k30, "'none' is not a valid pick");
+  const enhanced = chooseEnhancement(k30, 'lightning');
+  assert.equal(enhanced.stats.specials.lightning.enhanced, true);
+  assert.equal(enhanced.stats.specials.cluster.enhanced, false, 'one knight enhances one weapon');
+  assert.equal(enhanced.enhancementPending, false);
+  assert.equal(chooseEnhancement(enhanced, 'lightning'), enhanced, 'a weapon cannot be enhanced twice');
+  // Wave 30 grants no blessing (30 % 3 === 0), so the siege can resume at once.
+  assert.equal(nextWave(enhanced).phase, 'playing', 'enhancement made -> the siege resumes');
+
+  // Wave 40 grants the remaining enhancement and also owes a blessing.
+  const k40 = step(playing({ wave: 40, pending: 0, stats: { ...enhanced.stats } }), 16);
+  assert.equal(k40.enhancementPending, true);
+  assert.deepEqual(offerableEnhancements(k40.stats), ['cluster'], 'only the unenhanced weapon is offered');
+  const bothEnhanced = chooseEnhancement(k40, 'cluster');
+  assert.equal(bothEnhanced.stats.specials.cluster.enhanced, true);
+  assert.equal(nextWave(bothEnhanced), bothEnhanced, 'still blocked by the wave-40 blessing');
+
+  // Enhancements wait until both weapons are owned — wave 20 still grants a weapon.
+  const k20 = step(playing({
+    wave: 20,
+    pending: 0,
+    stats: {
+      ...startGame(createGame(7)).stats,
+      specials: {
+        cluster: { owned: true, freqLevel: 1, powerLevel: 1, enhanced: false },
+        lightning: { owned: false, freqLevel: 0, powerLevel: 0, enhanced: false },
+      },
+    },
+  }), 16);
+  assert.equal(k20.specialPending, true, 'wave 20 still owes the second weapon');
+  assert.equal(k20.enhancementPending, false, 'no enhancement before both weapons are owned');
+}
+
+// --- Lightning Chain Arc enhancement ---
+{
+  const lowSeed = (() => { let s = 1; while (createRng(s).next() >= 0.2) s += 1; return s; })();
+  const arcStats = {
+    ...startGame(createGame(7)).stats,
+    specials: {
+      cluster: { owned: false, freqLevel: 0, powerLevel: 0, enhanced: false },
+      lightning: { owned: true, freqLevel: 1, powerLevel: 2, enhanced: true },
+    },
+  };
+  const fight = playing({
+    rng: createRng(lowSeed),
+    rabbits: [
+      { ...rabbitAt(60, 20, 'brute'), id: 1 }, // toughest -> the primary strike
+      { ...rabbitAt(64, 10, 'common'), id: 2 }, // close -> the bolt arcs to it
+      { ...rabbitAt(95, 10, 'common'), id: 3 }, // far -> beyond the arc's reach
+    ],
+    stats: arcStats,
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const struck = step(fight, 50);
+  const hub = struck.rabbits.find((r) => r.id === 1)!;
+  const nearby = struck.rabbits.find((r) => r.id === 2)!;
+  const far = struck.rabbits.find((r) => r.id === 3)!;
+  near(hub.hp, 20 - lightningPct(2) * 20, 1e-6);
+  assert.ok(nearby.hp < 10, 'the bolt arcs to a nearby rabbit');
+  assert.equal(far.hp, 10, 'the arc does not reach beyond its range');
+  assert.ok(
+    struck.zaps.filter((z) => z.tone === 'lightning').length >= 2,
+    'the arc draws extra bolts',
+  );
+}
+
+// --- Cluster Holy Fire enhancement ---
+{
+  const lowSeed = (() => { let s = 1; while (createRng(s).next() >= 0.2) s += 1; return s; })();
+  const fireStats = {
+    ...startGame(createGame(7)).stats,
+    specials: {
+      cluster: { owned: true, freqLevel: 1, powerLevel: 1, enhanced: true },
+      lightning: { owned: false, freqLevel: 0, powerLevel: 0, enhanced: false },
+    },
+  };
+  // A primary blast scatters bomblets; the enhanced bomblets burst into fire.
+  let s = playing({
+    rng: createRng(lowSeed),
+    stats: fireStats,
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  for (let i = 0; i < 80 && s.firePatches.length === 0; i += 1) {
+    s = step(s, 50);
+  }
+  assert.ok(s.firePatches.length > 0, 'enhanced cluster bomblets leave holy fire');
+
+  // A rabbit standing in a patch burns; one outside it is untouched.
+  const burning = playing({
+    rabbits: [rabbitAt(40, 10)],
+    firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
+  });
+  assert.ok(step(burning, 50).rabbits[0].hp < 10, 'a rabbit in holy fire burns');
+  const safe = playing({
+    rabbits: [rabbitAt(80, 10)],
+    firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
+  });
+  assert.equal(step(safe, 50).rabbits[0].hp, 10, 'fire only burns rabbits within the patch');
+
+  // Spent patches burn out.
+  const fading = playing({ firePatches: [{ id: 1, x: 40, radius: 6, age: 2.49, ttl: 2.5 }] });
+  assert.equal(step(fading, 50).firePatches.length, 0, 'spent fire patches expire');
 }
 
 // --- Economy remains alive through the wave-30 arc ---

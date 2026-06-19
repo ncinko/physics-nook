@@ -15,6 +15,7 @@ import {
   type Vector2,
 } from '../../../lib/math/vectors';
 import {
+  FINAL_WAVE,
   MAX_SPECIAL_LEVEL,
   SPECIAL_IDS,
   TIM_SWING_TIME,
@@ -23,12 +24,14 @@ import {
   canRepairKeep,
   canUpgradeSpecial,
   chooseBlessing,
+  chooseEnhancement,
   chooseSpecial,
   clusterBomblets,
   createGame,
   knightLimbs,
   lightningPct,
   nextWave,
+  offerableEnhancements,
   offerableSpecials,
   rabbitTraits,
   repairCost,
@@ -131,6 +134,8 @@ type SpecialInfo = {
   icon: string;
   blurb: string;
   tracks: Record<SpecialTrack, { label: string; describe: (level: number) => string }>;
+  // The one-time wave-30/40 enhancement bestowed on this special.
+  enhancement: { name: string; icon: string; blurb: string };
 };
 
 const SPECIAL_INFO: Record<SpecialId, SpecialInfo> = {
@@ -142,6 +147,11 @@ const SPECIAL_INFO: Record<SpecialId, SpecialInfo> = {
       freq: { label: 'Trigger chance', describe: (lvl) => pct(specialChance(lvl)) },
       power: { label: 'Bomblet count', describe: (lvl) => `${clusterBomblets(lvl)} bomblets` },
     },
+    enhancement: {
+      name: 'Holy Fire',
+      icon: '🔥',
+      blurb: 'Bomblets scorch the ground, leaving holy fire that burns any rabbit standing in it.',
+    },
   },
   lightning: {
     name: 'Lightning',
@@ -150,6 +160,11 @@ const SPECIAL_INFO: Record<SpecialId, SpecialInfo> = {
     tracks: {
       freq: { label: 'Trigger chance', describe: (lvl) => pct(specialChance(lvl)) },
       power: { label: 'Strike damage', describe: (lvl) => `${pct(lightningPct(lvl))} of full health` },
+    },
+    enhancement: {
+      name: 'Chain Arc',
+      icon: '⚡',
+      blurb: 'Each strike arcs from the struck rabbit to nearby beasts, searing them too.',
     },
   },
 };
@@ -423,6 +438,8 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   };
   const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
   const pickSpecial = (weapon: SpecialWeapon) => setGame((prev) => chooseSpecial(prev, weapon));
+  const pickEnhancement = (weapon: SpecialWeapon) =>
+    setGame((prev) => chooseEnhancement(prev, weapon));
   const amplifySpecial = (id: SpecialId, track: SpecialTrack) =>
     setGame((prev) => upgradeSpecial(prev, id, track));
   const purchase = (id: ShopId) => setGame((prev) => buyDefense(prev, id));
@@ -501,6 +518,23 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                 <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={COLORS.blast} opacity={(1 - t) * 0.5} />
                 <ellipse cx={cx} cy={cy} rx={rx * 0.5} ry={ry * 0.5} fill="#fde68a" opacity={1 - t} />
               </g>
+            );
+          })}
+
+          {/* Holy fire patches from enhanced cluster bomblets (behind rabbits). */}
+          {state.firePatches.map((fire) => {
+            const t = fire.age / fire.ttl;
+            // Burn at full strength, then fade out over the last fifth of its life.
+            const opacity = t < 0.8 ? 1 : Math.max(0, 1 - (t - 0.8) / 0.2);
+            return (
+              <FirePatchFlames
+                key={fire.id}
+                cx={sx(fire.x)}
+                groundY={sy(0)}
+                halfW={fire.radius * SX}
+                phase={fire.age}
+                opacity={opacity}
+              />
             );
           })}
 
@@ -699,6 +733,46 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                     </div>
                   </>
                 );
+              })() : state.enhancementPending ? (() => {
+                const offered = offerableEnhancements(stats);
+                const choosing = offered.length > 1;
+                return (
+                  <>
+                    <h2 className="mt-3 mb-0 text-xl font-black text-white">
+                      {choosing ? 'Empower a special weapon' : 'Empower your last special'}
+                    </h2>
+                    <p className="mt-1 mb-0 text-xs text-slate-300">
+                      {choosing
+                        ? 'The Black Knight loses another limb. Bestow a one-time effect on one of your weapons — the other awaits the next knight.'
+                        : 'Another limb falls — your remaining weapon claims its effect.'}
+                    </p>
+                    <div className={`mt-3 grid w-full gap-2 ${choosing ? 'sm:grid-cols-2' : ''}`}>
+                      {offered.map((id) => {
+                        const enh = SPECIAL_INFO[id].enhancement;
+                        const sky = id === 'lightning';
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            onClick={() => pickEnhancement(id)}
+                            className={`flex flex-col gap-1 rounded-xl border p-3 text-left transition ${
+                              sky
+                                ? 'border-sky-400/50 bg-sky-950/80 hover:border-sky-300 hover:bg-sky-900/80'
+                                : 'border-amber-400/50 bg-amber-950/80 hover:border-amber-300 hover:bg-amber-900/80'
+                            }`}
+                          >
+                            <span className={`text-sm font-bold ${sky ? 'text-sky-100' : 'text-amber-100'}`}>
+                              {enh.icon} {enh.name}
+                            </span>
+                            <span className={`text-xs leading-5 ${sky ? 'text-sky-50/75' : 'text-amber-50/75'}`}>
+                              {enh.blurb}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
               })() : state.blessingPending ? (
                 <>
                   <h2 className="mt-3 mb-0 text-xl font-black text-white">Choose a grenade blessing</h2>
@@ -771,6 +845,11 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                       <div key={id} className="mt-2 w-full">
                         <p className="m-0 text-xs font-bold text-indigo-200">
                           {info.icon} {info.name}
+                          {special.enhanced && (
+                            <span className="ml-2 font-normal text-indigo-300/80">
+                              {info.enhancement.icon} {info.enhancement.name}
+                            </span>
+                          )}
                         </p>
                         <div className="mt-1 grid gap-2 sm:grid-cols-2">
                           {SPECIAL_TRACKS.map((track) => {
@@ -808,15 +887,29 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
           </Overlay>
         )}
 
-        {state.phase === 'gameover' && (
+        {(state.phase === 'gameover' || state.phase === 'victory') && (
           <Overlay>
             <div className="mx-auto flex w-full max-w-md flex-col items-center py-2">
-              <h2 className="m-0 text-2xl font-black text-[#ef4444]">The keep has fallen</h2>
-              <p className="mt-2 mb-0 text-sm text-slate-200">
-                You held until <strong className="text-white">wave {state.wave}</strong>
-                {' · '}rabbits felled: {state.score}
-                {best > 0 && <> · best: wave {best}</>}
-              </p>
+              {state.phase === 'victory' ? (
+                <>
+                  <h2 className="m-0 text-2xl font-black text-amber-300">Caerbannog is cleared!</h2>
+                  <p className="mt-2 mb-0 text-sm text-slate-200">
+                    The Black Knight is but a torso — you repelled all{' '}
+                    <strong className="text-white">{FINAL_WAVE} waves</strong>
+                    {' · '}rabbits felled: {state.score}
+                    {best > 0 && <> · best: wave {best}</>}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="m-0 text-2xl font-black text-[#ef4444]">The keep has fallen</h2>
+                  <p className="mt-2 mb-0 text-sm text-slate-200">
+                    You held until <strong className="text-white">wave {state.wave}</strong>
+                    {' · '}rabbits felled: {state.score}
+                    {best > 0 && <> · best: wave {best}</>}
+                  </p>
+                </>
+              )}
 
               <div className="mt-3 w-full rounded-xl border border-amber-400/40 bg-amber-950/40 px-4 py-3 text-center">
                 <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-amber-300">Final score</p>
@@ -873,7 +966,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
               <div className="mt-4 flex gap-2">
                 <button type="button" onClick={restart} className={primaryBtn}>
-                  Try Again
+                  {state.phase === 'victory' ? 'Play Again' : 'Try Again'}
                 </button>
                 {onExit && (
                   <button type="button" onClick={onExit} className={ghostBtn}>
@@ -1086,6 +1179,45 @@ function Caltrops({ level }: { level: number }) {
         const px = sx(Math.min(x, edge));
         const py = sy(0) - 1 - (i % 2) * 2;
         return <path key={i} d={`M ${px - 4} ${py} L ${px} ${py - 7} L ${px + 4} ${py}`} fill="none" />;
+      })}
+    </g>
+  );
+}
+
+// A patch of holy fire on the ground: a charred base and a row of flickering
+// flame tongues whose height wavers with the patch's age.
+function FirePatchFlames({
+  cx,
+  groundY,
+  halfW,
+  phase,
+  opacity,
+}: {
+  cx: number;
+  groundY: number;
+  halfW: number;
+  phase: number;
+  opacity: number;
+}) {
+  const tongues = 5;
+  return (
+    <g opacity={opacity} aria-hidden="true">
+      <ellipse cx={cx} cy={groundY - 2} rx={halfW} ry={5} fill="#7c2d12" opacity={0.55} />
+      {Array.from({ length: tongues }, (_, i) => {
+        const f = (i / (tongues - 1) - 0.5) * 2; // -1 .. 1 across the patch
+        const fx = cx + f * halfW * 0.78;
+        const flick = 1 + 0.35 * Math.sin(phase * 9 + i * 1.7);
+        const h = (11 + (i % 2) * 6) * flick;
+        const w = 5 + (i % 2) * 1.5;
+        return (
+          <g key={i}>
+            <path d={`M ${fx - w} ${groundY} Q ${fx} ${groundY - h} ${fx + w} ${groundY} Z`} fill="#f97316" />
+            <path
+              d={`M ${fx - w * 0.5} ${groundY} Q ${fx} ${groundY - h * 0.6} ${fx + w * 0.5} ${groundY} Z`}
+              fill="#fde68a"
+            />
+          </g>
+        );
       })}
     </g>
   );

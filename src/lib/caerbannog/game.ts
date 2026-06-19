@@ -39,7 +39,7 @@ export const WORLD = {
   groundY: 0,
 };
 
-export type GamePhase = 'intro' | 'playing' | 'intermission' | 'gameover';
+export type GamePhase = 'intro' | 'playing' | 'intermission' | 'gameover' | 'victory';
 export type RabbitKind = 'common' | 'runner' | 'brute' | 'boss' | 'knight';
 
 /** Seconds a Tim staff-swing animation plays after each cast (purely visual). */
@@ -65,6 +65,13 @@ export const knightLimbs = (wave: number): number => {
 /** Legs still attached for a given limb count (arms are lost before legs). */
 export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, limbs));
 
+/**
+ * The siege is won by clearing wave 50 — the appearance where the Black Knight
+ * is whittled down to a limbless torso ("It's just a flesh wound!"). There is no
+ * intermission after it: the run ends in victory rather than rolling onward.
+ */
+export const FINAL_WAVE = 50;
+
 // --- Special grenade weapons -----------------------------------------------
 // Each Black Knight (waves 10, 20, …) lets the player claim a secondary effect
 // that may trigger after a grenade's initial blast: the FIRST knight (wave 10)
@@ -78,6 +85,12 @@ export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, lim
 //                fixed share of that rabbit's full health.
 //                · freq track  → more often
 //                · power track → a larger share of health per strike
+//
+// Each Black Knight at waves 30 and 40 (both weapons are in hand by then) also
+// grants a one-time, *unleveled* enhancement for an owned special — wave 30
+// offers a choice, wave 40 grants the other:
+//   - lightning → an arc that chains from the struck rabbit to nearby beasts.
+//   - cluster   → holy fire: bomblets scorch the ground, leaving a burning patch.
 export type SpecialId = 'cluster' | 'lightning';
 /** 'none' is accepted by `chooseSpecial` as an explicit no-op (invalid pick). */
 export type SpecialWeapon = 'none' | SpecialId;
@@ -92,11 +105,19 @@ const CLUSTER_RADIUS_SCALE = 0.55; // bomblet blast radius vs the main grenade
 const CLUSTER_DAMAGE_SCALE = 0.6; // bomblet damage vs the main grenade
 const LIGHTNING_SKY_Y = 40; // world height the bolt descends from
 
-/** Per-special upgrade state: ownership plus a level on each of the two tracks. */
+// Wave-30/40 enhancements (flat, unleveled effects on an owned special):
+export const LIGHTNING_ARC_RANGE = 16; // world units a bolt will chain across
+export const LIGHTNING_ARC_MAX_TARGETS = 2; // extra rabbits a single bolt arcs to
+const LIGHTNING_ARC_FALLOFF = 0.5; // arced rabbits take this share of the strike %
+const CLUSTER_FIRE_TTL = 2.5; // seconds a scorched patch keeps burning
+const CLUSTER_FIRE_DPS_SCALE = 0.6; // burn dps as a share of base grenade damage
+
+/** Per-special upgrade state: ownership, a level on each track, and the one-time enhancement. */
 export interface SpecialState {
   owned: boolean;
   freqLevel: number; // 0 = unowned; 1+ raises the post-blast trigger chance
   powerLevel: number; // 0 = unowned; 1+ raises potency (bomblets / strike %)
+  enhanced: boolean; // the wave-30/40 enhancement (arc / holy fire) is claimed
 }
 
 /** Chance (0–1) a special triggers after a blast, by its frequency level. */
@@ -164,6 +185,15 @@ export interface Zap {
   tone?: 'lightning'; // styles the bolt; default is Tim's fire
 }
 
+/** A patch of holy fire left by an enhanced cluster's bomblet; burns rabbits over time. */
+export interface FirePatch {
+  id: number;
+  x: number; // world x of the patch centre, on the ground
+  radius: number; // world units; rabbits within this of `x` take the burn
+  age: number; // seconds since the patch ignited
+  ttl: number; // lifetime before the fire burns out
+}
+
 export interface RewardPopup {
   id: number;
   pos: Vector2;
@@ -203,6 +233,7 @@ export interface GameState {
   grenades: Grenade[];
   explosions: Explosion[];
   zaps: Zap[];
+  firePatches: FirePatch[]; // holy fire left by enhanced cluster bomblets
   rewardPopups: RewardPopup[];
   stats: GameStats;
   pending: number; // rabbits left to spawn this wave
@@ -210,6 +241,7 @@ export interface GameState {
   offer: BlessingId[]; // blessing choices shown during a blessing intermission
   blessingPending: boolean; // a blessing must be chosen before the next wave
   specialPending: boolean; // the one-time cluster/lightning choice is owed
+  enhancementPending: boolean; // the wave-30/40 enhancement choice is owed
   rng: Rng;
   nextId: number;
   bestWave: number;
@@ -232,12 +264,13 @@ export const createGame = (seed = 1): GameState => ({
   grenades: [],
   explosions: [],
   zaps: [],
+  firePatches: [],
   rewardPopups: [],
   stats: {
     castleHp: 5,
     maxCastleHp: 5,
-    ammo: 3,
-    maxAmmo: 3,
+    ammo: 2,
+    maxAmmo: 2,
     reload: 1.6,
     reloadTimer: 0,
     blastRadius: 9,
@@ -248,8 +281,8 @@ export const createGame = (seed = 1): GameState => ({
     timCooldown: 0,
     timSwing: 0,
     specials: {
-      cluster: { owned: false, freqLevel: 0, powerLevel: 0 },
-      lightning: { owned: false, freqLevel: 0, powerLevel: 0 },
+      cluster: { owned: false, freqLevel: 0, powerLevel: 0, enhanced: false },
+      lightning: { owned: false, freqLevel: 0, powerLevel: 0, enhanced: false },
     },
   },
   pending: 0,
@@ -257,6 +290,7 @@ export const createGame = (seed = 1): GameState => ({
   offer: [],
   blessingPending: false,
   specialPending: false,
+  enhancementPending: false,
   rng: createRng(seed),
   nextId: 1,
   bestWave: 0,
@@ -395,6 +429,7 @@ const beginWave = (state: GameState, wave: number): GameState => ({
   offer: [],
   blessingPending: false,
   specialPending: false,
+  enhancementPending: false,
   waveGoldEarned: 0,
   waveInterest: 0,
   precisionKillsThisWave: 0,
@@ -442,7 +477,39 @@ export const chooseSpecial = (state: GameState, weapon: SpecialWeapon): GameStat
       ...state.stats,
       specials: {
         ...state.stats.specials,
-        [weapon]: { owned: true, freqLevel: 1, powerLevel: 1 },
+        [weapon]: { owned: true, freqLevel: 1, powerLevel: 1, enhanced: false },
+      },
+    },
+  };
+};
+
+/** Owned specials that have not yet claimed their wave-30/40 enhancement. */
+export const offerableEnhancements = (stats: GameStats): SpecialId[] =>
+  SPECIAL_IDS.filter((id) => stats.specials[id].owned && !stats.specials[id].enhanced);
+
+/**
+ * Claim a special's one-time enhancement (valid only while a choice is pending
+ * and the weapon is owned but not already enhanced). One claim satisfies the
+ * pending choice, so the *other* enhancement waits for the next knight.
+ */
+export const chooseEnhancement = (state: GameState, weapon: SpecialWeapon): GameState => {
+  if (
+    state.phase !== 'intermission' ||
+    !state.enhancementPending ||
+    weapon === 'none' ||
+    !state.stats.specials[weapon].owned ||
+    state.stats.specials[weapon].enhanced
+  ) {
+    return state;
+  }
+  return {
+    ...state,
+    enhancementPending: false,
+    stats: {
+      ...state.stats,
+      specials: {
+        ...state.stats.specials,
+        [weapon]: { ...state.stats.specials[weapon], enhanced: true },
       },
     },
   };
@@ -518,7 +585,12 @@ export const repairKeep = (state: GameState): GameState => {
 
 /** Begin the next wave (blocked until any pending blessing/special is chosen). */
 export const nextWave = (state: GameState): GameState => {
-  if (state.phase !== 'intermission' || state.blessingPending || state.specialPending) {
+  if (
+    state.phase !== 'intermission' ||
+    state.blessingPending ||
+    state.specialPending ||
+    state.enhancementPending
+  ) {
     return state;
   }
   return beginWave(state, state.wave + 1);
@@ -638,6 +710,23 @@ export const step = (state: GameState, dtMs: number): GameState => {
     }
   }
 
+  // 5b. Holy fire (enhanced cluster): scorched patches burn any rabbit that
+  //     lingers in them. Patches age out; fresh ones spawned by this frame's
+  //     bomblet blasts (below) start burning next frame.
+  const firePatches = state.firePatches
+    .map((p) => ({ ...p, age: p.age + dt }))
+    .filter((p) => p.age < p.ttl);
+  if (firePatches.length > 0) {
+    const burn = stats.damage * CLUSTER_FIRE_DPS_SCALE;
+    for (const r of rabbits) {
+      for (const p of firePatches) {
+        if (Math.abs(r.x - p.x) <= p.radius) {
+          r.hp -= burn * dt * rabbitTraits(r.kind, state.wave).grenadeDamageMultiplier;
+        }
+      }
+    }
+  }
+
   // 6. Advance grenades; landed ones run their fuse, then detonate.
   const explosions = state.explosions
     .map((e) => ({ ...e, age: e.age + dt }))
@@ -704,6 +793,19 @@ export const step = (state: GameState, dtMs: number): GameState => {
       }
     }
 
+    // Enhanced cluster bomblets scorch the ground where they burst, leaving a
+    // patch of holy fire that burns rabbits walking through it.
+    if (blast.fromChild && stats.specials.cluster.enhanced) {
+      firePatches.push({
+        id: nextId,
+        x: blast.pos.x,
+        radius: blast.radius,
+        age: 0,
+        ttl: CLUSTER_FIRE_TTL,
+      });
+      nextId += 1;
+    }
+
     // Each owned special rolls independently off a primary (non-child) blast.
     if (!blast.fromChild) {
       const cluster = stats.specials.cluster;
@@ -736,16 +838,38 @@ export const step = (state: GameState, dtMs: number): GameState => {
           }
         }
         if (target) {
-          target.hp -= lightningPct(lightning.powerLevel) * target.maxHp;
+          const hub = target;
+          hub.hp -= lightningPct(lightning.powerLevel) * hub.maxHp;
           zaps.push({
             id: nextId,
-            from: { x: target.x, y: LIGHTNING_SKY_Y },
-            to: { x: target.x, y: target.y },
+            from: { x: hub.x, y: LIGHTNING_SKY_Y },
+            to: { x: hub.x, y: hub.y },
             age: 0,
             ttl: 0.22,
             tone: 'lightning',
           });
           nextId += 1;
+          // Enhanced: the bolt arcs from the struck rabbit to the nearest others,
+          // searing each for a reduced share of its own full health.
+          if (lightning.enhanced) {
+            const arcShare = lightningPct(lightning.powerLevel) * LIGHTNING_ARC_FALLOFF;
+            const chained = rabbits
+              .filter((r) => r !== hub && r.hp > 0 && Math.abs(r.x - hub.x) <= LIGHTNING_ARC_RANGE)
+              .sort((a, b) => Math.abs(a.x - hub.x) - Math.abs(b.x - hub.x))
+              .slice(0, LIGHTNING_ARC_MAX_TARGETS);
+            for (const r of chained) {
+              r.hp -= arcShare * r.maxHp;
+              zaps.push({
+                id: nextId,
+                from: { x: hub.x, y: hub.y },
+                to: { x: r.x, y: r.y },
+                age: 0,
+                ttl: 0.2,
+                tone: 'lightning',
+              });
+              nextId += 1;
+            }
+          }
         }
       }
     }
@@ -834,12 +958,12 @@ export const step = (state: GameState, dtMs: number): GameState => {
   let offer = state.offer;
   let blessingPending = state.blessingPending;
   let specialPending = state.specialPending;
+  let enhancementPending = state.enhancementPending;
   let bestWave = state.bestWave;
   if (castleHp <= 0) {
     phase = 'gameover';
     bestWave = Math.max(bestWave, state.wave);
   } else if (pending === 0 && rabbits.length === 0) {
-    phase = 'intermission';
     const clearReward = waveClearGold(state.wave);
     gold += clearReward;
     goldEarned += clearReward;
@@ -848,12 +972,21 @@ export const step = (state: GameState, dtMs: number): GameState => {
     waveInterest = goldInterest(gold);
     gold += waveInterest;
     goldEarned += waveInterest;
-    blessingPending = isBlessingWave(state.wave);
-    offer = blessingPending ? offerBlessings(rng) : [];
-    // Every Black Knight (waves 10, 20, …) lets the player claim a special while
-    // one is still unclaimed: one at wave 10, then the other at wave 20.
-    specialPending = state.wave % 10 === 0 && offerableSpecials(stats).length > 0;
     bestWave = Math.max(bestWave, state.wave);
+    if (state.wave >= FINAL_WAVE) {
+      // The limbless Black Knight is felled — the siege is won, the run ends.
+      phase = 'victory';
+    } else {
+      phase = 'intermission';
+      blessingPending = isBlessingWave(state.wave);
+      offer = blessingPending ? offerBlessings(rng) : [];
+      // Every Black Knight lets the player claim a reward while one is still
+      // unclaimed: a special weapon at waves 10 & 20 (one each), then a one-time
+      // enhancement for an owned weapon at waves 30 & 40 (one each).
+      specialPending = state.wave % 10 === 0 && offerableSpecials(stats).length > 0;
+      enhancementPending =
+        state.wave % 10 === 0 && state.wave >= 30 && offerableEnhancements(stats).length > 0;
+    }
   }
 
   return {
@@ -869,6 +1002,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     grenades,
     explosions,
     zaps,
+    firePatches,
     rewardPopups,
     stats,
     pending,
@@ -876,6 +1010,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     offer,
     blessingPending,
     specialPending,
+    enhancementPending,
     nextId,
     bestWave,
     announcementTimer,

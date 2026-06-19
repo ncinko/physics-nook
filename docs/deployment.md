@@ -72,7 +72,10 @@ It listens on `COASTER_WS_PORT` or `8787`.
 
 ## D1 Leaderboards
 
-The kinematics challenges use Cloudflare D1 through Pages Functions:
+The kinematics challenges and the hidden Rabbit of Caerbannog game use Cloudflare
+D1 through Pages Functions. They share one database and binding; each leaderboard
+just adds its own tables via a migration (`migrations/0003_caerbannog_leaderboard.sql`
+for Caerbannog).
 
 ```sh
 wrangler d1 create physics-nook-kinematics
@@ -80,7 +83,7 @@ wrangler d1 migrations apply physics-nook-kinematics --remote
 wrangler pages secret put LEADERBOARD_SALT
 ```
 
-Required binding:
+Required binding (shared by all leaderboards):
 
 ```text
 KINEMATICS_DB

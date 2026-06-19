@@ -171,6 +171,7 @@ export interface GameState {
   wave: number;
   score: number;
   gold: number; // currency for the static-defense shop
+  goldEarned: number; // total gold collected this run; never spent down (for scoring)
   waveGoldEarned: number;
   precisionKillsThisWave: number;
   rabbits: Rabbit[];
@@ -198,6 +199,7 @@ export const createGame = (seed = 1): GameState => ({
   wave: 0,
   score: 0,
   gold: 0,
+  goldEarned: 0,
   waveGoldEarned: 0,
   precisionKillsThisWave: 0,
   rabbits: [],
@@ -489,6 +491,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   const stats = { ...state.stats };
   let score = state.score;
   let gold = state.gold;
+  let goldEarned = state.goldEarned;
   let waveGoldEarned = state.waveGoldEarned;
   let precisionKillsThisWave = state.precisionKillsThisWave;
   let nextId = state.nextId;
@@ -698,6 +701,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
       score += 1;
       const reward = goldForKill(r.kind, state.wave, r.precisionKill);
       gold += reward;
+      goldEarned += reward;
       waveGoldEarned += reward;
       if (r.precisionKill) {
         precisionKillsThisWave += 1;
@@ -752,6 +756,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     phase = 'intermission';
     const clearReward = waveClearGold(state.wave);
     gold += clearReward;
+    goldEarned += clearReward;
     waveGoldEarned += clearReward;
     blessingPending = isBlessingWave(state.wave);
     offer = blessingPending ? offerBlessings(rng) : [];
@@ -765,6 +770,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     phase,
     score,
     gold,
+    goldEarned,
     waveGoldEarned,
     precisionKillsThisWave,
     rabbits,

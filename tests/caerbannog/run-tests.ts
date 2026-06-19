@@ -10,6 +10,12 @@ import {
 } from '../../src/lib/caerbannog/upgrades.ts';
 import { isBlessingWave, waveConfig } from '../../src/lib/caerbannog/waves.ts';
 import {
+  CAERBANNOG_DEFAULTS,
+  caerbannogScore,
+  selectBestCaerbannogScoresByUniqueName,
+  validateCaerbannogScoreSubmission,
+} from '../../src/lib/caerbannog/leaderboard.ts';
+import {
   KNIGHT_MAX_LIMBS,
   MAX_SPECIAL_LEVEL,
   TIM_SWING_TIME,
@@ -660,3 +666,101 @@ for (const wave of [5, 10, 15, 20, 25, 30]) {
 }
 
 console.log('Caerbannog progression tests passed.');
+
+// --- Run scoring: total gold collected accumulates and survives spending ---
+{
+  // A felled rabbit adds to both spendable gold and the run total.
+  const fight = playing({
+    rabbits: [rabbitAt(50)],
+    grenades: [{ id: 2, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const afterKill = step(fight, 50);
+  assert.equal(afterKill.goldEarned, afterKill.gold, 'first kill: total gold equals spendable gold');
+  assert.ok(afterKill.goldEarned > 0, 'a kill collects gold toward the run total');
+
+  // Spending gold in the shop must not reduce the run total.
+  const shop = { ...afterKill, phase: 'intermission' as const, gold: 200, goldEarned: 200 };
+  const bought = buyDefense(shop, 'tim');
+  assert.ok(bought.gold < shop.gold, 'buying a defense spends gold');
+  assert.equal(bought.goldEarned, shop.goldEarned, 'spending does not lower total gold collected');
+
+  // Clearing a wave adds its purse to the run total too.
+  const cleared = step(playing({ pending: 0, goldEarned: 5 }), 16);
+  assert.equal(cleared.goldEarned, 5 + cleared.waveGoldEarned, 'wave-clear purse adds to the run total');
+}
+
+// --- Leaderboard score formula and validation ---
+{
+  assert.equal(caerbannogScore(1, 0, 0), 0, 'a wave-1 wipeout with no kills/gold scores zero');
+  assert.equal(caerbannogScore(5, 12, 40), 100, 'score = wave*enemiesSlain + goldCollected');
+  assert.equal(caerbannogScore(12, 80, 350), 1310);
+
+  const valid = validateCaerbannogScoreSubmission({
+    name: '  Sir  Robin ',
+    score: caerbannogScore(8, 30, 90),
+    wave: 8,
+    enemiesSlain: 30,
+    goldCollected: 90,
+  });
+  assert.ok(valid.ok, 'a consistent submission validates');
+  assert.equal(valid.name, 'Sir Robin', 'the name is sanitized');
+  assert.equal(valid.score, 330);
+
+  const mismatched = validateCaerbannogScoreSubmission({
+    name: 'cheater',
+    score: 99999,
+    wave: 8,
+    enemiesSlain: 30,
+    goldCollected: 90,
+  });
+  assert.equal(mismatched.ok, false, 'a score that does not match the totals is rejected');
+
+  const badWave = validateCaerbannogScoreSubmission({
+    name: 'x',
+    score: 0,
+    wave: 0,
+    enemiesSlain: 0,
+    goldCollected: 0,
+  });
+  assert.equal(badWave.ok, false, 'wave must be at least 1');
+
+  const negativeGold = validateCaerbannogScoreSubmission({
+    name: 'x',
+    score: caerbannogScore(3, 4, -1),
+    wave: 3,
+    enemiesSlain: 4,
+    goldCollected: -1,
+  });
+  assert.equal(negativeGold.ok, false, 'negative gold is rejected');
+
+  const overMax = validateCaerbannogScoreSubmission({
+    name: 'x',
+    score: CAERBANNOG_DEFAULTS.maxScore + 1,
+    wave: 2,
+    enemiesSlain: 1,
+    goldCollected: CAERBANNOG_DEFAULTS.maxScore - 1,
+  });
+  assert.equal(overMax.ok, false, 'scores beyond the cap are rejected');
+}
+
+// --- Leaderboard ranking: best-per-name, highest score first ---
+{
+  const now = Date.now();
+  const ranked = selectBestCaerbannogScoresByUniqueName([
+    { name: 'Arthur', score: 100, wave: 5, enemiesSlain: 10, goldCollected: 50, createdAt: now },
+    { name: 'arthur', score: 250, wave: 9, enemiesSlain: 20, goldCollected: 70, createdAt: now + 10 },
+    { name: 'Bedevere', score: 180, wave: 7, enemiesSlain: 15, goldCollected: 75, createdAt: now + 20 },
+  ]);
+  assert.equal(ranked.length, 2, 'duplicate names collapse to their best');
+  assert.equal(ranked[0].name, 'arthur', 'highest score ranks first');
+  assert.equal(ranked[0].score, 250, "a player's best score is kept");
+  assert.equal(ranked[1].name, 'Bedevere');
+
+  const tie = selectBestCaerbannogScoresByUniqueName([
+    { name: 'Galahad', score: 90, wave: 4, enemiesSlain: 9, goldCollected: 54, createdAt: now + 5 },
+    { name: 'Lancelot', score: 90, wave: 4, enemiesSlain: 9, goldCollected: 54, createdAt: now + 1 },
+  ]);
+  assert.equal(tie[0].name, 'Lancelot', 'on a tie the earlier score ranks first');
+}
+
+console.log('Caerbannog leaderboard tests passed.');

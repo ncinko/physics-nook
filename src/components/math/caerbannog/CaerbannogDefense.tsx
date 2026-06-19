@@ -46,6 +46,14 @@ import {
   type BlessingId,
   type ShopId,
 } from '../../../lib/caerbannog/upgrades';
+import {
+  CAERBANNOG_DEFAULTS,
+  caerbannogScore,
+  selectBestCaerbannogScoresByUniqueName,
+  type CaerbannogLeaderboardScore,
+} from '../../../lib/caerbannog/leaderboard';
+import { sanitizeLeaderboardName } from '../../../lib/kinematics/stopZones';
+import { Cloud, Trophy, WifiOff } from 'lucide-react';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
 import {
   GRENADE_SPRITE,
@@ -152,6 +160,9 @@ const readBest = (): number => {
   return Number.parseInt(window.localStorage.getItem(STORAGE_KEY) ?? '0', 10) || 0;
 };
 
+type ApiStatus = 'checking' | 'online' | 'offline';
+type CaerbannogScoreEntry = CaerbannogLeaderboardScore & { id?: string };
+
 export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   const seedRef = useRef(Math.floor(Math.random() * 1e9));
   const [state, setState] = useState<GameState>(() => createGame(seedRef.current));
@@ -160,6 +171,18 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
   const [aim, setAim] = useState<Vector2 | null>(null);
   const aimRef = useRef<Vector2 | null>(null);
+
+  // Cloud leaderboard, shown on the game-over screen. A run token is minted
+  // server-side when a siege begins and redeemed once when the score is posted.
+  const runIdRef = useRef<string | null>(null);
+  const submittedRef = useRef(false);
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
+  const [cloudScores, setCloudScores] = useState<CaerbannogScoreEntry[]>([]);
+  const [localScores, setLocalScores] = useState<CaerbannogScoreEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  // Drives the game-over UI (ref guards against a double async submit).
+  const [submitted, setSubmitted] = useState(false);
 
   // Single source of truth: keep the ref in sync so the rAF loop reads fresh state.
   const setGame = useCallback((updater: (prev: GameState) => GameState) => {
@@ -186,6 +209,128 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
       });
     }
   }, [state.bestWave]);
+
+  const loadLocalScores = useCallback((): CaerbannogScoreEntry[] => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    try {
+      const raw = window.localStorage.getItem(CAERBANNOG_DEFAULTS.localStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        return selectBestCaerbannogScoresByUniqueName(parsed as CaerbannogScoreEntry[]);
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }, []);
+
+  const saveLocalScore = useCallback(
+    (score: CaerbannogScoreEntry) => {
+      const next = selectBestCaerbannogScoresByUniqueName([...loadLocalScores(), score]);
+      try {
+        window.localStorage.setItem(CAERBANNOG_DEFAULTS.localStorageKey, JSON.stringify(next));
+      } catch {
+        // Local scores are a bonus path; the game keeps running without storage.
+      }
+      setLocalScores(next);
+      return next;
+    },
+    [loadLocalScores],
+  );
+
+  const refreshLeaderboard = useCallback(async () => {
+    try {
+      const response = await fetch('/api/caerbannog/leaderboard?limit=10', {
+        headers: { accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Caerbannog leaderboard request failed: ${response.status}`);
+      }
+      const body = await response.json();
+      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    }
+  }, []);
+
+  const createServerRun = useCallback(async () => {
+    try {
+      const response = await fetch('/api/caerbannog/run', {
+        method: 'POST',
+        headers: { accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Caerbannog run request failed: ${response.status}`);
+      }
+      const body = await response.json();
+      runIdRef.current = typeof body.runId === 'string' ? body.runId : null;
+      setApiStatus(runIdRef.current ? 'online' : 'offline');
+    } catch {
+      runIdRef.current = null;
+      setApiStatus('offline');
+    }
+  }, []);
+
+  const handleScoreSubmit = useCallback(async () => {
+    const current = stateRef.current;
+    if (submittedRef.current) {
+      return;
+    }
+    submittedRef.current = true;
+    setSubmitted(true);
+
+    const score: CaerbannogScoreEntry = {
+      name: sanitizeLeaderboardName(playerName),
+      score: caerbannogScore(current.wave, current.score, current.goldEarned),
+      wave: current.wave,
+      enemiesSlain: current.score,
+      goldCollected: current.goldEarned,
+      createdAt: Date.now(),
+    };
+
+    saveLocalScore(score);
+
+    if (!runIdRef.current) {
+      setApiStatus('offline');
+      return;
+    }
+
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/caerbannog/leaderboard', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          runId: runIdRef.current,
+          name: score.name,
+          score: score.score,
+          wave: score.wave,
+          enemiesSlain: score.enemiesSlain,
+          goldCollected: score.goldCollected,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Caerbannog score submit failed: ${response.status}`);
+      }
+      const body = await response.json();
+      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    } finally {
+      setIsPosting(false);
+      runIdRef.current = null;
+    }
+  }, [playerName, saveLocalScore]);
+
+  // Load the leaderboard once on mount.
+  useEffect(() => {
+    setLocalScores(loadLocalScores());
+    void refreshLeaderboard();
+  }, [loadLocalScores, refreshLeaderboard]);
 
   // Real-time loop: only runs while playing, so the intro/intermission/gameover
   // screens stay idle (no wasted frames). Restarts when play resumes.
@@ -240,7 +385,19 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     }
   };
 
-  const begin = () => setGame((prev) => startGame(prev));
+  // Mint a fresh server run token and clear the previous submission state so the
+  // new siege can post exactly one score when (if) the keep eventually falls.
+  const armRun = () => {
+    submittedRef.current = false;
+    runIdRef.current = null;
+    setSubmitted(false);
+    setPlayerName('');
+    void createServerRun();
+  };
+  const begin = () => {
+    armRun();
+    setGame((prev) => startGame(prev));
+  };
   const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
   const pickSpecial = (weapon: SpecialWeapon) => setGame((prev) => chooseSpecial(prev, weapon));
   const amplifySpecial = () => setGame((prev) => upgradeSpecial(prev));
@@ -249,10 +406,17 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   const continueSiege = () => setGame((prev) => nextWave(prev));
   const restart = () => {
     seedRef.current = Math.floor(Math.random() * 1e9);
+    armRun();
     setGame(() => startGame(createGame(seedRef.current)));
   };
 
   const stats = state.stats;
+
+  const leaderboardScores = selectBestCaerbannogScoresByUniqueName(
+    apiStatus === 'online' ? cloudScores : localScores,
+  );
+  const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
+  const runScore = caerbannogScore(state.wave, state.score, state.goldEarned);
 
   return (
     <section className="not-prose w-full text-[var(--text-primary)]">
@@ -610,21 +774,77 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
         {state.phase === 'gameover' && (
           <Overlay>
-            <h2 className="m-0 text-2xl font-black text-[#ef4444]">The keep has fallen</h2>
-            <p className="mt-2 mb-0 text-sm text-slate-200">
-              You held until <strong className="text-white">wave {state.wave}</strong>
-              {' · '}rabbits felled: {state.score}
-              {best > 0 && <> · best: wave {best}</>}
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button type="button" onClick={restart} className={primaryBtn}>
-                Try Again
-              </button>
-              {onExit && (
-                <button type="button" onClick={onExit} className={ghostBtn}>
-                  Run away!
-                </button>
+            <div className="mx-auto flex w-full max-w-md flex-col items-center py-2">
+              <h2 className="m-0 text-2xl font-black text-[#ef4444]">The keep has fallen</h2>
+              <p className="mt-2 mb-0 text-sm text-slate-200">
+                You held until <strong className="text-white">wave {state.wave}</strong>
+                {' · '}rabbits felled: {state.score}
+                {best > 0 && <> · best: wave {best}</>}
+              </p>
+
+              <div className="mt-3 w-full rounded-xl border border-amber-400/40 bg-amber-950/40 px-4 py-3 text-center">
+                <p className="m-0 text-[10px] font-bold uppercase tracking-[0.28em] text-amber-300">Final score</p>
+                <p className="m-0 text-3xl font-black text-amber-200">{runScore.toLocaleString()}</p>
+                <p className="mt-1 mb-0 text-[11px] text-slate-300">
+                  wave {state.wave} × {state.score} felled + {state.goldEarned} gold gathered
+                </p>
+              </div>
+
+              {!submitted ? (
+                <form
+                  className="mt-3 flex w-full flex-col gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void handleScoreSubmit();
+                  }}
+                >
+                  <input
+                    value={playerName}
+                    onChange={(event) => setPlayerName(event.target.value)}
+                    maxLength={24}
+                    placeholder="Name for the leaderboard"
+                    className="w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                    autoComplete="off"
+                  />
+                  <div className="flex justify-center gap-2">
+                    <button type="submit" disabled={isPosting} className={`${primaryBtn} mt-0 disabled:opacity-50`}>
+                      <Trophy size={15} aria-hidden="true" className="mr-1 inline align-[-2px]" />
+                      {isPosting ? 'Posting…' : 'Submit score'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        submittedRef.current = true;
+                        setSubmitted(true);
+                      }}
+                      className={`${ghostBtn} mt-0`}
+                    >
+                      Skip
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <p className="mt-3 mb-0 text-xs text-slate-300">
+                  {isPosting ? 'Posting score…' : 'Score recorded below.'}
+                </p>
               )}
+
+              <Leaderboard
+                label={leaderboardLabel}
+                status={apiStatus}
+                scores={leaderboardScores}
+              />
+
+              <div className="mt-4 flex gap-2">
+                <button type="button" onClick={restart} className={primaryBtn}>
+                  Try Again
+                </button>
+                {onExit && (
+                  <button type="button" onClick={onExit} className={ghostBtn}>
+                    Run away!
+                  </button>
+                )}
+              </div>
             </div>
           </Overlay>
         )}
@@ -644,6 +864,60 @@ function Overlay({ children }: { children: ReactNode }) {
   return (
     <div className="absolute inset-0 flex flex-col items-center overflow-y-auto bg-black/65 p-4 text-center text-white backdrop-blur-sm">
       <div className="my-auto flex w-full flex-col items-center">{children}</div>
+    </div>
+  );
+}
+
+function formatScoreDate(createdAt: number) {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return '--';
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(createdAt));
+}
+
+function Leaderboard({
+  label,
+  status,
+  scores,
+}: {
+  label: string;
+  status: ApiStatus;
+  scores: CaerbannogScoreEntry[];
+}) {
+  return (
+    <div className="mt-4 w-full rounded-xl border border-[var(--grid-line)] bg-slate-950/50 p-3 text-left">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="m-0 text-sm font-semibold text-white">{label}</h3>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+          {status === 'online' ? <Cloud size={14} /> : <WifiOff size={14} />}
+          {status}
+        </span>
+      </div>
+      {scores.length > 0 ? (
+        <ol className="m-0 list-none space-y-0 p-0">
+          {scores.map((score, index) => (
+            <li
+              key={`${score.id ?? score.name}-${score.score}-${index}`}
+              className="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--grid-line)] py-1.5 text-sm last:border-b-0"
+            >
+              <span className="text-right font-semibold text-slate-400">#{index + 1}</span>
+              <span className="min-w-0">
+                <span className="block truncate font-semibold text-white">{score.name}</span>
+                <span className="block text-[10px] text-slate-400">
+                  wave {score.wave} · {formatScoreDate(score.createdAt)}
+                </span>
+              </span>
+              <span className="font-mono font-bold text-amber-300">{score.score.toLocaleString()}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="m-0 text-xs text-slate-400">No scores yet — be the first to hold the keep.</p>
+      )}
     </div>
   );
 }

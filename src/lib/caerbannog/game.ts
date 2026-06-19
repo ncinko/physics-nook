@@ -197,6 +197,7 @@ export interface GameState {
   gold: number; // currency for the static-defense shop
   goldEarned: number; // total gold collected this run; never spent down (for scoring)
   waveGoldEarned: number;
+  waveInterest: number; // interest paid on banked gold at the last wave clear (for the summary)
   precisionKillsThisWave: number;
   rabbits: Rabbit[];
   grenades: Grenade[];
@@ -225,6 +226,7 @@ export const createGame = (seed = 1): GameState => ({
   gold: 0,
   goldEarned: 0,
   waveGoldEarned: 0,
+  waveInterest: 0,
   precisionKillsThisWave: 0,
   rabbits: [],
   grenades: [],
@@ -374,6 +376,11 @@ export const goldForKill = (kind: RabbitKind, wave: number, precision = false): 
 /** Gold bonus for clearing a wave outright. */
 export const waveClearGold = (wave: number): number => 5 + Math.floor(wave / 5) * 2;
 
+/** Interest paid on banked gold at each wave clear, rounded up to a whole coin. */
+const GOLD_INTEREST_RATE = 0.1;
+export const goldInterest = (gold: number): number =>
+  gold <= 0 ? 0 : Math.ceil(gold * GOLD_INTEREST_RATE);
+
 /** Repeatable price to repair one lost keep heart between waves. */
 export const repairCost = (wave: number): number => 12 + Math.floor(wave / 5) * 2;
 
@@ -389,6 +396,7 @@ const beginWave = (state: GameState, wave: number): GameState => ({
   blessingPending: false,
   specialPending: false,
   waveGoldEarned: 0,
+  waveInterest: 0,
   precisionKillsThisWave: 0,
   rewardPopups: [],
   announcementTimer: wave % 5 === 0 ? 2.8 : 0,
@@ -562,6 +570,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   let gold = state.gold;
   let goldEarned = state.goldEarned;
   let waveGoldEarned = state.waveGoldEarned;
+  let waveInterest = state.waveInterest;
   let precisionKillsThisWave = state.precisionKillsThisWave;
   let nextId = state.nextId;
   let announcementTimer = Math.max(0, state.announcementTimer - dt);
@@ -835,6 +844,10 @@ export const step = (state: GameState, dtMs: number): GameState => {
     gold += clearReward;
     goldEarned += clearReward;
     waveGoldEarned += clearReward;
+    // Interest accrues on everything banked so far this clear, paid on top.
+    waveInterest = goldInterest(gold);
+    gold += waveInterest;
+    goldEarned += waveInterest;
     blessingPending = isBlessingWave(state.wave);
     offer = blessingPending ? offerBlessings(rng) : [];
     // Every Black Knight (waves 10, 20, …) lets the player claim a special while
@@ -850,6 +863,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     gold,
     goldEarned,
     waveGoldEarned,
+    waveInterest,
     precisionKillsThisWave,
     rabbits,
     grenades,

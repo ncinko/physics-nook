@@ -66,7 +66,7 @@ export const BLESSINGS: Blessing[] = [
   {
     id: 'holy-shrapnel',
     name: 'Blessed Shrapnel',
-    description: 'Each blast deals more damage (a dead-centre hit hits hardest).',
+    description: 'Each blast deals more damage.',
     apply: (s) => {
       s.damage += 1;
     },

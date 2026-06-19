@@ -655,31 +655,11 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               <p className="mt-1 mb-0 text-xs text-slate-300">
                 This wave: <strong className="text-amber-300">+{state.waveGoldEarned} gold</strong>
                 {' · '}{state.precisionKillsThisWave} precision {state.precisionKillsThisWave === 1 ? 'kill' : 'kills'}
+                {' · '}{state.waveInterest} interest
               </p>
-              {state.blessingPending && (
-                <>
-                  <h2 className="mt-1 mb-0 text-xl font-black text-white">Choose a grenade blessing</h2>
-                  <p className="mt-1 mb-0 text-xs text-slate-300">Blessings arrive after waves 1, 4, 7, …</p>
-                  <div className="mt-3 grid w-full gap-2 sm:grid-cols-3">
-                    {state.offer.map((id) => {
-                      const blessing = BLESSINGS.find((item) => item.id === id)!;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => pickBlessing(id)}
-                          className="flex flex-col gap-1 rounded-xl border border-amber-400/50 bg-amber-950/80 p-3 text-left transition hover:border-amber-300 hover:bg-amber-900/80"
-                        >
-                          <span className="text-sm font-bold text-amber-100">{blessing.name}</span>
-                          <span className="text-xs leading-5 text-amber-50/75">{blessing.description}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
 
-              {state.specialPending && (() => {
+              {/* One choice per screen, in order: bonus weapon -> blessing -> keep. */}
+              {state.specialPending ? (() => {
                 const offered = offerableSpecials(stats);
                 const choosing = offered.length > 1;
                 return (
@@ -719,101 +699,111 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                     </div>
                   </>
                 );
-              })()}
-
-              <div className="mt-3 flex w-full items-end justify-between gap-3 text-left">
-                <div>
-                  <h2 className="m-0 text-lg font-black text-white">Fortify the keep</h2>
-                  <p className="m-0 text-xs text-slate-300">Static defenses remain for the whole run.</p>
-                </div>
-                <span className="shrink-0 font-mono text-sm font-bold text-amber-300">{state.gold} gold</span>
-              </div>
-              <div className="mt-2 grid w-full gap-2 sm:grid-cols-3">
-                {SHOP.map((item) => {
-                  const level = item.level(stats);
-                  const maxed = level >= item.maxLevel;
-                  const cost = item.cost(level);
-                  const affordable = canBuy(stats, state.gold, item.id);
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => purchase(item.id)}
-                      disabled={!affordable}
-                      className="flex min-h-28 flex-col rounded-xl border border-slate-500/70 bg-slate-950/80 p-3 text-left transition enabled:hover:border-sky-300 enabled:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
-                    >
-                      <span className="flex items-center justify-between gap-2 text-sm font-bold text-white">
-                        {item.name}
-                        <span className="font-mono text-[11px] text-slate-300">Lv {level}/{item.maxLevel}</span>
-                      </span>
-                      <span className="mt-1 text-[11px] leading-4 text-slate-300">{item.detail(level)}</span>
-                      <span className="mt-auto pt-2 font-mono text-xs font-bold text-amber-300">
-                        {maxed ? 'MAXED' : `${cost} gold`}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                type="button"
-                onClick={repair}
-                disabled={!canRepairKeep(state)}
-                className="mt-2 flex w-full items-center justify-between rounded-lg border border-emerald-500/60 bg-emerald-950/70 px-3 py-2 text-left text-xs text-emerald-100 transition enabled:hover:border-emerald-300 enabled:hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <span>
-                  <strong>Patch one breach</strong> · restore one keep heart
-                </span>
-                <span className="font-mono font-bold text-amber-300">
-                  {stats.castleHp >= stats.maxCastleHp ? 'KEEP FULL' : `${repairCost(state.wave)} gold`}
-                </span>
-              </button>
-              {SPECIAL_IDS.filter((id) => stats.specials[id].owned).map((id) => {
-                const info = SPECIAL_INFO[id];
-                const special = stats.specials[id];
-                return (
-                  <div key={id} className="mt-2 w-full">
-                    <p className="m-0 text-xs font-bold text-indigo-200">
-                      {info.icon} {info.name}
-                    </p>
-                    <div className="mt-1 grid gap-2 sm:grid-cols-2">
-                      {SPECIAL_TRACKS.map((track) => {
-                        const level = track === 'freq' ? special.freqLevel : special.powerLevel;
-                        const maxed = level >= MAX_SPECIAL_LEVEL;
-                        const meta = info.tracks[track];
-                        return (
-                          <button
-                            key={track}
-                            type="button"
-                            onClick={() => amplifySpecial(id, track)}
-                            disabled={!canUpgradeSpecial(state, id, track)}
-                            className="flex items-center justify-between gap-2 rounded-lg border border-indigo-500/60 bg-indigo-950/70 px-3 py-2 text-left text-xs text-indigo-100 transition enabled:hover:border-indigo-300 enabled:hover:bg-indigo-900/70 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            <span>
-                              <strong>{meta.label}</strong> · {meta.describe(level)}
-                              {!maxed && <> → {meta.describe(level + 1)}</>}
-                            </span>
-                            <span className="shrink-0 font-mono font-bold text-amber-300">
-                              {maxed ? 'MAXED' : `${specialUpgradeCost(level)} gold`}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+              })() : state.blessingPending ? (
+                <>
+                  <h2 className="mt-3 mb-0 text-xl font-black text-white">Choose a grenade blessing</h2>
+                  <div className="mt-3 grid w-full gap-2 sm:grid-cols-3">
+                    {state.offer.map((id) => {
+                      const blessing = BLESSINGS.find((item) => item.id === id)!;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => pickBlessing(id)}
+                          className="flex flex-col gap-1 rounded-xl border border-amber-400/50 bg-amber-950/80 p-3 text-left transition hover:border-amber-300 hover:bg-amber-900/80"
+                        >
+                          <span className="text-sm font-bold text-amber-100">{blessing.name}</span>
+                          <span className="text-xs leading-5 text-amber-50/75">{blessing.description}</span>
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })}
-              <button
-                type="button"
-                onClick={continueSiege}
-                disabled={state.blessingPending || state.specialPending}
-                className={`${primaryBtn} disabled:cursor-not-allowed disabled:opacity-45`}
-              >
-                {state.blessingPending
-                  ? 'Choose a blessing first'
-                  : state.specialPending
-                    ? 'Choose a special weapon first'
-                    : `Begin wave ${state.wave + 1}`}
-              </button>
+                </>
+              ) : (
+                <>
+                  <div className="mt-3 flex w-full items-end justify-between gap-3 text-left">
+                    <h2 className="m-0 text-lg font-black text-white">Fortify the keep</h2>
+                    <span className="shrink-0 font-mono text-sm font-bold text-amber-300">{state.gold} gold</span>
+                  </div>
+                  <div className="mt-2 grid w-full gap-2 sm:grid-cols-3">
+                    {SHOP.map((item) => {
+                      const level = item.level(stats);
+                      const maxed = level >= item.maxLevel;
+                      const cost = item.cost(level);
+                      const affordable = canBuy(stats, state.gold, item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => purchase(item.id)}
+                          disabled={!affordable}
+                          className="flex min-h-28 flex-col rounded-xl border border-slate-500/70 bg-slate-950/80 p-3 text-left transition enabled:hover:border-sky-300 enabled:hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-55"
+                        >
+                          <span className="flex items-center justify-between gap-2 text-sm font-bold text-white">
+                            {item.name}
+                            <span className="font-mono text-[11px] text-slate-300">Lv {level}/{item.maxLevel}</span>
+                          </span>
+                          <span className="mt-1 text-[11px] leading-4 text-slate-300">{item.detail(level)}</span>
+                          <span className="mt-auto pt-2 font-mono text-xs font-bold text-amber-300">
+                            {maxed ? 'MAXED' : `${cost} gold`}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={repair}
+                    disabled={!canRepairKeep(state)}
+                    className="mt-2 flex w-full items-center justify-between rounded-lg border border-emerald-500/60 bg-emerald-950/70 px-3 py-2 text-left text-xs text-emerald-100 transition enabled:hover:border-emerald-300 enabled:hover:bg-emerald-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span>
+                      <strong>Patch one breach</strong> · restore one keep heart
+                    </span>
+                    <span className="font-mono font-bold text-amber-300">
+                      {stats.castleHp >= stats.maxCastleHp ? 'KEEP FULL' : `${repairCost(state.wave)} gold`}
+                    </span>
+                  </button>
+                  {SPECIAL_IDS.filter((id) => stats.specials[id].owned).map((id) => {
+                    const info = SPECIAL_INFO[id];
+                    const special = stats.specials[id];
+                    return (
+                      <div key={id} className="mt-2 w-full">
+                        <p className="m-0 text-xs font-bold text-indigo-200">
+                          {info.icon} {info.name}
+                        </p>
+                        <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                          {SPECIAL_TRACKS.map((track) => {
+                            const level = track === 'freq' ? special.freqLevel : special.powerLevel;
+                            const maxed = level >= MAX_SPECIAL_LEVEL;
+                            const meta = info.tracks[track];
+                            return (
+                              <button
+                                key={track}
+                                type="button"
+                                onClick={() => amplifySpecial(id, track)}
+                                disabled={!canUpgradeSpecial(state, id, track)}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-indigo-500/60 bg-indigo-950/70 px-3 py-2 text-left text-xs text-indigo-100 transition enabled:hover:border-indigo-300 enabled:hover:bg-indigo-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <span>
+                                  <strong>{meta.label}</strong> · {meta.describe(level)}
+                                  {!maxed && <> → {meta.describe(level + 1)}</>}
+                                </span>
+                                <span className="shrink-0 font-mono font-bold text-amber-300">
+                                  {maxed ? 'MAXED' : `${specialUpgradeCost(level)} gold`}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button type="button" onClick={continueSiege} className={primaryBtn}>
+                    Begin wave {state.wave + 1}
+                  </button>
+                </>
+              )}
             </div>
           </Overlay>
         )}

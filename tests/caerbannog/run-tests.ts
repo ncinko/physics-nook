@@ -32,6 +32,7 @@ import {
   clusterBomblets,
   createGame,
   goldForKill,
+  goldInterest,
   knightLegs,
   knightLimbs,
   landingPoint,
@@ -772,9 +773,33 @@ console.log('Caerbannog progression tests passed.');
   assert.ok(bought.gold < shop.gold, 'buying a defense spends gold');
   assert.equal(bought.goldEarned, shop.goldEarned, 'spending does not lower total gold collected');
 
-  // Clearing a wave adds its purse to the run total too.
+  // Clearing a wave adds its purse and interest to the run total too.
   const cleared = step(playing({ pending: 0, goldEarned: 5 }), 16);
-  assert.equal(cleared.goldEarned, 5 + cleared.waveGoldEarned, 'wave-clear purse adds to the run total');
+  assert.equal(
+    cleared.goldEarned,
+    5 + cleared.waveGoldEarned + cleared.waveInterest,
+    'wave-clear purse and interest add to the run total',
+  );
+}
+
+// --- Gold interest: paid on banked gold each wave clear, rounded up ---
+{
+  assert.equal(goldInterest(0), 0, 'no gold earns no interest');
+  assert.equal(goldInterest(5), 1, 'interest rounds up to a whole coin');
+  assert.ok(goldInterest(100) > goldInterest(50), 'interest grows with banked gold');
+
+  // A wave clear pays interest on the gold held after the clear purse, on top of
+  // the spendable pile, and records it for the wave summary.
+  const banked = step(playing({ pending: 0, gold: 100, goldEarned: 100 }), 16);
+  assert.equal(banked.phase, 'intermission');
+  const expected = goldInterest(100 + waveClearGold(1));
+  assert.ok(expected > 0, 'a healthy purse earns interest');
+  assert.equal(banked.waveInterest, expected, 'the summary records the interest paid');
+  assert.equal(banked.gold, 100 + waveClearGold(1) + expected, 'interest is added to spendable gold');
+  assert.equal(banked.gold, 100 + banked.waveGoldEarned + banked.waveInterest, 'no gold goes missing');
+
+  // Interest is a clean slate at the next wave (carried only in the summary).
+  assert.equal(step(playing({ wave: 2, pending: 99 }), 16).waveInterest, 0, 'interest is zero mid-wave');
 }
 
 // --- Leaderboard score formula and validation ---

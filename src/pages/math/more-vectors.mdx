@@ -1,0 +1,180 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: More with Vectors
+description: Scale and negate vectors, build them from unit vectors, and see how the same vector formalism carries physical units like length, velocity, and force.
+canonicalPath: /math/more-vectors
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { ScalarScaler } from '../../components/math/ScalarScaler';
+import { BunnyField } from '../../components/math/BunnyField';
+import { BunnyCompanion } from '../../components/math/BunnyCompanion';
+import { mathPath } from '../../data/modules';
+
+<BunnyCompanion client:only="react" />
+
+<ModuleHero module={mathPath} currentPath="/math/more-vectors" />
+
+<div id="page-content"></div>
+
+# More with Vectors
+
+On the [first vectors page](/math/vectors) a bunny hopped: every hop had a magnitude and a direction, and chaining hops tip-to-tail added the vectors. Here we keep working with that same hop, but stretch it, flip it, break it into unit-sized steps, and finally attach the physical units that turn an abstract arrow into a displacement, a velocity, or a force.
+
+## Scaling and Negation
+
+Multiplying a vector by an ordinary number — a **scalar** — stretches or shrinks it without changing the line it points along. Each component is multiplied by the scalar:
+
+$$
+c\,\vec{a} = c\,\langle a_x, a_y \rangle = \langle c\,a_x,\; c\,a_y \rangle.
+$$
+
+The magnitude scales by the absolute value of the scalar,
+
+$$
+\lVert c\,\vec{a} \rVert = |c|\,\lVert \vec{a} \rVert,
+$$
+
+so $2\vec{a}$ is twice as long and $\tfrac{1}{2}\vec{a}$ is half as long, both pointing the same way as $\vec{a}$.
+
+A **negative** scalar does something extra: it reverses the direction. The special case $c = -1$ is **negation**, $-\vec{a} = (-1)\vec{a}$, which is the same-length hop pointing the opposite way. This is exactly what lets us subtract: $\vec{a} - \vec{b} = \vec{a} + (-\vec{b})$.
+
+<InteractiveAnchor id="vector-scaling" />
+
+<ScalarScaler client:visible />
+
+## Unit Vectors
+
+A **unit vector** is any vector with magnitude $1$. Two of them are special enough to get their own names. Let the bunny's single hop one space to the right be
+
+$$
+\hat{\imath} = \langle 1, 0 \rangle,
+$$
+
+and its single hop one space up be
+
+$$
+\hat{\jmath} = \langle 0, 1 \rangle.
+$$
+
+(The "hat" is read "i-hat" and "j-hat," and always marks a unit vector.) Using the scaling rule from the previous section, any vector is just a scaled right-hop plus a scaled up-hop:
+
+$$
+\vec{a} = \langle a_x, a_y \rangle = a_x\,\hat{\imath} + a_y\,\hat{\jmath}.
+$$
+
+So $\langle 3, 2 \rangle$ is "three hops right and two hops up," or $3\hat{\imath} + 2\hat{\jmath}$. Every press of an arrow key below adds one unit vector to the bunny's running **displacement** from where its current carrot appeared. Each hop is drawn as a blue vector; reach the carrot and their green sum is the total displacement — the same head-to-tail addition from the first page, now built one unit vector at a time.
+
+<InteractiveAnchor id="bunny-field" />
+
+<BunnyField client:visible />
+
+## Vectors Carry Units
+
+So far the bunny's hops have been pure numbers on a grid. In physics a vector almost always carries a **unit** that tells you what it measures. The bunny's hop is a **displacement**, so its components have units of length — say meters — and a hop of $\langle 3, 2 \rangle\ \text{m}$ means three meters east and two meters north. Displacement is the most intuitive vector precisely because you can pace it out.
+
+The power of the vector formalism is that the *algebra never changes*. Adding components, scaling, and decomposing into $\hat{\imath}$ and $\hat{\jmath}$ work identically no matter what the arrow represents. The units simply ride along inside the magnitude:
+
+<div className="my-6 flex justify-center [&_table]:!my-0 [&_table]:!w-auto [&_th]:!px-6 [&_td]:!px-6">
+
+| Quantity | Symbol | Example units |
+| --- | --- | --- |
+| Displacement | $\vec{d}$ | $\text{m}$ |
+| Velocity | $\vec{v}$ | $\text{m/s}$ |
+| Acceleration | $\vec{a}$ | $\text{m/s}^2$ |
+| Force | $\vec{F}$ | $\text{N} = \text{kg·m/s}^2$ |
+| Electric field | $\vec{E}$ | $\text{N/C}$ |
+
+</div>
+
+Scaling even respects the units. Multiplying a velocity $\vec{v}$ (in $\text{m/s}$) by a time $t$ (a scalar in $\text{s}$) gives a displacement in meters, $\vec{d} = \vec{v}\,t$ — the seconds cancel just as they would in ordinary arithmetic, while the *direction* of the velocity is preserved. Every tool you built on the first page now applies to forces on a free-body diagram, to electric fields around a charge, and to any other quantity with both a magnitude and a direction.
+
+<ProblemSolvingSection
+  title="Vector Practice"
+>
+  <WorkedExampleCard
+    title="Scaling and Negating"
+    accent="blue"
+  >
+    #### Problem
+
+    A bunny's hop is $\vec{a} = \langle 2, 3 \rangle$. Find $2\vec{a}$ and $-\vec{a}$.
+
+    #### Use
+
+    $$
+    c\,\langle a_x, a_y \rangle = \langle c\,a_x,\; c\,a_y \rangle.
+    $$
+
+    #### Solve
+
+    $$
+    2\vec{a} = \langle 2\cdot 2,\; 2\cdot 3 \rangle = \langle 4, 6 \rangle,
+    \qquad
+    -\vec{a} = \langle -2, -3 \rangle.
+    $$
+
+    #### Check
+
+    $2\vec{a}$ points the same way as $\vec{a}$ but is twice as long, while $-\vec{a}$ has the same length and points the opposite way — exactly what scaling by $2$ and by $-1$ should do.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Unit Vectors and Units"
+    accent="blue"
+  >
+    #### Problem
+
+    A velocity is $\vec{v} = \langle -4, 3 \rangle\ \text{m/s}$. Write it with unit vectors and find its speed (the magnitude).
+
+    #### Write and solve
+
+    $$
+    \vec{v} = -4\,\hat{\imath} + 3\,\hat{\jmath}\ \text{m/s},
+    \qquad
+    \lVert \vec{v} \rVert = \sqrt{(-4)^2 + 3^2} = \sqrt{25} = 5\ \text{m/s}.
+    $$
+
+    #### Check
+
+    The components form a $3$-$4$-$5$ right triangle, so a speed of $5\ \text{m/s}$ is reasonable, and the unit $\text{m/s}$ carries straight through to the magnitude.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="More Vectors Checkpoint"
+  questions={[
+    {
+      id: 'scalar-multiply',
+      question: 'What is $3\\langle -1, 2 \\rangle$?',
+      options: [
+        { id: 'A', text: '$\\langle -3, 6 \\rangle$', isCorrect: true, explanation: 'Multiply each component by the scalar: $3\\cdot(-1) = -3$ and $3\\cdot 2 = 6$.' },
+        { id: 'B', text: '$\\langle 2, 5 \\rangle$', isCorrect: false, explanation: 'A scalar multiplies each component; it is not added to them.' },
+        { id: 'C', text: '$\\langle -1, 6 \\rangle$', isCorrect: false, explanation: 'Both components scale by $3$, so the $x$ component becomes $-3$, not $-1$.' }
+      ]
+    },
+    {
+      id: 'negation-direction',
+      question: 'How does $-\\vec{a}$ compare to $\\vec{a}$?',
+      options: [
+        { id: 'B', text: 'Same length, opposite direction.', isCorrect: true, explanation: 'Negation is scaling by $-1$: the magnitude is unchanged because $|-1| = 1$, but the direction reverses.' },
+        { id: 'A', text: 'Twice the length, same direction.', isCorrect: false, explanation: 'That would be $2\\vec{a}$. Scaling by $-1$ does not change the length.' },
+        { id: 'C', text: 'Half the length, opposite direction.', isCorrect: false, explanation: 'The length is unchanged, since $|-1| = 1$.' }
+      ]
+    },
+    {
+      id: 'force-magnitude',
+      question: 'A force is $\\vec{F} = \\langle 3, 4 \\rangle\\ \\text{N}$. What is its magnitude?',
+      options: [
+        { id: 'C', text: '$5\\ \\text{N}$', isCorrect: true, explanation: 'Magnitude is $\\sqrt{3^2 + 4^2} = 5$, and the unit newton carries through unchanged.' },
+        { id: 'A', text: '$7\\ \\text{N}$', isCorrect: false, explanation: 'Magnitude is found with the Pythagorean theorem, not by adding the components.' },
+        { id: 'B', text: '$12\\ \\text{N}$', isCorrect: false, explanation: 'That is the product of the components, not the magnitude.' }
+      ]
+    }
+  ]}
+/>

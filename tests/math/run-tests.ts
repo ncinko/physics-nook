@@ -29,6 +29,15 @@ import {
   hopStaysOnLine,
   totalHop,
 } from '../../src/lib/math/bunnyHops.ts';
+import {
+  FIELD_BOUNDS,
+  UNIT_STEPS,
+  carrotReached,
+  cellCount,
+  clampToField,
+  randomCarrot,
+  stepBunny,
+} from '../../src/lib/math/bunnyField.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -126,3 +135,63 @@ assert.equal(hopStaysOnLine(6, 2, -8, 8), true);
 assert.equal(hopStaysOnLine(-7, -2, -8, 8), false);
 
 console.log('Bunny hop tests passed.');
+
+// --- Keyboard bunny field (2D unit-vector hops) ---
+
+// A unit step inside the field just adds the unit vector.
+assert.deepEqual(stepBunny({ x: 0, y: 0 }, UNIT_STEPS.right), { x: 1, y: 0 });
+assert.deepEqual(stepBunny({ x: 0, y: 0 }, UNIT_STEPS.up), { x: 0, y: 1 });
+assert.deepEqual(stepBunny({ x: 0, y: 0 }, UNIT_STEPS.left), { x: -1, y: 0 });
+assert.deepEqual(stepBunny({ x: 0, y: 0 }, UNIT_STEPS.down), { x: 0, y: -1 });
+
+// Stepping off an edge clamps back to the boundary (no move).
+assert.deepEqual(stepBunny({ x: FIELD_BOUNDS.maxX, y: 0 }, UNIT_STEPS.right), {
+  x: FIELD_BOUNDS.maxX,
+  y: 0,
+});
+assert.deepEqual(stepBunny({ x: 0, y: FIELD_BOUNDS.minY }, UNIT_STEPS.down), {
+  x: 0,
+  y: FIELD_BOUNDS.minY,
+});
+assert.deepEqual(clampToField({ x: 99, y: -99 }), {
+  x: FIELD_BOUNDS.maxX,
+  y: FIELD_BOUNDS.minY,
+});
+
+assert.equal(carrotReached({ x: 2, y: -1 }, { x: 2, y: -1 }), true);
+assert.equal(carrotReached({ x: 2, y: -1 }, { x: 2, y: 0 }), false);
+
+// Default field is 11 x 7 cells.
+assert.equal(cellCount(), 77);
+
+// randomCarrot maps the smallest draw to the bottom-left cell and never lands on
+// the avoided cell, even when the raw draw points straight at it.
+assert.deepEqual(randomCarrot({ x: 0, y: 0 }, FIELD_BOUNDS, () => 0), {
+  x: FIELD_BOUNDS.minX,
+  y: FIELD_BOUNDS.minY,
+});
+const avoidCell = { x: 0, y: 0 };
+const width = FIELD_BOUNDS.maxX - FIELD_BOUNDS.minX + 1;
+const avoidIndex = (avoidCell.y - FIELD_BOUNDS.minY) * width + (avoidCell.x - FIELD_BOUNDS.minX);
+// A draw fraction that rounds to exactly the avoided index must be skipped.
+const collidingDraw = (avoidIndex + 0.5) / (cellCount() - 1);
+assert.equal(
+  carrotReached(randomCarrot(avoidCell, FIELD_BOUNDS, () => collidingDraw), avoidCell),
+  false,
+);
+// Sampling the full [0, 1) range always yields an in-bounds cell that is not the
+// avoided one.
+for (let i = 0; i < cellCount() - 1; i += 1) {
+  const draw = i / (cellCount() - 1);
+  const carrot = randomCarrot(avoidCell, FIELD_BOUNDS, () => draw);
+  assert.ok(
+    carrot.x >= FIELD_BOUNDS.minX &&
+      carrot.x <= FIELD_BOUNDS.maxX &&
+      carrot.y >= FIELD_BOUNDS.minY &&
+      carrot.y <= FIELD_BOUNDS.maxY,
+    `random carrot ${JSON.stringify(carrot)} is in bounds`,
+  );
+  assert.equal(carrotReached(carrot, avoidCell), false, 'random carrot avoids the bunny');
+}
+
+console.log('Bunny field tests passed.');

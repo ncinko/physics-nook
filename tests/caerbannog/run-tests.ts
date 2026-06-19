@@ -18,6 +18,7 @@ import {
 import {
   KNIGHT_MAX_LIMBS,
   MAX_SPECIAL_LEVEL,
+  SPECIAL_IDS,
   TIM_SWING_TIME,
   WORLD,
   blastDamage,
@@ -28,13 +29,16 @@ import {
   canUpgradeSpecial,
   chooseBlessing,
   chooseSpecial,
+  clusterBomblets,
   createGame,
   goldForKill,
   knightLegs,
   knightLimbs,
   landingPoint,
+  lightningPct,
   nextWave,
   offerBlessings,
+  offerableSpecials,
   rabbitKindForSpawn,
   rabbitTraits,
   repairCost,
@@ -496,71 +500,155 @@ console.log('Caerbannog game step tests passed.');
   assert.ok(specialChance(99) <= 0.9);
   assert.ok(specialUpgradeCost(2) > specialUpgradeCost(1));
 
-  // The first Black Knight (wave 10) unlocks the one-time pick; wave 5 does not.
+  // Power tracks: cluster scatters more bomblets, lightning sears a larger share.
+  assert.equal(clusterBomblets(0), 0);
+  assert.equal(clusterBomblets(1), 5);
+  assert.equal(clusterBomblets(2), 6);
+  assert.equal(lightningPct(0), 0);
+  near(lightningPct(1), 0.15);
+  assert.ok(lightningPct(2) > lightningPct(1));
+  assert.ok(lightningPct(99) <= 0.5);
+
+  // The first Black Knight (wave 10) owes a pick; wave 5 does not.
   const knightCleared = step(playing({ wave: 10, pending: 0 }), 16);
   assert.equal(knightCleared.phase, 'intermission');
   assert.equal(knightCleared.specialPending, true, 'wave 10 owes a special-weapon choice');
+  assert.deepEqual(
+    offerableSpecials(knightCleared.stats).sort(),
+    [...SPECIAL_IDS].sort(),
+    'both weapons are on offer at the first knight',
+  );
   const rabbitCleared = step(playing({ wave: 5, pending: 0 }), 16);
   assert.equal(rabbitCleared.specialPending, false, 'ordinary milestone waves do not');
 
-  // The choice is gated, sets the weapon at level 1, and clears the obligation.
+  // The choice is gated, sets both tracks to level 1, and clears the obligation.
   assert.equal(chooseSpecial(knightCleared, 'none'), knightCleared, "'none' is not a valid pick");
   const chosen = chooseSpecial(knightCleared, 'cluster');
-  assert.equal(chosen.stats.specialWeapon, 'cluster');
-  assert.equal(chosen.stats.specialLevel, 1);
+  assert.equal(chosen.stats.specials.cluster.owned, true);
+  assert.equal(chosen.stats.specials.cluster.freqLevel, 1);
+  assert.equal(chosen.stats.specials.cluster.powerLevel, 1);
+  assert.equal(chosen.stats.specials.lightning.owned, false, 'one knight grants one weapon');
   assert.equal(chosen.specialPending, false);
+  assert.equal(
+    chooseSpecial(chosen, 'cluster'),
+    chosen,
+    'an owned weapon cannot be claimed again',
+  );
   // The next wave stays blocked until the (wave-10) blessing is also chosen.
   assert.equal(nextWave(chosen), chosen, 'still blocked by the pending blessing');
   const ready = chooseBlessing(chosen, chosen.offer[0]);
   assert.equal(nextWave(ready).phase, 'playing', 'both choices made -> the siege resumes');
-  // A later knight wave does not re-offer once a weapon is owned.
-  assert.equal(step(playing({ wave: 20, pending: 0, stats: { ...ready.stats } }), 16).specialPending, false);
 
-  // Upgrades raise the level and spend gold; gated by affordability and cap.
+  // The second Black Knight (wave 20) offers the *other* weapon.
+  const secondKnight = step(playing({ wave: 20, pending: 0, stats: { ...ready.stats } }), 16);
+  assert.equal(secondKnight.specialPending, true, 'wave 20 owes the remaining special');
+  assert.deepEqual(
+    offerableSpecials(secondKnight.stats),
+    ['lightning'],
+    'only the unclaimed weapon is offered the second time',
+  );
+  const bothOwned = chooseSpecial(secondKnight, 'lightning');
+  assert.equal(bothOwned.stats.specials.lightning.owned, true);
+  assert.equal(bothOwned.stats.specials.cluster.owned, true, 'the first weapon is retained');
+  // A third knight has nothing left to grant.
+  assert.equal(
+    step(playing({ wave: 30, pending: 0, stats: { ...bothOwned.stats } }), 16).specialPending,
+    false,
+    'with both weapons owned no further pick is owed',
+  );
+
+  // Upgrades raise the chosen track and spend gold; gated by affordability/cap.
   const shop = { ...chosen, phase: 'intermission' as const, gold: 1000 };
-  assert.equal(canUpgradeSpecial(shop), true);
-  const upgraded = upgradeSpecial(shop);
-  assert.equal(upgraded.stats.specialLevel, 2);
-  assert.equal(upgraded.gold, 1000 - specialUpgradeCost(1));
+  assert.equal(canUpgradeSpecial(shop, 'cluster', 'freq'), true);
+  assert.equal(canUpgradeSpecial(shop, 'cluster', 'power'), true);
+  assert.equal(canUpgradeSpecial(shop, 'lightning', 'freq'), false, 'an unowned weapon cannot upgrade');
+  const freqUp = upgradeSpecial(shop, 'cluster', 'freq');
+  assert.equal(freqUp.stats.specials.cluster.freqLevel, 2);
+  assert.equal(freqUp.stats.specials.cluster.powerLevel, 1, 'tracks advance independently');
+  assert.equal(freqUp.gold, 1000 - specialUpgradeCost(1));
+  const powerUp = upgradeSpecial(shop, 'cluster', 'power');
+  assert.equal(powerUp.stats.specials.cluster.powerLevel, 2);
   const poor = { ...shop, gold: 0 };
-  assert.equal(upgradeSpecial(poor), poor, 'no gold -> no upgrade');
-  const maxed = { ...shop, stats: { ...shop.stats, specialLevel: MAX_SPECIAL_LEVEL } };
-  assert.equal(canUpgradeSpecial(maxed), false, 'cannot exceed the cap');
+  assert.equal(upgradeSpecial(poor, 'cluster', 'freq'), poor, 'no gold -> no upgrade');
+  const maxed = {
+    ...shop,
+    stats: {
+      ...shop.stats,
+      specials: {
+        ...shop.stats.specials,
+        cluster: { owned: true, freqLevel: MAX_SPECIAL_LEVEL, powerLevel: MAX_SPECIAL_LEVEL },
+      },
+    },
+  };
+  assert.equal(canUpgradeSpecial(maxed, 'cluster', 'freq'), false, 'cannot exceed the cap');
+  assert.equal(canUpgradeSpecial(maxed, 'cluster', 'power'), false, 'cannot exceed the cap');
 }
 
 // --- Special weapon effects fire off a primary blast (seeded roll) ---
 {
   // Seeds whose first roll forces / suppresses the trigger deterministically.
   const lowSeed = (() => { let s = 1; while (createRng(s).next() >= 0.2) s += 1; return s; })();
+  const ownsOnly = (id: 'cluster' | 'lightning', freqLevel = 1, powerLevel = 1) => ({
+    ...startGame(createGame(7)).stats,
+    specials: {
+      cluster: { owned: id === 'cluster', freqLevel: id === 'cluster' ? freqLevel : 0, powerLevel: id === 'cluster' ? powerLevel : 0 },
+      lightning: { owned: id === 'lightning', freqLevel: id === 'lightning' ? freqLevel : 0, powerLevel: id === 'lightning' ? powerLevel : 0 },
+    },
+  });
 
   // Cluster: a primary blast scatters bomblets when the roll lands.
   const clusterFight = playing({
     rng: createRng(lowSeed),
-    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'cluster', specialLevel: 1 },
+    stats: ownsOnly('cluster'),
     grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
   });
   const clustered = step(clusterFight, 50);
-  assert.ok(clustered.grenades.length >= 5, 'a cluster scatters bomblets');
+  assert.equal(clustered.grenades.length, clusterBomblets(1), 'a cluster scatters its bomblet count');
   assert.ok(clustered.grenades.every((g) => g.clusterChild), 'the scattered grenades are bomblets');
+
+  // A higher power track scatters more bomblets.
+  const biggerCluster = step(playing({
+    rng: createRng(lowSeed),
+    stats: ownsOnly('cluster', 1, 3),
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  }), 50);
+  assert.equal(biggerCluster.grenades.length, clusterBomblets(3), 'the power track adds bomblets');
 
   // Bomblets do not themselves re-trigger the special (no infinite cascade).
   const childFight = playing({
     rng: createRng(lowSeed),
-    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'cluster', specialLevel: 6 },
+    stats: ownsOnly('cluster', 6, 6),
     grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04, clusterChild: true }],
   });
   assert.equal(step(childFight, 50).grenades.length, 0, 'a bomblet blast spawns no further bomblets');
 
-  // Lightning: bolts strike rabbits near the blast, even just outside its radius.
+  // Lightning: strikes the toughest rabbit on screen for a share of its full HP,
+  // anywhere on the field — independent of where the grenade landed.
   const lightningFight = playing({
     rng: createRng(lowSeed),
-    rabbits: [rabbitAt(61, 10)], // dist 11: outside the radius-9 blast, inside lightning reach
-    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'lightning', specialLevel: 1 },
+    rabbits: [{ ...rabbitAt(90, 10), id: 1 }], // far from the blast at x=50
+    stats: ownsOnly('lightning'),
     grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
   });
   const struck = step(lightningFight, 50);
-  assert.ok(struck.rabbits[0].hp < 10, 'lightning damages a rabbit the blast itself missed');
+  near(struck.rabbits[0].hp, 10 - lightningPct(1) * 10, 1e-6);
   assert.ok(struck.zaps.some((z) => z.tone === 'lightning'), 'a lightning bolt is drawn');
+
+  // It seeks the rabbit with the most current health, leaving the weaker alone.
+  const choosing = playing({
+    rng: createRng(lowSeed),
+    rabbits: [
+      { ...rabbitAt(40, 4, 'common'), id: 1 },
+      { ...rabbitAt(80, 20, 'brute'), id: 2 },
+    ],
+    stats: ownsOnly('lightning', 1, 2),
+    grenades: [{ id: 9, pos: { x: 95, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const seeking = step(choosing, 50);
+  const tough = seeking.rabbits.find((r) => r.id === 2)!;
+  const weak = seeking.rabbits.find((r) => r.id === 1)!;
+  near(tough.hp, 20 - lightningPct(2) * 20, 1e-6);
+  assert.equal(weak.hp, 4, 'lightning ignores the weaker rabbit');
 }
 
 // --- Economy remains alive through the wave-30 arc ---
@@ -644,7 +732,7 @@ const runUntilPhaseChange = (initial: GameState, maxSeconds = 120): GameState =>
       break;
     }
     if (passive.blessingPending) passive = chooseBlessing(passive, passive.offer[0]);
-    if (passive.specialPending) passive = chooseSpecial(passive, 'cluster');
+    if (passive.specialPending) passive = chooseSpecial(passive, offerableSpecials(passive.stats)[0]);
     passive = nextWave(passive);
   }
   assert.ok(failedWave <= 15, `passive-only play should fail by wave 15, failed at ${failedWave}`);

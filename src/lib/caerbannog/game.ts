@@ -66,27 +66,52 @@ export const knightLimbs = (wave: number): number => {
 export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, limbs));
 
 // --- Special grenade weapons -----------------------------------------------
-// Unlocked once, after the first Black Knight (wave 10): the player commits to
-// ONE secondary effect that may trigger after a grenade's initial blast, then
-// spends gold to raise its chance.
-//   - cluster:   scatters a handful of smaller bomblets from the blast.
-//   - lightning: calls bolts down onto the rabbits near the blast.
-export type SpecialWeapon = 'none' | 'cluster' | 'lightning';
+// Each Black Knight (waves 10, 20, …) lets the player claim a secondary effect
+// that may trigger after a grenade's initial blast: the FIRST knight (wave 10)
+// offers a choice of one, and the SECOND knight (wave 20) grants the *other*, so
+// a seasoned run can wield both. Each weapon has two independent upgrade tracks
+// bought with gold:
+//   - cluster:   scatters bomblets from the blast.
+//                · freq track  → more often
+//                · power track → more bomblets
+//   - lightning: calls a bolt down on the toughest rabbit on screen, dealing a
+//                fixed share of that rabbit's full health.
+//                · freq track  → more often
+//                · power track → a larger share of health per strike
+export type SpecialId = 'cluster' | 'lightning';
+/** 'none' is accepted by `chooseSpecial` as an explicit no-op (invalid pick). */
+export type SpecialWeapon = 'none' | SpecialId;
+/** The two upgrade tracks every special shares: how often, and how hard. */
+export type SpecialTrack = 'freq' | 'power';
+
+export const SPECIAL_IDS: SpecialId[] = ['cluster', 'lightning'];
 
 export const MAX_SPECIAL_LEVEL = 6;
-const CLUSTER_BOMBLETS = 5; // bomblets scattered when a cluster triggers
+const CLUSTER_BOMBLETS_BASE = 5; // bomblets at the first (level-1) power tier
 const CLUSTER_RADIUS_SCALE = 0.55; // bomblet blast radius vs the main grenade
 const CLUSTER_DAMAGE_SCALE = 0.6; // bomblet damage vs the main grenade
-const LIGHTNING_DAMAGE = 2.5; // damage per bolt
-const LIGHTNING_BOLTS = 3; // most rabbits a single strike hits
-const LIGHTNING_REACH = 4; // world units past the blast radius a bolt can reach
-const LIGHTNING_SKY_Y = 40; // world height the bolts descend from
+const LIGHTNING_SKY_Y = 40; // world height the bolt descends from
 
-/** Chance (0–1) a chosen special triggers after a blast, by upgrade level. */
+/** Per-special upgrade state: ownership plus a level on each of the two tracks. */
+export interface SpecialState {
+  owned: boolean;
+  freqLevel: number; // 0 = unowned; 1+ raises the post-blast trigger chance
+  powerLevel: number; // 0 = unowned; 1+ raises potency (bomblets / strike %)
+}
+
+/** Chance (0–1) a special triggers after a blast, by its frequency level. */
 export const specialChance = (level: number): number =>
   level <= 0 ? 0 : Math.min(0.9, 0.25 + (level - 1) * 0.15);
 
-/** Gold to advance the special weapon from its current level to the next. */
+/** Bomblets a cluster scatters when it triggers, by its power level. */
+export const clusterBomblets = (level: number): number =>
+  level <= 0 ? 0 : CLUSTER_BOMBLETS_BASE + (level - 1);
+
+/** Share (0–1) of a rabbit's full health a lightning strike deals, by power level. */
+export const lightningPct = (level: number): number =>
+  level <= 0 ? 0 : Math.min(0.5, 0.15 + (level - 1) * 0.07);
+
+/** Gold to advance one special track from its current level to the next. */
 export const specialUpgradeCost = (level: number): number => 35 + Math.max(0, level - 1) * 30;
 
 export interface RabbitTraits {
@@ -162,8 +187,7 @@ export interface GameStats {
   timLevel: number; // 0 = not summoned; higher = stronger/faster casts
   timCooldown: number; // seconds until Tim's next cast
   timSwing: number; // seconds left on Tim's staff-swing animation (visual only)
-  specialWeapon: SpecialWeapon; // chosen secondary blast effect ('none' until wave 10)
-  specialLevel: number; // 0 = not chosen; 1+ raises the trigger chance
+  specials: Record<SpecialId, SpecialState>; // secondary blast effects, claimed on knight waves
 }
 
 export interface GameState {
@@ -221,8 +245,10 @@ export const createGame = (seed = 1): GameState => ({
     timLevel: 0,
     timCooldown: 0,
     timSwing: 0,
-    specialWeapon: 'none',
-    specialLevel: 0,
+    specials: {
+      cluster: { owned: false, freqLevel: 0, powerLevel: 0 },
+      lightning: { owned: false, freqLevel: 0, powerLevel: 0 },
+    },
   },
   pending: 0,
   spawnTimer: 0,
@@ -383,32 +409,75 @@ export const chooseBlessing = (state: GameState, id: BlessingId): GameState => {
   return { ...state, stats, blessingPending: false, offer: [] };
 };
 
-/** Commit to a special grenade weapon (only valid while the choice is pending). */
+/** Specials still available to claim (unowned), offered on a knight wave. */
+export const offerableSpecials = (stats: GameStats): SpecialId[] =>
+  SPECIAL_IDS.filter((id) => !stats.specials[id].owned);
+
+/**
+ * Claim a special grenade weapon (only valid while a choice is pending and the
+ * weapon is still unowned). Both upgrade tracks start at level 1. One claim
+ * satisfies the pending choice, so the *other* weapon waits for the next knight.
+ */
 export const chooseSpecial = (state: GameState, weapon: SpecialWeapon): GameState => {
-  if (state.phase !== 'intermission' || !state.specialPending || weapon === 'none') {
+  if (
+    state.phase !== 'intermission' ||
+    !state.specialPending ||
+    weapon === 'none' ||
+    state.stats.specials[weapon].owned
+  ) {
     return state;
   }
   return {
     ...state,
     specialPending: false,
-    stats: { ...state.stats, specialWeapon: weapon, specialLevel: 1 },
+    stats: {
+      ...state.stats,
+      specials: {
+        ...state.stats.specials,
+        [weapon]: { owned: true, freqLevel: 1, powerLevel: 1 },
+      },
+    },
   };
 };
 
-/** Whether the run can afford to raise its special weapon's trigger chance. */
-export const canUpgradeSpecial = (state: GameState): boolean =>
-  state.phase === 'intermission' &&
-  state.stats.specialWeapon !== 'none' &&
-  state.stats.specialLevel < MAX_SPECIAL_LEVEL &&
-  state.gold >= specialUpgradeCost(state.stats.specialLevel);
+const trackLevel = (state: SpecialState, track: SpecialTrack): number =>
+  track === 'freq' ? state.freqLevel : state.powerLevel;
 
-/** Spend gold to raise the chance the chosen special triggers after a blast. */
-export const upgradeSpecial = (state: GameState): GameState => {
-  if (!canUpgradeSpecial(state)) return state;
+/** Whether the run can afford to raise the given track of an owned special. */
+export const canUpgradeSpecial = (
+  state: GameState,
+  id: SpecialId,
+  track: SpecialTrack,
+): boolean => {
+  const special = state.stats.specials[id];
+  return (
+    state.phase === 'intermission' &&
+    special.owned &&
+    trackLevel(special, track) < MAX_SPECIAL_LEVEL &&
+    state.gold >= specialUpgradeCost(trackLevel(special, track))
+  );
+};
+
+/** Spend gold to raise one track of a special weapon by a level. */
+export const upgradeSpecial = (
+  state: GameState,
+  id: SpecialId,
+  track: SpecialTrack,
+): GameState => {
+  if (!canUpgradeSpecial(state, id, track)) return state;
+  const special = state.stats.specials[id];
+  const cost = specialUpgradeCost(trackLevel(special, track));
+  const key = track === 'freq' ? 'freqLevel' : 'powerLevel';
   return {
     ...state,
-    gold: state.gold - specialUpgradeCost(state.stats.specialLevel),
-    stats: { ...state.stats, specialLevel: state.stats.specialLevel + 1 },
+    gold: state.gold - cost,
+    stats: {
+      ...state.stats,
+      specials: {
+        ...state.stats.specials,
+        [id]: { ...special, [key]: trackLevel(special, track) + 1 },
+      },
+    },
   };
 };
 
@@ -626,11 +695,14 @@ export const step = (state: GameState, dtMs: number): GameState => {
       }
     }
 
-    if (!blast.fromChild && stats.specialWeapon !== 'none' && rng.next() < specialChance(stats.specialLevel)) {
-      if (stats.specialWeapon === 'cluster') {
+    // Each owned special rolls independently off a primary (non-child) blast.
+    if (!blast.fromChild) {
+      const cluster = stats.specials.cluster;
+      if (cluster.owned && rng.next() < specialChance(cluster.freqLevel)) {
         // Scatter bomblets up and outward from the blast; they arc, land, and
         // pop on their own short fuse (and never re-trigger the special).
-        for (let i = 0; i < CLUSTER_BOMBLETS; i += 1) {
+        const count = clusterBomblets(cluster.powerLevel);
+        for (let i = 0; i < count; i += 1) {
           const dir = rng.range(-1, 1);
           grenades.push({
             id: nextId,
@@ -642,19 +714,24 @@ export const step = (state: GameState, dtMs: number): GameState => {
           });
           nextId += 1;
         }
-      } else {
-        // Lightning: bolts fall on the rabbits nearest the blast.
-        const reach = blast.radius + LIGHTNING_REACH;
-        const targets = rabbits
-          .filter((r) => r.hp > 0 && Math.abs(r.x - blast.pos.x) <= reach)
-          .sort((a, b) => Math.abs(a.x - blast.pos.x) - Math.abs(b.x - blast.pos.x))
-          .slice(0, LIGHTNING_BOLTS);
-        for (const r of targets) {
-          r.hp -= LIGHTNING_DAMAGE * rabbitTraits(r.kind, state.wave).staticDamageMultiplier;
+      }
+
+      const lightning = stats.specials.lightning;
+      if (lightning.owned && rng.next() < specialChance(lightning.freqLevel)) {
+        // Lightning seeks the toughest rabbit anywhere on screen (most current
+        // health) and burns away a fixed share of its full health.
+        let target: Rabbit | null = null;
+        for (const r of rabbits) {
+          if (r.hp > 0 && (target === null || r.hp > target.hp)) {
+            target = r;
+          }
+        }
+        if (target) {
+          target.hp -= lightningPct(lightning.powerLevel) * target.maxHp;
           zaps.push({
             id: nextId,
-            from: { x: r.x, y: LIGHTNING_SKY_Y },
-            to: { x: r.x, y: r.y },
+            from: { x: target.x, y: LIGHTNING_SKY_Y },
+            to: { x: target.x, y: target.y },
             age: 0,
             ttl: 0.22,
             tone: 'lightning',
@@ -760,8 +837,9 @@ export const step = (state: GameState, dtMs: number): GameState => {
     waveGoldEarned += clearReward;
     blessingPending = isBlessingWave(state.wave);
     offer = blessingPending ? offerBlessings(rng) : [];
-    // The first Black Knight (wave 10) unlocks the one-time special-weapon pick.
-    specialPending = stats.specialWeapon === 'none' && state.wave % 10 === 0;
+    // Every Black Knight (waves 10, 20, …) lets the player claim a special while
+    // one is still unclaimed: one at wave 10, then the other at wave 20.
+    specialPending = state.wave % 10 === 0 && offerableSpecials(stats).length > 0;
     bestWave = Math.max(bestWave, state.wave);
   }
 

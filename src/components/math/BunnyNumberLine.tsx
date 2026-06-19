@@ -115,7 +115,7 @@ export function BunnyNumberLine() {
         <h3 className="m-0 text-lg font-semibold">Bunny Arithmetic</h3>
         <p className="mt-1 mb-0 text-sm leading-6 text-[var(--text-muted)]">
           Hop to the carrot. Each hop is a one-dimensional vector: a size (how far) and
-          a direction (the sign). The hops sum up to the total displacement, exactly like vector addition.
+          a direction (the sign).
         </p>
       </div>
 

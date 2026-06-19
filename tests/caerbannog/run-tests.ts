@@ -11,6 +11,7 @@ import {
 import { isBlessingWave, waveConfig } from '../../src/lib/caerbannog/waves.ts';
 import {
   KNIGHT_MAX_LIMBS,
+  MAX_SPECIAL_LEVEL,
   TIM_SWING_TIME,
   WORLD,
   blastDamage,
@@ -18,7 +19,9 @@ import {
   caltropsDps,
   caltropsSlow,
   canRepairKeep,
+  canUpgradeSpecial,
   chooseBlessing,
+  chooseSpecial,
   createGame,
   goldForKill,
   knightLegs,
@@ -30,12 +33,15 @@ import {
   rabbitTraits,
   repairCost,
   repairKeep,
+  specialChance,
+  specialUpgradeCost,
   startGame,
   step,
   timStats,
   throwGrenade,
   timeToGround,
   trajectoryPoints,
+  upgradeSpecial,
   waveClearGold,
   type GameState,
   type Rabbit,
@@ -475,6 +481,82 @@ console.log('Caerbannog game step tests passed.');
   assert.ok(settling.stats.timSwing < TIM_SWING_TIME, 'the swing animation winds down');
 }
 
+// --- Special weapons: unlock, choice, upgrade, and effects ---
+{
+  // Trigger chance climbs with level and is capped.
+  assert.equal(specialChance(0), 0);
+  near(specialChance(1), 0.25);
+  assert.ok(specialChance(2) > specialChance(1));
+  assert.ok(specialChance(99) <= 0.9);
+  assert.ok(specialUpgradeCost(2) > specialUpgradeCost(1));
+
+  // The first Black Knight (wave 10) unlocks the one-time pick; wave 5 does not.
+  const knightCleared = step(playing({ wave: 10, pending: 0 }), 16);
+  assert.equal(knightCleared.phase, 'intermission');
+  assert.equal(knightCleared.specialPending, true, 'wave 10 owes a special-weapon choice');
+  const rabbitCleared = step(playing({ wave: 5, pending: 0 }), 16);
+  assert.equal(rabbitCleared.specialPending, false, 'ordinary milestone waves do not');
+
+  // The choice is gated, sets the weapon at level 1, and clears the obligation.
+  assert.equal(chooseSpecial(knightCleared, 'none'), knightCleared, "'none' is not a valid pick");
+  const chosen = chooseSpecial(knightCleared, 'cluster');
+  assert.equal(chosen.stats.specialWeapon, 'cluster');
+  assert.equal(chosen.stats.specialLevel, 1);
+  assert.equal(chosen.specialPending, false);
+  // The next wave stays blocked until the (wave-10) blessing is also chosen.
+  assert.equal(nextWave(chosen), chosen, 'still blocked by the pending blessing');
+  const ready = chooseBlessing(chosen, chosen.offer[0]);
+  assert.equal(nextWave(ready).phase, 'playing', 'both choices made -> the siege resumes');
+  // A later knight wave does not re-offer once a weapon is owned.
+  assert.equal(step(playing({ wave: 20, pending: 0, stats: { ...ready.stats } }), 16).specialPending, false);
+
+  // Upgrades raise the level and spend gold; gated by affordability and cap.
+  const shop = { ...chosen, phase: 'intermission' as const, gold: 1000 };
+  assert.equal(canUpgradeSpecial(shop), true);
+  const upgraded = upgradeSpecial(shop);
+  assert.equal(upgraded.stats.specialLevel, 2);
+  assert.equal(upgraded.gold, 1000 - specialUpgradeCost(1));
+  const poor = { ...shop, gold: 0 };
+  assert.equal(upgradeSpecial(poor), poor, 'no gold -> no upgrade');
+  const maxed = { ...shop, stats: { ...shop.stats, specialLevel: MAX_SPECIAL_LEVEL } };
+  assert.equal(canUpgradeSpecial(maxed), false, 'cannot exceed the cap');
+}
+
+// --- Special weapon effects fire off a primary blast (seeded roll) ---
+{
+  // Seeds whose first roll forces / suppresses the trigger deterministically.
+  const lowSeed = (() => { let s = 1; while (createRng(s).next() >= 0.2) s += 1; return s; })();
+
+  // Cluster: a primary blast scatters bomblets when the roll lands.
+  const clusterFight = playing({
+    rng: createRng(lowSeed),
+    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'cluster', specialLevel: 1 },
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const clustered = step(clusterFight, 50);
+  assert.ok(clustered.grenades.length >= 5, 'a cluster scatters bomblets');
+  assert.ok(clustered.grenades.every((g) => g.clusterChild), 'the scattered grenades are bomblets');
+
+  // Bomblets do not themselves re-trigger the special (no infinite cascade).
+  const childFight = playing({
+    rng: createRng(lowSeed),
+    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'cluster', specialLevel: 6 },
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04, clusterChild: true }],
+  });
+  assert.equal(step(childFight, 50).grenades.length, 0, 'a bomblet blast spawns no further bomblets');
+
+  // Lightning: bolts strike rabbits near the blast, even just outside its radius.
+  const lightningFight = playing({
+    rng: createRng(lowSeed),
+    rabbits: [rabbitAt(61, 10)], // dist 11: outside the radius-9 blast, inside lightning reach
+    stats: { ...startGame(createGame(7)).stats, specialWeapon: 'lightning', specialLevel: 1 },
+    grenades: [{ id: 9, pos: { x: 50, y: 0 }, vel: { x: 0, y: 0 }, state: 'fuse', fuse: 0.04 }],
+  });
+  const struck = step(lightningFight, 50);
+  assert.ok(struck.rabbits[0].hp < 10, 'lightning damages a rabbit the blast itself missed');
+  assert.ok(struck.zaps.some((z) => z.tone === 'lightning'), 'a lightning bolt is drawn');
+}
+
 // --- Economy remains alive through the wave-30 arc ---
 {
   const totalShopCost = SHOP.flatMap((item) =>
@@ -556,6 +638,7 @@ const runUntilPhaseChange = (initial: GameState, maxSeconds = 120): GameState =>
       break;
     }
     if (passive.blessingPending) passive = chooseBlessing(passive, passive.offer[0]);
+    if (passive.specialPending) passive = chooseSpecial(passive, 'cluster');
     passive = nextWave(passive);
   }
   assert.ok(failedWave <= 15, `passive-only play should fail by wave 15, failed at ${failedWave}`);

@@ -15,22 +15,29 @@ import {
   type Vector2,
 } from '../../../lib/math/vectors';
 import {
+  MAX_SPECIAL_LEVEL,
   TIM_SWING_TIME,
   WORLD,
   buyDefense,
   canRepairKeep,
+  canUpgradeSpecial,
   chooseBlessing,
+  chooseSpecial,
   createGame,
   knightLimbs,
   nextWave,
   rabbitTraits,
   repairCost,
   repairKeep,
+  specialChance,
+  specialUpgradeCost,
   startGame,
   step,
   throwGrenade,
+  upgradeSpecial,
   type GameState,
   type RabbitKind,
+  type SpecialWeapon,
 } from '../../../lib/caerbannog/game';
 import {
   BLESSINGS,
@@ -102,6 +109,21 @@ const RABBIT_PALETTES: Record<RabbitKind, Record<string, string>> = {
   // entry only satisfies the palette record's exhaustiveness.
   knight: KILLER_PALETTE,
 };
+
+const SPECIAL_INFO: Record<Exclude<SpecialWeapon, 'none'>, { name: string; icon: string; blurb: string }> = {
+  cluster: {
+    name: 'Cluster Bomb',
+    icon: '💣',
+    blurb: 'A blast may scatter a cluster of smaller bomblets that burst around it.',
+  },
+  lightning: {
+    name: 'Lightning',
+    icon: '⚡',
+    blurb: 'A blast may call lightning down onto the rabbits caught nearby.',
+  },
+};
+
+const pct = (chance: number) => `${Math.round(chance * 100)}%`;
 
 const pointerToWorld = (event: PointerEvent<SVGElement>): Vector2 => {
   const svg = event.currentTarget.ownerSVGElement ?? (event.currentTarget as SVGSVGElement);
@@ -220,6 +242,8 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
   const begin = () => setGame((prev) => startGame(prev));
   const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
+  const pickSpecial = (weapon: SpecialWeapon) => setGame((prev) => chooseSpecial(prev, weapon));
+  const amplifySpecial = () => setGame((prev) => upgradeSpecial(prev));
   const purchase = (id: ShopId) => setGame((prev) => buyDefense(prev, id));
   const repair = () => setGame((prev) => repairKeep(prev));
   const continueSiege = () => setGame((prev) => nextWave(prev));
@@ -348,29 +372,32 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             );
           })}
 
-          {state.zaps.map((zap) => (
-            <g key={zap.id} opacity={1 - zap.age / zap.ttl}>
-              <line
-                x1={sx(zap.from.x)}
-                y1={sy(zap.from.y)}
-                x2={sx(zap.to.x)}
-                y2={sy(zap.to.y)}
-                stroke="#fb923c"
-                strokeWidth={6}
-                strokeLinecap="round"
-                opacity={0.45}
-              />
-              <line
-                x1={sx(zap.from.x)}
-                y1={sy(zap.from.y)}
-                x2={sx(zap.to.x)}
-                y2={sy(zap.to.y)}
-                stroke="#fde68a"
-                strokeWidth={2}
-                strokeLinecap="round"
-              />
-            </g>
-          ))}
+          {state.zaps.map((zap) => {
+            const lightning = zap.tone === 'lightning';
+            return (
+              <g key={zap.id} opacity={1 - zap.age / zap.ttl}>
+                <line
+                  x1={sx(zap.from.x)}
+                  y1={sy(zap.from.y)}
+                  x2={sx(zap.to.x)}
+                  y2={sy(zap.to.y)}
+                  stroke={lightning ? '#60a5fa' : '#fb923c'}
+                  strokeWidth={lightning ? 5 : 6}
+                  strokeLinecap="round"
+                  opacity={0.45}
+                />
+                <line
+                  x1={sx(zap.from.x)}
+                  y1={sy(zap.from.y)}
+                  x2={sx(zap.to.x)}
+                  y2={sy(zap.to.y)}
+                  stroke={lightning ? '#e0f2fe' : '#fde68a'}
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                />
+              </g>
+            );
+          })}
 
           {state.grenades.map((grenade) => {
             const angle =
@@ -381,9 +408,10 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
             return (
               <g key={grenade.id} transform={`translate(${sx(grenade.pos.x)}, ${sy(grenade.pos.y)})`}>
                 <g transform={`rotate(${angle})`}>
-                  <Pixels sprite={GRENADE_SPRITE} cell={2} />
+                  {/* Cluster bomblets are drawn smaller than a full grenade. */}
+                  <Pixels sprite={GRENADE_SPRITE} cell={grenade.clusterChild ? 1.3 : 2} />
                 </g>
-                {grenade.state === 'fuse' && (
+                {grenade.state === 'fuse' && !grenade.clusterChild && (
                   <text
                     x={0}
                     y={-22}
@@ -471,6 +499,38 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                 </>
               )}
 
+              {state.specialPending && (
+                <>
+                  <h2 className="mt-3 mb-0 text-xl font-black text-white">Claim a special weapon</h2>
+                  <p className="mt-1 mb-0 text-xs text-slate-300">
+                    The Black Knight is felled. Pick one secondary effect for your grenades — then
+                    spend gold to raise its odds.
+                  </p>
+                  <div className="mt-3 grid w-full gap-2 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={() => pickSpecial('cluster')}
+                      className="flex flex-col gap-1 rounded-xl border border-amber-400/50 bg-amber-950/80 p-3 text-left transition hover:border-amber-300 hover:bg-amber-900/80"
+                    >
+                      <span className="text-sm font-bold text-amber-100">
+                        {SPECIAL_INFO.cluster.icon} {SPECIAL_INFO.cluster.name}
+                      </span>
+                      <span className="text-xs leading-5 text-amber-50/75">{SPECIAL_INFO.cluster.blurb}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => pickSpecial('lightning')}
+                      className="flex flex-col gap-1 rounded-xl border border-sky-400/50 bg-sky-950/80 p-3 text-left transition hover:border-sky-300 hover:bg-sky-900/80"
+                    >
+                      <span className="text-sm font-bold text-sky-100">
+                        {SPECIAL_INFO.lightning.icon} {SPECIAL_INFO.lightning.name}
+                      </span>
+                      <span className="text-xs leading-5 text-sky-50/75">{SPECIAL_INFO.lightning.blurb}</span>
+                    </button>
+                  </div>
+                </>
+              )}
+
               <div className="mt-3 flex w-full items-end justify-between gap-3 text-left">
                 <div>
                   <h2 className="m-0 text-lg font-black text-white">Fortify the keep</h2>
@@ -517,13 +577,40 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                   {stats.castleHp >= stats.maxCastleHp ? 'KEEP FULL' : `${repairCost(state.wave)} gold`}
                 </span>
               </button>
+              {stats.specialWeapon !== 'none' && (
+                <button
+                  type="button"
+                  onClick={amplifySpecial}
+                  disabled={!canUpgradeSpecial(state)}
+                  className="mt-2 flex w-full items-center justify-between rounded-lg border border-indigo-500/60 bg-indigo-950/70 px-3 py-2 text-left text-xs text-indigo-100 transition enabled:hover:border-indigo-300 enabled:hover:bg-indigo-900/70 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span>
+                    <strong>
+                      {SPECIAL_INFO[stats.specialWeapon].icon} Amplify {SPECIAL_INFO[stats.specialWeapon].name}
+                    </strong>{' '}
+                    · {pct(specialChance(stats.specialLevel))} to trigger
+                    {stats.specialLevel < MAX_SPECIAL_LEVEL && (
+                      <> → {pct(specialChance(stats.specialLevel + 1))}</>
+                    )}
+                  </span>
+                  <span className="font-mono font-bold text-amber-300">
+                    {stats.specialLevel >= MAX_SPECIAL_LEVEL
+                      ? 'MAXED'
+                      : `${specialUpgradeCost(stats.specialLevel)} gold`}
+                  </span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={continueSiege}
-                disabled={state.blessingPending}
+                disabled={state.blessingPending || state.specialPending}
                 className={`${primaryBtn} disabled:cursor-not-allowed disabled:opacity-45`}
               >
-                {state.blessingPending ? 'Choose a blessing first' : `Begin wave ${state.wave + 1}`}
+                {state.blessingPending
+                  ? 'Choose a blessing first'
+                  : state.specialPending
+                    ? 'Choose a special weapon first'
+                    : `Begin wave ${state.wave + 1}`}
               </button>
             </div>
           </Overlay>
@@ -828,6 +915,14 @@ function Hud({ state, best }: { state: GameState; best: number }) {
       <span title="Gold available for defenses" className="font-semibold text-amber-500">
         {state.gold} gold
       </span>
+      {stats.specialWeapon !== 'none' && (
+        <span
+          title={`${SPECIAL_INFO[stats.specialWeapon].name}: ${pct(specialChance(stats.specialLevel))} to trigger`}
+          className="font-semibold text-indigo-300"
+        >
+          {SPECIAL_INFO[stats.specialWeapon].icon} {pct(specialChance(stats.specialLevel))}
+        </span>
+      )}
       {best > 0 && <span className="text-[var(--text-muted)]">best W{best}</span>}
     </div>
   );

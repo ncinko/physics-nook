@@ -65,6 +65,30 @@ export const knightLimbs = (wave: number): number => {
 /** Legs still attached for a given limb count (arms are lost before legs). */
 export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, limbs));
 
+// --- Special grenade weapons -----------------------------------------------
+// Unlocked once, after the first Black Knight (wave 10): the player commits to
+// ONE secondary effect that may trigger after a grenade's initial blast, then
+// spends gold to raise its chance.
+//   - cluster:   scatters a handful of smaller bomblets from the blast.
+//   - lightning: calls bolts down onto the rabbits near the blast.
+export type SpecialWeapon = 'none' | 'cluster' | 'lightning';
+
+export const MAX_SPECIAL_LEVEL = 6;
+const CLUSTER_BOMBLETS = 5; // bomblets scattered when a cluster triggers
+const CLUSTER_RADIUS_SCALE = 0.55; // bomblet blast radius vs the main grenade
+const CLUSTER_DAMAGE_SCALE = 0.6; // bomblet damage vs the main grenade
+const LIGHTNING_DAMAGE = 2.5; // damage per bolt
+const LIGHTNING_BOLTS = 3; // most rabbits a single strike hits
+const LIGHTNING_REACH = 4; // world units past the blast radius a bolt can reach
+const LIGHTNING_SKY_Y = 40; // world height the bolts descend from
+
+/** Chance (0–1) a chosen special triggers after a blast, by upgrade level. */
+export const specialChance = (level: number): number =>
+  level <= 0 ? 0 : Math.min(0.9, 0.25 + (level - 1) * 0.15);
+
+/** Gold to advance the special weapon from its current level to the next. */
+export const specialUpgradeCost = (level: number): number => 35 + Math.max(0, level - 1) * 30;
+
 export interface RabbitTraits {
   hpMultiplier: number;
   speedMultiplier: number;
@@ -94,6 +118,7 @@ export interface Grenade {
   vel: Vector2;
   state: 'flying' | 'fuse';
   fuse: number; // seconds left on the fuse once landed
+  clusterChild?: boolean; // a bomblet from a cluster trigger (smaller, no re-trigger)
 }
 
 export interface Explosion {
@@ -104,13 +129,14 @@ export interface Explosion {
   ttl: number; // lifetime for the visual flash
 }
 
-/** A bolt of Tim's magic, drawn from his staff to the rabbit it struck. */
+/** A bolt of magic: Tim's staff-fire, or a lightning strike from the heavens. */
 export interface Zap {
   id: number;
   from: Vector2;
   to: Vector2;
   age: number;
   ttl: number;
+  tone?: 'lightning'; // styles the bolt; default is Tim's fire
 }
 
 export interface RewardPopup {
@@ -136,6 +162,8 @@ export interface GameStats {
   timLevel: number; // 0 = not summoned; higher = stronger/faster casts
   timCooldown: number; // seconds until Tim's next cast
   timSwing: number; // seconds left on Tim's staff-swing animation (visual only)
+  specialWeapon: SpecialWeapon; // chosen secondary blast effect ('none' until wave 10)
+  specialLevel: number; // 0 = not chosen; 1+ raises the trigger chance
 }
 
 export interface GameState {
@@ -155,6 +183,7 @@ export interface GameState {
   spawnTimer: number; // seconds until the next spawn
   offer: BlessingId[]; // blessing choices shown during a blessing intermission
   blessingPending: boolean; // a blessing must be chosen before the next wave
+  specialPending: boolean; // the one-time cluster/lightning choice is owed
   rng: Rng;
   nextId: number;
   bestWave: number;
@@ -190,11 +219,14 @@ export const createGame = (seed = 1): GameState => ({
     timLevel: 0,
     timCooldown: 0,
     timSwing: 0,
+    specialWeapon: 'none',
+    specialLevel: 0,
   },
   pending: 0,
   spawnTimer: 0,
   offer: [],
   blessingPending: false,
+  specialPending: false,
   rng: createRng(seed),
   nextId: 1,
   bestWave: 0,
@@ -327,6 +359,7 @@ const beginWave = (state: GameState, wave: number): GameState => ({
   spawnTimer: 0.5, // small beat before the first rabbit appears
   offer: [],
   blessingPending: false,
+  specialPending: false,
   waveGoldEarned: 0,
   precisionKillsThisWave: 0,
   rewardPopups: [],
@@ -346,6 +379,35 @@ export const chooseBlessing = (state: GameState, id: BlessingId): GameState => {
   const stats = { ...state.stats };
   applyBlessing(stats, id);
   return { ...state, stats, blessingPending: false, offer: [] };
+};
+
+/** Commit to a special grenade weapon (only valid while the choice is pending). */
+export const chooseSpecial = (state: GameState, weapon: SpecialWeapon): GameState => {
+  if (state.phase !== 'intermission' || !state.specialPending || weapon === 'none') {
+    return state;
+  }
+  return {
+    ...state,
+    specialPending: false,
+    stats: { ...state.stats, specialWeapon: weapon, specialLevel: 1 },
+  };
+};
+
+/** Whether the run can afford to raise its special weapon's trigger chance. */
+export const canUpgradeSpecial = (state: GameState): boolean =>
+  state.phase === 'intermission' &&
+  state.stats.specialWeapon !== 'none' &&
+  state.stats.specialLevel < MAX_SPECIAL_LEVEL &&
+  state.gold >= specialUpgradeCost(state.stats.specialLevel);
+
+/** Spend gold to raise the chance the chosen special triggers after a blast. */
+export const upgradeSpecial = (state: GameState): GameState => {
+  if (!canUpgradeSpecial(state)) return state;
+  return {
+    ...state,
+    gold: state.gold - specialUpgradeCost(state.stats.specialLevel),
+    stats: { ...state.stats, specialLevel: state.stats.specialLevel + 1 },
+  };
 };
 
 /** Buy one level of a static defense with gold (only valid during intermission). */
@@ -375,9 +437,9 @@ export const repairKeep = (state: GameState): GameState => {
   };
 };
 
-/** Begin the next wave (blocked until any pending blessing is chosen). */
+/** Begin the next wave (blocked until any pending blessing/special is chosen). */
 export const nextWave = (state: GameState): GameState => {
-  if (state.phase !== 'intermission' || state.blessingPending) {
+  if (state.phase !== 'intermission' || state.blessingPending || state.specialPending) {
     return state;
   }
   return beginWave(state, state.wave + 1);
@@ -500,7 +562,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     .map((e) => ({ ...e, age: e.age + dt }))
     .filter((e) => e.age < e.ttl);
   const grenades: Grenade[] = [];
-  const blasts: Array<{ pos: Vector2; radius: number }> = [];
+  const blasts: Array<{ pos: Vector2; radius: number; damageScale: number; fromChild: boolean }> = [];
   for (const prev of state.grenades) {
     const g: Grenade = { ...prev, pos: { ...prev.pos }, vel: { ...prev.vel } };
     if (g.state === 'flying') {
@@ -510,23 +572,43 @@ export const step = (state: GameState, dtMs: number): GameState => {
       if (g.pos.y <= WORLD.groundY) {
         g.pos.y = WORLD.groundY;
         g.state = 'fuse';
-        g.fuse = stats.fuseTime;
+        // Bomblets pop quickly so a cluster reads as one chained burst.
+        g.fuse = g.clusterChild ? Math.min(stats.fuseTime, 0.35) : stats.fuseTime;
         g.vel = { x: 0, y: 0 };
       }
       grenades.push(g);
     } else {
       g.fuse -= dt;
       if (g.fuse <= 0) {
-        blasts.push({ pos: g.pos, radius: stats.blastRadius });
+        const child = g.clusterChild === true;
+        blasts.push({
+          pos: g.pos,
+          radius: child ? stats.blastRadius * CLUSTER_RADIUS_SCALE : stats.blastRadius,
+          damageScale: child ? CLUSTER_DAMAGE_SCALE : 1,
+          fromChild: child,
+        });
       } else {
         grenades.push(g);
       }
     }
   }
 
-  // 7. Resolve blasts: damage rabbits by proximity, spawn an explosion flash.
+  // Bolts (Tim's fire and lightning strikes) share one list so a grenade blast
+  // can add lightning here before Tim takes his turn below.
+  const zaps = state.zaps
+    .map((z) => ({ ...z, age: z.age + dt }))
+    .filter((z) => z.age < z.ttl);
+
+  // 7. Resolve blasts: damage rabbits by proximity, spawn an explosion flash,
+  //    then maybe fire the chosen special weapon off a primary (non-child) blast.
   for (const blast of blasts) {
-    explosions.push({ id: nextId, pos: blast.pos, radius: blast.radius, age: 0, ttl: 0.3 });
+    explosions.push({
+      id: nextId,
+      pos: blast.pos,
+      radius: blast.radius,
+      age: 0,
+      ttl: blast.fromChild ? 0.22 : 0.3,
+    });
     nextId += 1;
     for (const r of rabbits) {
       // `r.y` is only a hop animation. Accuracy must depend on where the player
@@ -535,17 +617,52 @@ export const step = (state: GameState, dtMs: number): GameState => {
       const dist = Math.abs(r.x - blast.pos.x);
       const wasAlive = r.hp > 0;
       const traits = rabbitTraits(r.kind, state.wave);
-      r.hp -= blastDamage(stats.damage, dist, blast.radius) * traits.grenadeDamageMultiplier;
+      r.hp -= blastDamage(stats.damage * blast.damageScale, dist, blast.radius) * traits.grenadeDamageMultiplier;
       if (wasAlive && r.hp <= 0 && dist <= blast.radius * 0.25) {
         r.precisionKill = true;
+      }
+    }
+
+    if (!blast.fromChild && stats.specialWeapon !== 'none' && rng.next() < specialChance(stats.specialLevel)) {
+      if (stats.specialWeapon === 'cluster') {
+        // Scatter bomblets up and outward from the blast; they arc, land, and
+        // pop on their own short fuse (and never re-trigger the special).
+        for (let i = 0; i < CLUSTER_BOMBLETS; i += 1) {
+          const dir = rng.range(-1, 1);
+          grenades.push({
+            id: nextId,
+            pos: { x: blast.pos.x, y: 1 },
+            vel: { x: dir * rng.range(6, 16), y: rng.range(14, 24) },
+            state: 'flying',
+            fuse: stats.fuseTime,
+            clusterChild: true,
+          });
+          nextId += 1;
+        }
+      } else {
+        // Lightning: bolts fall on the rabbits nearest the blast.
+        const reach = blast.radius + LIGHTNING_REACH;
+        const targets = rabbits
+          .filter((r) => r.hp > 0 && Math.abs(r.x - blast.pos.x) <= reach)
+          .sort((a, b) => Math.abs(a.x - blast.pos.x) - Math.abs(b.x - blast.pos.x))
+          .slice(0, LIGHTNING_BOLTS);
+        for (const r of targets) {
+          r.hp -= LIGHTNING_DAMAGE * rabbitTraits(r.kind, state.wave).staticDamageMultiplier;
+          zaps.push({
+            id: nextId,
+            from: { x: r.x, y: LIGHTNING_SKY_Y },
+            to: { x: r.x, y: r.y },
+            age: 0,
+            ttl: 0.22,
+            tone: 'lightning',
+          });
+          nextId += 1;
+        }
       }
     }
   }
 
   // 8. Tim the Enchanter zaps the frontmost rabbit on his cadence.
-  const zaps = state.zaps
-    .map((z) => ({ ...z, age: z.age + dt }))
-    .filter((z) => z.age < z.ttl);
   stats.timSwing = Math.max(0, stats.timSwing - dt);
   if (stats.timLevel > 0) {
     stats.timCooldown -= dt;
@@ -626,6 +743,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
   let phase: GamePhase = state.phase;
   let offer = state.offer;
   let blessingPending = state.blessingPending;
+  let specialPending = state.specialPending;
   let bestWave = state.bestWave;
   if (castleHp <= 0) {
     phase = 'gameover';
@@ -637,6 +755,8 @@ export const step = (state: GameState, dtMs: number): GameState => {
     waveGoldEarned += clearReward;
     blessingPending = isBlessingWave(state.wave);
     offer = blessingPending ? offerBlessings(rng) : [];
+    // The first Black Knight (wave 10) unlocks the one-time special-weapon pick.
+    specialPending = stats.specialWeapon === 'none' && state.wave % 10 === 0;
     bestWave = Math.max(bestWave, state.wave);
   }
 
@@ -657,6 +777,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
     spawnTimer,
     offer,
     blessingPending,
+    specialPending,
     nextId,
     bestWave,
     announcementTimer,

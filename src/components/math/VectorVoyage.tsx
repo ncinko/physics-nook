@@ -19,14 +19,15 @@ import {
 import { BunnySprite } from './BunnySprite';
 
 const VIEW_WIDTH = 640;
-const VIEW_HEIGHT = 420;
 const GRID_MIN_X = -6;
 const GRID_MAX_X = 6;
 const GRID_MIN_Y = -4;
 const GRID_MAX_Y = 4;
 const GRID_MARGIN = 36;
 const PLOT_WIDTH = VIEW_WIDTH - GRID_MARGIN * 2;
-const PLOT_HEIGHT = VIEW_HEIGHT - GRID_MARGIN * 2;
+const GRID_UNIT = PLOT_WIDTH / (GRID_MAX_X - GRID_MIN_X);
+const PLOT_HEIGHT = GRID_UNIT * (GRID_MAX_Y - GRID_MIN_Y);
+const VIEW_HEIGHT = PLOT_HEIGHT + GRID_MARGIN * 2;
 
 const COLORS = {
   path: '#2563eb',
@@ -253,6 +254,16 @@ export function VectorVoyage() {
             />
           ))}
 
+          {reached && (
+            <Arrow
+              start={level.start}
+              end={level.target}
+              color={COLORS.success}
+              label="Σ"
+              opacity={0.42}
+            />
+          )}
+
           {invalidTip && <BlockedHint start={current} end={invalidTip} />}
 
           <Burrow point={level.start} />
@@ -430,11 +441,13 @@ function Arrow({
   end,
   color,
   label,
+  opacity = 1,
 }: {
   start: Vector2;
   end: Vector2;
   color: string;
   label: string;
+  opacity?: number;
 }) {
   const screenStart = toScreen(start);
   const screenEnd = toScreen(end);
@@ -454,7 +467,7 @@ function Arrow({
   const midX = (screenStart.x + screenEnd.x) / 2 - uy * 12;
   const midY = (screenStart.y + screenEnd.y) / 2 + ux * 12;
   return (
-    <g>
+    <g opacity={opacity}>
       <line
         x1={screenStart.x}
         y1={screenStart.y}

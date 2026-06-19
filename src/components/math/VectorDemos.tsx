@@ -10,14 +10,15 @@ import {
 import { BunnySprite, type BunnyFrameName } from './BunnySprite';
 
 const VIEW_WIDTH = 640;
-const VIEW_HEIGHT = 360;
 const GRID_MIN_X = -6;
 const GRID_MAX_X = 6;
 const GRID_MIN_Y = -4;
 const GRID_MAX_Y = 4;
 const GRID_MARGIN = 36;
 const PLOT_WIDTH = VIEW_WIDTH - GRID_MARGIN * 2;
-const PLOT_HEIGHT = VIEW_HEIGHT - GRID_MARGIN * 2;
+const GRID_UNIT = PLOT_WIDTH / (GRID_MAX_X - GRID_MIN_X);
+const PLOT_HEIGHT = GRID_UNIT * (GRID_MAX_Y - GRID_MIN_Y);
+const VIEW_HEIGHT = PLOT_HEIGHT + GRID_MARGIN * 2;
 
 const COLORS = {
   a: '#2563eb',

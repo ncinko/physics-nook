@@ -705,6 +705,21 @@ export const modules: ModuleMeta[] = [
           image: '/social/physics-nook-card.svg',
         },
       },
+      {
+        id: 'electromagnetism-current',
+        href: '/electromagnetism/current',
+        title: 'Electric Current',
+        shortTitle: 'Current',
+        description:
+          'Follow charges into motion: the Drude model of electron drift, Ohm’s law, and series–parallel circuits.',
+        seo: {
+          title: 'Electric Current',
+          description:
+            'Learn electric current from the microscopic Drude model of electron drift up to Ohm’s law, power, and series–parallel circuit behavior.',
+          canonicalPath: '/electromagnetism/current',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
     ],
   },
 ];

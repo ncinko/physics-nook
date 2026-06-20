@@ -1,0 +1,146 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Electric Current
+description: Follow charges into motion — the Drude model of electron drift, Ohm's law, and series–parallel circuits.
+canonicalPath: /electromagnetism/current
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import ElectronGas from '../../components/electromagnetism/ElectronGas.jsx';
+import SeriesParallelPlayground from '../../components/electromagnetism/SeriesParallelPlayground.jsx';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/current" />
+
+<div id="page-content"></div>
+
+# Electric Current
+
+The microscopic motion of charges and the macroscopic behavior of circuits are two views of the same physics. Inside a metal, a sea of conduction electrons collides with the lattice while being nudged along by an electric field. In a circuit, components shape that field to control current and energy transfer. Bridging the two pictures is the essence of **Ohm's law**.
+
+
+## Microscopic Picture of Conduction
+
+In the classical **Drude model**, a metal hosts a dense gas of conduction electrons that ricochet off the ionic lattice. Each collision resets an electron's random thermal velocity, but an applied field biases the motion into a slow net **drift**. Click and drag in the scene to set the field's direction and strength.
+
+<InteractiveAnchor id="electron-gas" />
+
+<ElectronGas client:only="react" />
+
+The drift velocity can be estimated from the average time between collisions $\tau$ and the field $E$:
+
+$$
+v_d = -\frac{eE\tau}{m_e},
+$$
+
+where $e$ and $m_e$ are the electron charge and mass. The negative sign means electrons drift *opposite* the field. The drift speed is tiny compared with the random thermal speed — in copper, with $\tau \approx 2.5\times10^{-14}\,\text{s}$ and a field of $1.0\,\text{V/m}$, the drift speed is only about $0.4\,\text{mm/s}$.
+
+<DerivationPanel title="How does this connect to Ohm's law?">
+
+Define the conductivity $\sigma$ and the current density $J = I/A$. Higher conductivity means more current for a given field, and current density is current per cross-sectional area. They are related by
+
+$$
+J = \sigma E.
+$$
+
+For a wire of length $L$ in a constant field, the potential difference is $\Delta V = EL$, so
+
+$$
+J = \sigma E = \sigma\,\frac{\Delta V}{L} \quad\Longrightarrow\quad \Delta V = \frac{L}{\sigma A}\,I.
+$$
+
+This is Ohm's law with resistance $R = \dfrac{L}{\sigma A}$.
+
+To connect back to drift, a geometric argument gives the current density as $J = -n e v_d$, where $n$ is the electron number density. Combining with the drift velocity,
+
+$$
+v_d = -\frac{eE\tau}{m_e} \quad\Longrightarrow\quad J = \frac{n e^2 \tau}{m_e}\,E,
+$$
+
+so the conductivity is
+
+$$
+\sigma = \frac{n e^2 \tau}{m_e}.
+$$
+
+Materials with more conduction electrons or longer times between collisions conduct better.
+
+</DerivationPanel>
+
+The Drude model is a useful first picture, but it has limits: it treats electrons as classical particles and ignores quantum effects such as the Pauli exclusion principle. Explaining superconductivity or the temperature dependence of resistivity needs more.
+
+## Macroscopic Circuits
+
+Circuit components act as macroscopic guides for the electric field. Following a single charge carrier around the loop, its potential energy changes as it moves with or against the field. Rather than tracking the field in detail, it is simpler to track the **potential differences** across components.
+
+A battery provides a potential difference that drives the current. Resistors, bulbs, and other components limit and direct that current, each with its own voltage drop. Applying Ohm's law to each component, together with how the components are wired, predicts the current in every branch.
+
+
+<DerivationPanel title="How does energy flow in a circuit?">
+
+Power is the rate of change of potential energy. For a charge $q$ crossing a potential difference $\Delta V$, the energy change is $\Delta U = q\,\Delta V$. If that charge crosses in time $\Delta t$,
+
+$$
+P = \frac{\Delta U}{\Delta t} = \frac{q\,\Delta V}{\Delta t} = I\,\Delta V,
+$$
+
+using $I = \dfrac{q}{\Delta t}$. Components with a larger voltage drop or more current dissipate more power. For a resistor, $\Delta V = IR$, so
+
+$$
+P = I\,\Delta V = I^2 R,
+$$
+
+which is converted into thermal energy, heating the resistor.
+
+</DerivationPanel>
+
+<ProblemSolvingSection title="Practice">
+  <WorkedExampleCard title="Drift Speed in Copper" accent="blue">
+    #### Problem
+
+    A copper wire $0.10\,\text{m}$ long with cross-section $1.0\,\text{mm}^2$ sits in a field of $2.0\,\text{V/m}$. Estimate the drift speed if $\tau = 2.5\times10^{-14}\,\text{s}$.
+
+    #### Solve
+
+    With $e = 1.60\times10^{-19}\,\text{C}$ and $m_e = 9.11\times10^{-31}\,\text{kg}$,
+
+    $$
+    v_d = \frac{eE\tau}{m_e} = \frac{(1.60\times10^{-19})(2.0)(2.5\times10^{-14})}{9.11\times10^{-31}} \approx 8.8\times10^{-3}\,\text{m/s}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Resistance and Current" accent="blue">
+    #### Problem
+
+    Copper has conductivity $5.8\times10^7\,\text{S/m}$. Find the resistance of the wire above, then estimate the current from the field using Ohm's law.
+
+    #### Solve
+
+    $$
+    R = \frac{L}{\sigma A} = \frac{0.10}{(5.8\times10^7)(1.0\times10^{-6})} \approx 1.7\times10^{-3}\,\Omega.
+    $$
+
+    The potential difference is $\Delta V = EL = (2.0)(0.10) = 0.20\,\text{V}$, so
+
+    $$
+    I = \frac{\Delta V}{R} = \frac{0.20}{1.7\times10^{-3}} \approx 120\,\text{A}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Series vs Parallel" accent="red">
+    #### Problem
+
+    Two resistors, $30\,\Omega$ and $60\,\Omega$, are connected across a $12\,\text{V}$ battery. Find the total current if they are (a) in series and (b) in parallel.
+
+    #### Solve
+
+    **(a) Series:** $R_{eq} = 30 + 60 = 90\,\Omega$, so $I = \dfrac{12}{90} \approx 0.13\,\text{A}$.
+
+    **(b) Parallel:** $\dfrac{1}{R_{eq}} = \dfrac{1}{30} + \dfrac{1}{60} = \dfrac{1}{20}$, so $R_{eq} = 20\,\Omega$ and $I = \dfrac{12}{20} = 0.60\,\text{A}$.
+  </WorkedExampleCard>
+</ProblemSolvingSection>

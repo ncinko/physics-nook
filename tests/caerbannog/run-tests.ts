@@ -699,6 +699,7 @@ console.log('Caerbannog game step tests passed.');
 
 // --- Clearing the final wave wins the siege ---
 {
+  assert.equal(FINAL_WAVE, 40, 'the final Black Knight stand is wave 40');
   const won = step(playing({ wave: FINAL_WAVE, pending: 0 }), 16);
   assert.equal(won.phase, 'victory', 'clearing the final wave ends the run in victory');
   assert.equal(won.blessingPending, false, 'no blessing is owed on victory');
@@ -710,7 +711,7 @@ console.log('Caerbannog game step tests passed.');
   assert.equal(step(playing({ wave: FINAL_WAVE - 1, pending: 0 }), 16).phase, 'intermission');
 }
 
-// --- Wave-30/40 enhancements: offer, choice, and gating ---
+// --- Wave-30 enhancement: offer, choice, and gating ---
 {
   const bothOwned = () => ({
     ...startGame(createGame(7)).stats,
@@ -737,13 +738,12 @@ console.log('Caerbannog game step tests passed.');
   // Wave 30 grants no blessing (30 % 3 === 0), so the siege can resume at once.
   assert.equal(nextWave(enhanced).phase, 'playing', 'enhancement made -> the siege resumes');
 
-  // Wave 40 grants the remaining enhancement and also owes a blessing.
+  // Wave 40 ends immediately: no unusable reward prompt is owed.
   const k40 = step(playing({ wave: 40, pending: 0, stats: { ...enhanced.stats } }), 16);
-  assert.equal(k40.enhancementPending, true);
-  assert.deepEqual(offerableEnhancements(k40.stats), ['cluster'], 'only the unenhanced weapon is offered');
-  const bothEnhanced = chooseEnhancement(k40, 'cluster');
-  assert.equal(bothEnhanced.stats.specials.cluster.enhanced, true);
-  assert.equal(nextWave(bothEnhanced), bothEnhanced, 'still blocked by the wave-40 blessing');
+  assert.equal(k40.phase, 'victory');
+  assert.equal(k40.enhancementPending, false);
+  assert.equal(k40.blessingPending, false);
+  assert.equal(chooseEnhancement(k40, 'cluster'), k40, 'victory cannot open a dead-end upgrade');
 
   // Enhancements wait until both weapons are owned — wave 20 still grants a weapon.
   const k20 = step(playing({

@@ -66,11 +66,11 @@ export const knightLimbs = (wave: number): number => {
 export const knightLegs = (limbs: number): number => Math.min(2, Math.max(0, limbs));
 
 /**
- * The siege is won by clearing wave 50 — the appearance where the Black Knight
- * is whittled down to a limbless torso ("It's just a flesh wound!"). There is no
- * intermission after it: the run ends in victory rather than rolling onward.
+ * The siege is won by clearing wave 40. The one-legged Black Knight makes his
+ * final stand there; felling him takes his last leg and ends the run rather
+ * than rolling onward to another intermission.
  */
-export const FINAL_WAVE = 50;
+export const FINAL_WAVE = 40;
 
 // --- Special grenade weapons -----------------------------------------------
 // Each Black Knight (waves 10, 20, …) lets the player claim a secondary effect
@@ -86,9 +86,9 @@ export const FINAL_WAVE = 50;
 //                · freq track  → more often
 //                · power track → a larger share of health per strike
 //
-// Each Black Knight at waves 30 and 40 (both weapons are in hand by then) also
+// The Black Knight at wave 30 (both weapons are in hand by then) also
 // grants a one-time, *unleveled* enhancement for an owned special — wave 30
-// offers a choice, wave 40 grants the other:
+// offers a choice of one:
 //   - lightning → an arc that chains from the struck rabbit to nearby beasts.
 //   - cluster   → holy fire: bomblets scorch the ground, leaving a burning patch.
 export type SpecialId = 'cluster' | 'lightning';
@@ -105,7 +105,7 @@ const CLUSTER_RADIUS_SCALE = 0.55; // bomblet blast radius vs the main grenade
 const CLUSTER_DAMAGE_SCALE = 0.6; // bomblet damage vs the main grenade
 const LIGHTNING_SKY_Y = 40; // world height the bolt descends from
 
-// Wave-30/40 enhancements (flat, unleveled effects on an owned special):
+// Wave-30 enhancement choices (flat, unleveled effects on one owned special):
 export const LIGHTNING_ARC_RANGE = 16; // world units a bolt will chain across
 export const LIGHTNING_ARC_MAX_TARGETS = 2; // extra rabbits a single bolt arcs to
 const LIGHTNING_ARC_FALLOFF = 0.5; // arced rabbits take this share of the strike %
@@ -130,7 +130,7 @@ export interface SpecialState {
   owned: boolean;
   freqLevel: number; // 0 = unowned; 1+ raises the post-blast trigger chance
   powerLevel: number; // 0 = unowned; 1+ raises potency (bomblets / strike %)
-  enhanced: boolean; // the wave-30/40 enhancement (arc / holy fire) is claimed
+  enhanced: boolean; // the wave-30 enhancement (arc / holy fire) is claimed
 }
 
 /** Chance (0–1) a special triggers after a blast, by its frequency level. */
@@ -256,7 +256,7 @@ export interface GameState {
   offer: BlessingId[]; // blessing choices shown during a blessing intermission
   blessingPending: boolean; // a blessing must be chosen before the next wave
   specialPending: boolean; // the one-time cluster/lightning choice is owed
-  enhancementPending: boolean; // the wave-30/40 enhancement choice is owed
+  enhancementPending: boolean; // the wave-30 enhancement choice is owed
   rng: Rng;
   nextId: number;
   bestWave: number;
@@ -509,14 +509,14 @@ export const chooseSpecial = (state: GameState, weapon: SpecialWeapon): GameStat
   };
 };
 
-/** Owned specials that have not yet claimed their wave-30/40 enhancement. */
+/** Owned specials that have not yet claimed the wave-30 enhancement. */
 export const offerableEnhancements = (stats: GameStats): SpecialId[] =>
   SPECIAL_IDS.filter((id) => stats.specials[id].owned && !stats.specials[id].enhanced);
 
 /**
  * Claim a special's one-time enhancement (valid only while a choice is pending
  * and the weapon is owned but not already enhanced). One claim satisfies the
- * pending choice, so the *other* enhancement waits for the next knight.
+ * pending choice. Only one weapon can receive this capstone in a run.
  */
 export const chooseEnhancement = (state: GameState, weapon: SpecialWeapon): GameState => {
   if (
@@ -1002,18 +1002,16 @@ export const step = (state: GameState, dtMs: number): GameState => {
     goldEarned += waveInterest;
     bestWave = Math.max(bestWave, state.wave);
     if (state.wave >= FINAL_WAVE) {
-      // The limbless Black Knight is felled — the siege is won, the run ends.
+      // The Black Knight's final leg is felled — the siege is won, the run ends.
       phase = 'victory';
     } else {
       phase = 'intermission';
       blessingPending = isBlessingWave(state.wave);
       offer = blessingPending ? offerBlessings(rng) : [];
-      // Every Black Knight lets the player claim a reward while one is still
-      // unclaimed: a special weapon at waves 10 & 20 (one each), then a one-time
-      // enhancement for an owned weapon at waves 30 & 40 (one each).
+      // The first two Black Knights grant the special weapons. Wave 30 grants
+      // one capstone enhancement; wave 40 ends in victory with no reward prompt.
       specialPending = state.wave % 10 === 0 && offerableSpecials(stats).length > 0;
-      enhancementPending =
-        state.wave % 10 === 0 && state.wave >= 30 && offerableEnhancements(stats).length > 0;
+      enhancementPending = state.wave === 30 && offerableEnhancements(stats).length > 0;
     }
   }
 

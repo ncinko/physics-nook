@@ -134,7 +134,7 @@ type SpecialInfo = {
   icon: string;
   blurb: string;
   tracks: Record<SpecialTrack, { label: string; describe: (level: number) => string }>;
-  // The one-time wave-30/40 enhancement bestowed on this special.
+  // The one-time wave-30 enhancement bestowed on this special.
   enhancement: { name: string; icon: string; blurb: string };
 };
 

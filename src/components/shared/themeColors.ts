@@ -1,13 +1,27 @@
-// Small shared helper so the electromagnetism canvases read the active theme's
-// CSS custom properties (light / dark / pastel) instead of hardcoded colors.
+// Shared helper so canvas-based interactives read the active theme's CSS custom
+// properties (light / dark / pastel) instead of hardcoded colors.
+//
+// `getCssColor` and `onThemeChange` are generic primitives any domain can reuse.
+// `themeColors()` is the convenience palette used by the field/charge canvases.
 
-export const getCssColor = (name, fallback) => {
+export const getCssColor = (name: string, fallback: string): string => {
   if (typeof window === 'undefined') return fallback;
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   return value || fallback;
 };
 
-export const themeColors = () => ({
+export interface ThemeColors {
+  bg: string;
+  surface: string;
+  grid: string;
+  text: string;
+  muted: string;
+  positive: string;
+  negative: string;
+  probe: string;
+}
+
+export const themeColors = (): ThemeColors => ({
   bg: getCssColor('--sim-bg', '#f9fafb'),
   surface: getCssColor('--surface-elevated', '#ffffff'),
   grid: getCssColor('--grid-line', '#d1d5db'),
@@ -18,9 +32,9 @@ export const themeColors = () => ({
   probe: getCssColor('--accent-green', '#22c55e'),
 });
 
-// Run `redraw` once now and again whenever the active theme changes, so static
-// canvases (no animation loop) repaint with the new palette. Returns a cleanup.
-export const onThemeChange = (redraw) => {
+// Run `redraw` whenever the active theme changes, so static canvases (no
+// animation loop) repaint with the new palette. Returns a cleanup function.
+export const onThemeChange = (redraw: () => void): (() => void) => {
   if (typeof window === 'undefined') return () => {};
   const observer = new MutationObserver(redraw);
   observer.observe(document.documentElement, {

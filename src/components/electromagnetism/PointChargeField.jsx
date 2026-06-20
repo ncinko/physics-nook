@@ -1,6 +1,6 @@
 // PointChargeField.jsx — single point charge with r̂, snapping, shared-exponent readout
 import React, { useRef, useEffect, useState } from "react";
-import { themeColors, onThemeChange } from "./themeColors";
+import { themeColors, onThemeChange } from "../shared/themeColors";
 
 export default function PointChargeUnitVectorDemo() {
   const canvasRef = useRef(null);

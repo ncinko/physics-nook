@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { coulombFieldAt } from "../../lib/electromagnetism";
-import { themeColors } from "./themeColors";
+import { themeColors } from "../shared/themeColors";
 
 // ElectricPotentialSimulation — with potential colormap + equipotential lines (togglable)
 // -------------------------------------------------------------------------------

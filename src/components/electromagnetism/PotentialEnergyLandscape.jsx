@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { themeColors } from "./themeColors";
+import { themeColors } from "../shared/themeColors";
 
 /**
  * PotentialEnergyLandscape1D (layout + sync refinements v4 — Option B class isolation)

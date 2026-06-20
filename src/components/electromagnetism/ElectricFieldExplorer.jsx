@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { coulombFieldAt } from "../../lib/electromagnetism";
-import { themeColors } from "./themeColors";
+import { themeColors } from "../shared/themeColors";
 
 const ElectricFieldExplorer = () => {
   const canvasRef = useRef(null);

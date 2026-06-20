@@ -12,6 +12,8 @@
     --surface-elevated: rgba(255, 255, 255, 0.82);
     --accent-red: #ef4444;
     --accent-blue: #3b82f6;
+    --accent-green: #22c55e;
+    --accent-purple: #7e57c2;
   }
 
   /* Dark Theme */
@@ -24,6 +26,8 @@
     --surface-elevated: rgba(17, 24, 39, 0.9);
     --accent-red: #f87171;
     --accent-blue: #60a5fa;
+    --accent-green: #4ade80;
+    --accent-purple: #a78bfa;
   }
 
   /* Pastel Theme */
@@ -36,6 +40,8 @@
     --surface-elevated: rgba(255, 250, 224, 0.9);
     --accent-red: #ffb4a2;
     --accent-blue: #bde0fe;
+    --accent-green: #b7e4c7;
+    --accent-purple: #cdb4db;
   }
 }
 

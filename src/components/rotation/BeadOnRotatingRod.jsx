@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { themeColors } from "../electromagnetism/themeColors";
+import { themeColors } from "../shared/themeColors";
 
 /**
  * BeadOnRotatingRod.jsx

@@ -13,6 +13,8 @@ export default {
           sim: 'var(--sim-bg)',
           red: 'var(--accent-red)',
           blue: 'var(--accent-blue)',
+          green: 'var(--accent-green)',
+          purple: 'var(--accent-purple)',
         },
       },
     },

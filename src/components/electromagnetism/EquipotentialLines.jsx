@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { potentialAt } from '../../lib/electromagnetism';
-import { themeColors, onThemeChange } from './themeColors';
+import { themeColors, onThemeChange } from '../shared/themeColors';
 
 // A +q / -q dipole. Dots are drawn wherever the potential lands near one of a
 // set of evenly spaced levels, so equipotential contours emerge from the field.

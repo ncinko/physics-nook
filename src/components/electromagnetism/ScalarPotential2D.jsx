@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { themeColors, onThemeChange } from "./themeColors";
+import { themeColors, onThemeChange } from "../shared/themeColors";
 
 /**
  * ScalarPotential2D (v3)

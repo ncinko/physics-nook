@@ -12,7 +12,7 @@ import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import ElectronGas from '../../components/electromagnetism/ElectronGas.jsx';
-import SeriesParallelPlayground from '../../components/electromagnetism/SeriesParallelPlayground.jsx';
+import CircuitKit from '../../components/electromagnetism/CircuitKit.jsx';
 import { electromagnetismPath } from '../../data/modules';
 
 <ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/current" />
@@ -80,6 +80,17 @@ Circuit components act as macroscopic guides for the electric field. Following a
 
 A battery provides a potential difference that drives the current. Resistors, bulbs, and other components limit and direct that current, each with its own voltage drop. Applying Ohm's law to each component, together with how the components are wired, predicts the current in every branch.
 
+Build your own circuit below. Drag components from the palette onto the grid, wire them together, and run the transient simulation. Beyond resistors and batteries, you can add **capacitors**, **inductors**, and **switches**, then watch each component's voltage and current evolve on the scope — including RC charging and LC oscillation.
+
+<InteractiveAnchor id="circuit-kit" />
+
+<SimulationBlock
+  title="Circuit Builder"
+  description="Drag components onto the grid, wire them up, and run a transient simulation with a live voltage/current scope. Use Fullscreen for more room."
+  width="full"
+>
+  <CircuitKit client:only="react" />
+</SimulationBlock>
 
 <DerivationPanel title="How does energy flow in a circuit?">
 

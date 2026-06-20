@@ -26,6 +26,7 @@ export const interactiveModuleOrder = [
   'Waves',
   'Quantum',
   'Electromagnetism',
+  'Rotation',
 ];
 
 export const interactiveEntries: InteractiveEntry[] = [
@@ -446,13 +447,31 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['drude', 'drift velocity', 'conduction'],
   },
   {
-    id: 'series-parallel-playground',
-    title: 'Series–Parallel Circuit',
-    description: 'Build a bulb-plus-branches circuit, flip switches, and read current, voltage, and power for each component.',
-    href: '/electromagnetism/current#series-parallel-playground',
+    id: 'circuit-kit',
+    title: 'Circuit Builder',
+    description: 'Drag resistors, batteries, capacitors, inductors, and switches onto a grid, wire them up, and run a transient simulation with a live scope.',
+    href: '/electromagnetism/current#circuit-kit',
     module: 'Electromagnetism',
     kind: 'standalone',
-    tags: ['circuits', 'ohms law', 'series parallel'],
+    tags: ['circuits', 'transient', 'capacitor', 'inductor'],
+  },
+  {
+    id: 'rotating-ship',
+    title: 'Rotating Spaceship Frame',
+    description: 'Switch between the star frame and the spinning ship frame and drop a ball to feel centrifugal and Coriolis effects.',
+    href: '/rotation/rotating-frames#rotating-ship',
+    module: 'Rotation',
+    kind: 'standalone',
+    tags: ['rotating frame', 'centrifugal', 'coriolis'],
+  },
+  {
+    id: 'bead-on-rotating-rod',
+    title: 'Bead on a Rotating Rod',
+    description: 'Watch a bead slide outward along a spinning rod as the rotating-frame forces act on it.',
+    href: '/rotation/rotating-frames#bead-on-rotating-rod',
+    module: 'Rotation',
+    kind: 'inline',
+    tags: ['rotating frame', 'centrifugal', 'coriolis'],
   },
   {
     id: 'orbitals',

@@ -1,0 +1,81 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Rotating Reference Frames
+description: Distinguish real centripetal force from the apparent centrifugal and Coriolis effects in a rotating reference frame.
+canonicalPath: /rotation/rotating-frames
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import RotatingShip2D from '../../components/rotation/RotatingShip2D.jsx';
+import BeadOnRotatingRod from '../../components/rotation/BeadOnRotatingRod.jsx';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/rotation/rotating-frames" />
+
+<div id="page-content"></div>
+
+# Rotating Reference Frames
+
+Few ideas in mechanics get tangled as often as **centripetal** and **centrifugal**. They sound like opposites, and in a sense they are.  These two words often describe the same phenomenon, but from two different points of view.
+
+- **Centripetal force** is real, used from a point of view where an object is moving along a circular path.  It points *inward* (toward the center of the circle) and holds the object along its circular path: tension in a string, gravity on a planet, friction on a cornering car. "Centripetal" is not a new kind of force — it is simply an adjective for the net inward force.
+- **Centrifugal force** is apparent, used from a point of view within a rotating frame of reference. From an outside point of view, nothing is actually pushing the object outward. The outward "force" you feel on a merry-go-round is what it takes to make Newton's laws bookkeep correctly *from inside a rotating frame*. Alongside it lives a second apparent force, the **Coriolis** force.
+
+
+## The Inward Acceleration of Circular Motion
+
+An object moving in a circle is always accelerating, even at constant speed, because its velocity keeps changing direction. That acceleration points toward the center with magnitude
+
+$$
+a_{\text{centripetal}} = \frac{v^2}{r} = r\omega^2.
+$$
+
+The word **centripetal** means "center-seeking", i.e. the acceleration is directed toward the center of some circle.  To produce this centripetal acceleration, some combination of forces with a net inward component is required, $F = ma_{\text{cent}}$.  If these forces are suddenly removed, the object would fly off along a straight line.
+
+<DerivationPanel title="Where do the centripetal and Coriolis terms come from?">
+
+Working in polar coordinates, the acceleration of a point splits into a radial part and a transverse part:
+
+$$
+\vec a = \left(\ddot r - r\dot\theta^2\right)\hat{\mathbf r} + \left(r\ddot\theta + 2\dot r\dot\theta\right)\hat{\boldsymbol\theta}.
+$$
+
+These terms are byproducts of *choosing* polar coordinates, not new physics. But two of them have names:
+
+- $-r\dot\theta^2$ is the **centripetal** term — the inward acceleration of circular motion.
+- $2\dot r\dot\theta$ is the **Coriolis** term — it appears only when the radius is *changing* ($\dot r \neq 0$) while also rotating.
+
+
+## Riding Inside the Rotating Frame
+
+Everything above is the view of an outside, non-rotating observer, who needs only real forces. Now move *inside* the rotation. To keep using $\vec F = m\vec a$ in a frame spinning at $\Omega$, an observer must add two **apparent** (fictitious) accelerations:
+
+$$
+\vec a_{\text{centrifugal}} = \Omega^2\,\vec r \quad(\text{outward}), \qquad
+\vec a_{\text{Coriolis}} = -2\,\vec\Omega\times\vec v_{\text{rel}}.
+$$
+
+The centrifugal term is the outward push you feel; the Coriolis term deflects anything that moves within the frame. Neither corresponds to a real interaction — they are the price of describing the world from a turning point of view. From outside, a Formula 1 driver is being pulled *inward* through a tight left turn; from inside the car, it feels exactly like being thrown to the *right*.
+
+The spaceship below makes this switch concrete. A ring-shaped ship rotates against a field of stars. Pick a frame, set a comfortable spin, and click **Drop ball**.
+
+<InteractiveAnchor id="rotating-ship" />
+
+<SimulationBlock
+  title="Rotating Spaceship Frame"
+  description="Switch between the star (inertial) and ship (rotating) frames, then drop a ball to watch the centrifugal and Coriolis effects appear."
+>
+  <RotatingShip2D client:only="react" />
+</SimulationBlock>
+
+From the **star frame**, the ball simply travels in a straight line until it strikes the hull — no mysterious forces, just inertia. From the **ship frame**, the same motion looks strange: the ball curves as if pushed by two effects at once —
+
+- toward the floor, more strongly the farther out you are (**centrifugal**);
+- sideways, at a right angle to its velocity (**Coriolis**).
+
+If you spent your whole life inside the ship with no window to the stars, you might never call these "apparent." You would simply measure them — and, noticing that they depend on $\dot\theta$, deduce that you live inside a giant rotating circle. In that moment $\dot\theta$ stops being the rate of change of some object's angle and becomes a physical property of your reference frame itself.
+
+That is the heart of the centripetal–centrifugal distinction: **centripetal** is the real inward force that bends a path into a circle, while **centrifugal** and **Coriolis** are the apparent forces you invent to explain that same motion from a frame that is itself turning.

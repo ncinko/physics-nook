@@ -1,0 +1,157 @@
+/* CircuitKit.css */
+
+.circuit-kit-container {
+    display: flex;
+    flex-direction: column;
+    height: 680px;
+    max-height: 85vh;
+    width: 100%;
+    font-family: sans-serif;
+}
+
+/* When the simulation block is fullscreened, let the builder use the full height. */
+.simulation-shell:fullscreen .circuit-kit-container,
+.simulation-shell.is-fallback-fullscreen .circuit-kit-container {
+    height: 100%;
+    max-height: none;
+}
+.circuit-kit-canvas-container {
+    flex-grow: 1;
+    position: relative;
+}
+.circuit-kit-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+.circuit-kit-controls-inspector {
+    flex-shrink: 0;
+    background-color: #374151;
+    color: #f9fafb;
+    padding: 0.5rem;
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    border-top: 1px solid #4b5563;
+}
+.circuit-kit-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.circuit-kit-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+.circuit-kit-button {
+    background-color: #4b5563;
+    color: #f9fafb;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    border: none;
+    cursor: pointer;
+}
+.circuit-kit-sliders {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem 0.5rem;
+}
+.circuit-kit-slider-label {
+    font-size: 0.75rem;
+    display: flex;
+    flex-direction: column;
+}
+.circuit-kit-sim-time {
+    font-size: 0.75rem;
+}
+.element-inspector {
+    padding: 0.75rem;
+    border: 1px solid #4b5563;
+    border-radius: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.element-inspector-title {
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+    font-size: 1.125rem;
+}
+.element-inspector-param {
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.element-inspector-param-label {
+    width: 2.5rem;
+}
+.element-inspector-input {
+    background-color: #1f2937;
+    color: #f9fafb;
+    border: 1px solid #4b5563;
+    padding: 0.25rem 0.5rem;
+    width: 8rem;
+    border-radius: 0.25rem;
+}
+.element-inspector-checkbox {
+     font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+.element-inspector-actions {
+    margin-top: 0.5rem;
+}
+.element-inspector-delete-button {
+    background-color: #ef4444;
+    color: #f9fafb;
+    padding: 0.25rem 0.75rem;
+    border-radius: 0.25rem;
+    border: none;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+.scope-plot-container {
+    border-width: 1px;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    position: relative;
+}
+.scope-plot-no-element {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+}
+.scope-plot-lock-button {
+    position: absolute;
+    top: 0.25rem;
+    right: 0.25rem;
+    padding: 0.25rem;
+    border-radius: 0.25rem;
+}
+.scope-plot-mode-button {
+    position: absolute;
+    top: 0.25rem;
+    left: 0.25rem;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.75rem;
+    border-radius: 0.25rem;
+    background: #4b5563;
+    color: #f9fafb;
+}
+.scope-plot-header {
+    font-size: 0.875rem;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    padding-right: 2rem;
+}

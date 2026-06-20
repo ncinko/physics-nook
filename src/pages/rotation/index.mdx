@@ -1,0 +1,137 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Rotational Dynamics
+description: Build the rotational analogs of force and mass — torque, moment of inertia, angular momentum, and rotational kinetic energy.
+canonicalPath: /rotation
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import RotatingDisk from '../../components/rotation/RotatingDisk.jsx';
+import TorqueSimulation from '../../components/rotation/TorqueSimulation.jsx';
+import PhysicalPendulum from '../../components/rotation/PhysicalPendulum.jsx';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/rotation" />
+
+<div id="page-content"></div>
+
+# Rotational Dynamics
+
+Rotational dynamics studies objects that spin and the influences that change their spin. Every idea has a familiar linear analog: force becomes **torque**, mass becomes **moment of inertia**, and Newton's second law $\vec F = m\vec a$ becomes
+
+$$
+\tau = I\alpha.
+$$
+
+If forces and free-body diagrams feel rusty, the [Forces](/forces) page is a good warm-up — torque is built from forces and lever arms.
+
+The key quantities:
+
+- **Torque** $\tau = rF\sin\theta$ — the rotational equivalent of force, from a force $F$ applied at a lever arm $r$.
+- **Moment of inertia** $I$ — resistance to changes in spin. For a point mass $I = mr^2$; for a solid disk about its center $I = \tfrac12 mr^2$.
+- **Angular kinematics** — angular displacement $\theta$, angular velocity $\omega = \dfrac{d\theta}{dt}$, and angular acceleration $\alpha = \dfrac{d\omega}{dt}$.
+- **Angular momentum** $L = I\omega$ — conserved when no external torque acts.
+- **Rotational kinetic energy** $K_{\text{rot}} = \tfrac12 I\omega^2$.
+
+## A Disk and a Torque
+
+For a solid disk spinning about its center, $I = \tfrac12 mr^2$. Apply a net torque and it gains angular acceleration through $\tau = I\alpha$. Notice how a heavier or larger disk resists the same torque more.
+
+<InteractiveAnchor id="rotating-disk" />
+
+<SimulationBlock
+  title="Rotating Disk"
+  description="Vary mass, radius, and torque, and watch the angular acceleration respond through τ = Iα."
+>
+  <RotatingDisk client:only="react" />
+</SimulationBlock>
+
+## Lever Arm and Torque
+
+A force produces more torque the farther from the pivot it acts, and the more perpendicular it is to the lever arm:
+
+$$
+\tau = rF\sin\theta,
+$$
+
+where $\theta$ is the angle between the force and the lever arm. A force pointing straight along the arm ($\theta = 0$) makes no torque at all.
+
+<InteractiveAnchor id="torque-lever-arm" />
+
+<TorqueSimulation client:only="react" />
+
+## Physical Pendulum
+
+A rigid body swinging about a pivot is a **physical pendulum**. Its angular frequency depends on the moment of inertia about the pivot and the distance $d$ from the pivot to the center of mass:
+
+$$
+\omega = \sqrt{\frac{mgd}{I}}.
+$$
+
+Switching the disk between rigidly fixed and free to spin changes $I$ about the pivot, and so changes the period.
+
+<InteractiveAnchor id="physical-pendulum" />
+
+<PhysicalPendulum client:only="react" />
+
+<ProblemSolvingSection title="Practice">
+  <WorkedExampleCard title="Angular Acceleration of a Disk" accent="blue">
+    #### Problem
+
+    A solid disk of mass $4\,\text{kg}$ and radius $0.5\,\text{m}$ feels a net torque of $2\,\text{N·m}$. Find its angular acceleration.
+
+    #### Solve
+
+    $$
+    I = \tfrac12 m r^2 = \tfrac12 (4)(0.5)^2 = 0.5\,\text{kg·m}^2,
+    $$
+
+    $$
+    \alpha = \frac{\tau}{I} = \frac{2}{0.5} = 4\,\text{rad/s}^2.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Torque on a Wheel" accent="blue">
+    #### Problem
+
+    A force of $10\,\text{N}$ is applied tangentially to the rim of a wheel of radius $0.3\,\text{m}$. What is the torque?
+
+    #### Solve
+
+    Tangential means $\theta = 90°$, so
+
+    $$
+    \tau = rF\sin 90° = (0.3)(10) = 3\,\text{N·m}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Angular Velocity from Angular Momentum" accent="blue">
+    #### Problem
+
+    A rotating object has angular momentum $8\,\text{kg·m}^2/\text{s}$ and moment of inertia $2\,\text{kg·m}^2$. Find its angular velocity.
+
+    #### Solve
+
+    From $L = I\omega$,
+
+    $$
+    \omega = \frac{L}{I} = \frac{8}{2} = 4\,\text{rad/s}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Rotational Kinetic Energy" accent="red">
+    #### Problem
+
+    A disk with moment of inertia $0.5\,\text{kg·m}^2$ rotates at $4\,\text{rad/s}$. Find its rotational kinetic energy.
+
+    #### Solve
+
+    $$
+    K_{\text{rot}} = \tfrac12 I\omega^2 = \tfrac12 (0.5)(4)^2 = 4\,\text{J}.
+    $$
+  </WorkedExampleCard>
+</ProblemSolvingSection>

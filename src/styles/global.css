@@ -224,3 +224,38 @@ div {
 .equation-derivation :last-child {
   margin-bottom: 0;
 }
+
+/* Themed controls for ported electromagnetism interactives (.btn / .control-panel).
+   These class names are used only by the electromagnetism React islands. */
+.control-panel {
+  color: var(--text-primary);
+}
+
+.btn {
+  appearance: none;
+  cursor: pointer;
+  border-radius: 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 45%, var(--grid-line));
+  background: var(--accent-blue);
+  color: #ffffff;
+  padding: 0.4rem 0.85rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.2;
+  transition: filter 0.15s ease, border-color 0.15s ease;
+}
+
+.btn:hover {
+  filter: brightness(1.05);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-secondary {
+  background: var(--surface-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--grid-line);
+}

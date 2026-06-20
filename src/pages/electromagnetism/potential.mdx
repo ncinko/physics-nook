@@ -1,0 +1,185 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Electric Potential
+description: Move from force to energy — potential energy landscapes, the electric potential, and its relationship to the field.
+canonicalPath: /electromagnetism/potential
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import PotentialEnergyLandscape from '../../components/electromagnetism/PotentialEnergyLandscape.jsx';
+import ScalarPotential2D from '../../components/electromagnetism/ScalarPotential2D.jsx';
+import ElectricPotentialExplorer from '../../components/electromagnetism/ElectricPotentialExplorer.jsx';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/potential" />
+
+<div id="page-content"></div>
+
+# Electric Potential
+
+The **electric potential** describes electric interactions in terms of *energy* rather than *force*. Just as gravitational potential energy relates to the gravitational force, electric potential energy relates to the electric force. When a charge moves through a field, its potential energy changes; we define the electric potential $V$ as the potential energy per unit charge.
+
+
+
+## Potential Energy Landscapes
+
+Visualizing an object "rolling" on a potential energy surface connects the force and energy pictures. Below, a mass feels either a spring-like force or simple gravity. In both cases it tends to move *downhill* along the 1D potential energy curve, trading potential energy for kinetic energy and back.
+
+<InteractiveAnchor id="potential-energy-landscape" />
+
+<SimulationBlock
+  title="Potential Energy Landscape"
+  description="Drag the mass on the curve or in the motion view; watch the energy bars exchange U and K."
+>
+  <PotentialEnergyLandscape client:only="react" />
+</SimulationBlock>
+
+This downhill tendency is a general property of conservative forces. The force always points toward decreasing potential energy, captured in one dimension by
+
+$$
+F \approx -\frac{\Delta U}{\Delta x},
+$$
+
+which is the slope of the potential energy function $U(x)$.
+
+<DerivationPanel title="Which forces have a potential energy?">
+
+The work done by a **conservative** force depends only on the start and end positions, not the path taken. Those are exactly the forces for which we can define a scalar potential energy. The electric, gravitational, and spring forces are conservative; friction and air resistance are not.
+
+In one dimension, the work done over a small step is $W \approx F\,\Delta x$. For a conservative force we call this a change in potential energy, $\Delta U = -W$, so
+
+$$
+F \approx -\frac{\Delta U}{\Delta x}.
+$$
+
+In three dimensions the same idea is the gradient, which points in the direction of steepest increase of a scalar field:
+
+$$
+\vec{\mathbf F} = -\nabla U = -\left\langle \frac{\partial U}{\partial x}, \frac{\partial U}{\partial y}, \frac{\partial U}{\partial z} \right\rangle.
+$$
+
+Don't worry if that notation is unfamiliar — picture a 2D energy landscape $U(x,y)$ of hills and valleys, with matter tending to flow downhill.
+
+</DerivationPanel>
+
+## From Energy to Potential
+
+Before the electrical case, recall gravitational potential energy near Earth's surface, $U = mgh$.
+
+<DerivationPanel title="Does U = mgh agree with our definition?">
+
+Yes. With "up" positive, the gravitational force near the surface is $F = -mg$. The work done moving an object up a small height $\Delta h$ is $W = F\,\Delta h = -mg\,\Delta h$, so
+
+$$
+\Delta U = -W = mg\,\Delta h.
+$$
+
+Choosing $U = 0$ at $h = 0$ gives $U(h) = mgh$.
+
+</DerivationPanel>
+
+Suppose we want the potential energy *independent of mass*. Define $V = gh$ with the rule $U = mV$. This $V$ (units of J/kg) tells us the potential energy per unit mass at a given height.
+
+For the electric force we do exactly this. The electric potential $V$ is defined so that
+
+$$
+U = qV,
+$$
+
+where $q$ is the charge. Its units are J/C, which we call **volts**. Only *changes* in potential energy — and therefore changes in potential — are physical: $V$ can be shifted by any constant without changing the physics, just as elevation does not depend on our choice of sea level. Picking that constant is choosing a "zero of potential."
+
+## Point Charge Potential
+
+The electric potential due to a point charge $Q$ is
+
+$$
+V = k\,\frac{Q}{r},
+$$
+
+where $r$ is the distance from the charge and $k = 9 \times 10^9\ \tfrac{\text{N·m}^2}{\text{C}^2}$.
+
+<DerivationPanel title="Where does V = kQ/r come from?">
+
+Start from $V = \tfrac{U}{q}$, so we need the potential energy of a charge $q$ in the field of $Q$. Coulomb's law gives the force $F = k\dfrac{Qq}{r^2}$. The change in potential energy bringing $q$ from infinity to $r$ is
+
+$$
+\Delta U = -\int_{\infty}^{r} k\,\frac{Qq}{r^2}\,dr = -kQq\left[-\frac{1}{r}\right]_{\infty}^{r} = k\,\frac{Qq}{r}.
+$$
+
+Dividing by $q$,
+
+$$
+V = \frac{U}{q} = k\,\frac{Q}{r}.
+$$
+
+</DerivationPanel>
+
+We can picture $V(x,y)$ with a color map. Below, brighter colors are higher potential; it decreases as you move away from the positive charge, since $V \propto 1/r$. Drag the charge, and toggle the equipotential rings — they are circles of constant $V$.
+
+<InteractiveAnchor id="scalar-potential-2d" />
+
+<ScalarPotential2D client:only="react" />
+
+In 3D we draw *equipotential surfaces*, the analog of these rings. Because $U = qV$, positive and negative charges behave differently in the *same* potential: both tend toward lower *potential energy*, not lower *potential*. When the signs get confusing, fall back on "like charges repel, opposites attract."
+
+This last explorer overlays the potential color map and equipotentials on the field arrows and lines. Build intuition for how source charges shape the potential, how a test charge moves, and how field and potential relate.
+
+<InteractiveAnchor id="electric-potential-explorer" />
+
+<SimulationBlock
+  title="Electric Potential Explorer"
+  description="Toggle the colormap, equipotentials, field arrows, and field lines; add, drag, and remove charges."
+>
+  <ElectricPotentialExplorer client:only="react" />
+</SimulationBlock>
+
+Notice that the equipotential lines are everywhere perpendicular to the field lines. Just as $F \approx -\tfrac{\Delta U}{\Delta x}$ in one dimension, the field is the (negative) slope of the potential:
+
+$$
+E \approx -\frac{\Delta V}{\Delta x}.
+$$
+
+<ProblemSolvingSection title="Practice">
+  <WorkedExampleCard title="Potential of a Point Charge" accent="blue">
+    #### Problem
+
+    What is the electric potential $0.25\,\text{m}$ from a $+3\,\mu\text{C}$ point charge?
+
+    #### Solve
+
+    $$
+    V = k\,\frac{q}{r} = 9\times10^9 \cdot \frac{3\times10^{-6}}{0.25} \approx 1.1\times10^5\,\text{V}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Work Along an Equipotential" accent="blue">
+    #### Problem
+
+    Why is no work required to move a charge along an equipotential surface?
+
+    #### Reasoning
+
+    Along an equipotential, $\Delta V = 0$. Since $\Delta U = q\,\Delta V$, the change in potential energy is zero — and the work done by the electric force equals $-\Delta U = 0$.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Change in Potential Energy" accent="red">
+    #### Problem
+
+    Find the change in electric potential energy of a $-3\,\mu\text{C}$ charge that moves from $5\,\text{V}$ to $12\,\text{V}$.
+
+    #### Solve
+
+    With $\Delta V = 7\,\text{V}$ and $q = -3\times10^{-6}\,\text{C}$,
+
+    $$
+    \Delta U = q\,\Delta V = (-3\times10^{-6})(7) = -2.1\times10^{-5}\,\text{J}.
+    $$
+
+    The negative charge *loses* potential energy moving toward higher potential.
+  </WorkedExampleCard>
+</ProblemSolvingSection>

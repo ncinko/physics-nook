@@ -654,6 +654,59 @@ export const modules: ModuleMeta[] = [
       },
     ],
   },
+  {
+    slug: 'electromagnetism',
+    href: '/electromagnetism',
+    title: 'Electromagnetism',
+    navLabel: 'Electromagnetism',
+    summary:
+      'Build the field concept from Coulomb’s law, connect it to potential energy, and follow charges into currents and circuits.',
+    audience: 'Self-learners moving from mechanics into electricity and the field picture.',
+    prerequisites: ['Vectors in two dimensions', 'Coulomb’s law and charge', 'Work and potential energy'],
+    learningObjectives: [
+      'Define the electric field as force per unit charge and build it from point charges',
+      'Use superposition to combine fields and read field lines',
+      'Connect electric potential energy, electric potential, and the field as its gradient',
+      'Relate microscopic electron drift to Ohm’s law and circuit behavior',
+    ],
+    status: 'active',
+    navVisibility: 'menu',
+    cardEyebrow: 'Fields',
+    accent: '#6366f1',
+    heroImage: '/social/physics-nook-card.svg',
+    pages: [
+      {
+        id: 'electromagnetism-field',
+        href: '/electromagnetism',
+        title: 'Electric Field',
+        shortTitle: 'Electric Field',
+        description:
+          'Define the electric field as force per unit charge, build it from point charges, and explore superposition and field lines.',
+        seo: {
+          title: 'Electric Field',
+          description:
+            'Learn the electric field as force per unit charge, build it from point charges, and explore superposition and field lines with interactive simulations.',
+          canonicalPath: '/electromagnetism',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+      {
+        id: 'electromagnetism-potential',
+        href: '/electromagnetism/potential',
+        title: 'Electric Potential',
+        shortTitle: 'Potential',
+        description:
+          'Move from force to energy: potential energy landscapes, the electric potential, and its relationship to the field.',
+        seo: {
+          title: 'Electric Potential',
+          description:
+            'Learn electric potential as potential energy per unit charge, visualize V(x,y) as a color map, and connect potential to the electric field.',
+          canonicalPath: '/electromagnetism/potential',
+          image: '/social/physics-nook-card.svg',
+        },
+      },
+    ],
+  },
 ];
 
 export const featuredModule = modules.find((module) => module.featured) ?? modules[0];
@@ -679,6 +732,7 @@ const wavesModule = mustGetModuleBySlug('waves');
 const quantumModule = mustGetModuleBySlug('quantum');
 const thermodynamicsModule = mustGetModuleBySlug('thermodynamics');
 const collisionsModule = mustGetModuleBySlug('collisions');
+const electromagnetismModule = mustGetModuleBySlug('electromagnetism');
 const gameSiteUrl =
   import.meta.env.PUBLIC_GAME_URL ??
   (import.meta.env.DEV ? 'http://127.0.0.1:5173' : 'https://game.physicsnook.com');
@@ -736,6 +790,16 @@ export const wavesAndOscillationsPath = {
   ],
 } satisfies ModulePathGroup;
 
+export const electromagnetismPath = {
+  id: 'electromagnetism',
+  href: electromagnetismModule.href,
+  navLabel: electromagnetismModule.navLabel,
+  summary: electromagnetismModule.summary,
+  cardEyebrow: electromagnetismModule.cardEyebrow,
+  navVisibility: 'menu',
+  pages: electromagnetismModule.pages,
+} satisfies ModulePathGroup;
+
 export const quantumPath = {
   id: 'quantum',
   href: quantumModule.href,
@@ -789,6 +853,7 @@ export const exploreModuleGroups = [
   relativityPath,
   wavesAndOscillationsPath,
   quantumPath,
+  electromagnetismPath,
   thermodynamicsPath,
   gamesPath,
 ].filter((group) => group.navVisibility === 'menu');

@@ -28,7 +28,8 @@
     "test:ripple": "node --experimental-strip-types tests/ripple/run-tests.ts",
     "test:solar": "node --experimental-strip-types tests/solar/run-tests.ts",
     "test:caerbannog": "node --experimental-strip-types tests/caerbannog/run-tests.ts",
-    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog"
+    "test:electromagnetism": "node --experimental-strip-types tests/electromagnetism/run-tests.ts",
+    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog && npm run test:electromagnetism"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

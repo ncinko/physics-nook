@@ -1,0 +1,196 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Electric Field
+description: Define the electric field as force per unit charge, build it from point charges, and explore superposition and field lines.
+canonicalPath: /electromagnetism
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import PointChargeField from '../../components/electromagnetism/PointChargeField.jsx';
+import TwoChargeSuperposition from '../../components/electromagnetism/TwoChargeSuperposition.jsx';
+import ElectricFieldExplorer from '../../components/electromagnetism/ElectricFieldExplorer.jsx';
+import EquipotentialLines from '../../components/electromagnetism/EquipotentialLines.jsx';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism" />
+
+<div id="page-content"></div>
+
+# Electric Field
+
+An **electric field** is the force per unit charge at a point in space. We define it by
+
+$$
+\vec{\mathbf E} = \frac{\vec{\mathbf F}}{q_{\text{test}}},
+$$
+
+where $\vec{\mathbf F}$ is the electric force acting on a small, positive **test charge** $q_{\text{test}}$. In other words, the field describes the force a test charge *would* feel if placed at a particular location.
+
+If vector components and unit vectors feel rusty, the [Vectors](/math/vectors) page is a good warm-up — the field is a vector at every point in space.
+
+## Point Charge
+
+In the presence of a single point charge, the electric field is
+
+$$
+\vec{\mathbf E} = k\,\frac{q}{r^2}\,\hat{\mathbf r},
+$$
+
+where $k$ is Coulomb's constant and $q$ is the charge in coulombs.
+
+<DerivationPanel title="Do these two definitions of the electric field agree with Coulomb's law?">
+
+Start from Coulomb's law for the force on a test charge in the presence of a point charge:
+
+$$
+\vec{\mathbf F} = k\,\frac{q\,q_{\text{test}}}{r^2}\,\hat{\mathbf r}.
+$$
+
+Divide both sides by the test charge to get the electric field:
+
+$$
+\vec{\mathbf E} = \frac{\vec{\mathbf F}}{q_{\text{test}}} = k\,\frac{q}{r^2}\,\hat{\mathbf r}.
+$$
+
+</DerivationPanel>
+
+The vector $\vec{\mathbf r}$ points from the charge's position to the location of interest where we are computing the field, so its magnitude $r = \lVert \vec{\mathbf r} \rVert$ is the distance from the charge. The direction of $\vec{\mathbf E}$ comes from the unit vector $\hat{\mathbf r} = \dfrac{\vec{\mathbf r}}{\lVert \vec{\mathbf r} \rVert}$.
+
+<InteractiveAnchor id="point-charge-field" />
+
+<PointChargeField client:only="react" />
+
+**Try it:**
+
+- Double $q$ and confirm $E \propto q$.
+- Halve $r$ and confirm $E \propto 1/r^2$.
+- Flip the sign of $q$ and watch the field direction reverse.
+
+## Superposition
+
+When multiple charges are present, the net electric field is the vector sum of the individual fields:
+
+$$
+\vec{\mathbf E}_{\text{net}} = \sum_i \vec{\mathbf E}_i.
+$$
+
+With two point charges, the net field is simply $\vec{\mathbf E}_{\text{net}} = \vec{\mathbf E}_1 + \vec{\mathbf E}_2$, added tip-to-tail.
+
+<InteractiveAnchor id="two-charge-superposition" />
+
+<TwoChargeSuperposition client:only="react" />
+
+**Try it:**
+
+- Place two equal charges and find the point where $\vec{\mathbf E} = 0$.
+- Make a dipole ($+q$, $-q$) and describe the shape of the net field.
+
+<DerivationPanel title="Is there one electric field, or many?">
+
+We often speak of *individual* electric fields due to each point charge. This is a useful mental model for connecting to Coulomb's law and applying superposition.
+
+In the long run, it is better to imagine that space is filled with a single, unified field $\vec{\mathbf E}_{\text{net}}$. The field is a property of space itself, shaped by the configuration of charges. The field then determines the force on charges within that space, which predicts their motion, which changes the field, and so on:
+
+<svg viewBox="0 0 400 400" style="max-width: 320px; margin: 1rem auto; display: block; color: var(--text-primary);" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="200" cy="200" r="150" fill="none" stroke="var(--grid-line)" stroke-width="2" />
+  <g font-size="15" text-anchor="middle" fill="currentColor">
+    <rect x="115" y="40" rx="18" ry="18" width="170" height="36" fill="var(--surface-elevated)" stroke="var(--grid-line)" />
+    <text x="200" y="64">charge configuration</text>
+    <rect x="280" y="180" rx="18" ry="18" width="100" height="36" fill="var(--surface-elevated)" stroke="var(--grid-line)" />
+    <text x="330" y="204">electric field</text>
+    <rect x="115" y="324" rx="18" ry="18" width="170" height="36" fill="var(--surface-elevated)" stroke="var(--grid-line)" />
+    <text x="200" y="348">forces on charges</text>
+    <rect x="20" y="180" rx="18" ry="18" width="160" height="36" fill="var(--surface-elevated)" stroke="var(--grid-line)" />
+    <text x="100" y="204">motion of charges</text>
+  </g>
+  <g fill="var(--text-muted)">
+    <g transform="translate(306.066,306.066) rotate(135)"><path d="M0,-5 L10,0 L0,5 Z" /></g>
+    <g transform="translate(93.934,306.066) rotate(225)"><path d="M0,-5 L10,0 L0,5 Z" /></g>
+    <g transform="translate(93.934,93.934) rotate(315)"><path d="M0,-5 L10,0 L0,5 Z" /></g>
+    <g transform="translate(306.066,93.934) rotate(45)"><path d="M0,-5 L10,0 L0,5 Z" /></g>
+  </g>
+</svg>
+
+</DerivationPanel>
+
+## Electric Force and Field Lines
+
+The whole point of the field is that, once we know it, the net force on any charge placed in it is
+
+$$
+\vec{\mathbf F}_{\text{net}} = q_{\text{test}}\,\vec{\mathbf E}_{\text{net}}.
+$$
+
+The explorer below draws the field around a configuration of charges. Use the presets for a monopole, dipole, or capacitor; switch on field lines; and launch a green test charge to watch it accelerate along the force $q\vec{\mathbf E}$.
+
+<InteractiveAnchor id="electric-field-explorer" />
+
+<SimulationBlock
+  title="Electric Field Explorer"
+  description="Place charges, choose a preset, draw field lines, and launch a test charge."
+>
+  <ElectricFieldExplorer client:only="react" />
+</SimulationBlock>
+
+<DerivationPanel title="Did we add any new physics?">
+
+Not yet. So far the electric field is just a way to organize our thinking about forces between charges. Notice that the field is implicitly a function of position (and time), since the force on a test charge depends on where it sits:
+
+$$
+\vec{\mathbf E} = \vec{\mathbf E}(\vec{\mathbf r}, t).
+$$
+
+In these simulations the field updates *instantaneously* as charges move. That is not how reality works — the field concept becomes far more powerful in genuinely time-dependent situations, where changing electric fields generate magnetic fields and vice versa. That is the road to electromagnetism.
+
+</DerivationPanel>
+
+
+
+<ProblemSolvingSection title="Practice">
+  <WorkedExampleCard title="Field of a Point Charge" accent="blue">
+    #### Problem
+
+    Find the magnitude of the electric field $0.5\,\text{m}$ from a $2\,\mu\text{C}$ point charge.
+
+    #### Given
+
+    - $k \approx 9 \times 10^9\,\text{N·m}^2/\text{C}^2$
+    - $q = 2 \times 10^{-6}\,\text{C}$
+    - $r = 0.5\,\text{m}$
+
+    #### Solve
+
+    $$
+    E = k\,\frac{|q|}{r^2} = 9 \times 10^9 \cdot \frac{2 \times 10^{-6}}{(0.5)^2} \approx 7.2 \times 10^4\,\text{N/C}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Net Field at a Midpoint" accent="blue">
+    #### Problem
+
+    Two identical $1\,\mu\text{C}$ point charges are placed $1\,\text{m}$ apart. Determine the net electric field at the midpoint between them.
+
+    #### Solve
+
+    At the midpoint, each charge contributes a field of equal magnitude pointing in the *opposite* direction (both fields point away from their like-signed source). The two contributions cancel:
+
+    $$
+    \vec{\mathbf E}_{\text{net}} = \vec{\mathbf E}_1 + \vec{\mathbf E}_2 = 0.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Why E = 0 Inside a Conductor" accent="red">
+    #### Problem
+
+    In electrostatic equilibrium (no motion of free charges), why must the electric field be zero inside a conductor?
+
+    #### Reasoning
+
+    If the field were nonzero, the free charges inside would feel a force $\vec{\mathbf F} = q\vec{\mathbf E}$, and a net force means acceleration — not equilibrium. The charges keep rearranging until their own field exactly cancels the interior field everywhere, at which point the motion stops. That equilibrium configuration is precisely the one with $\vec{\mathbf E} = 0$ inside.
+  </WorkedExampleCard>
+</ProblemSolvingSection>

@@ -703,8 +703,8 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                     </h2>
                     <p className="mt-1 mb-0 text-xs text-slate-300">
                       {choosing
-                        ? 'The Black Knight is felled. Pick one secondary effect for your grenades — the other awaits the next knight.'
-                        : 'A second Black Knight falls — the remaining special weapon is yours to wield.'}
+                        ? 'Tis but a scratch. Pick one secondary effect for your grenades.'
+                        : 'Just a flesh wound! The remaining special weapon is yours to wield.'}
                     </p>
                     <div className={`mt-3 grid w-full gap-2 ${choosing ? 'sm:grid-cols-2' : ''}`}>
                       {offered.map((id) => {
@@ -743,7 +743,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                     </h2>
                     <p className="mt-1 mb-0 text-xs text-slate-300">
                       {choosing
-                        ? 'The Black Knight loses another limb. Bestow a one-time effect on one of your weapons — the other awaits the next knight.'
+                        ? 'The Black Knight loses another limb. Bestow a one-time effect on one of your weapons.'
                         : 'Another limb falls — your remaining weapon claims its effect.'}
                     </p>
                     <div className={`mt-3 grid w-full gap-2 ${choosing ? 'sm:grid-cols-2' : ''}`}>
@@ -894,7 +894,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                 <>
                   <h2 className="m-0 text-2xl font-black text-amber-300">Caerbannog is cleared!</h2>
                   <p className="mt-2 mb-0 text-sm text-slate-200">
-                    The Black Knight is but a torso — you repelled all{' '}
+                    The Black Knight is but a torso; we'll call it a draw. You repelled all{' '}
                     <strong className="text-white">{FINAL_WAVE} waves</strong>
                     {' · '}rabbits felled: {state.score}
                     {best > 0 && <> · best: wave {best}</>}

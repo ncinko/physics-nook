@@ -9,6 +9,12 @@ import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import EnergyDropExplorer from '../../components/energy/EnergyDropExplorer.jsx';
 import CoasterBuilder3D from '../../components/coaster/CoasterBuilder3D.jsx';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/energy" />
+
+<div id="page-content"></div>
 
 # Energy
 

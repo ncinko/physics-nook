@@ -3,183 +3,136 @@ layout: ../../layouts/TextbookLayout.astro
 ---
 
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
-import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
-import EnergyLedgerPanel from '../../components/energy/EnergyLedgerPanel.astro';
-import EnergyTrackExplorer from '../../components/simulations/EnergyTrackExplorer.jsx';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import EnergyDropExplorer from '../../components/energy/EnergyDropExplorer.jsx';
+import CoasterBuilder3D from '../../components/coaster/CoasterBuilder3D.jsx';
 
 # Energy
 
-One of the most useful entry points into energy is the **work-energy theorem**. Rather than starting with a list of energy types, it starts with a direct statement about motion: when the net force does work on a system, the kinetic energy changes. From there, we can reinterpret the work done by conservative forces as a change in a potential-energy function and build the familiar conservation laws from that idea.
+Energy is one of the most useful ideas in physics because it is a single number that we can track as a system changes. In mechanics we will meet it in two forms first: the energy an object has **because it is moving**, and the energy it has **because of where it sits in a gravitational field**. This page introduces both, then lets you watch one turn into the other by picking up a ball and dropping it.
 
-## The Work-Energy Theorem
+## Kinetic Energy
 
-For a moving object, the kinetic-energy term is
-
-$$
-K = \frac{1}{2}mv^2.
-$$
-
-Work measures energy transfer caused by a force acting through a displacement, and the net work done on a system changes its kinetic energy:
+**Kinetic energy** is the energy of motion. For an object of mass $m$ moving with speed $v$, it is defined as
 
 $$
-W_{\text{net}} = \Delta K.
+K = \tfrac{1}{2}mv^2.
 $$
 
-This theorem is often the fastest way to connect forces and motion. If gravity, a spring, or friction does work on an object, the kinetic energy responds. That statement is more fundamental than the later bookkeeping language. The energy framework becomes especially powerful once we recognize that some kinds of work can be packaged into a new function.
+Two features of this definition are worth pausing on. First, kinetic energy grows with mass: a heavier object moving at the same speed carries more of it. Second, and more importantly, it depends on the **square** of the speed. Doubling the speed does not double the kinetic energy — it quadruples it. Kinetic energy is measured in **joules** (J), where $1\,\text{J} = 1\,\text{kg}\cdot\text{m}^2/\text{s}^2$.
 
-## Reinterpreting Conservative Work as Potential Energy
+## Gravitational Potential Energy
 
-Suppose a force is **conservative**, meaning the work it does depends only on the starting and ending points, not on the path taken. In that case, we can define a potential-energy function so that
-
-$$
-W_{\text{cons}} = -\Delta U.
-$$
-
-That lets us replace a work calculation with a bookkeeping statement about stored energy. Gravity is the standard example near Earth's surface:
+**Gravitational potential energy** is energy stored by virtue of an object's height. Near Earth's surface, where the gravitational field strength $g \approx 9.8\,\text{m/s}^2$ is essentially constant, it is defined as
 
 $$
-U_g = mgh.
+U = mgh,
 $$
 
-Now the work-energy theorem becomes
+where $h$ is the height of the object above a reference level we are free to choose. Lifting a ball higher stores more potential energy; letting it down spends that store. Because only *changes* in height matter, the choice of where $h = 0$ is just bookkeeping — here we will measure height from the ground.
 
-$$
-\Delta K + \Delta U = W_{\text{non-cons}}.
-$$
+Potential energy is also measured in joules, which is what makes the next step possible: because $K$ and $U$ are measured in the same units, we can add them and watch the **total** as an object moves.
 
-If only conservative forces act, then the non-conservative work term is zero and the combination $K + U$ stays fixed. In other words, the usual conservation law is not a separate mystery; it is what the work-energy theorem looks like after we reinterpret conservative work as a potential-energy change.
+## Watch One Become the Other
 
-<EnergyLedgerPanel />
+Drag the ball up to store gravitational potential energy, then let go. As it falls, its height drops and its speed grows — potential energy is steadily converted into kinetic energy. The bar chart on the right keeps the running tally.
 
-## Systems, Conservation, and Friction
+<InteractiveAnchor id="energy-drop" />
 
-Before writing a final energy equation, decide what belongs in the **system**. If the system is just a moving cart, then gravity and friction may look like outside influences. If the system includes the cart, the track, and Earth, then gravitational potential energy and thermal energy become part of the bookkeeping inside the system.
+<EnergyDropExplorer client:visible />
 
-When friction is negligible, the cart continually trades gravitational potential energy and kinetic energy:
+**Reading the stacked bar chart.** This is the kind of diagram we draw constantly in class, so it is worth learning to read. Each colored block is one form of energy, drawn to scale: the purple block is gravitational potential energy, the green block is kinetic energy, and they are *stacked* so the height of the whole column is the **total** energy. Watch what happens as the ball falls:
 
-$$
-E_{\text{mech}} = K + U_g \approx \text{constant}.
-$$
+- At the top, the column is entirely purple — all potential, no kinetic.
+- As it descends, the purple block shrinks while the green block grows by exactly the same amount.
+- Just before it lands, the column is almost entirely green — nearly all kinetic.
+- The **top of the stack never moves.** The dashed "total" line stays put, because the energy is only changing form, not appearing or disappearing.
 
-When friction matters, the mechanical energy is no longer constant by itself. A more complete ledger includes the energy converted into thermal energy:
+Try sliding the **mass** higher: both blocks get taller, because $K$ and $U$ each scale with $m$ — yet the ball still reaches the ground at the same speed, since that speed depends on the height dropped, not the mass.
 
-$$
-E_{\text{total}} = K + U_g + E_{\text{thermal}}.
-$$
-
-That is why collisions can "lose" kinetic energy without violating conservation of energy, and why oscillations fade when damping is present. The energy is not destroyed; the work done by non-conservative forces is being recorded in a different column of the ledger.
-
-As you explore the track below, try this sequence:
-
-1. Set track friction to zero and release the cart from a high point. Watch the kinetic and gravitational bars trade places while the total stays fixed.
-2. Keep the same release height but increase the mass. Notice that the energy values grow, yet the frictionless speed reached near the bottom stays the same.
-3. Add track friction and compare the shrinking mechanical energy with the growing thermal-energy bar.
-4. Change the gravity preset to compare how the same track shape behaves on the Moon, Earth, and Jupiter.
-
-<InteractiveAnchor id="energy-track" />
-
-<SimulationBlock
-  title="Energy Track Explorer"
-  description="Release a cart on a curved track and watch kinetic, gravitational, and thermal energy rebalance in real time."
->
-  <EnergyTrackExplorer client:only="react" />
-</SimulationBlock>
+## Worked Examples
 
 <ProblemSolvingSection>
   <WorkedExampleCard
-    title="Find Speed from a Frictionless Drop"
+    title="Speed of a Dropped Ball"
     accent="blue"
   >
     #### Problem
 
-    A cart starts from rest $1.8\,\text{m}$ above the lowest point of a frictionless track. Find its speed at the bottom.
-
-    #### Given
-
-    - $h = 1.8\,\text{m}$
-    - $g = 9.8\,\text{m/s}^2$
-    - starts from rest
-
-    #### Use
-
-    With no friction,
-
-    $$
-    mgh = \frac{1}{2}mv^2.
-    $$
-
-    The mass cancels, leaving
-
-    $$
-    v = \sqrt{2gh}.
-    $$
-
-    #### Solve
-
-    $$
-    v = \sqrt{2(9.8)(1.8)}
-    = \sqrt{35.28}
-    \approx 5.94\,\text{m/s}.
-    $$
-
-    #### Check
-
-    The result depends only on the height drop, not on the cart mass. That is the same mass cancellation the explorer shows when you compare carts released from the same point.
-  </WorkedExampleCard>
-
-  <WorkedExampleCard
-    title="Include Thermal Energy from Friction"
-    accent="red"
-  >
-    #### Problem
-
-    A $2.0\,\text{kg}$ cart starts from rest and descends $1.5\,\text{m}$. Friction transfers $6.0\,\text{J}$ into thermal energy during the motion. Find the cart's final speed.
+    A $2.0\,\text{kg}$ ball is held at rest $3.0\,\text{m}$ above the ground and released. How fast is it moving just before it lands?
 
     #### Given
 
     - $m = 2.0\,\text{kg}$
-    - $h = 1.5\,\text{m}$
-    - $E_{\text{thermal}} = 6.0\,\text{J}$
-    - starts from rest
+    - $h = 3.0\,\text{m}$
+    - released from rest, so $K_{\text{top}} = 0$
 
     #### Use
 
-    The lost gravitational potential energy is split between kinetic and thermal energy:
+    At the top, all of the energy is potential:
 
     $$
-    mgh = K_f + E_{\text{thermal}}.
+    U_{\text{top}} = mgh = (2.0)(9.8)(3.0) = 58.8\,\text{J}.
+    $$
+
+    By the time it reaches the ground, all of that has become kinetic energy, so $K_{\text{bottom}} = 58.8\,\text{J}$. Setting $\tfrac{1}{2}mv^2 = K_{\text{bottom}}$ and solving for the speed:
+
+    $$
+    v = \sqrt{\frac{2K_{\text{bottom}}}{m}} = \sqrt{\frac{2(58.8)}{2.0}}.
     $$
 
     #### Solve
 
-    First find the available gravitational energy:
-
     $$
-    mgh = (2.0)(9.8)(1.5) = 29.4\,\text{J}.
-    $$
-
-    So the final kinetic energy is
-
-    $$
-    K_f = 29.4 - 6.0 = 23.4\,\text{J}.
-    $$
-
-    Now solve for the speed:
-
-    $$
-    \frac{1}{2}(2.0)v^2 = 23.4
-    \qquad \Rightarrow \qquad
-    v^2 = 23.4
-    \qquad \Rightarrow \qquad
-    v \approx 4.84\,\text{m/s}.
+    v = \sqrt{58.8} \approx 7.7\,\text{m/s}.
     $$
 
     #### Check
 
-    This speed is smaller than the frictionless value because part of the gravitational energy was redirected into thermal energy instead of staying in the mechanical ledger.
+    Notice the mass cancels: $v = \sqrt{2gh}$. Two balls of different mass dropped from the same height land at the same speed — exactly what the explorer shows when you change the mass slider.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Reading the Bar Chart Partway Down"
+    accent="red"
+  >
+    #### Problem
+
+    A $1.5\,\text{kg}$ ball is dropped from $4.0\,\text{m}$. When it has fallen to a height of $1.0\,\text{m}$, how much energy is kinetic and how much is potential?
+
+    #### Given
+
+    - $m = 1.5\,\text{kg}$
+    - release height $h_0 = 4.0\,\text{m}$, current height $h = 1.0\,\text{m}$
+
+    #### Use
+
+    The total energy equals the potential energy at the release point:
+
+    $$
+    E = mgh_0 = (1.5)(9.8)(4.0) = 58.8\,\text{J}.
+    $$
+
+    The potential energy now is
+
+    $$
+    U = mgh = (1.5)(9.8)(1.0) = 14.7\,\text{J},
+    $$
+
+    and the rest of the total must be kinetic.
+
+    #### Solve
+
+    $$
+    K = E - U = 58.8 - 14.7 = 44.1\,\text{J}.
+    $$
+
+    #### Check
+
+    On a stacked bar chart, draw a purple block of $14.7\,\text{J}$ with a green block of $44.1\,\text{J}$ on top — together they reach the same $58.8\,\text{J}$ total line as at the start.
   </WorkedExampleCard>
 </ProblemSolvingSection>
 
@@ -188,31 +141,46 @@ As you explore the track below, try this sequence:
   eyebrow="Energy Checkpoint"
   questions={[
     {
-      id: 'conservation-vs-transfer',
-      question: 'A cart slides down a frictionless track. Which statement best describes the energy bookkeeping?',
+      id: 'ke-speed-squared',
+      question: 'Two carts have the same mass, but cart B moves twice as fast as cart A. How do their kinetic energies compare?',
       options: [
-        { id: 'B', text: 'Energy is created because the cart speeds up as it goes downhill.', isCorrect: false, explanation: 'The cart speeds up because stored gravitational potential energy is being converted into kinetic energy. Faster motion does not mean energy was created from nothing.' },
-        { id: 'A', text: 'Gravitational potential energy is converted into kinetic energy while the total mechanical energy stays constant.', isCorrect: true, explanation: 'Exactly. On a frictionless track, height energy is traded for motion energy, but the sum $K + U_g$ stays fixed for the run.' },
-        { id: 'C', text: 'Kinetic energy stays constant because only the height is changing.', isCorrect: false, explanation: 'As the cart drops, the height changes and so does the speed. That is exactly why kinetic energy increases while gravitational potential energy decreases.' }
+        { id: 'A', text: 'Cart B has four times the kinetic energy of cart A.', isCorrect: true, explanation: 'Kinetic energy depends on the square of the speed ($K = \\tfrac{1}{2}mv^2$), so doubling the speed multiplies the kinetic energy by $2^2 = 4$.' },
+        { id: 'B', text: 'Cart B has twice the kinetic energy of cart A.', isCorrect: false, explanation: 'It is tempting to scale linearly, but $K$ depends on $v^2$, not $v$. Doubling the speed quadruples the kinetic energy.' },
+        { id: 'C', text: 'They have the same kinetic energy because the masses are equal.', isCorrect: false, explanation: 'Equal masses alone do not make equal kinetic energies — the speeds differ, and speed enters squared.' }
       ]
     },
     {
-      id: 'mass-and-speed',
-      question: 'Two carts start from the same height on the same frictionless track, but one cart has twice the mass. What happens near the bottom?',
+      id: 'pe-height',
+      question: 'You lift a box from the floor to a shelf, then to a second shelf twice as high. Compared to the first shelf, the gravitational potential energy on the second shelf (measured from the floor) is:',
       options: [
-        { id: 'B', text: 'The heavier cart must move faster because it has more mass.', isCorrect: false, explanation: 'More mass means more energy is involved, but for the same frictionless height drop the speed depends on the conversion of $mgh$ into $\\tfrac{1}{2}mv^2$, and the mass cancels out.' },
-        { id: 'C', text: 'The lighter cart must move faster because it is easier to accelerate.', isCorrect: false, explanation: 'It is tempting to focus on inertia alone, but the energy argument is cleaner: for the same height change on a frictionless track, both carts reach the same speed.' },
-        { id: 'A', text: 'They reach the same speed, even though the heavier cart has larger kinetic energy.', isCorrect: true, explanation: 'Right. The speed follows from the drop in height, so both carts reach the same frictionless speed. The heavier cart still carries more kinetic energy because $K = \\tfrac{1}{2}mv^2$.' }
+        { id: 'B', text: 'Twice as large, because $U = mgh$ and the height doubled.', isCorrect: true, explanation: 'With the same mass and $g$, potential energy is proportional to height, so doubling $h$ doubles $U$.' },
+        { id: 'A', text: 'The same, because it is the same box.', isCorrect: false, explanation: 'Potential energy depends on height, not just on which object it is. A higher shelf stores more.' },
+        { id: 'C', text: 'Four times as large.', isCorrect: false, explanation: 'Potential energy scales linearly with height ($U = mgh$), not with its square. Doubling $h$ doubles $U$.' }
       ]
     },
     {
-      id: 'friction-thermal',
-      question: 'When track friction is increased, which statement is correct?',
+      id: 'drop-conservation',
+      question: 'A ball is dropped from rest. At the moment it has fallen halfway down, what does the stacked energy bar chart show?',
       options: [
-        { id: 'A', text: 'Mechanical energy decreases because some of it is transferred into thermal energy, while the full energy ledger can still remain constant.', isCorrect: true, explanation: 'Exactly. Friction converts part of the kinetic-plus-potential ledger into thermal energy. Mechanical energy alone decreases, but total tracked energy can still be conserved when that thermal term is included.' },
-        { id: 'B', text: 'Total energy is no longer conserved because friction destroys part of it.', isCorrect: false, explanation: 'Friction does not destroy energy. It transfers energy into less mechanically useful forms such as thermal energy.' },
-        { id: 'C', text: 'Friction only changes the direction of motion, not the energy bookkeeping.', isCorrect: false, explanation: 'Friction changes both the motion and the energy ledger because it converts mechanical energy into thermal energy over time.' }
+        { id: 'A', text: 'Half potential and half kinetic, with the same total height as at the start.', isCorrect: true, explanation: 'Halfway down, half the original height remains, so half the energy is still potential and half has become kinetic. The total — the top of the stack — is unchanged.' },
+        { id: 'B', text: 'A taller total stack, because the ball is now moving.', isCorrect: false, explanation: 'Motion does not add energy. Potential energy is converting into kinetic energy; the total stays the same.' },
+        { id: 'C', text: 'All kinetic, because the ball is already falling.', isCorrect: false, explanation: 'Only at the ground is the energy fully kinetic. Halfway down, half of it is still stored as potential energy.' }
       ]
     }
   ]}
 />
+
+## Take It Further: Build a Coaster
+
+The same trade between kinetic and gravitational potential energy plays out all over a roller coaster: every drop spends stored height as speed, and every hill buys it back. Build a track, release the train, and open **Telemetry** to watch a kinetic/potential energy ledger just like the one above — now riding along a course you design.
+
+<InteractiveAnchor id="coaster-builder" />
+
+<SimulationBlock
+  title="Coaster Builder"
+  description="Stack track pieces, release the train, and watch kinetic and potential energy trade as it runs. Scroll to zoom, right-drag to pan, WASD to move the camera."
+  width="full"
+  showFullscreen={false}
+>
+  <CoasterBuilder3D client:only="react" height={820} />
+</SimulationBlock>

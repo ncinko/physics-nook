@@ -31,6 +31,10 @@ Build controls and readouts from the shared primitives so every interactive them
 
 Colors come from CSS custom properties in `global.css` (`--text-primary`, `--grid-line`, `--surface-elevated`, `--accent-*`), mirrored by Tailwind `theme-*` aliases. Use these tokens, not hardcoded hex.
 
+### Scene surfaces
+
+Treat a transparent, unboxed scene as the default for inline illustrations. Add a filled background, border, or shadow only when the surface carries useful meaning: for example, it defines a plot or data region, provides necessary contrast, or marks a direct-manipulation boundary. Do not put every animation on a `--sim-bg` panel merely to contain it visually; let simple diagrams and motion illustrations sit naturally in the reading flow.
+
 ### Readouts
 
 Show the fewest values that make the point. Prefer the lightest form: values woven into the caption/prose, or a single grouped `Readout` (`variant="panel"`, the default). Reserve per-value cards (`variant="cards"`) for dashboard-style standalone tools; do not make them the default cadence.
@@ -38,6 +42,7 @@ Show the fewest values that make the point. Prefer the lightest form: values wov
 ### Inline checklist
 
 - Mount directly in MDX (no `SimulationBlock`); the component owns its own centering and max width.
+- Default to a transparent scene; add a panel surface only when it improves meaning, contrast, or interaction clarity.
 - Keep controls in one `ControlBar`; keep any readout light (grouped `Readout` or inline values).
 - Read theme colors through `themeColors` / CSS tokens; no hardcoded palettes.
 - Hydrate with `client:visible`, or `client:only="react"` for canvas islands that gain nothing from SSR.

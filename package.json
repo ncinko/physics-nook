@@ -24,13 +24,14 @@
     "test:forces": "node --experimental-strip-types tests/forces/run-tests.ts",
     "test:quantum": "node --experimental-strip-types tests/quantum/run-tests.ts",
     "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
+    "test:energy": "node --experimental-strip-types tests/energy/run-tests.ts",
     "test:oscillations": "node --experimental-strip-types tests/oscillations/run-tests.ts",
     "test:ripple": "node --experimental-strip-types tests/ripple/run-tests.ts",
     "test:solar": "node --experimental-strip-types tests/solar/run-tests.ts",
     "test:caerbannog": "node --experimental-strip-types tests/caerbannog/run-tests.ts",
     "test:electromagnetism": "node --experimental-strip-types tests/electromagnetism/run-tests.ts",
     "test:rotation": "node --experimental-strip-types tests/rotation/run-tests.ts",
-    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation"
+    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

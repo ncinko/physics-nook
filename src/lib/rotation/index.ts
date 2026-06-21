@@ -7,6 +7,44 @@ export interface Vec2 {
   y: number;
 }
 
+export interface UniformCircularMotionState {
+  position: Vec2;
+  velocity: Vec2;
+  acceleration: Vec2;
+  speed: number;
+  centripetalAcceleration: number;
+}
+
+/**
+ * Position and kinematics for uniform circular motion about the origin.
+ * Positive omega moves counterclockwise; changing its sign reverses velocity
+ * while the acceleration remains directed toward the center.
+ */
+export function uniformCircularMotion(
+  radius: number,
+  omega: number,
+  angle: number,
+): UniformCircularMotionState {
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const velocity = {
+    x: -radius * omega * sin,
+    y: radius * omega * cos,
+  };
+  const acceleration = {
+    x: -radius * omega * omega * cos,
+    y: -radius * omega * omega * sin,
+  };
+
+  return {
+    position: { x: radius * cos, y: radius * sin },
+    velocity,
+    acceleration,
+    speed: Math.hypot(velocity.x, velocity.y),
+    centripetalAcceleration: Math.hypot(acceleration.x, acceleration.y),
+  };
+}
+
 /** Newton's second law for rotation: angular acceleration α = τ / I. */
 export function angularAccel(torque: number, momentOfInertia: number): number {
   if (momentOfInertia === 0) return Infinity;

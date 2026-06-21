@@ -9,8 +9,8 @@ import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import CentripetalAccelerationExplorer from '../../components/rotation/CentripetalAccelerationExplorer';
 import RotatingShip2D from '../../components/rotation/RotatingShip2D.jsx';
-import BeadOnRotatingRod from '../../components/rotation/BeadOnRotatingRod.jsx';
 import { mechanicsPath } from '../../data/modules';
 
 <ModuleHero module={mechanicsPath} currentPath="/rotation/rotating-frames" />
@@ -32,6 +32,10 @@ An object moving in a circle is always accelerating, even at constant speed, bec
 $$
 a_{\text{centripetal}} = \frac{v^2}{r} = r\omega^2.
 $$
+
+<InteractiveAnchor id="centripetal-acceleration" />
+
+<CentripetalAccelerationExplorer client:visible />
 
 The word **centripetal** means "center-seeking", i.e. the acceleration is directed toward the center of some circle.  To produce this centripetal acceleration, some combination of forces with a net inward component is required, $F = ma_{\text{cent}}$.  If these forces are suddenly removed, the object would fly off along a straight line.
 

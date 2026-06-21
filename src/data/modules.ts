@@ -643,11 +643,11 @@ export const modules: ModuleMeta[] = [
         href: '/energy',
         title: 'Energy',
         description:
-          'Use a curved track explorer to connect work, potential energy, mechanical energy, and friction.',
+          'Build a 3D roller coaster and watch kinetic, potential, and thermal energy trade as the train runs.',
         seo: {
           title: 'Energy',
           description:
-            'Explore the work-energy theorem and energy conservation with a curved-track energy explorer.',
+            'Explore the work-energy theorem, conservation, g-forces, and friction by building a 3D roller coaster and reading its live energy ledger.',
           canonicalPath: '/energy',
           image: '/social/physics-nook-card.svg',
         },
@@ -801,6 +801,7 @@ const wavesModule = mustGetModuleBySlug('waves');
 const quantumModule = mustGetModuleBySlug('quantum');
 const thermodynamicsModule = mustGetModuleBySlug('thermodynamics');
 const collisionsModule = mustGetModuleBySlug('collisions');
+const energyModule = mustGetModuleBySlug('energy');
 const electromagnetismModule = mustGetModuleBySlug('electromagnetism');
 const rotationModule = mustGetModuleBySlug('rotation');
 const gameSiteUrl =
@@ -825,13 +826,14 @@ export const mechanicsPath = {
   href: kinematicsModule.href,
   navLabel: 'Mechanics',
   summary:
-    'Core motion ideas from one-dimensional graphs to forces, vectors, and collisions.',
+    'Core motion ideas from one-dimensional graphs to forces, vectors, collisions, and energy.',
   cardEyebrow: 'Mechanics',
   navVisibility: 'menu',
   pages: [
     ...kinematicsModule.pages,
     forcesModule.pages[0],
     collisionsModule.pages[0],
+    energyModule.pages[0],
     // Rotational Dynamics (rotationModule.pages[0]) is hidden for now; only the
     // Rotating Frames page is surfaced in navigation.
     rotationModule.pages[1],

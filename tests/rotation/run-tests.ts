@@ -10,6 +10,7 @@ import {
   polarAcceleration,
   rotationalKineticEnergy,
   torqueFromForce,
+  uniformCircularMotion,
 } from '../../src/lib/rotation/index.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
@@ -46,5 +47,32 @@ near(cor.y, -4); // -2 Ω vx
 const corZero = coriolisAccel(5, 0, 0); // no velocity → no Coriolis
 near(corZero.x, 0);
 near(corZero.y, 0);
+
+// Uniform circular motion: velocity is tangent and acceleration points inward.
+const uniform = uniformCircularMotion(2, 3, 0);
+near(uniform.position.x, 2);
+near(uniform.position.y, 0);
+near(uniform.velocity.x, 0);
+near(uniform.velocity.y, 6);
+near(uniform.acceleration.x, -18);
+near(uniform.acceleration.y, 0);
+near(uniform.speed, 6); // v = r omega
+near(uniform.centripetalAcceleration, 18); // a_c = r omega^2 = v^2 / r
+near(uniform.centripetalAcceleration, (uniform.speed * uniform.speed) / 2);
+near(
+  uniform.position.x * uniform.velocity.x + uniform.position.y * uniform.velocity.y,
+  0,
+); // position and velocity are perpendicular
+assert.ok(
+  uniform.position.x * uniform.acceleration.x + uniform.position.y * uniform.acceleration.y < 0,
+); // acceleration is antiparallel to position
+
+// Reversing the rotation reverses velocity but leaves centripetal acceleration unchanged.
+const reversed = uniformCircularMotion(2, -3, 0);
+near(reversed.velocity.x, -uniform.velocity.x);
+near(reversed.velocity.y, -uniform.velocity.y);
+near(reversed.acceleration.x, uniform.acceleration.x);
+near(reversed.acceleration.y, uniform.acceleration.y);
+near(reversed.centripetalAcceleration, uniform.centripetalAcceleration);
 
 console.log('rotation tests passed');

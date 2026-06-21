@@ -1,0 +1,18 @@
+/*
+ * Styles for CoasterBuilder3D that aren't expressible as Tailwind utilities on
+ * the elements themselves. The builder toolbar marks each variant flyout with
+ * `.submenu` (hidden via `opacity-0 invisible -translate-x-4`); these rules
+ * reveal it when its `.group` parent is hovered or focused. Scoped by the
+ * `.submenu` child so it only affects this component.
+ */
+.group:hover > .submenu,
+.group:focus-within > .submenu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* The WebGL canvas is keyboard-driven (WASD); suppress the focus outline. */
+.group .submenu :focus-visible {
+  outline: none;
+}

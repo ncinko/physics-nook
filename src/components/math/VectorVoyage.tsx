@@ -73,8 +73,9 @@ export function VectorVoyage() {
   const positions = useMemo(() => pathPositions(level.start, moves), [level, moves]);
   const current = positions[positions.length - 1];
   const reached = isReached(current, level.target);
+  // The net displacement is the vector sum of every hop — the single arrow from
+  // the burrow to the carrot that the chain of hops adds up to.
   const net = totalDisplacement(moves);
-  const needed = subtract(level.target, level.start);
 
   // Animated bunny sprite that hops in an arc toward the current path tip.
   const [bunny, setBunny] = useState(() => {
@@ -271,30 +272,26 @@ export function VectorVoyage() {
           <VoyageBunny x={bunny.x} y={bunny.y} lift={bunny.lift} dir={bunny.dir} />
         </svg>
 
-        <div className="grid gap-3 md:grid-cols-3">
-          <Readout label="hops needed" value={formatVector(needed)} accent={COLORS.target} />
-          <Readout label="hops so far" value={formatVector(net)} accent={COLORS.path} />
-          <Readout
-            label="still to hop"
-            value={formatVector(subtract(needed, net))}
-            accent={reached ? COLORS.success : COLORS.muted}
-          />
-        </div>
+        {/* Bunny = start + hop 1 + hop 2 + …, always rendered so growing the
+            expression doesn't shift the controls below. Each hop is tinted to
+            match its path arrow, and reaching the carrot caps the line with a
+            highlighted "= carrot". */}
+        <p className="m-0 font-mono text-sm leading-7 text-[var(--text-muted)]">
+          <span className="font-semibold text-[var(--text-primary)]">Bunny</span>
+          {' = '}
+          <span style={{ color: COLORS.start }}>{formatVector(level.start)}</span>
+          {moves.map((move, index) => (
+            <span key={index} style={{ color: COLORS.path, fontWeight: 600 }}>
+              {' + '}
+              {formatVector(move)}
+            </span>
+          ))}
+          {reached && (
+            <span style={{ color: COLORS.target, fontWeight: 700 }}> = carrot</span>
+          )}
+        </p>
 
-        {moves.length > 0 && (
-          <p className="m-0 font-mono text-xs leading-6 text-[var(--text-muted)]">
-            {moves.map((move, index) => (
-              <span key={index}>
-                {index > 0 && ' + '}
-                {formatVector(move)}
-              </span>
-            ))}
-            {' = '}
-            <span style={{ color: COLORS.path }}>{formatVector(net)}</span>
-          </p>
-        )}
-
-        {reached ? (
+        {reached && (
           <p
             className="m-0 rounded-lg border px-3 py-2 text-sm font-semibold"
             style={{
@@ -303,15 +300,16 @@ export function VectorVoyage() {
               background: 'color-mix(in srgb, #16a34a 12%, var(--bg-primary))',
             }}
           >
-            Munch! The bunny reached the carrot in {moves.length}{' '}
-            {moves.length === 1 ? 'hop' : 'hops'} The hops added up to the trip{' '}
-            {formatVector(net)}.
+            Munch! Those {moves.length} {moves.length === 1 ? 'hop' : 'hops'} sum to a single
+            net displacement of {formatVector(net)}.
           </p>
-        ) : invalidTip ? (
+        )}
+
+        {!reached && invalidTip && (
           <p className="m-0 text-sm font-semibold" style={{ color: COLORS.invalid }}>
             That hop crashes into a hedge. Pick a waypoint that hops around it.
           </p>
-        ) : null}
+        )}
 
         <div className="flex flex-wrap gap-2">
           <ControlButton onClick={undo} disabled={moves.length === 0}>
@@ -356,19 +354,6 @@ function ControlButton({
     >
       {children}
     </button>
-  );
-}
-
-function Readout({ label, value, accent }: { label: string; value: string; accent?: string }) {
-  return (
-    <div className="min-w-0 rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <p className="m-0 text-xs font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-        {label}
-      </p>
-      <p className="mt-1 mb-0 break-words font-mono text-sm font-semibold md:text-base" style={{ color: accent }}>
-        {value}
-      </p>
-    </div>
   );
 }
 

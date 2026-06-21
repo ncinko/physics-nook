@@ -67,6 +67,28 @@ const snapVector = (vector: Vector2): Vector2 => ({
   y: Math.round(vector.y * 2) / 2,
 });
 
+// The carrot is a target the player aims for: a random integer grid point inside
+// a comfortable interior range, never the origin and never the spot just eaten.
+const CARROT_X_RANGE: [number, number] = [-5, 5];
+const CARROT_Y_RANGE: [number, number] = [-3, 3];
+
+const randomGridInt = ([min, max]: [number, number]) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
+
+const randomCarrot = (avoid?: Vector2): Vector2 => {
+  let next: Vector2;
+  do {
+    next = { x: randomGridInt(CARROT_X_RANGE), y: randomGridInt(CARROT_Y_RANGE) };
+  } while (
+    (next.x === 0 && next.y === 0) ||
+    (avoid !== undefined && next.x === avoid.x && next.y === avoid.y)
+  );
+  return next;
+};
+
+const samePoint = (a: Vector2, b: Vector2) =>
+  Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
+
 const makeDragHandlers = (setVector: (vector: Vector2) => void) => ({
   onPointerDown: (event: PointerEvent<SVGCircleElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -118,9 +140,19 @@ export function VectorAdditionDemo() {
   const [b, setB] = useState<Vector2>({ x: 1.5, y: 2 });
   const [firstHop, setFirstHop] = useState<'hop1' | 'hop2'>('hop1');
   const [phase, setPhase] = useState<'idle' | 'hopping' | 'landed'>('idle');
+  // The carrot is a target placed on the grid, independent of the hop sum; the
+  // player adjusts the hops so hop 1 + hop 2 lands on it. Seeded deterministically
+  // for SSR, then randomized on mount to avoid a hydration mismatch.
+  const [carrot, setCarrot] = useState<Vector2>({ x: 4, y: 3 });
+  const [reached, setReached] = useState(false);
   const sum = add(a, b);
   const dragA = useMemo(() => makeDragHandlers(setA), []);
   const dragB = useMemo(() => makeDragHandlers(setB), []);
+
+  // Drop a fresh random carrot once on the client.
+  useEffect(() => {
+    setCarrot((current) => randomCarrot(current));
+  }, []);
 
   // The bunny shows the sum by actually taking the two hops, instead of the
   // resultant being drawn the moment the tips move.
@@ -139,6 +171,7 @@ export function VectorAdditionDemo() {
     }
     const origin = toScreen(ZERO_VECTOR);
     setPhase('idle');
+    setReached(false);
     setBunny({ x: origin.x, y: origin.y, dir: 1, frame: 'sit' });
   }, [a, b, firstHop]);
 
@@ -155,7 +188,8 @@ export function VectorAdditionDemo() {
     if (phase === 'hopping') {
       return;
     }
-    // Two waypoints between three corners: start → first hop's tip → carrot.
+    setReached(false);
+    // Two waypoints between three corners: start → first hop's tip → combined tip.
     const lead = firstHop === 'hop1' ? a : b;
     const route = [ZERO_VECTOR, lead, sum].map(toScreen);
     setPhase('hopping');
@@ -186,6 +220,12 @@ export function VectorAdditionDemo() {
           rafRef.current = null;
           setBunny({ x: landing.x, y: landing.y, dir, frame: 'sit' });
           setPhase('landed');
+          // Reached the carrot only if the combined hop actually lands on it.
+          // When it does, the carrot is eaten and a fresh one is dropped.
+          if (samePoint(sum, carrot)) {
+            setReached(true);
+            setCarrot((current) => randomCarrot(current));
+          }
           return;
         }
         segStart = now;
@@ -205,12 +245,12 @@ export function VectorAdditionDemo() {
   const secondColor = firstHop === 'hop1' ? COLORS.b : COLORS.a;
   const firstLabel = firstHop === 'hop1' ? 'hop 1' : 'hop 2';
   const secondLabel = firstHop === 'hop1' ? 'hop 2' : 'hop 1';
-  const carrot = toScreen(sum);
+  const carrotScreen = toScreen(carrot);
 
   return (
     <DemoShell
-      title="Add Two Hops"
-      description="Adjust the hop vectors, and then press Hop! to send the bunny on its way. Swap the order — either route lands on the same carrot."
+      title="Add Two Vectors"
+      description="Adjust the hops so their sum lands on the carrot, then press Hop! to send the bunny."
     >
       <ReadoutGrid>
         <Readout label="hop 1" value={formatVector(a)} accent={COLORS.a} />
@@ -228,7 +268,7 @@ export function VectorAdditionDemo() {
 
       <VectorSvg ariaLabel="Interactive bunny vector addition diagram">
         <Grid />
-        <Carrot point={carrot} reached={phase === 'landed'} />
+        <Carrot point={carrotScreen} reached={false} />
         {/* Alternate order, faded: the other hop first, completing the parallelogram. */}
         <Arrow start={ZERO_VECTOR} vector={second} color={secondColor} label="" faded />
         <Arrow start={second} vector={first} color={firstColor} label="" faded />
@@ -273,7 +313,7 @@ export function VectorAdditionDemo() {
         </span>
       </div>
 
-      {phase === 'landed' && (
+      {phase === 'landed' && reached && (
         <p
           className="m-0 rounded-lg border px-3 py-2 text-sm font-semibold"
           style={{
@@ -282,8 +322,15 @@ export function VectorAdditionDemo() {
             background: 'color-mix(in srgb, #16a34a 12%, var(--bg-primary))',
           }}
         >
-          Munch! Hop 1 then hop 2 — or hop 2 then hop 1 — both land on the carrot at {formatVector(sum)}. One
-          combined hop of {formatVector(sum)} gets there directly.
+          Munch! Hop 1 then hop 2 — or hop 2 then hop 1 — both reach the carrot, equivalent to one
+          combined hop of {formatVector(sum)}.
+        </p>
+      )}
+
+      {phase === 'landed' && !reached && (
+        <p className="m-0 rounded-lg border border-[var(--grid-line)] px-3 py-2 text-sm text-[var(--text-muted)]">
+          Landed on {formatVector(sum)}, not on the carrot. Drag the hop tips so hop 1 + hop 2
+          adds up to the carrot, then hop again.
         </p>
       )}
     </DemoShell>

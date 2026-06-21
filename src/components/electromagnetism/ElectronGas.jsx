@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useMemo, useState } from "react";
+import { ControlBar, Slider, Button } from "../shared/InlineControls";
 
 // ElectronGas.jsx — bigger, hazier electrons; simplified controls
 
@@ -211,7 +212,21 @@ g.addColorStop(1.0, `hsla(${p.hue}, 90%, 60%, 0)`);
   const onLeave = () => { dragRef.current = null; };
 
   return (
-    <div style={{ position: "relative", width: "100%", maxWidth: width, margin: "0 auto", color: "var(--text-primary)" }}>
+    <div style={{ width: "100%", maxWidth: width, margin: "0 auto", color: "var(--text-primary)" }}>
+      <ControlBar className="mb-2">
+        <Button onClick={() => setRunning((r) => !r)}>{running ? "Pause" : "Play"}</Button>
+        <Button variant="secondary" onClick={reseed}>Reseed</Button>
+        <Slider
+          label={<>τ<sub>L</sub></>}
+          min={0.08}
+          max={0.8}
+          step={0.01}
+          value={tauL}
+          onChange={setTauL}
+          format={(v) => v.toFixed(2)}
+        />
+      </ControlBar>
+
       <div
         style={{ position: "relative", width: "100%", aspectRatio: `${width} / ${height}`, borderRadius: 12, overflow: "hidden", boxShadow: "0 4px 22px rgba(0,0,0,0.35)" }}
         onMouseDown={onDown}
@@ -224,17 +239,6 @@ g.addColorStop(1.0, `hsla(${p.hue}, 90%, 60%, 0)`);
       >
         <canvas ref={canvasRef} width={width} height={height} style={{ display: "block", width: "100%", height: "100%" }} />
         <canvas ref={trailRef} width={width} height={height} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
-
-        {/* Controls */}
-        <div style={{ position: "absolute", left: 12, top: 12, display: "flex", gap: 10, alignItems: "center", background: "rgba(12,20,28,0.35)", padding: "8px 10px", borderRadius: 10, backdropFilter: "blur(6px)" }}>
-          <button onClick={() => setRunning(r => !r)} style={{ background: running ? "#0b7" : "#444", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>{running ? "Pause" : "Play"}</button>
-          <button onClick={reseed} style={{ background: "#0ea5e9", color: "white", border: "none", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontWeight: 600 }}>Reseed</button>
-
-          <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ opacity: 0.85 }}>τ<sub>L</sub></span>
-            <input type="range" min={0.08} max={0.8} step={0.01} value={tauL} onChange={(e) => setTauL(parseFloat(e.target.value))} />
-          </label>
-        </div>
       </div>
       <p style={{ marginTop: 6, fontSize: 13, opacity: 0.8 }}>
         Tip: click and drag anywhere to set the electric field (arrow = direction, length = strength).

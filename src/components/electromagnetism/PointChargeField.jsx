@@ -1,6 +1,8 @@
 // PointChargeField.jsx — single point charge with r̂, snapping, shared-exponent readout
 import React, { useRef, useEffect, useState } from "react";
 import { themeColors, onThemeChange } from "../shared/themeColors";
+import { ControlBar, Slider, Toggle } from "../shared/InlineControls";
+import { Readout } from "../shared/Readout";
 
 export default function PointChargeUnitVectorDemo() {
   const canvasRef = useRef(null);
@@ -297,24 +299,19 @@ export default function PointChargeUnitVectorDemo() {
 
   return (
     <div style={{ textAlign: "center", color: "var(--text-primary)" }}>
-      <div style={{ marginBottom: 8, display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-        <label>
-          q (nC):{" "}
-          <input
-            type="range"
-            min={-10} max={10} step={0.1}
-            value={qNanoC}
-            onChange={(e) => setQNanoC(+e.target.value)}
-          />{" "}
-          <span style={{ display: "inline-block", minWidth: 56, textAlign: "left" }}>
-            {qNanoC.toFixed(1)}
-          </span>
-        </label>
-        <label style={{ userSelect: "none" }}>
-          <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-          {" "}Snap to grid
-        </label>
-      </div>
+      <ControlBar className="mb-2">
+        <Slider
+          label="q"
+          unit="nC"
+          min={-10}
+          max={10}
+          step={0.1}
+          value={qNanoC}
+          onChange={setQNanoC}
+          format={(v) => v.toFixed(1)}
+        />
+        <Toggle label="Snap to grid" checked={snap} onChange={setSnap} />
+      </ControlBar>
 
       {/* Centered, fluid canvas */}
       <canvas
@@ -330,48 +327,19 @@ export default function PointChargeUnitVectorDemo() {
         }}
       />
 
-      {/* Info panel (responsive 2-column grid like the two-charge sim) */}
-      <div
-        style={{
-          marginTop: 8,
-          width: "100%",
-          textAlign: "left",
-          fontFamily: "system-ui, sans-serif",
-          fontSize: 16,
-          background: "var(--surface-elevated)",
-          border: "1px solid var(--grid-line)",
-          borderRadius: 8,
-          padding: "8px 12px",
-          color: "var(--text-primary)",
-          maxWidth: 820,
-          marginInline: "auto"
-        }}
-      >
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 12,
-            alignItems: "start"
-          }}
-        >
-          {/* Geometry */}
-          <section>
-            <div style={{ fontWeight: 600, marginBottom: 6, marginLeft:0 }}>Geometry</div>
-            <div>r = <VecFixed x={phys.r.x} y={phys.r.y} decimals={0} /> µm</div>
-            <div>|r| = <Fixed value={phys.mags.r} decimals={0} /> µm</div>
-            <div style={{ marginTop: 6 }}>
-              r̂ = <VecFixed x={phys.rhat.x} y={phys.rhat.y} decimals={2} />
-            </div>
-          </section>
-
-          {/* Field */}
-          <section>
-            <div style={{ fontWeight: 600, marginBottom: 6 }}>Field</div>
-            <div>E = <VecSci2 vec={phys.E} /> N/C</div>
-            <div>|E| = <Sci2 value={phys.mags.E} /> N/C</div>
-          </section>
-        </div>
+      {/* Readout (grouped panel — the default, lightweight inline cadence) */}
+      <div className="mx-auto mt-2 max-w-[820px]">
+        <Readout variant="panel">
+          <Readout.Group label="Geometry">
+            <Readout.Value label="r" value={<VecFixed x={phys.r.x} y={phys.r.y} decimals={0} />} unit="µm" />
+            <Readout.Value label="|r|" value={<Fixed value={phys.mags.r} decimals={0} />} unit="µm" />
+            <Readout.Value label="r̂" value={<VecFixed x={phys.rhat.x} y={phys.rhat.y} decimals={2} />} />
+          </Readout.Group>
+          <Readout.Group label="Field">
+            <Readout.Value label="E" value={<VecSci2 vec={phys.E} />} unit="N/C" />
+            <Readout.Value label="|E|" value={<Sci2 value={phys.mags.E} />} unit="N/C" />
+          </Readout.Group>
+        </Readout>
       </div>
     </div>
   );

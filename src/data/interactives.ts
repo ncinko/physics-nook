@@ -416,7 +416,7 @@ export const interactiveEntries: InteractiveEntry[] = [
     description: 'Roll a mass on a 1D potential energy curve for a spring or gravity, tracking the energy exchange.',
     href: '/electromagnetism/potential#potential-energy-landscape',
     module: 'Electromagnetism',
-    kind: 'standalone',
+    kind: 'inline',
     tags: ['potential energy', 'energy', 'conservative force'],
   },
   {

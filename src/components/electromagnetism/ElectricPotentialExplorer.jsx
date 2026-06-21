@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { coulombFieldAt } from "../../lib/electromagnetism";
 import { themeColors } from "../shared/themeColors";
+import { ControlBar, Toggle, Button, Select } from "../shared/InlineControls";
 
 // ElectricPotentialSimulation — with potential colormap + equipotential lines (togglable)
 // -------------------------------------------------------------------------------
@@ -473,8 +474,7 @@ const ElectricPotentialExplorer = () => {
   }, [regenerateColormapAndContours, draggingTestCharge, draggingChargeIndex]);
 
   // Config change
-  const handleConfigurationChange = (e) => {
-    const newConfig = e.target.value;
+  const handleConfigurationChange = (newConfig) => {
     setConfiguration(newConfig);
     const { width: W, height: H } = size;
     if (newConfig === "dipole") setCharges(dipoleConfig(W, H));
@@ -665,30 +665,22 @@ const ElectricPotentialExplorer = () => {
   // UI
   return (
     <div style={{ textAlign: "center", color: "var(--text-primary)" }}>
-      <div style={{ marginBottom: "0.5rem", display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", justifyContent: "center" }}>
-        <label htmlFor="configuration">Select Configuration:</label>
-        <select id="configuration" value={configuration} onChange={handleConfigurationChange}>
-          <option value="monopole">Monopole</option>
-          <option value="dipole">Dipole</option>
-          <option value="capacitor">Capacitor Plates</option>
-        </select>
-
-        <label style={{ marginLeft: 12 }}>
-          <input type="checkbox" checked={showColormap} onChange={(e) => setShowColormap(e.target.checked)} /> Potential colormap
-        </label>
-        <label>
-          <input type="checkbox" checked={showEquipotentials} onChange={(e) => setShowEquipotentials(e.target.checked)} /> Equipotential lines
-        </label>
-        <label>
-          <input type="checkbox" checked={showArrows} onChange={(e) => setShowArrows(e.target.checked)} /> Field arrows
-        </label>
-        <label>
-          <input type="checkbox" checked={showFieldLines} onChange={(e) => setShowFieldLines(e.target.checked)} /> Field lines
-        </label>
-
-      
-
-      </div>
+      <ControlBar className="mb-2">
+        <Select
+          label="Configuration"
+          value={configuration}
+          onChange={handleConfigurationChange}
+          options={[
+            { value: "monopole", label: "Monopole" },
+            { value: "dipole", label: "Dipole" },
+            { value: "capacitor", label: "Capacitor Plates" },
+          ]}
+        />
+        <Toggle label="Potential colormap" checked={showColormap} onChange={setShowColormap} />
+        <Toggle label="Equipotential lines" checked={showEquipotentials} onChange={setShowEquipotentials} />
+        <Toggle label="Field arrows" checked={showArrows} onChange={setShowArrows} />
+        <Toggle label="Field lines" checked={showFieldLines} onChange={setShowFieldLines} />
+      </ControlBar>
 
       {/* Responsive, centered canvas */}
       <canvas
@@ -706,12 +698,12 @@ const ElectricPotentialExplorer = () => {
         }}
       />
 
-      <div style={{ marginTop: "0.5rem" }}>
-        <button onClick={resetSimulation} className="btn btn-secondary">Reset Simulation</button>
-        <button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge} style={{ marginLeft: 8 }} className="btn">
+      <ControlBar className="mt-2">
+        <Button variant="secondary" onClick={resetSimulation}>Reset Simulation</Button>
+        <Button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge}>
           {animateTestCharge ? "Test Charge Animating" : "Start Test Charge Animation"}
-        </button>
-      </div>
+        </Button>
+      </ControlBar>
 
       <p style={{ marginTop: "0.5rem" }}>
         Click to add a charge (Shift = negative). Drag to move. <strong>Ctrl-click</strong> (or ⌘-click) a charge to remove it. Drag the green test charge to reposition it.

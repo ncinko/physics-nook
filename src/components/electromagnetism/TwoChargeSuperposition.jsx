@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
 import { themeColors, onThemeChange } from "../shared/themeColors";
+import { ControlBar, Slider, Toggle } from "../shared/InlineControls";
+import { Readout } from "../shared/Readout";
 
 export default function TwoChargeSuperposition() {
   const canvasRef = useRef(null);
@@ -363,28 +365,11 @@ export default function TwoChargeSuperposition() {
 
   return (
     <div style={{ textAlign: "center", color: "var(--text-primary)" }}>
-      <div style={{ marginBottom: 8, display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
-        <label>
-          q₁ (nC):{" "}
-          <input type="range" min={-10} max={10} step={0.1}
-                 value={q1NanoC} onChange={(e) => setQ1NanoC(+e.target.value)} />{" "}
-          <span style={{ display: "inline-block", minWidth: 56, textAlign: "left" }}>
-            {q1NanoC.toFixed(1)}
-          </span>
-        </label>
-        <label>
-          q₂ (nC):{" "}
-          <input type="range" min={-10} max={10} step={0.1}
-                 value={q2NanoC} onChange={(e) => setQ2NanoC(+e.target.value)} />{" "}
-          <span style={{ display: "inline-block", minWidth: 56, textAlign: "left" }}>
-            {q2NanoC.toFixed(1)}
-          </span>
-        </label>
-        <label style={{ userSelect: "none" }}>
-          <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} />
-          {" "}Snap to grid
-        </label>
-      </div>
+      <ControlBar className="mb-2">
+        <Slider label="q₁" unit="nC" min={-10} max={10} step={0.1} value={q1NanoC} onChange={setQ1NanoC} format={(v) => v.toFixed(1)} />
+        <Slider label="q₂" unit="nC" min={-10} max={10} step={0.1} value={q2NanoC} onChange={setQ2NanoC} format={(v) => v.toFixed(1)} />
+        <Toggle label="Snap to grid" checked={snap} onChange={setSnap} />
+      </ControlBar>
 
             <canvas
         ref={canvasRef}
@@ -406,59 +391,27 @@ export default function TwoChargeSuperposition() {
         <span style={{ color: "#fb8c00" }}><b>net field</b></span> is the tip-to-tail sum of the individual fields.
       </p>
 
-      {/* Info panel (responsive 3-column grid) */}
-<div
-  style={{
-    marginTop: 8,
-    width: "100%",
-    textAlign: "left",
-    fontFamily: "system-ui, sans-serif",
-    fontSize: 16,
-    background: "var(--surface-elevated)",
-    border: "1px solid var(--grid-line)",
-    borderRadius: 8,
-    padding: "8px 12px",
-    color: "var(--text-primary)",
-    maxWidth: 820,
-    marginInline: "auto"
-  }}
->
-  <div
-    style={{
-      display: "grid",
-      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-      gap: 12,
-      alignItems: "start"
-    }}
-  >
-    {/* Geometry */}
-    <section>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Geometry</div>
-      <div>r₁ = <VecFixed x={phys.r1.x} y={phys.r1.y} decimals={0} /> µm</div>
-      <div>|r₁| = <Fixed value={phys.mags.r1} decimals={0} /> µm</div>
-      <div style={{ marginTop: 6 }}>
-      r₂ = <VecFixed x={phys.r2.x} y={phys.r2.y} decimals={0} /> µm
+      {/* Readout (grouped panel) */}
+      <div className="mx-auto mt-2 max-w-[820px]">
+        <Readout variant="panel">
+          <Readout.Group label="Geometry">
+            <Readout.Value label="r₁" value={<VecFixed x={phys.r1.x} y={phys.r1.y} decimals={0} />} unit="µm" />
+            <Readout.Value label="|r₁|" value={<Fixed value={phys.mags.r1} decimals={0} />} unit="µm" />
+            <Readout.Value label="r₂" value={<VecFixed x={phys.r2.x} y={phys.r2.y} decimals={0} />} unit="µm" />
+            <Readout.Value label="|r₂|" value={<Fixed value={phys.mags.r2} decimals={0} />} unit="µm" />
+          </Readout.Group>
+          <Readout.Group label="Constituent Fields">
+            <Readout.Value label="E₁" value={<VecSci2 vec={phys.E1} />} unit="N/C" />
+            <Readout.Value label="|E₁|" value={<Sci2 value={phys.mags.E1} />} unit="N/C" />
+            <Readout.Value label="E₂" value={<VecSci2 vec={phys.E2} />} unit="N/C" />
+            <Readout.Value label="|E₂|" value={<Sci2 value={phys.mags.E2} />} unit="N/C" />
+          </Readout.Group>
+          <Readout.Group label="Net Field">
+            <Readout.Value label="E" value={<VecSci2 vec={phys.Es} />} unit="N/C" />
+            <Readout.Value label="|E|" value={<Sci2 value={phys.mags.Es} />} unit="N/C" />
+          </Readout.Group>
+        </Readout>
       </div>
-      <div>|r₂| = <Fixed value={phys.mags.r2} decimals={0} /> µm</div>
-    </section>
-
-    {/* Field (constituents) */}
-    <section>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Constituent Fields</div>
-      <div>E₁ = <VecSci2 vec={phys.E1} /> N/C</div>
-      <div>|E₁| = <Sci2 value={phys.mags.E1} /> N/C</div>
-      <div style={{ marginTop: 6}}>E₂ = <VecSci2 vec={phys.E2} /> N/C</div>
-      <div>|E₂| = <Sci2 value={phys.mags.E2} /> N/C</div>
-    </section>
-
-    {/* Net */}
-    <section>
-      <div style={{ fontWeight: 600, marginBottom: 6 }}>Net Field</div>
-        <div>E = <VecSci2 vec={phys.Es} /> N/C</div>
-        <div>|E| = <Sci2 value={phys.mags.Es} /> N/C</div>
-    </section>
-  </div>
-</div>
 
     </div>
   );

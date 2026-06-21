@@ -1,5 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { themeColors } from "../shared/themeColors";
+import { ControlBar, Slider, Button } from "../shared/InlineControls";
+
+// Fixed width (px) reserved for the vertical stacked energy bar beside the canvases.
+const BAR_W = 64;
 
 /**
  * PotentialEnergyLandscape1D (layout + sync refinements v4 — Option B class isolation)
@@ -32,8 +36,6 @@ export default function PotentialEnergyLandscape1D() {
 
   // Refs for canvases and wrappers
   const outerRef = useRef(null); // full-bleed wrapper
-  const potWrapRef = useRef(null);
-  const simWrapRef = useRef(null);
   const potRef = useRef(null); // potential plot canvas
   const simRef = useRef(null); // motion view canvas
   const rafRef = useRef(null);
@@ -49,10 +51,10 @@ export default function PotentialEnergyLandscape1D() {
   const domain = useMemo(() => (mode === "quadratic" ? { qMin: -1.5, qMax: 1.5 } : { qMin: 0, qMax: 3.0 }), [mode]);
 
   // Shared panel height (in CSS px)
-  const [sharedH, setSharedH] = useState(520);
+  const [sharedH, setSharedH] = useState(300);
 
   // Layout widths (in CSS px) computed to perfectly fill wrapper
-  const [layout, setLayout] = useState({ potW: 900, simW: 700, barsW: 280, gap: 8 });
+  const [layout, setLayout] = useState({ potW: 360, simW: 320, stacked: false, gap: 12 });
 
   // --------------- Helpers: Energies and acceleration ---------------
   const U = (q) => (mode === "quadratic" ? 0.5 * k * q * q : m * g * q);
@@ -68,36 +70,29 @@ export default function PotentialEnergyLandscape1D() {
     const measure = () => {
       const outer = outerRef.current;
       if (!outer) return;
-      const W = outer.clientWidth; // full-bleed width
+      const W = outer.clientWidth;
 
-      // Fixed energy column width; rest is for the two canvases
-      const gap = 8;
-      const barsW = 280;
-      const available = Math.max(700, W - barsW - 2 * gap);
+      // Inline layout: two canvases (potential + motion) with a narrow vertical
+      // stacked energy bar reserved on the side. Canvases stack when the row tightens.
+      const gap = 12;
+      const canvasesW = W - BAR_W - gap;
+      const stacked = canvasesW < 600;
 
-      // Target ratio between potential and motion panels
-      const potWeight = 1.6; // emphasize potential
-      const simWeight = 1.0;
-      const totalWeight = potWeight + simWeight;
-      let potW = Math.floor((available * potWeight) / totalWeight);
-      let simW = available - potW; // exact fit (no leftover width)
-
-      // Clamp minimums so they don't become "narrow"
-      potW = Math.max(520, potW);
-      simW = Math.max(460, simW);
-
-      // If clamping pushed us wider than available, rescale together
-      let sum = potW + simW;
-      if (sum > available) {
-        const scale = available / sum;
-        potW = Math.floor(potW * scale);
-        simW = available - potW;
+      let potW, simW;
+      if (stacked) {
+        potW = canvasesW;
+        simW = canvasesW;
+      } else {
+        const inner = canvasesW - gap;
+        potW = Math.round(inner * 0.54); // give the potential plot a little more room
+        simW = inner - potW;
       }
 
-      // Shared height proportional to smaller width, within bounds
-      const H = clamp(Math.round(Math.min(potW, simW) * 0.6), 420, 760);
+      // Shared height: bounded so the demo stays in the reading flow.
+      const basis = stacked ? Math.min(canvasesW, 560) : Math.min(potW, simW);
+      const H = clamp(Math.round(basis * (stacked ? 0.52 : 0.78)), 240, 380);
 
-      setLayout({ potW, simW, barsW, gap });
+      setLayout({ potW, simW, stacked, gap });
 
       // size canvases to CSS width/height with device pixel ratio
       const dpr = window.devicePixelRatio || 1;
@@ -404,7 +399,10 @@ export default function PotentialEnergyLandscape1D() {
     const upct = Math.max(0, Math.min(100, (Uval / scale) * 100));
     const kpct = Math.max(0, Math.min(100, (Kval / scale) * 100));
     if (uFillRef.current) uFillRef.current.style.height = upct + "%";
-    if (kFillRef.current) kFillRef.current.style.height = kpct + "%";
+    if (kFillRef.current) {
+      kFillRef.current.style.height = kpct + "%";
+      kFillRef.current.style.bottom = upct + "%"; // stack K on top of U
+    }
   }
 
   // One-off draw used on init/resize/drag
@@ -516,9 +514,9 @@ export default function PotentialEnergyLandscape1D() {
 
   // --------------------------- UI helpers ---------------------------
   const switchBtn = (name, label) => (
-    <button className={`btn ${mode === name ? "" : "btn-secondary"}`} onClick={() => setMode(name)} style={{ minWidth: 120 }}>
+    <Button variant={mode === name ? "primary" : "secondary"} onClick={() => setMode(name)}>
       {label}
-    </button>
+    </Button>
   );
 
   const number = (x) => x.toFixed(3).replace(/\.000$/, ".0");
@@ -532,96 +530,86 @@ export default function PotentialEnergyLandscape1D() {
 
   // --------------------------- Render ---------------------------
   return (
-    // Contained wrapper — respects the site's usual text width (inherits parent .container)
-    <div
-      ref={outerRef}
-      style={{
-        width: "100%",
-        margin: "0 auto",
-        color: "var(--text-primary)"
-      }}
-    >
-
-      {/* Top controls */}
-      <div className="control-panel" style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <div style={{ display: "flex", gap: 8 }}>
-          {switchBtn("quadratic", "Quadratic: U=½kx²")}
-          {switchBtn("linear", "Linear: U=mgh")}
-        </div>
-
-        <button className="btn" onClick={() => setPaused((p) => !p)}>{paused ? "Play" : "Pause"}</button>
-        <button className="btn btn-secondary" onClick={() => { vRef.current = 0; qRef.current = mode === "quadratic" ? 0.0 : 2.2; E0Ref.current = null; drawOnce(layout.potW, layout.simW, sharedH); }}>
+    <div ref={outerRef} style={{ width: "100%", margin: "0 auto", color: "var(--text-primary)" }}>
+      {/* Controls */}
+      <ControlBar className="mb-3">
+        {switchBtn("quadratic", "U = ½kx²")}
+        {switchBtn("linear", "U = mgh")}
+        <Button onClick={() => setPaused((p) => !p)}>{paused ? "Play" : "Pause"}</Button>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            vRef.current = 0;
+            qRef.current = mode === "quadratic" ? 0.0 : 2.2;
+            E0Ref.current = null;
+            drawOnce(layout.potW, layout.simW, sharedH);
+          }}
+        >
           Reset
-        </button>
+        </Button>
+        {mode === "quadratic" ? (
+          <Slider label="Damping" min={0} max={0.2} step={0.01} value={damping} onChange={setDamping} format={(v) => v.toFixed(2)} />
+        ) : (
+          <Slider label="Restitution" min={0} max={1} step={0.01} value={restitution} onChange={setRestitution} format={(v) => v.toFixed(2)} />
+        )}
+      </ControlBar>
 
-        <div className="slider-group" style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
-          
-          {mode === "quadratic" ? (
-            <label>
-              Damping: {damping.toFixed(2)}
-              <input type="range" min={0} max={0.2} step={0.01} value={damping} onChange={(e) => setDamping(parseFloat(e.target.value))} />
-            </label>
-          ) : (
-            <label>
-              Restitution: {restitution.toFixed(2)}
-              <input type="range" min={0} max={1} step={0.01} value={restitution} onChange={(e) => setRestitution(parseFloat(e.target.value))} />
-            </label>
-          )}
-        </div>
-      </div>
-
-      {/* Three side-by-side panels: exact widths to fit wrapper, shared height */}
+      {/* Potential curve + motion view, with a vertical stacked energy bar on the side */}
       <div
-        className="pel-canvases"
         style={{
           display: "grid",
-          gridTemplateColumns: `${layout.potW}px ${layout.simW}px ${layout.barsW}px`,
+          gridTemplateColumns: `minmax(0, 1fr) ${BAR_W}px`,
           gap: layout.gap,
           alignItems: "stretch",
-          marginTop: 12,
         }}
       >
-        {/* Potential plot */}
-        <div ref={potWrapRef} className="pel-panel" style={{ textAlign: "center", height: sharedH, margin: 0 }}>
-          <canvas ref={potRef} style={{ width: "100%", height: sharedH, borderRadius: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }} />
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: layout.stacked ? "minmax(0, 1fr)" : `${layout.potW}px ${layout.simW}px`,
+            gap: layout.gap,
+            justifyContent: "center",
+          }}
+        >
+          <canvas ref={potRef} style={{ width: "100%", height: sharedH, borderRadius: 8, border: "1px solid var(--grid-line)" }} />
+          <canvas ref={simRef} style={{ width: "100%", height: sharedH, borderRadius: 8, border: "1px solid var(--grid-line)" }} />
         </div>
 
-        {/* Motion view */}
-        <div ref={simWrapRef} className="pel-panel" style={{ textAlign: "center", height: sharedH, margin: 0 }}>
-          <canvas ref={simRef} style={{ width: "100%", height: sharedH, borderRadius: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }} />
-        </div>
-
-        {/* Energy bars */}
-        <div className="pel-panel" style={{ padding: 12, height: sharedH, display: "flex", flexDirection: "column", margin: 0 }}>
-          <h4 style={{ margin: "4px 0 8px", color: "var(--text-primary)" }}>Energy</h4>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, alignItems: "end", flex: 1, border: "1px solid var(--grid-line)", borderRadius: 10, padding: 10 }}>
-            <Bar label="U" color="#0ea5a0" fillRef={uFillRef} />
-            <Bar label="K" color="#10b981" fillRef={kFillRef} />
-          </div>
-          <EnergyReadout mode={mode} qRef={qRef} vRef={vRef} bars={bars} />
-        </div>
+        <EnergyBar uFillRef={uFillRef} kFillRef={kFillRef} />
       </div>
     </div>
   );
 }
 
-function EnergyReadout({ mode, qRef, vRef, bars }) {
-  const number = (x) => x.toFixed(3).replace(/\.000$/, ".0");
-  return (
-    <div style={{ marginTop: 10, fontSize: 13, lineHeight: 1.45, color: "var(--text-muted)" }}>
-
-      
-    </div>
+function EnergyBar({ uFillRef, kFillRef }) {
+  const swatch = (color, label) => (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span style={{ width: 10, height: 10, borderRadius: 2, background: color }} />
+      {label}
+    </span>
   );
-}
-
-function Bar({ label, color, fillRef }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", height: "100%" }}>
-      <div style={{ flex: 1, width: "80%", background: "color-mix(in srgb, var(--text-primary) 12%, transparent)", borderRadius: 10, position: "relative" }}>
-        <div ref={fillRef} style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "0%", background: color, borderRadius: 10 }} />
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, height: "100%" }}>
+      {/* U fills from the bottom; K stacks on top of it. Total height = E (conserved). */}
+      <div
+        style={{
+          position: "relative",
+          flex: 1,
+          width: 26,
+          minHeight: 120,
+          background: "color-mix(in srgb, var(--text-primary) 12%, transparent)",
+          border: "1px solid var(--grid-line)",
+          borderRadius: 6,
+          overflow: "hidden",
+        }}
+      >
+        <div ref={uFillRef} style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: "0%", background: "#0ea5a0" }} />
+        <div ref={kFillRef} style={{ position: "absolute", left: 0, right: 0, bottom: "0%", height: "0%", background: "#C32148" }} />
       </div>
-      <div style={{ marginTop: 6, fontWeight: 700, color: "var(--text-primary)" }}>{label}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: "var(--text-muted)" }}>
+        {swatch("#C32148", "K")}
+        {swatch("#0ea5a0", "U")}
+      </div>
     </div>
   );
 }

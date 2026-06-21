@@ -14,11 +14,40 @@ For new work, prefer TypeScript and TSX. Existing JSX files do not need to be co
 
 ## Inline vs Standalone
 
-Use an inline demo when the interaction teaches one local concept inside the reading flow. Inline demos should feel like touchable illustrations: minimal controls, direct manipulation where possible, small overlays instead of full panels, direct MDX placement instead of `SimulationBlock`, and usually `client:visible`.
+Use an inline demo when the interaction teaches one local concept inside the reading flow. Inline demos should feel like touchable illustrations: minimal controls, direct manipulation where possible, small overlays instead of full panels, and direct MDX placement instead of `SimulationBlock`.
 
 Use a standalone lab when the interaction is a larger tool: multiple tasks, many adjustable parameters, audio, games, fullscreen needs, broad comparison workflows, or enough controls that the prose should step aside. Standalone labs should use `SimulationBlock` on lesson pages or `ImmersiveLayout` for full-screen tools.
 
-When adding either kind, place an `InteractiveAnchor` immediately before the mounted component and point the catalog entry at that anchor.
+When adding either kind, place an `InteractiveAnchor` immediately before the mounted component, point the catalog entry in `src/data/interactives.ts` at that anchor, and set its `kind` to match how the component is actually mounted.
+
+### Shared UI building blocks
+
+Build controls and readouts from the shared primitives so every interactive themes consistently (light/dark/pastel) and reads the same way. Do not hand-roll control rows or info panels with ad-hoc inline styles.
+
+- `src/components/shared/themeColors.ts` — the `themeColors()` palette plus `getCssColor` / `onThemeChange` for canvas drawing that follows the active theme.
+- `src/components/shared/InlineControls.tsx` — `ControlBar` (a wrapping control row) with `Slider`, `Toggle`, `Select`, and `Button`. Native range/checkbox inputs inherit the theme accent via `global.css`.
+- `src/components/shared/Readout.tsx` — `Readout` with `Readout.Group` / `Readout.Value`; presentation- and count-agnostic (see below).
+- `SimulationBlock` (standalone only) — the breakout shell, header, and fullscreen toggle.
+
+Colors come from CSS custom properties in `global.css` (`--text-primary`, `--grid-line`, `--surface-elevated`, `--accent-*`), mirrored by Tailwind `theme-*` aliases. Use these tokens, not hardcoded hex.
+
+### Readouts
+
+Show the fewest values that make the point. Prefer the lightest form: values woven into the caption/prose, or a single grouped `Readout` (`variant="panel"`, the default). Reserve per-value cards (`variant="cards"`) for dashboard-style standalone tools; do not make them the default cadence.
+
+### Inline checklist
+
+- Mount directly in MDX (no `SimulationBlock`); the component owns its own centering and max width.
+- Keep controls in one `ControlBar`; keep any readout light (grouped `Readout` or inline values).
+- Read theme colors through `themeColors` / CSS tokens; no hardcoded palettes.
+- Hydrate with `client:visible`, or `client:only="react"` for canvas islands that gain nothing from SSR.
+- `kind: 'inline'` in `interactives.ts`.
+
+### Standalone checklist
+
+- Wrap in `SimulationBlock` (`width`, `title`/`description`, fullscreen) on lesson pages, or use `ImmersiveLayout` for full-screen tools.
+- Use the same `ControlBar` / `Button` / `Readout` primitives so it matches the inline demos.
+- `kind: 'standalone'` in `interactives.ts`.
 
 ## Component Boundaries
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { themeColors, onThemeChange } from "../shared/themeColors";
+import { ControlBar, Slider, Toggle, Button } from "../shared/InlineControls";
 
 /**
  * ScalarPotential2D (v3)
@@ -92,7 +93,7 @@ export default function ScalarPotential2D() {
     if (!wrap || !canvas) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const cssW = Math.max(640, Math.min(800, wrap.clientWidth)); // within typical text column
+    const cssW = Math.max(280, Math.min(800, wrap.clientWidth)); // fill the column width, capped
     const cssH = Math.round(cssW * 0.8);
     const w = Math.round(cssW * dpr * quality);
     const h = Math.round(cssH * dpr * quality);
@@ -333,41 +334,29 @@ export default function ScalarPotential2D() {
   // --------------------------- JSX ---------------------------
   return (
     <div className="sp2d" style={{ width: "100%", color: "var(--text-primary)" }}>
+      <ControlBar className="mb-2">
+        <Slider label="q" unit="µC" min={0.1} max={5} step={0.05} value={qMicroC} onChange={setQMicroC} format={(v) => v.toFixed(2)} />
+        <Toggle label="Snap to grid" checked={snap} onChange={setSnap} />
+        <Toggle label="Equipotential lines" checked={showContours} onChange={setShowContours} />
+        <Button variant="secondary" onClick={() => setCharge({ x: 0, y: 0 })}>Reset charge</Button>
+      </ControlBar>
 
-      {/* Controls */}
-      <div className="control-panel" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-        <label>
-          q (µC): {qMicroC.toFixed(2)}
-          <input type="range" min={0.1} max={5} step={0.05} value={qMicroC} onChange={(e) => setQMicroC(parseFloat(e.target.value))} />
-        </label>
-
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={snap} onChange={(e) => setSnap(e.target.checked)} /> Snap to grid
-        </label>
-        <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <input type="checkbox" checked={showContours} onChange={(e) => setShowContours(e.target.checked)} /> Show equipotential lines
-        </label>
-        <button className="btn btn-secondary" onClick={() => { setCharge({ x: 0, y: 0 }); }}>Reset charge</button>
+      {/* Color map fills the column; legend + caption sit below it */}
+      <div ref={wrapRef} style={{ position: "relative" }}>
+        <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "auto", marginInline: "auto", borderRadius: 8, border: "1px solid var(--grid-line)", background: "var(--sim-bg)", cursor: "crosshair" }} />
+        <div style={{ position: "absolute", left: 8, bottom: 8, padding: "6px 8px", background: "var(--surface-elevated)", color: "var(--text-primary)", border: "1px solid var(--grid-line)", borderRadius: 6, fontSize: 12, lineHeight: 1.4 }}>
+          <div><strong>x</strong> = {fmt.num(readout.x)} m, <strong>y</strong> = {fmt.num(readout.y)} m</div>
+          <div><strong>r</strong> = {fmt.num(readout.r)} m</div>
+          <div><strong>V</strong> = {fmt.si(readout.V, "V")}</div>
+          <div style={{ opacity: 0.8 }}>{snap ? "Snapping on — 0.25 m grid" : "(Drag the red +q to move)"}</div>
+        </div>
       </div>
 
-      {/* Layout: canvas + legend/readout */}
-      <div className="sp2d-grid" ref={wrapRef} style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 12, alignItems: "start" }}>
-        <div className="sp2d-canvaswrap" style={{ position: "relative" }}>
-          <canvas ref={canvasRef} style={{ width: "100%", height: "auto", borderRadius: 8, border: "1px solid var(--grid-line)", background: "var(--sim-bg)", cursor: "crosshair" }} />
-          <div style={{ position: "absolute", left: 8, bottom: 8, padding: "6px 8px", background: "var(--surface-elevated)", color: "var(--text-primary)", border: "1px solid var(--grid-line)", borderRadius: 6, fontSize: 12, lineHeight: 1.4 }}>
-            <div><strong>x</strong> = {fmt.num(readout.x)} m, <strong>y</strong> = {fmt.num(readout.y)} m</div>
-            <div><strong>r</strong> = {fmt.num(readout.r)} m</div>
-            <div><strong>V</strong> = {fmt.si(readout.V, "V")} <span style={{opacity:0.75}}></span></div>
-            <div style={{ opacity: 0.8 }}>{snap ? "Snapping on — 0.25 m grid" : "(Drag the red +q to move)"}</div>
-          </div>
-        </div>
-        <div className="sp2d-side" style={{ padding: 8, border: "1px solid var(--grid-line)", borderRadius: 10, background: "var(--surface-elevated)" }}>
-          <h4 style={{ margin: "4px 0 8px", color: "var(--text-primary)" }}></h4>
-          <canvas ref={legendRef} style={{ display: "block", marginBottom: 8 }} />
-          <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
-            <p style={{ margin: 0 }}>Color encodes potential <em>V(x,y)</em> of a positive point charge. Brighter colors mean higher potential. Potential decreases with distance: <em>V ∝ 1/r</em>.</p>
-          </div>
-        </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", marginTop: 10 }}>
+        <canvas ref={legendRef} style={{ display: "block" }} />
+        <p style={{ margin: 0, flex: 1, minWidth: 220, fontSize: 13, color: "var(--text-muted)", lineHeight: 1.45 }}>
+          Color encodes the potential <em>V(x,y)</em> of a positive point charge. Brighter colors mean higher potential. Potential decreases with distance: <em>V ∝ 1/r</em>.
+        </p>
       </div>
     </div>
   );

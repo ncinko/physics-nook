@@ -231,8 +231,14 @@ div {
   margin-bottom: 0;
 }
 
-/* Themed controls for ported electromagnetism interactives (.btn / .control-panel).
-   These class names are used only by the electromagnetism React islands. */
+/* Canonical themed control classes (.btn / .btn-secondary / .control-panel),
+   shared across interactive islands. Native range/checkbox inputs inherit the
+   accent color so sliders and toggles match the active theme everywhere. */
+input[type="range"],
+input[type="checkbox"] {
+  accent-color: var(--accent-blue);
+}
+
 .control-panel {
   color: var(--text-primary);
 }

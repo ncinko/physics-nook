@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { coulombFieldAt } from "../../lib/electromagnetism";
 import { themeColors } from "../shared/themeColors";
+import { ControlBar, Slider, Toggle, Button, Select } from "../shared/InlineControls";
 
 const ElectricFieldExplorer = () => {
   const canvasRef = useRef(null);
@@ -238,8 +239,7 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
 
 
   // Config change
-  const handleConfigurationChange = (e) => {
-    const newConfig = e.target.value;
+  const handleConfigurationChange = (newConfig) => {
     setConfiguration(newConfig);
     const { width: W, height: H } = size;
     if (newConfig === "dipole") {
@@ -431,41 +431,27 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
 
   return (
     <div style={{ textAlign: "center", color: "var(--text-primary)" }}>
-      <div style={{ marginBottom: "0.5rem" }}>
-        <label htmlFor="configuration">Select Configuration: </label>
-        <select
-          id="configuration"
+      <ControlBar className="mb-2">
+        <Select
+          label="Configuration"
           value={configuration}
           onChange={handleConfigurationChange}
-        >
-          <option value="monopole">Monopole</option>
-          <option value="dipole">Dipole</option>
-          <option value="capacitor">Capacitor Plates</option>
-        </select>
-
-        <label style={{ marginLeft: 12 }}>
-          <input
-            type="checkbox"
-            checked={showFieldLines}
-            onChange={(e) => setShowFieldLines(e.target.checked)}
-          />{" "}
-          Show field lines
-        </label>
-
-        <label
-          style={{ marginLeft: 8, opacity: showFieldLines ? 1 : 0.5 }}
-        >
-          Density:
-          <input
-            type="range"
-            min="4"
-            max="24"
-            value={linesPerMicroC}
-            onChange={(e) => setLinesPerMicroC(+e.target.value)}
-            disabled={!showFieldLines}
-          />
-        </label>
-      </div>
+          options={[
+            { value: "monopole", label: "Monopole" },
+            { value: "dipole", label: "Dipole" },
+            { value: "capacitor", label: "Capacitor Plates" },
+          ]}
+        />
+        <Toggle label="Show field lines" checked={showFieldLines} onChange={setShowFieldLines} />
+        <Slider
+          label="Density"
+          min={4}
+          max={24}
+          value={linesPerMicroC}
+          onChange={setLinesPerMicroC}
+          disabled={!showFieldLines}
+        />
+      </ControlBar>
 
       {/* Responsive, centered canvas */}
       <canvas
@@ -482,18 +468,17 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
         }}
       />
 
-      <div style={{ marginTop: "0.5rem" }}>
-        <button onClick={resetSimulation}>Reset Simulation</button>
-        <button
+      <ControlBar className="mt-2">
+        <Button variant="secondary" onClick={resetSimulation}>Reset Simulation</Button>
+        <Button
           onClick={() => setAnimateTestCharge(true)}
           disabled={animateTestCharge}
-          style={{ marginLeft: 8 }}
         >
           {animateTestCharge
             ? "Test Charge Animating"
             : "Start Test Charge Animation"}
-        </button>
-      </div>
+        </Button>
+      </ControlBar>
 
       <p style={{ marginTop: "0.5rem" }}>
         Click to add a charge (Shift = negative). Drag to move.{" "}

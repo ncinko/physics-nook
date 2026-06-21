@@ -223,13 +223,7 @@ export function VectorVoyage() {
 
       <div className="grid gap-4">
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-          <p className="m-0 font-semibold">
-            {level.name}
-            <span className="ml-2 font-normal text-[var(--text-muted)]">{level.hint}</span>
-          </p>
-          <p className="m-0 font-mono text-[var(--text-muted)]">
-            hops {moves.length} 
-          </p>
+          
         </div>
 
         <svg
@@ -511,17 +505,7 @@ function VoyageBunny({ x, y, lift, dir }: { x: number; y: number; lift: number; 
 function Burrow({ point }: { point: Vector2 }) {
   const screen = toScreen(point);
   return (
-    <g>
-      {/* mound */}
-      <path
-        d={`M ${screen.x - 16} ${screen.y + 4} a 16 12 0 0 1 32 0 Z`}
-        fill="color-mix(in srgb, #92400e 30%, var(--bg-primary))"
-        stroke={COLORS.burrow}
-        strokeWidth={1.5}
-      />
-      {/* hole the bunny hops out of */}
-      <ellipse cx={screen.x} cy={screen.y + 3} rx={8} ry={5} fill={COLORS.burrow} opacity={0.85} />
-    </g>
+    <ellipse cx={screen.x} cy={screen.y} rx={13} ry={7} fill={COLORS.burrow} opacity={0.85} />
   );
 }
 

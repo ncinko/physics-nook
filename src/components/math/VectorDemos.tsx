@@ -118,14 +118,25 @@ export function VectorReaderDemo() {
       description="This graphical representation can also be described by its components, magnitude, and direction."
     >
       <ReadoutGrid>
-        <Readout label="components" value={formatVector(vector)} accent={COLORS.a} />
+        <Readout
+          label="components"
+          value={
+            <>
+              {'<'}
+              <span style={{ color: COLORS.result }}>{formatScalar(vector.x)}</span>
+              {', '}
+              <span style={{ color: COLORS.b }}>{formatScalar(vector.y)}</span>
+              {'>'}
+            </>
+          }
+        />
         <Readout label="magnitude" value={formatScalar(magnitude(vector), 2)} />
         <Readout label="direction" value={`${formatScalar(directionDegrees(vector), 0)} deg`} />
       </ReadoutGrid>
 
       <VectorSvg ariaLabel="Interactive vector reader">
         <Grid />
-        <Arrow start={{ x: 0, y: 0 }} vector={vector} color={COLORS.a} label="a" />
+        <Arrow start={{ x: 0, y: 0 }} vector={vector} color={COLORS.a} label="a" accent />
         <ComponentLegs vector={vector} />
         <Handle point={vector} color={COLORS.a} label="drag vector tip" {...dragHandlers} />
       </VectorSvg>
@@ -367,7 +378,7 @@ function Readout({
   accent,
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   accent?: string;
 }) {
   return (
@@ -458,11 +469,11 @@ function ComponentLegs({ vector }: { vector: Vector2 }) {
     <g opacity="0.75">
       <line x1={origin.x} y1={origin.y} x2={xTip.x} y2={xTip.y} stroke={COLORS.result} strokeWidth="2" strokeDasharray="6 5" />
       <line x1={xTip.x} y1={xTip.y} x2={tip.x} y2={tip.y} stroke={COLORS.b} strokeWidth="2" strokeDasharray="6 5" />
-      <text x={(origin.x + xTip.x) / 2 - 12} y={origin.y - 8} fill={COLORS.result} fontSize="13" fontWeight="700">
-        x
+      <text x={(origin.x + xTip.x) / 2 - 14} y={origin.y - 8} fill={COLORS.result} fontSize="13" fontWeight="700">
+        a<tspan fontSize="9" dy="3">x</tspan>
       </text>
       <text x={xTip.x + 8} y={(xTip.y + tip.y) / 2} fill={COLORS.b} fontSize="13" fontWeight="700">
-        y
+        a<tspan fontSize="9" dy="3">y</tspan>
       </text>
     </g>
   );
@@ -477,6 +488,7 @@ function Arrow({
   width = 2.8,
   dashed = false,
   faded = false,
+  accent = false,
   labelOffset = { x: 0, y: 0 },
 }: {
   start: Vector2;
@@ -487,6 +499,7 @@ function Arrow({
   width?: number;
   dashed?: boolean;
   faded?: boolean;
+  accent?: boolean;
   labelOffset?: Vector2;
 }) {
   const worldEnd = end ?? add(start, vector ?? ZERO_VECTOR);
@@ -538,6 +551,14 @@ function Arrow({
       <text x={labelX} y={labelY} fill={color} fontSize="13" fontWeight="800">
         {label}
       </text>
+      {accent && (
+        <g stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" fill="none">
+          <line x1={labelX - 1} y1={labelY - 13} x2={labelX + 8} y2={labelY - 13} />
+          <polyline
+            points={`${labelX + 4.5},${labelY - 15.5} ${labelX + 8},${labelY - 13} ${labelX + 4.5},${labelY - 10.5}`}
+          />
+        </g>
+      )}
     </g>
   );
 }

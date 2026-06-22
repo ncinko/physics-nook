@@ -60,16 +60,6 @@ PORT
 
 Production clients default to `wss://ws.physicsnook.com`. Override with `VITE_GAME_WS_URL` or `PUBLIC_GAME_WS_URL` when needed.
 
-## Coaster Realtime Server
-
-Coaster Park uses the separate server at `server/realtime.mjs`:
-
-```sh
-npm run realtime
-```
-
-It listens on `COASTER_WS_PORT` or `8787`.
-
 ## D1 Leaderboards
 
 The kinematics challenges and the hidden Rabbit of Caerbannog game use Cloudflare

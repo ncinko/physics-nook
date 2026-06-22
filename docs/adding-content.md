@@ -11,16 +11,16 @@ Use this checklist when adding a new learning module or page.
 
 ## Metadata And Navigation
 
-Register public learning pages in `src/data/modules.ts`:
+Register public learning pages in `src/data/modules/` (one file per domain, assembled by `src/data/modules/index.ts`):
 
-- Add or update the module entry.
+- Add or update the module entry in its domain file.
 - Add the page entry with `href`, `title`, `description`, and `seo`.
 - Set `canonicalPath` to the route path without a trailing slash, except `/`.
 - Use `noindex: true` only for hidden experiments or pages that should not appear in search.
 
 Top-level site defaults live in `src/data/site.ts`. Do not duplicate titles, descriptions, social image defaults, or canonical handling in individual layouts.
 
-Navigation is derived from module groups in `src/data/modules.ts` and `src/data/navigation.ts`. Prefer adding a page to an existing group before inventing a new navigation section.
+Navigation is derived from module groups in `src/data/modules/` and `src/data/navigation.ts`. Prefer adding a page to an existing group before inventing a new navigation section.
 
 ## Content Conventions
 

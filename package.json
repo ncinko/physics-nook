@@ -12,7 +12,6 @@
     "preview": "astro preview",
     "astro": "astro",
     "check": "astro check",
-    "realtime": "node server/realtime.mjs",
     "game:dev": "vite --config apps/client/vite.config.ts",
     "game:build": "vite build --config apps/client/vite.config.ts",
     "game:build:pages": "vite build --config apps/client/vite.config.ts --outDir ../../dist",

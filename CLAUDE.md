@@ -20,13 +20,13 @@ Read [docs/architecture.md](docs/architecture.md) before structural changes. The
 - `src/pages/` — Astro/MDX learning pages (math is written with remark-math + rehype-katex)
 - `src/lib/<domain>/` — pure, DOM-free physics/model logic (deterministic, testable)
 - `src/components/<domain>/` — React islands and Astro components for interactivity
-- `src/data/` — centralized metadata: `site.ts` (SEO defaults), `modules.ts` (page registry + nav), `interactives.ts` (interactive-widget registry), `navigation.ts`
+- `src/data/` — centralized metadata: `site.ts` (SEO defaults), `modules/` (page registry + nav, one file per domain re-exported by `modules/index.ts`), `interactives.ts` (interactive-widget registry), `navigation.ts`
 - `apps/client/`, `apps/server/`, `packages/shared/` — standalone multiplayer game surfaces
 - `functions/`, `migrations/` — Cloudflare Pages Functions + D1 for leaderboards
 
 ## Conventions
 
-- New lesson pages: follow the checklist in [docs/adding-content.md](docs/adding-content.md). Register every public page in `src/data/modules.ts`; register every interactive widget in `src/data/interactives.ts`.
+- New lesson pages: follow the checklist in [docs/adding-content.md](docs/adding-content.md). Register every public page in `src/data/modules/`; register every interactive widget in `src/data/interactives.ts`.
 - New/changed simulations: follow [docs/adding-simulations.md](docs/adding-simulations.md). Keep model logic in `src/lib/<domain>` with a test in `tests/<domain>`; keep rendering/controls in components.
 - Layouts: `TextbookLayout.astro` for lessons, `BaseLayout.astro` for custom pages, `ImmersiveLayout.astro` only for full-screen tools.
 - Hydrate React islands only where interactivity is needed; keep heavy deps (Three, KaTeX) isolated to pages that use them.

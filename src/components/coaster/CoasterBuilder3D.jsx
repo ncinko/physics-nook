@@ -1137,6 +1137,9 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
         const z = Math.cos(rotation) * zoom * Math.cos(pitch);
         const y = zoom * Math.sin(pitch);
         camera.position.set(target.x + x, target.y + y, target.z + z);
+        // RIDE cam tilts camera.up to the cart's normal; reset it to world up so
+        // the orbit view doesn't inherit the cart's roll when switching back.
+        camera.up.set(0, 1, 0);
         camera.lookAt(target);
       } else if (cameraModeRef.current === "RIDE" && cartRef.current) {
         if (cartRef.current) {

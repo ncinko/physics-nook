@@ -13,7 +13,6 @@ functions/         Cloudflare Pages Functions for leaderboard APIs
 migrations/        Cloudflare D1 schema migrations
 packages/shared/   Shared protocol, validation, constants, and simulation helpers
 seeds/             Optional D1 seed data
-server/            Coaster Park realtime room server
 src/               Astro pages, layouts, React islands, styles, and site data
 tests/             Node strip-types test runners by domain
 ```
@@ -49,18 +48,11 @@ http://localhost:5173/orbitals/
 http://localhost:5173/ripples/
 ```
 
-Run the legacy Coaster Park realtime room server:
-
-```sh
-npm run realtime
-```
-
 ## Deployables
 
 - `physics-nook`: Astro static site built with `npm run build`.
 - `physics-nook-game`: Vite game client built with `npm run game:build`.
 - `ws.physicsnook.com`: Node WebSocket server from `apps/server/src/server.ts`.
-- Coaster Park realtime server: `server/realtime.mjs`, used by `/coaster-park`.
 
 Both Cloudflare Pages projects publish `dist`; the build command decides what gets written there. See [Deployment](docs/deployment.md) for the full setup.
 

@@ -1,10 +1,7 @@
-// Pure, DOM-free physics core for the single-player CoasterBuilder3D island.
-//
-// This intentionally lives alongside — but separate from — the multiplayer
-// `physics.ts` / `track.ts` model (which drives `CoasterParkBuilder`). The two
-// use different track representations; this module holds only the along-track
-// velocity integration, g-force, and energy math used by the 3D editor so that
-// the React island owns rendering/input while the testable math stays here.
+// Pure, DOM-free physics core for the CoasterBuilder3D island on the energy
+// page: the along-track velocity integration, g-force, and energy math. Kept
+// here so the React island owns only rendering and input; tested in
+// tests/coaster/rideModel.test.ts.
 
 export interface Vec3 {
   x: number;

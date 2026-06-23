@@ -20,6 +20,7 @@
     "game:server:watch": "node --experimental-strip-types --watch apps/server/src/server.ts",
     "test:kinematics": "node --experimental-strip-types tests/kinematics/run-tests.ts",
     "test:math": "node --experimental-strip-types tests/math/run-tests.ts",
+    "test:measurement": "node --experimental-strip-types tests/measurement/run-tests.ts",
     "test:forces": "node --experimental-strip-types tests/forces/run-tests.ts",
     "test:quantum": "node --experimental-strip-types tests/quantum/run-tests.ts",
     "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
@@ -30,7 +31,8 @@
     "test:caerbannog": "node --experimental-strip-types tests/caerbannog/run-tests.ts",
     "test:electromagnetism": "node --experimental-strip-types tests/electromagnetism/run-tests.ts",
     "test:rotation": "node --experimental-strip-types tests/rotation/run-tests.ts",
-    "test:all": "npm run test:math && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation"
+    "test:hamlet": "node --experimental-strip-types tests/hamlet/run-tests.ts",
+    "test:all": "npm run test:math && npm run test:measurement && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation && npm run test:hamlet"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

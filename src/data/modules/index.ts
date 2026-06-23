@@ -3,6 +3,7 @@ import { normalizePath } from '../../utils/paths';
 import type { ModuleMeta, ModulePathGroup } from './types';
 
 import { mathModule } from './math';
+import { measurementModule } from './measurement';
 import { kinematicsModule } from './kinematics';
 import { relativityModule } from './relativity';
 import { oscillationsModule } from './oscillations';
@@ -22,6 +23,7 @@ export * from './types';
 // assembles the list and the cross-module structures derived from it.
 export const modules: ModuleMeta[] = [
   mathModule,
+  measurementModule,
   kinematicsModule,
   relativityModule,
   oscillationsModule,
@@ -54,6 +56,16 @@ export const mathPath = {
   cardEyebrow: mathModule.cardEyebrow,
   navVisibility: 'menu',
   pages: mathModule.pages,
+} satisfies ModulePathGroup;
+
+export const measurementPath = {
+  id: 'measurement',
+  href: measurementModule.href,
+  navLabel: measurementModule.navLabel,
+  summary: measurementModule.summary,
+  cardEyebrow: measurementModule.cardEyebrow,
+  navVisibility: 'menu',
+  pages: measurementModule.pages,
 } satisfies ModulePathGroup;
 
 export const mechanicsPath = {
@@ -159,6 +171,7 @@ export const gamesPath = {
 
 export const exploreModuleGroups = [
   mathPath,
+  measurementPath,
   mechanicsPath,
   relativityPath,
   wavesAndOscillationsPath,

@@ -39,6 +39,14 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
     noindex: true,
   },
+  {
+    title: "Hamlet's Wheel",
+    description:
+      'A communal pixel hamster who runs his wheel by day and sleeps by night on Pacific time. Feed, water, and pet him — everyone shares the same hamster.',
+    canonicalPath: '/hamlet',
+    image: '/social/physics-nook-card.svg',
+    noindex: true,
+  },
 ];
 
 export const buildDocumentTitle = (pageMeta: PageMeta) =>

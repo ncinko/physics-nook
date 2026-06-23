@@ -1,0 +1,15 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import HamletScene from '../components/hamlet/HamletScene.jsx';
+---
+
+<BaseLayout
+  title="Hamlet's Wheel"
+  description="Meet Hamlet, a communal pixel hamster who runs his wheel by day and sleeps by night on Pacific time."
+  canonicalPath="/hamlet"
+  noindex={true}
+>
+  <!-- client:only — the scene is driven by the live Pacific clock (Date.now), so
+       rendering it on the client only avoids a server/client hydration mismatch. -->
+  <HamletScene client:only="react" />
+</BaseLayout>

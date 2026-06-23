@@ -1,0 +1,239 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: 'SI Units & Scientific Notation'
+description: 'Build the measurement language for lab work: SI units, metric prefixes, unit conversions, scientific notation, and significant figures.'
+canonicalPath: '/measurement/si-units-scientific-notation'
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { SIUnitDefinitions } from '../../components/measurement/SIUnitDefinitions';
+import { PrefixPowerChart } from '../../components/measurement/PrefixPowerChart';
+import { PrefixScale } from '../../components/measurement/PrefixScale';
+import { ScientificNotationSlider } from '../../components/measurement/ScientificNotationSlider';
+import { measurementPath } from '../../data/modules';
+
+<ModuleHero module={measurementPath} currentPath="/measurement/si-units-scientific-notation" />
+
+<div id="page-content"></div>
+
+# SI Units & Scientific Notation
+
+Most physical quantities require units alongside a numerical value.  $67\ \text{meters}$ is a length, $67\ \text{seconds}$ is a time, and $67\ \text{kilograms}$ is a mass.  The number $67$ (while it does have memetic meaning), does not have any physical meaning without a unit. 
+
+A measurement has two parts:
+
+$$
+\text{measurement} = \text{number} \times \text{unit}.
+$$
+
+The number tells *how many*. The unit tells how many of *what*.  It is extremely useful, as notated above, to think of this as multiplication of the two.  As you perform arithmetic/algebra with measurements, the same operations apply to both the numerical values and corresponding units.
+
+For example, if a car travels $120\ \text{miles}$ in $2\ \text{hours}$, then its average speed is
+
+$$
+v = \frac{120\ \text{miles}}{2\ \text{hours}} = 60\ \text{mi/hr}.
+$$
+
+As expected, miles per hour is a standard way of expressing speed.  If we instead had units of square miles, there was an error in our reasoning.  *Checking units* is often an easy way of spotting mistakes in your work.
+
+## SI Units
+
+The SI system (*Système international d'unités*) is the shared measuring language used across physics. There are relatively few base units, and most units are just combinations of these. 
+
+<InteractiveAnchor id="si-unit-definitions" />
+
+<SIUnitDefinitions client:visible />
+
+Derived units are combinations of these base units: speed is measured in $\text{m/s}$ and acceleration in $\text{m/s}^2$.  Some combinations are given a special name: force is measured in newtons $\text{N} = \text{kg}\cdot\text{m/s}^2$, energy in joules $\text{J} = \text{kg}\cdot\text{m}^2/\text{s}^2$, and momentum (among a small group of people) in langs $\text{L} = \text{kg}\cdot\text{m/s}$. The special names are convenient, but the base-unit structure often hints at the deeper relationships between quantities and how we define them.
+
+## Powers of 10
+
+Metric prefixes are shorthand powers of ten attached to a unit. A millimeter is not a new kind of length; it is $10^{-3}$ meters. A kilometer is $10^3$ meters. Replace the prefix with its power of ten, and the conversion becomes ordinary multiplication.
+
+<InteractiveAnchor id="prefix-power-chart" />
+
+<PrefixPowerChart client:visible />
+
+
+
+## Scientific Notation
+
+Scientific notation writes a number as a coefficient times a power of ten:
+
+$$
+a \times 10^n,
+\qquad 1 \le |a| < 10.
+$$
+
+This notation handles both Earth's radius, about $6.4 \times 10^6\ \text{m}$, and a visible-light wavelength, about $5.0 \times 10^{-7}\ \text{m}$, without long strings of zeros.
+
+
+<InteractiveAnchor id="scientific-notation-slider" />
+
+<ScientificNotationSlider client:visible />
+
+This also happens to be a convenient way of expressing the precision of a measurement.  If a length is reported as
+
+$$
+3.10 \times 10^2\ \text{m},
+$$
+
+the final digit of the measurement is implied to be reliable (i.e. it's probably between 309 and 311 meters).  The numbers $3$, $1$, and the final $0$ in the coefficient are said to be *significant figures*.
+
+That is why these are different claims:
+
+<div className="my-6 overflow-x-auto [&_table]:!my-0 [&_table]:!w-max [&_th]:!px-4 [&_td]:!px-4">
+
+| Value | Significant figures | Precision claim |
+| --- | --- | --- |
+| $3.1 \times 10^2\ \text{m}$ | 2 | nearest $10\ \text{m}$ |
+| $3.10 \times 10^2\ \text{m}$ | 3 | nearest $1\ \text{m}$ |
+| $3.100 \times 10^2\ \text{m}$ | 4 | nearest $0.1\ \text{m}$ |
+
+</div>
+
+
+
+<ProblemSolvingSection
+  title="Problem Solving"
+>
+  <WorkedExampleCard
+    title="Convert a small length"
+    accent="blue"
+  >
+    #### Problem
+
+    A wire is $680\ \mu\text{m}$ thick. Write its thickness in meters and in scientific notation.
+
+    #### Use
+
+    Micro means $10^{-6}$:
+
+    $$
+    680\ \mu\text{m} = 680 \times 10^{-6}\ \text{m}.
+    $$
+
+    #### Solve
+
+    $$
+    680 \times 10^{-6}\ \text{m}
+    = 0.000680\ \text{m}
+    = 6.80 \times 10^{-4}\ \text{m}.
+    $$
+
+    #### Check
+
+    Micrometers are much smaller than meters, so the meter value should be a small decimal. The trailing zero in $6.80$ preserves the three significant figures from $680$.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Compare two distances"
+    accent="blue"
+  >
+    #### Problem
+
+    Which is larger: $3.2 \times 10^5\ \text{m}$ or $7.5 \times 10^4\ \text{m}$?
+
+    #### Solve
+
+    Compare powers first. Since $10^5$ is ten times larger than $10^4$, rewrite the second value with the same power:
+
+    $$
+    7.5 \times 10^4\ \text{m}
+    = 0.75 \times 10^5\ \text{m}.
+    $$
+
+    Now compare coefficients:
+
+    $$
+    3.2 \times 10^5\ \text{m} > 0.75 \times 10^5\ \text{m}.
+    $$
+
+    #### Check
+
+    In ordinary notation these are $320{,}000\ \text{m}$ and $75{,}000\ \text{m}$, so the first distance is larger.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Report a measured result"
+    accent="blue"
+  >
+    #### Problem
+
+    A distance calculation gives $0.004782\ \text{m}$ with an uncertainty of $0.00031\ \text{m}$. Report the result in scientific notation.
+
+    #### Use
+
+    Round the uncertainty to one significant figure, then match the value to that place:
+
+    $$
+    0.00031\ \text{m} \rightarrow 0.0003\ \text{m}.
+    $$
+
+    #### Solve
+
+    The value should stop in the same decimal place:
+
+    $$
+    0.004782\ \text{m} \rightarrow 0.0048\ \text{m}.
+    $$
+
+    Now factor out $10^{-3}\ \text{m}$ from both parts:
+
+    $$
+    0.0048 \pm 0.0003\ \text{m}
+    = (4.8 \pm 0.3) \times 10^{-3}\ \text{m}.
+    $$
+
+    #### Check
+
+    The uncertainty reaches the tenths place in the coefficient, so the measured value also stops at the tenths place: $4.8 \pm 0.3$.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Units & Notation Checkpoint"
+  questions={[
+    {
+      id: 'unit-meaning',
+      question: 'What does the unit in $12\\ \\text{m/s}$ tell you?',
+      options: [
+        { id: 'A', text: 'The quantity is a distance per time.', isCorrect: true, explanation: '$\\text{m/s}$ means meters divided by seconds, so it describes distance traveled per unit time.' },
+        { id: 'B', text: 'The quantity is a time per distance.', isCorrect: false, explanation: 'Time per distance would have units like $\\text{s/m}$, not $\\text{m/s}$.' },
+        { id: 'C', text: 'The quantity has no physical dimension.', isCorrect: false, explanation: 'A unit is exactly what gives the number its physical meaning.' }
+      ]
+    },
+    {
+      id: 'prefix-conversion',
+      question: 'How many meters is $25\\ \\text{mm}$?',
+      options: [
+        { id: 'A', text: '$2.5 \\times 10^{-2}\\ \\text{m}$', isCorrect: true, explanation: 'Milli means $10^{-3}$, so $25\\ \\text{mm}=25\\times10^{-3}\\ \\text{m}=2.5\\times10^{-2}\\ \\text{m}$.' },
+        { id: 'B', text: '$2.5 \\times 10^2\\ \\text{m}$', isCorrect: false, explanation: 'Millimeters are smaller than meters, so converting to meters should make the number smaller, not larger.' },
+        { id: 'C', text: '$25 \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: '$10^3$ belongs to kilo, not milli.' }
+      ]
+    },
+    {
+      id: 'scientific-notation',
+      question: 'Which value is written correctly in scientific notation?',
+      options: [
+        { id: 'A', text: '$4.7 \\times 10^6$', isCorrect: true, explanation: 'The coefficient is between $1$ and $10$, so this is normalized scientific notation.' },
+        { id: 'B', text: '$47 \\times 10^5$', isCorrect: false, explanation: 'This equals the same number, but the coefficient is not between $1$ and $10$.' },
+        { id: 'C', text: '$0.47 \\times 10^7$', isCorrect: false, explanation: 'The coefficient is below $1$, so it is not normalized scientific notation.' }
+      ]
+    },
+    {
+      id: 'sig-fig-notation',
+      question: 'What is the best report for $5320 \\pm 180\\ \\text{m}$?',
+      options: [
+        { id: 'A', text: '$(5.3 \\pm 0.2) \\times 10^3\\ \\text{m}$', isCorrect: true, explanation: 'Round $180$ to $200$, match the value to the hundreds place, then factor out $10^3$.' },
+        { id: 'B', text: '$(5.320 \\pm 0.180) \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: 'This keeps more digits than the uncertainty can support.' },
+        { id: 'C', text: '$(5 \\pm 2) \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: 'The uncertainty is $0.2\\times10^3\\ \\text{m}$, not $2\\times10^3\\ \\text{m}$.' }
+      ]
+    }
+  ]}
+/>

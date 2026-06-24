@@ -44,7 +44,7 @@ Furthermore, the number of digits used implies something about the uncertainty a
 
 ## Propagation of Uncertainty
 
-To get $\pi$ we have to *divide* one uncertain number by another. So how do quantify the uncertainty of the resulting quotient? 
+To get $\pi$ we have to *divide* one uncertain number by another. So how do we quantify the uncertainty of the resulting quotient? 
 
 The simplest method is to just try the extremes.  Take the smallest and largest plausible value of each input, recompute the result every which way, and see how far apart the answers land. The range of values quantifies the uncertainty; the half-width of this range is the new $\pm$. 
 
@@ -52,7 +52,7 @@ The simplest method is to just try the extremes.  Take the smallest and largest 
 
 <PropagationBracket client:visible />
 
-Once you've done this procedure a few times, you may start to notice a pattern in the simplest arithmetic operations:
+Once you've done this procedure a few times, you may start to notice a pattern:
 
 **Addition/Subtraction: absolute uncertainties add.**  If $R = A \pm B$, then $\delta R = \delta A + \delta B$.
 
@@ -76,13 +76,15 @@ Rather than compare results to some true value, we compare them to a theoretical
 
 <PiHunt client:visible />
 
-By random chance, it's common to have a small percentage of measurements in disagreement with the theoretical value.  If the disagreement is improbable (*statistics* can help quantify this probability), either you made a mistake or there's a **systematic error** — a consistent bias, like a tape that was read off-center every time — that your uncertainty didn't account for. It helps to measure the gap in units of your own uncertainty:
+By random chance, it's common to have some measurements in disagreement with the theoretical value.  If the magnitude of this disagreement is improbable (*statistics* can help quantify this probability), either you made a mistake or there's a **systematic error** — a consistent bias, like a tape that was read off-center every time — that your uncertainty didn't account for. 
+
+It's helpful to quantify any discrepancy as a multiple of the uncertainty:
 
 $$
-\text{discrepancy} = \frac{|\,\text{experiment} - \text{theory}\,|}{\text{uncertainty}}.
+\frac{|\,\text{experiment} - \text{theory}\,|}{\text{uncertainty}}.
 $$
 
-Under about $1$ means the prediction sits comfortably inside the bar; much more than $2$ is a red flag. This is also where **precision** and **accuracy** part ways: the coin's measurement is *precise* (small) but not *accurate* (centered on the truth). A tight bar in the wrong place is worse than an honest wide one, because it hides the problem. You can always make a result "agree" by inflating its uncertainty, but that's not measuring better, it's just admitting you measured worse.
+If this quantity is about $1$, the uncertainty is likely a good estimate of the error; very close to $0$ or much greater than $2$ typically means something is wrong. This is also where **precision** and **accuracy** differ: small values of the numerator correspond to accurate measurements, while small values of the denominator are precise.  As an experimentalist, the goal is usually to make both *as small as possible* while keeping a ratio close to 1.
 
 <ProblemSolvingSection
   title="Problem Solving"

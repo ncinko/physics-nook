@@ -1,81 +1,86 @@
 export const CHICKEN_ROUND_SECONDS = 20;
-export const MIN_CHICKEN_COUNT = 42;
-export const MAX_CHICKEN_COUNT = 68;
+
+export interface ChickenRoundConfig {
+  round: number;
+  min: number;
+  max: number;
+}
+
+export const CHICKEN_ROUNDS: ChickenRoundConfig[] = [
+  { round: 1, min: 20, max: 40 },
+  { round: 2, min: 50, max: 100 },
+  { round: 3, min: 100, max: 200 },
+];
 
 export interface ChickenEstimate {
   trueCount: number;
   estimate: number;
   uncertainty: number;
+  elapsedSeconds: number;
+  roundSeconds?: number;
 }
 
 export interface ChickenScore {
   trueCount: number;
   estimate: number;
   uncertainty: number;
-  low: number;
-  high: number;
   error: number;
-  discrepancy: number;
-  coversTruth: boolean;
-  accuracyPoints: number;
-  precisionPoints: number;
+  errorUncertaintyRatio: number;
+  elapsedSeconds: number;
+  accuracyScore: number;
+  ratioMultiplier: number;
+  speedBonus: number;
   score: number;
-  verdict: string;
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 const roundTenth = (value: number): number => Math.round(value * 10) / 10;
 
-export const chickenCountForRandom = (random: () => number = Math.random): number => {
+export const chickenCountForRound = (
+  roundIndex: number,
+  random: () => number = Math.random,
+): number => {
+  const config = CHICKEN_ROUNDS[clamp(Math.floor(roundIndex), 0, CHICKEN_ROUNDS.length - 1)];
   const draw = clamp(random(), 0, 0.999999999);
-  return MIN_CHICKEN_COUNT + Math.floor(draw * (MAX_CHICKEN_COUNT - MIN_CHICKEN_COUNT + 1));
+  return config.min + Math.floor(draw * (config.max - config.min + 1));
 };
 
 export const scoreChickenEstimate = ({
   trueCount,
   estimate,
   uncertainty,
+  elapsedSeconds,
+  roundSeconds = CHICKEN_ROUND_SECONDS,
 }: ChickenEstimate): ChickenScore => {
   const cleanTrueCount = Math.max(0, Math.round(trueCount));
   const cleanEstimate = Math.max(0, estimate);
   const cleanUncertainty = Math.max(0, uncertainty);
-  const low = cleanEstimate - cleanUncertainty;
-  const high = cleanEstimate + cleanUncertainty;
+  const cleanRoundSeconds = Math.max(1, roundSeconds);
+  const cleanElapsedSeconds = clamp(elapsedSeconds, 0, cleanRoundSeconds);
   const error = Math.abs(cleanEstimate - cleanTrueCount);
-  const coversTruth = cleanTrueCount >= low && cleanTrueCount <= high;
-  const discrepancy =
+  const errorUncertaintyRatio =
     cleanUncertainty === 0 ? (error === 0 ? 0 : Infinity) : error / cleanUncertainty;
 
-  const accuracyWindow = Math.max(12, cleanTrueCount * 0.35);
-  const accuracyPoints = 60 * clamp(1 - error / accuracyWindow, 0, 1);
+  const accuracyScale = Math.max(4, cleanTrueCount * 0.18);
+  const accuracyScore = 160 * Math.exp(-error / accuracyScale);
 
-  const tightUncertainty = Math.max(2, cleanTrueCount * 0.06);
-  const wideUncertainty = Math.max(6, cleanTrueCount * 0.22);
-  const precisionPoints = coversTruth
-    ? 40 * clamp(1 - (cleanUncertainty - tightUncertainty) / (wideUncertainty - tightUncertainty), 0, 1)
+  const ratioMultiplier = Number.isFinite(errorUncertaintyRatio)
+    ? 1 / (1 + Math.max(0, errorUncertaintyRatio - 1) ** 2)
     : 0;
 
-  let verdict = 'Your interval missed the true count.';
-  if (coversTruth && error <= tightUncertainty) {
-    verdict = 'Accurate and well-sized: your range caught the truth without wasting much width.';
-  } else if (coversTruth) {
-    verdict = 'Honest uncertainty: your range caught the truth, but a narrower estimate would score higher.';
-  } else if (error <= tightUncertainty) {
-    verdict = 'Good center, but the uncertainty was too tight to include the truth.';
-  }
+  const speedBonus = 45 * clamp(1 - cleanElapsedSeconds / cleanRoundSeconds, 0, 1);
+  const score = Math.round(accuracyScore * ratioMultiplier + speedBonus);
 
   return {
     trueCount: cleanTrueCount,
     estimate: cleanEstimate,
     uncertainty: cleanUncertainty,
-    low,
-    high,
     error,
-    discrepancy,
-    coversTruth,
-    accuracyPoints: roundTenth(accuracyPoints),
-    precisionPoints: roundTenth(precisionPoints),
-    score: Math.round(accuracyPoints + precisionPoints),
-    verdict,
+    errorUncertaintyRatio: roundTenth(errorUncertaintyRatio),
+    elapsedSeconds: roundTenth(cleanElapsedSeconds),
+    accuracyScore: roundTenth(accuracyScore),
+    ratioMultiplier: roundTenth(ratioMultiplier),
+    speedBonus: roundTenth(speedBonus),
+    score,
   };
 };

@@ -12,9 +12,8 @@ import {
   type Measurement,
 } from '../../src/lib/measurement/uncertainty.ts';
 import {
-  MAX_CHICKEN_COUNT,
-  MIN_CHICKEN_COUNT,
-  chickenCountForRandom,
+  CHICKEN_ROUNDS,
+  chickenCountForRound,
   scoreChickenEstimate,
 } from '../../src/lib/measurement/chickenCount.ts';
 
@@ -135,39 +134,67 @@ assert.equal(formatMeasurement({ value: 9.81, uncertainty: 0.23 }), '9.8 ± 0.2'
 
 console.log('Reporting/format tests passed.');
 
-// --- Chicken counting: accuracy vs precision ---
+// --- Chicken counting: three-round count ranges and speed-aware score ---
 
-assert.equal(chickenCountForRandom(() => 0), MIN_CHICKEN_COUNT);
-assert.equal(chickenCountForRandom(() => 0.999999), MAX_CHICKEN_COUNT);
-assert.equal(chickenCountForRandom(() => 1), MAX_CHICKEN_COUNT);
+assert.deepEqual(CHICKEN_ROUNDS.map(({ min, max }) => [min, max]), [
+  [20, 40],
+  [50, 100],
+  [100, 200],
+]);
+
+assert.equal(chickenCountForRound(0, () => 0), 20);
+assert.equal(chickenCountForRound(0, () => 0.999999), 40);
+assert.equal(chickenCountForRound(1, () => 0), 50);
+assert.equal(chickenCountForRound(1, () => 0.999999), 100);
+assert.equal(chickenCountForRound(2, () => 0), 100);
+assert.equal(chickenCountForRound(2, () => 0.999999), 200);
+assert.equal(chickenCountForRound(99, () => 1), 200);
 
 {
-  const perfect = scoreChickenEstimate({ trueCount: 50, estimate: 50, uncertainty: 0 });
-  assert.equal(perfect.coversTruth, true);
-  assert.equal(perfect.error, 0);
-  assert.equal(perfect.discrepancy, 0);
-  assert.equal(perfect.score, 100);
+  const perfectFast = scoreChickenEstimate({
+    trueCount: 50,
+    estimate: 50,
+    uncertainty: 0,
+    elapsedSeconds: 2,
+  });
+  assert.equal(perfectFast.error, 0);
+  assert.equal(perfectFast.errorUncertaintyRatio, 0);
+  assert.equal(perfectFast.accuracyScore, 160);
+  assert.ok(perfectFast.speedBonus > 35, 'fast guesses earn a speed bonus');
 }
 
 {
-  const honest = scoreChickenEstimate({ trueCount: 50, estimate: 47, uncertainty: 5 });
-  assert.equal(honest.coversTruth, true);
-  assert.ok(honest.score > 70, 'an honest close interval should score well');
+  const accurateSlow = scoreChickenEstimate({
+    trueCount: 50,
+    estimate: 50,
+    uncertainty: 5,
+    elapsedSeconds: 20,
+  });
+  assert.equal(accurateSlow.speedBonus, 0);
+  assert.ok(accurateSlow.score < scoreChickenEstimate({
+    trueCount: 50,
+    estimate: 50,
+    uncertainty: 5,
+    elapsedSeconds: 3,
+  }).score, 'same estimate scores higher when locked sooner');
 }
 
 {
-  const vague = scoreChickenEstimate({ trueCount: 50, estimate: 50, uncertainty: 30 });
-  assert.equal(vague.coversTruth, true);
-  assert.equal(vague.accuracyPoints, 60);
-  assert.equal(vague.precisionPoints, 0);
-  assert.equal(vague.score, 60);
-}
-
-{
-  const overconfident = scoreChickenEstimate({ trueCount: 50, estimate: 48, uncertainty: 1 });
-  assert.equal(overconfident.coversTruth, false);
-  assert.equal(overconfident.discrepancy, 2);
-  assert.ok(overconfident.score < 60, 'a tight interval that misses truth loses precision credit');
+  const honestMiss = scoreChickenEstimate({
+    trueCount: 50,
+    estimate: 47,
+    uncertainty: 5,
+    elapsedSeconds: 8,
+  });
+  const overconfidentMiss = scoreChickenEstimate({
+    trueCount: 50,
+    estimate: 47,
+    uncertainty: 1,
+    elapsedSeconds: 8,
+  });
+  assert.equal(honestMiss.error, overconfidentMiss.error);
+  assert.ok(overconfidentMiss.errorUncertaintyRatio > honestMiss.errorUncertaintyRatio);
+  assert.ok(overconfidentMiss.score < honestMiss.score, 'large error:uncertainty ratio is penalized');
 }
 
 console.log('Chicken-count scoring tests passed.');

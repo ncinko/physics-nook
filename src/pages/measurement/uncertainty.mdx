@@ -22,14 +22,14 @@ import { measurementPath } from '../../data/modules';
 
 <div id="page-content"></div>
 
-# Measurement & Uncertainty
+# Uncertainty
 
 Dividing the circumference of a circle by its diameter always gives the same value of $\pi = 3.14159\ldots$  In theory, we should be able to *measure* $\pi$ ourselves. Wrap a measuring tape around a mug, place a ruler across it, and divide our two results.
 
 Trouble shows up the moment you read the tape or ruler: the edges never lands exactly on a mark.  A measurement is always a **best estimate** together with an **uncertainty**, written as
 
 $$
-\text{measurement} = \text{best estimate} \pm \text{uncertainty}.
+\text{measurement} = (\text{best estimate} \pm \text{uncertainty}) \times \text{unit}.
 $$
 
 When you read a single mark off a ruler, the edge falls somewhere inside the smallest division. Half of that smallest division is a standard choice of uncertainty.
@@ -42,7 +42,7 @@ Something like $\pm 0.5\ \text{mm}$ expresses the **absolute** uncertainty, whic
 
 Furthermore, the number of digits used implies something about the uncertainty as well. Reporting $24.8\ \text{cm}$ implies the uncertainty is on the order of $0.1 \ \text{cm}$. We often round the uncertainty to **one significant figure**, then round the measured value to the same decimal place: $3.097 \pm 0.083$ is reported as $3.10 \pm 0.08$.
 
-## Propagation of Uncertainty
+## Propagation of uncertainty
 
 To get $\pi$ we have to *divide* one uncertain number by another. So how do we quantify the uncertainty of the resulting quotient? 
 

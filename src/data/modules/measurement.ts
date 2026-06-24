@@ -25,34 +25,35 @@ export const measurementModule: ModuleMeta = {
   heroImage: '/social/physics-nook-card.svg',
   pages: [
     {
-      id: 'measurement-uncertainty',
-      href: '/measurement/uncertainty',
-      title: 'Measurement & Uncertainty',
-      shortTitle: 'Uncertainty',
-      description:
-        'Discover π by measuring round objects: read the ± off a ruler, propagate it through C ÷ d, and test whether your error bar catches the true value.',
-      seo: {
-        title: 'Measurement & Uncertainty',
-        description:
-          'An algebra-level introduction to measurement uncertainty, propagation by the high–low method, and comparing an experiment to theory — by trying to measure π with everyday round objects.',
-        canonicalPath: '/measurement/uncertainty',
-        image: '/social/physics-nook-card.svg',
-      },
-    },
-    {
       id: 'measurement-si-units-scientific-notation',
       href: '/measurement/si-units-scientific-notation',
-      title: 'SI Units & Scientific Notation',
+      title: 'Measurement',
       shortTitle: 'Units & Notation',
       description:
-        'Build the measurement language for lab work: SI units, metric prefixes, unit conversions, scientific notation, and significant figures.',
+        'Build the measurement language for lab work: SI units, metric prefixes, and scientific notation.',
       seo: {
-        title: 'SI Units & Scientific Notation',
+        title: 'Measurement',
         description:
           'Learn SI units, common metric prefixes, scientific notation, and how significant figures work when measured values are written as powers of ten.',
         canonicalPath: '/measurement/si-units-scientific-notation',
         image: '/social/physics-nook-card.svg',
       },
     },
+    {
+      id: 'measurement-uncertainty',
+      href: '/measurement/uncertainty',
+      title: 'Uncertainty',
+      shortTitle: 'Uncertainty',
+      description:
+        'Explore the concept of measurement uncertainty and how it affects the reliability of experimental results.',
+      seo: {
+        title: 'Uncertainty',
+        description:
+          'An algebra-level introduction to measurement uncertainty, propagation by the high–low method, and comparing an experiment to theory — by trying to measure π with everyday round objects.',
+        canonicalPath: '/measurement/uncertainty',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    
   ],
 };

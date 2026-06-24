@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/TextbookLayout.astro
 title: 'SI Units & Scientific Notation'
-description: 'Build the measurement language for lab work: SI units, metric prefixes, unit conversions, scientific notation, and significant figures.'
+description: 'Build the measurement language for lab work: SI units, metric prefixes, and scientific notation.'
 canonicalPath: '/measurement/si-units-scientific-notation'
 ---
 
@@ -23,9 +23,9 @@ import { measurementPath } from '../../data/modules';
 
 <div id="page-content"></div>
 
-# SI Units & Scientific Notation
+# Measurement
 
-Most physical quantities require units alongside a numerical value.  $67\ \text{meters}$ is a length, $67\ \text{seconds}$ is a time, and $67\ \text{kilograms}$ is a mass.  The number $67$ (while it does have memetic meaning), does not have any physical meaning without a unit. 
+Most physical quantities require units alongside a numerical value.  $67\ \text{meters}$ is a length, $67\ \text{seconds}$ is a time, and $67\ \text{kilograms}$ is a mass.  The number $67$ (while it does have memetic meaning) does not have any physical meaning without a unit. 
 
 A measurement has two parts:
 
@@ -33,7 +33,7 @@ $$
 \text{measurement} = \text{number} \times \text{unit}.
 $$
 
-The number tells *how many*. The unit tells how many of *what*.  It is extremely useful, as notated above, to think of this as multiplication of the two.  As you perform arithmetic/algebra with measurements, the same operations apply to both the numerical values and corresponding units.
+The number tells *how many*. The unit tells how many *of what*.  It is extremely useful, as notated above, to think of this as multiplication of the two.  As you perform arithmetic/algebra with measurements, the same operations apply to both the numerical values and corresponding units.
 
 For example, if a car travels $120\ \text{miles}$ in $2\ \text{hours}$, then its average speed is
 
@@ -41,7 +41,7 @@ $$
 v = \frac{120\ \text{miles}}{2\ \text{hours}} = 60\ \text{mi/hr}.
 $$
 
-As expected, miles per hour is a standard way of expressing speed.  If we instead had units of square miles, there was an error in our reasoning.  *Checking units* is often an easy way of spotting mistakes in your work.
+As expected, miles per hour is a standard way of expressing speed.  If our work results in units of square miles for a speed, there was an error in our reasoning.  *Checking units* is often an easy way of spotting mistakes.
 
 ## SI Units
 
@@ -85,19 +85,9 @@ $$
 3.10 \times 10^2\ \text{m},
 $$
 
-the final digit of the measurement is implied to be reliable (i.e. it's probably between 309 and 311 meters).  The numbers $3$, $1$, and the final $0$ in the coefficient are said to be *significant figures*.
+the final digit implies the reliablity of the measurement (i.e. it's probably between 305 and 315 meters).  The numbers $3$, $1$, and the final $0$ in the coefficient are said to be *significant figures*.
 
-That is why these are different claims:
 
-<div className="my-6 overflow-x-auto [&_table]:!my-0 [&_table]:!w-max [&_th]:!px-4 [&_td]:!px-4">
-
-| Value | Significant figures | Precision claim |
-| --- | --- | --- |
-| $3.1 \times 10^2\ \text{m}$ | 2 | nearest $10\ \text{m}$ |
-| $3.10 \times 10^2\ \text{m}$ | 3 | nearest $1\ \text{m}$ |
-| $3.100 \times 10^2\ \text{m}$ | 4 | nearest $0.1\ \text{m}$ |
-
-</div>
 
 
 

@@ -26,9 +26,7 @@ import { measurementPath } from '../../data/modules';
 
 Dividing the circumference of a circle by its diameter always gives the same value of $\pi = 3.14159\ldots$  In theory, we should be able to *measure* $\pi$ ourselves. Wrap a measuring tape around a mug, place a ruler across it, and divide our two results.
 
-Trouble shows up the moment you read the tape or ruler: the edges never lands exactly on a mark. Every measurement has a corresponding **uncertainty**.
-
-A measurement is always a **best estimate** together with an **uncertainty**, written as
+Trouble shows up the moment you read the tape or ruler: the edges never lands exactly on a mark.  A measurement is always a **best estimate** together with an **uncertainty**, written as
 
 $$
 \text{measurement} = \text{best estimate} \pm \text{uncertainty}.
@@ -54,11 +52,11 @@ The simplest method is to just try the extremes.  Take the smallest and largest 
 
 <PropagationBracket client:visible />
 
-Once you've done this procedure a few times, you may start to notice a pattern in the simplest arithemetic operations:
+Once you've done this procedure a few times, you may start to notice a pattern in the simplest arithmetic operations:
 
-**Adding or subtracting → absolute uncertainties add.** If $R = A \pm B$, then $\delta R = \delta A + \delta B$.
+**Addition/Subtraction: absolute uncertainties add.**  If $R = A \pm B$, then $\delta R = \delta A + \delta B$.
 
-**Multiplying or dividing → relative uncertainties add.** If $R = A \times B$ or $R = A / B$, then
+**Multiplication/Division: relative uncertainties (approximately) add.**  If $R = A \times B$ or $R = A / B$, then
 
 $$
 \frac{\delta R}{|R|} = \frac{\delta A}{|A|} + \frac{\delta B}{|B|}.
@@ -121,7 +119,7 @@ Under about $1$ means the prediction sits comfortably inside the bar; much more 
 
     #### Check
 
-    The bigger side carries the smaller relative doubt, and the percentages simply add — exactly what the high–low machine shows for a product.
+    The bigger side carries the smaller relative uncertainty, and the percentages simply add — exactly what the high–low machine shows for a product.
   </WorkedExampleCard>
 
   <WorkedExampleCard
@@ -188,7 +186,7 @@ Under about $1$ means the prediction sits comfortably inside the bar; much more 
       options: [
         { id: 'A', text: 'Add the relative (percent) uncertainties of $d$ and $t$.', isCorrect: true, explanation: 'Division combines quantities multiplicatively, so relative uncertainties add: $\\delta v / v = \\delta d / d + \\delta t / t$.' },
         { id: 'B', text: 'Add the absolute uncertainties $\\delta d$ and $\\delta t$.', isCorrect: false, explanation: 'Absolute uncertainties add only for sums and differences. They do not even share units with $v$ here.' },
-        { id: 'C', text: 'Subtract the relative uncertainty of $t$ from that of $d$.', isCorrect: false, explanation: 'Uncertainties never cancel — combining measurements can only grow the doubt, so the relative uncertainties add.' }
+        { id: 'C', text: 'Subtract the relative uncertainty of $t$ from that of $d$.', isCorrect: false, explanation: 'Uncertainties never cancel — combining measurements can only increase the uncertainty, so the relative uncertainties add.' }
       ]
     },
     {

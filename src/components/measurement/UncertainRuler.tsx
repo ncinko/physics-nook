@@ -113,9 +113,6 @@ export function UncertainRuler() {
     <div className="not-prose mx-auto my-8 flex max-w-[600px] flex-col gap-4 text-[var(--text-primary)]">
       <p className="m-0 text-center text-sm leading-6 text-[var(--text-muted)]">
         Drag the <span className="font-semibold">reading</span> along the ruler to measure the object.
-        It snaps to a mark or halfway between two — it turns{' '}
-        <span className="font-semibold text-[var(--accent-green)]">green</span> when your ± band covers
-        the true edge.
       </p>
 
       <svg

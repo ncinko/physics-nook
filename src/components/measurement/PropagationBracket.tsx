@@ -138,22 +138,7 @@ export function PropagationBracket() {
         <Slider label="± on B" min={0.1} max={1} step={0.1} value={bUnc} onChange={setBUnc} format={(v) => v.toFixed(1)} />
       </ControlBar>
 
-      <p className="m-0 text-center text-sm leading-7 text-[var(--text-muted)]">
-        {isAdditive ? (
-          <>
-            <span className="font-semibold text-[var(--text-primary)]">Shortcut rule (± and −): absolute uncertainties add.</span>{' '}
-            u = {num(a.uncertainty)} + {num(b.uncertainty)} = {num(rule.uncertainty)}, giving{' '}
-            <span className="font-semibold text-[var(--text-primary)]">{num(rule.value)} ± {num(rule.uncertainty)}</span> — the same half-width as the bracket.
-          </>
-        ) : (
-          <>
-            <span className="font-semibold text-[var(--text-primary)]">Shortcut rule (× and ÷): relative uncertainties add.</span>{' '}
-            {pct(relativeUncertainty(a))} + {pct(relativeUncertainty(b))} = {pct(relativeUncertainty(a) + relativeUncertainty(b))}, so
-            u = {num(Math.abs(rule.value))} × {pct(relativeUncertainty(a) + relativeUncertainty(b))} = {num(rule.uncertainty)}
-            {op === 'divide' && ' (the bracket runs a hair wider — it keeps a tiny term the shortcut drops)'}.
-          </>
-        )}
-      </p>
+      
     </div>
   );
 }

@@ -1,0 +1,14 @@
+---
+import ImmersiveLayout from '../layouts/ImmersiveLayout.astro';
+import MoonPhaseSandbox from '../components/astronomy/MoonPhaseSandbox';
+---
+
+<ImmersiveLayout
+  title="Moon Phase Sandbox"
+  description="A standalone 3D Earth-Moon-Sun sandbox for exploring lunar phases from space and from the surfaces of Earth and the Moon."
+  canonicalPath="/moon-phases"
+  image="/social/physics-nook-card.svg"
+>
+  <MoonPhaseSandbox client:load />
+</ImmersiveLayout>
+

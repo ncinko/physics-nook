@@ -32,6 +32,13 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
   },
   {
+    title: 'Moon Phase Sandbox',
+    description:
+      'Explore the Earth-Moon-Sun system in 3D, advance time, and walk on Earth or the Moon.',
+    canonicalPath: '/moon-phases',
+    image: '/social/physics-nook-card.svg',
+  },
+  {
     title: 'Pendulum Peg Challenge',
     description:
       'A hidden pendulum game about timing, wrapping a string around a peg, and cutting for the closest landing.',

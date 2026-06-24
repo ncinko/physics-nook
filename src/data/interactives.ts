@@ -32,6 +32,15 @@ export const interactiveModuleOrder = [
 
 export const interactiveEntries: InteractiveEntry[] = [
   {
+    id: 'moon-phase-sandbox',
+    title: 'Moon Phase Sandbox',
+    description: 'Explore the Earth-Moon-Sun system in 3D, advance time, and walk on Earth or the Moon.',
+    href: '/moon-phases',
+    module: 'Featured',
+    kind: 'standalone',
+    tags: ['moon phases', 'astronomy', '3d'],
+  },
+  {
     id: 'bunny-number-line',
     title: 'Bunny on the Number Line',
     description: 'Hop a bunny along a number line to meet vectors as one-dimensional hops that add up.',

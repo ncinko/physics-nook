@@ -1,0 +1,333 @@
+.moon-phase-sandbox {
+  position: relative;
+  width: 100vw;
+  min-height: 100vh;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 72% 22%, rgba(255, 196, 120, 0.13), transparent 22rem),
+    radial-gradient(circle at 18% 72%, rgba(76, 201, 240, 0.1), transparent 18rem),
+    #02040b;
+  color: #f8fafc;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+}
+
+.moon-phase-canvas {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+.moon-phase-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+}
+
+.moon-phase-canvas canvas:active {
+  cursor: grabbing;
+}
+
+.moon-phase-sandbox.is-surface .moon-phase-canvas canvas {
+  cursor: crosshair;
+}
+
+.moon-hud {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: rgba(5, 10, 20, 0.72);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.26);
+  backdrop-filter: blur(16px);
+}
+
+.moon-hud-primary {
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 0.5rem;
+  padding: 0.9rem 1rem;
+}
+
+.moon-title-block {
+  min-width: 12rem;
+}
+
+.moon-kicker {
+  color: #fbbf24;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.moon-title-block h1 {
+  margin: 0.12rem 0 0;
+  font-size: 1.45rem;
+  font-weight: 750;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.moon-readouts {
+  display: flex;
+  max-width: min(56rem, 100%);
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.moon-readouts div {
+  width: min(13rem, 28vw);
+  min-width: 0;
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.72);
+  padding: 0.55rem 0.65rem;
+}
+
+.moon-readouts .moon-eclipse-readout {
+  border: 1px solid rgba(251, 146, 60, 0.38);
+  background: rgba(67, 20, 7, 0.72);
+}
+
+.moon-eclipse-readout strong {
+  color: #fed7aa;
+}
+
+.moon-readouts span,
+.moon-date span,
+.moon-speed output,
+.moon-toggle span,
+.moon-location-pill span {
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.moon-readouts strong {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.1rem;
+  color: #ffffff;
+  font-size: 0.96rem;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moon-time-panel {
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  width: min(31rem, calc(100vw - 2rem));
+  gap: 0.7rem;
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+}
+
+.moon-date,
+.moon-speed,
+.moon-control-row,
+.moon-presets,
+.moon-view-panel,
+.moon-location-pill,
+.moon-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.moon-date,
+.moon-speed {
+  gap: 0.55rem;
+}
+
+.moon-date span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.moon-control-row,
+.moon-presets {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.moon-icon-button,
+.moon-text-button,
+.moon-presets button,
+.moon-segmented button {
+  appearance: none;
+  min-height: 2.15rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.76);
+  color: #f8fafc;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.moon-icon-button {
+  display: inline-grid;
+  width: 2.25rem;
+  place-items: center;
+  padding: 0;
+}
+
+.moon-text-button,
+.moon-presets button,
+.moon-segmented button {
+  padding: 0.42rem 0.68rem;
+}
+
+.moon-icon-button:hover,
+.moon-text-button:hover,
+.moon-presets button:hover,
+.moon-segmented button:hover {
+  border-color: rgba(125, 211, 252, 0.7);
+  color: #bae6fd;
+}
+
+.moon-speed input {
+  min-width: 8rem;
+  flex: 1;
+}
+
+.moon-speed output {
+  width: 4.7rem;
+  text-align: right;
+}
+
+.moon-presets button.is-active {
+  border-color: rgba(251, 191, 36, 0.76);
+  background: rgba(251, 191, 36, 0.17);
+  color: #fde68a;
+}
+
+.moon-view-panel {
+  bottom: 1rem;
+  left: 1rem;
+  gap: 0.55rem;
+  border-radius: 0.5rem;
+  padding: 0.65rem;
+}
+
+.moon-segmented {
+  display: inline-flex;
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.82);
+  padding: 0.18rem;
+}
+
+.moon-segmented button {
+  border-color: transparent;
+  background: transparent;
+}
+
+.moon-segmented button[aria-pressed="true"] {
+  background: #38bdf8;
+  color: #04111f;
+}
+
+.moon-toggle {
+  gap: 0.42rem;
+  border-radius: 0.45rem;
+  background: rgba(15, 23, 42, 0.76);
+  padding: 0.48rem 0.62rem;
+}
+
+.moon-location-pill {
+  gap: 0.38rem;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.76);
+  padding: 0.5rem 0.68rem;
+}
+
+@media (max-width: 760px) {
+  .moon-hud-primary {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 0.75rem;
+  }
+
+  .moon-title-block h1 {
+    font-size: 1.15rem;
+  }
+
+  .moon-readouts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+
+  .moon-readouts div {
+    width: auto;
+    padding: 0.45rem 0.5rem;
+  }
+
+  .moon-readouts strong {
+    font-size: 0.82rem;
+  }
+
+  .moon-time-panel {
+    right: 0.6rem;
+    bottom: 0.6rem;
+    left: 0.6rem;
+    width: auto;
+    padding: 0.65rem;
+  }
+
+  .moon-view-panel {
+    right: 0.6rem;
+    bottom: 13.2rem;
+    left: 0.6rem;
+    flex-wrap: wrap;
+    padding: 0.55rem;
+  }
+
+  .moon-speed input {
+    min-width: 6rem;
+  }
+
+  .moon-presets button:nth-child(1),
+  .moon-presets button:nth-child(2),
+  .moon-presets button:nth-child(6),
+  .moon-presets button:nth-child(7) {
+    display: none;
+  }
+}
+
+@media (max-width: 440px) {
+  .moon-readouts {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .moon-readouts div:last-child {
+    grid-column: 1 / -1;
+  }
+
+  .moon-control-row {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+
+  .moon-icon-button,
+  .moon-text-button {
+    width: 100%;
+    min-width: 0;
+  }
+}

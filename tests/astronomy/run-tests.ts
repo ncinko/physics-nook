@@ -1,0 +1,1 @@
+import './astronomy.test.ts';

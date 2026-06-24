@@ -11,6 +11,12 @@ import {
   uncertaintyDecimals,
   type Measurement,
 } from '../../src/lib/measurement/uncertainty.ts';
+import {
+  MAX_CHICKEN_COUNT,
+  MIN_CHICKEN_COUNT,
+  chickenCountForRandom,
+  scoreChickenEstimate,
+} from '../../src/lib/measurement/chickenCount.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -128,5 +134,42 @@ assert.equal(formatMeasurement({ value: 3.14159, uncertainty: 0.12 }), '3.1 ± 0
 assert.equal(formatMeasurement({ value: 9.81, uncertainty: 0.23 }), '9.8 ± 0.2');
 
 console.log('Reporting/format tests passed.');
+
+// --- Chicken counting: accuracy vs precision ---
+
+assert.equal(chickenCountForRandom(() => 0), MIN_CHICKEN_COUNT);
+assert.equal(chickenCountForRandom(() => 0.999999), MAX_CHICKEN_COUNT);
+assert.equal(chickenCountForRandom(() => 1), MAX_CHICKEN_COUNT);
+
+{
+  const perfect = scoreChickenEstimate({ trueCount: 50, estimate: 50, uncertainty: 0 });
+  assert.equal(perfect.coversTruth, true);
+  assert.equal(perfect.error, 0);
+  assert.equal(perfect.discrepancy, 0);
+  assert.equal(perfect.score, 100);
+}
+
+{
+  const honest = scoreChickenEstimate({ trueCount: 50, estimate: 47, uncertainty: 5 });
+  assert.equal(honest.coversTruth, true);
+  assert.ok(honest.score > 70, 'an honest close interval should score well');
+}
+
+{
+  const vague = scoreChickenEstimate({ trueCount: 50, estimate: 50, uncertainty: 30 });
+  assert.equal(vague.coversTruth, true);
+  assert.equal(vague.accuracyPoints, 60);
+  assert.equal(vague.precisionPoints, 0);
+  assert.equal(vague.score, 60);
+}
+
+{
+  const overconfident = scoreChickenEstimate({ trueCount: 50, estimate: 48, uncertainty: 1 });
+  assert.equal(overconfident.coversTruth, false);
+  assert.equal(overconfident.discrepancy, 2);
+  assert.ok(overconfident.score < 60, 'a tight interval that misses truth loses precision credit');
+}
+
+console.log('Chicken-count scoring tests passed.');
 
 console.log('All measurement tests passed.');

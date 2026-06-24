@@ -11,14 +11,12 @@ import QuestionSequence from '../../components/interactive/QuestionSequence.jsx'
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import { ChickenCompanion } from '../../components/measurement/ChickenCompanion';
-import { ChickenCountLauncher } from '../../components/measurement/ChickenCountLauncher';
 import { UncertainRuler } from '../../components/measurement/UncertainRuler';
 import { PropagationBracket } from '../../components/measurement/PropagationBracket';
 import { PiHunt } from '../../components/measurement/PiHunt';
 import { measurementPath } from '../../data/modules';
 
 <ChickenCompanion action="openGame" client:only="react" />
-<ChickenCountLauncher client:only="react" />
 
 <ModuleHero module={measurementPath} currentPath="/measurement/uncertainty" />
 

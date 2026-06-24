@@ -7,6 +7,8 @@ import {
   useState,
   type KeyboardEvent,
 } from 'react';
+import { X } from 'lucide-react';
+import { ChickenCountGame } from './ChickenCountGame';
 import {
   CHICKEN_COLS,
   CHICKEN_FRAME_PIXELS,
@@ -32,8 +34,10 @@ export const CHICKEN_COUNT_OPEN_EVENT = 'measurement:chicken-count:open';
 export function ChickenCompanion({ action = 'flee' }: ChickenCompanionProps) {
   const [frame, setFrame] = useState<ChickenFrameName>('stand');
   const [facing, setFacing] = useState(1);
+  const [gameOpen, setGameOpen] = useState(false);
 
   const wrapRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const xFracRef = useRef(0.82);
   const yPxRef = useRef(22);
   const liftRef = useRef(0);
@@ -44,7 +48,7 @@ export function ChickenCompanion({ action = 'flee' }: ChickenCompanionProps) {
 
   const activate = useCallback(() => {
     if (action === 'openGame') {
-      window.dispatchEvent(new CustomEvent(CHICKEN_COUNT_OPEN_EVENT));
+      setGameOpen(true);
       return;
     }
     fleeRef.current?.();
@@ -228,48 +232,102 @@ export function ChickenCompanion({ action = 'flee' }: ChickenCompanionProps) {
     }
   };
 
+  useEffect(() => {
+    if (!gameOpen) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const onWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setGameOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onWindowKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', onWindowKeyDown);
+    };
+  }, [gameOpen]);
+
   return (
-    <div
-      ref={wrapRef}
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-      onClick={activate}
-      onKeyDown={onKeyDown}
-      style={{
-        position: 'fixed',
-        pointerEvents: 'auto',
-        cursor: 'pointer',
-        zIndex: 1,
-        opacity: 0.92,
-        willChange: 'left, bottom, transform',
-      }}
-    >
-      <svg
-        width={SPRITE_W}
-        height={SPRITE_H}
-        viewBox={`0 0 ${SPRITE_W} ${SPRITE_H}`}
-        role="presentation"
-        style={{ display: 'block', shapeRendering: 'crispEdges' }}
+    <>
+      <div
+        ref={wrapRef}
+        role="button"
+        tabIndex={0}
+        aria-label={label}
+        onClick={activate}
+        onKeyDown={onKeyDown}
+        style={{
+          position: 'fixed',
+          pointerEvents: 'auto',
+          cursor: 'pointer',
+          zIndex: 1,
+          opacity: 0.92,
+          willChange: 'left, bottom, transform',
+        }}
       >
-        <g transform={facing < 0 ? `translate(${SPRITE_W},0) scale(-1,1)` : undefined}>
-          {pixels.map((px, i) => (
-            <rect
-              key={i}
-              x={px.x * CELL}
-              y={px.y * CELL}
-              width={CELL}
-              height={CELL}
-              fill={px.fill}
-              onClick={(event) => {
-                event.stopPropagation();
-                activate();
-              }}
-              style={{ pointerEvents: 'auto', cursor: 'pointer' }}
-            />
-          ))}
-        </g>
-      </svg>
-    </div>
+        <svg
+          width={SPRITE_W}
+          height={SPRITE_H}
+          viewBox={`0 0 ${SPRITE_W} ${SPRITE_H}`}
+          role="presentation"
+          style={{ display: 'block', shapeRendering: 'crispEdges' }}
+        >
+          <g transform={facing < 0 ? `translate(${SPRITE_W},0) scale(-1,1)` : undefined}>
+            {pixels.map((px, i) => (
+              <rect
+                key={i}
+                x={px.x * CELL}
+                y={px.y * CELL}
+                width={CELL}
+                height={CELL}
+                fill={px.fill}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  activate();
+                }}
+                style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+              />
+            ))}
+          </g>
+        </svg>
+      </div>
+
+      {action === 'openGame' && gameOpen && (
+        <div
+          className="fixed inset-0 z-[80] overflow-y-auto bg-black/45 px-3 py-5 backdrop-blur-sm sm:px-5"
+          onClick={() => setGameOpen(false)}
+        >
+          <div className="mx-auto flex min-h-full max-w-4xl items-center">
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="Chicken counting game"
+              className="w-full"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-2 flex justify-end">
+                <button
+                  ref={closeButtonRef}
+                  type="button"
+                  aria-label="Close chicken counting game"
+                  onClick={() => setGameOpen(false)}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[var(--text-primary)] shadow-sm transition hover:border-[var(--accent-blue)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)]"
+                >
+                  <X aria-hidden="true" size={18} strokeWidth={2.5} />
+                </button>
+              </div>
+              <ChickenCountGame className="my-0" />
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

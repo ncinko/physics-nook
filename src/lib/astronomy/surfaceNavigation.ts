@@ -13,9 +13,18 @@ export interface SurfaceMove {
   turnRadians?: number;
 }
 
+export interface SurfaceViewFrame {
+  eyeUp: Vec3;
+  bodyForward: Vec3;
+  bodyRight: Vec3;
+  lookDirection: Vec3;
+  headUp: Vec3;
+}
+
 const WORLD_NORTH: Vec3 = { x: 0, y: 1, z: 0 };
 const WORLD_FALLBACK: Vec3 = { x: 0, y: 0, z: -1 };
 const EPSILON = 1e-9;
+const SURFACE_PITCH_LIMIT = Math.PI / 2 - 0.04;
 
 export const add = (a: Vec3, b: Vec3): Vec3 => ({
   x: a.x + b.x,
@@ -60,6 +69,9 @@ export const rotateAroundAxis = (vector: Vec3, axis: Vec3, angleRadians: number)
     scale(unitAxis, dot(unitAxis, vector) * (1 - cos)),
   );
 };
+
+export const clampSurfacePitch = (pitchRadians: number): number =>
+  Math.max(-SURFACE_PITCH_LIMIT, Math.min(SURFACE_PITCH_LIMIT, pitchRadians));
 
 const tangentBasis = (up: Vec3) => {
   let north = normalize(projectToTangent(WORLD_NORTH, up));
@@ -136,6 +148,46 @@ export const moveSurfacePose = (
   }
 
   return poseFromUpAndForward(nextUp, radius, nextForward);
+};
+
+export const turnSurfacePose = (
+  pose: SurfacePose,
+  yawRadians: number,
+): SurfacePose => poseFromUpAndForward(
+  pose.up,
+  length(pose.position),
+  rotateAroundAxis(pose.forward, pose.up, yawRadians),
+);
+
+export const getSurfaceViewFrame = (
+  pose: SurfacePose,
+  pitchRadians: number,
+): SurfaceViewFrame => {
+  const eyeUp = normalize(pose.up);
+  let bodyForward = normalize(projectToTangent(pose.forward, eyeUp));
+
+  if (length(bodyForward) < EPSILON) {
+    bodyForward = tangentBasis(eyeUp).north;
+  }
+
+  const bodyRight = normalize(cross(eyeUp, bodyForward));
+  const pitch = clampSurfacePitch(pitchRadians);
+  const lookDirection = normalize(add(
+    scale(bodyForward, Math.cos(pitch)),
+    scale(eyeUp, Math.sin(pitch)),
+  ));
+  const headUp = normalize(add(
+    scale(eyeUp, Math.cos(pitch)),
+    scale(bodyForward, -Math.sin(pitch)),
+  ));
+
+  return {
+    eyeUp,
+    bodyForward,
+    bodyRight,
+    lookDirection,
+    headUp,
+  };
 };
 
 export const surfaceLatitudeLongitude = (pose: SurfacePose) => {

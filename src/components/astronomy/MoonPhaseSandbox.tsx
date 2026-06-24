@@ -17,19 +17,28 @@ import {
   MEAN_MOON_DISTANCE_KM,
   MOON_PATH_SAMPLE_COUNT,
   MOON_RADIUS_KM,
+  SUN_RADIUS_KM,
   TIME_SPEED_PRESETS,
   advanceSimulationTime,
   applySpaceTranslation,
   canUseClickForDescent,
   clampCameraPitch,
+  clampSurfacePitch,
   createSurfacePose,
   formatSpeedLabel,
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getSurfaceSkyState,
+  getSurfaceViewFrame,
+  getSunRenderMode,
   moveSurfacePose,
+  apparentAngularRadiusRadians,
+  skyProxyRadiusForAngularSize,
   speedFromLogSlider,
+  surfaceDirectionVisibility,
   surfaceLatitudeLongitude,
+  turnSurfacePose,
+  type AstronomyScaleMode,
   type CameraMode,
   type EclipseState,
   type MoonPhaseSummary,
@@ -39,7 +48,7 @@ import {
 import './moonPhaseSandbox.css';
 
 type BodyId = 'earth' | 'moon';
-type ScaleMode = 'compact' | 'true';
+type ScaleMode = AstronomyScaleMode;
 type LabelId = 'earth' | 'moon' | 'sun' | 'path' | 'eclipse';
 
 interface SceneObjects {
@@ -51,9 +60,12 @@ interface SceneObjects {
   earthMesh: THREE.Mesh;
   moonMesh: THREE.Mesh;
   sunMesh: THREE.Mesh;
+  infiniteSunDisk: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   sunLight: THREE.DirectionalLight;
   earthAtmosphere: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  surfaceMoonProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
+  surfaceSunProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   moonPathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   eclipseLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   lunarEclipseTint: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
@@ -71,8 +83,10 @@ interface TransitionState {
   duration: number;
   fromPosition: THREE.Vector3;
   fromTarget: THREE.Vector3;
+  fromUp: THREE.Vector3;
   toPosition: THREE.Vector3;
   toTarget: THREE.Vector3;
+  toUp: THREE.Vector3;
   onComplete: () => void;
 }
 
@@ -91,6 +105,11 @@ const SNAPSHOT_UPDATE_MS = 180;
 const UI_SYNC_MS = 220;
 const SPACE_LOOK_SENSITIVITY = 0.0036;
 const SURFACE_LOOK_SENSITIVITY = 0.0024;
+const SURFACE_SKY_BODY_DISTANCE = 420;
+const COMPACT_SUN_DISTANCE = 260;
+const INFINITE_SUN_DISTANCE = 1200;
+const INFINITE_SUN_HALO_SCALE = 7;
+const WORLD_CAMERA_UP = new THREE.Vector3(0, 1, 0);
 
 const BODY_CONFIG: Record<BodyId, {
   label: string;
@@ -344,6 +363,56 @@ const createSurfaceSkyDome = () =>
     }),
   );
 
+const createInfiniteSunDisk = () => {
+  const material = new THREE.ShaderMaterial({
+    uniforms: {
+      coreRadius: { value: 1 / INFINITE_SUN_HALO_SCALE },
+    },
+    vertexShader: `
+      varying vec2 vUv;
+
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float coreRadius;
+      varying vec2 vUv;
+
+      void main() {
+        vec2 centered = (vUv - 0.5) * 2.0;
+        float radius = length(centered);
+        if (radius > 1.0) discard;
+
+        float core = 1.0 - smoothstep(coreRadius * 0.82, coreRadius, radius);
+        float halo = (1.0 - smoothstep(coreRadius, 1.0, radius))
+          * pow(max(0.0, 1.0 - radius), 2.4)
+          * 0.42;
+        float intensity = max(core, halo);
+        if (intensity < 0.004) discard;
+
+        vec3 coreColor = mix(vec3(1.0, 0.69, 0.26), vec3(1.0, 0.96, 0.73), core);
+        vec3 haloColor = vec3(1.0, 0.43, 0.12);
+        vec3 color = coreColor * core * 1.35 + haloColor * halo;
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    depthTest: false,
+    depthWrite: false,
+    fog: false,
+    transparent: false,
+  });
+  material.toneMapped = false;
+
+  const disk = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), material);
+  disk.frustumCulled = false;
+  disk.renderOrder = -20;
+  disk.visible = false;
+  return disk;
+};
+
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
@@ -352,7 +421,8 @@ const getMoonDistance = (scaleMode: ScaleMode, moonDistanceKm: number) =>
     ? (moonDistanceKm / EARTH_RADIUS_KM) * EARTH_SCENE_RADIUS
     : COMPACT_MOON_DISTANCE * (moonDistanceKm / MEAN_MOON_DISTANCE_KM);
 
-const getSunDistance = (scaleMode: ScaleMode) => (scaleMode === 'true' ? 520 : 260);
+const getCompactSunPosition = (sunDirection: THREE.Vector3) =>
+  sunDirection.clone().multiplyScalar(COMPACT_SUN_DISTANCE);
 
 const getScenePositionFromGeocentric = (vector: Vec3, scaleMode: ScaleMode) => {
   const position = vectorFromPlain(vector);
@@ -424,6 +494,7 @@ const applySpaceCameraLook = (
 ) => {
   const basis = getCameraBasis(state.yaw, state.pitch);
   const lookTarget = camera.position.clone().add(vectorFromPlain(basis.forward));
+  camera.up.copy(WORLD_CAMERA_UP);
   camera.lookAt(lookTarget);
 };
 
@@ -434,19 +505,21 @@ const getSurfaceCameraVectors = (
   const config = BODY_CONFIG[surface.body];
   const bodyGroup = getBodyGroup(objects, surface.body);
   const bodyCenter = getBodyCenter(objects, surface.body);
-  const localEye = vectorFromPlain(surface.pose.up).multiplyScalar(config.radius + config.eyeHeight);
-  const localForward = vectorFromPlain(surface.pose.forward);
-  const localUp = vectorFromPlain(surface.pose.up);
-  const localLook = localForward
-    .multiplyScalar(Math.cos(surface.pitch))
-    .add(localUp.clone().multiplyScalar(Math.sin(surface.pitch)))
-    .normalize();
+  const frame = getSurfaceViewFrame(surface.pose, surface.pitch);
+  const localEye = vectorFromPlain(frame.eyeUp).multiplyScalar(config.radius + config.eyeHeight);
 
   const eye = localEye.applyQuaternion(bodyGroup.quaternion).add(bodyCenter);
-  const lookDirection = localLook.applyQuaternion(bodyGroup.quaternion).normalize();
+  const lookDirection = vectorFromPlain(frame.lookDirection).applyQuaternion(bodyGroup.quaternion).normalize();
+  const headUp = vectorFromPlain(frame.headUp).applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldUp = vectorFromPlain(frame.eyeUp).applyQuaternion(bodyGroup.quaternion).normalize();
   const target = eye.clone().add(lookDirection.multiplyScalar(config.radius * 2));
 
-  return { eye, target };
+  return {
+    eye,
+    target,
+    headUp,
+    worldUp,
+  };
 };
 
 const updateLinePositions = (
@@ -503,6 +576,92 @@ const setEclipseIndicator = (
   }
 
   objects.labels.eclipse.visible = true;
+};
+
+const setSurfaceSkyProxiesHidden = (objects: SceneObjects) => {
+  objects.surfaceMoonProxy.visible = false;
+  objects.surfaceSunProxy.visible = false;
+  objects.surfaceMoonProxy.material.opacity = 0;
+  objects.surfaceSunProxy.material.opacity = 0;
+};
+
+const setInfiniteSunDiskHidden = (objects: SceneObjects) => {
+  objects.infiniteSunDisk.visible = false;
+};
+
+const updateInfiniteSunDisk = (
+  objects: SceneObjects,
+  snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
+  enabled: boolean,
+) => {
+  if (!enabled) {
+    setInfiniteSunDiskHidden(objects);
+    return;
+  }
+
+  const cameraInverse = objects.camera.quaternion.clone().invert();
+  const sunViewDirection = vectorFromPlain(snapshot.sunDirection)
+    .normalize()
+    .applyQuaternion(cameraInverse)
+    .normalize();
+
+  if (sunViewDirection.z >= -0.001) {
+    setInfiniteSunDiskHidden(objects);
+    return;
+  }
+
+  const angularRadius = apparentAngularRadiusRadians(SUN_RADIUS_KM, snapshot.sunDistanceKm);
+  const diskPosition = sunViewDirection.multiplyScalar(INFINITE_SUN_DISTANCE);
+  const viewDepth = Math.max(1, -diskPosition.z);
+  const haloAngularRadius = angularRadius * INFINITE_SUN_HALO_SCALE;
+  const haloDiameter = 2 * viewDepth * Math.tan(haloAngularRadius);
+
+  objects.infiniteSunDisk.position.copy(diskPosition);
+  objects.infiniteSunDisk.scale.set(haloDiameter, haloDiameter, 1);
+  objects.infiniteSunDisk.material.uniforms.coreRadius.value = 1 / INFINITE_SUN_HALO_SCALE;
+  objects.infiniteSunDisk.visible = true;
+};
+
+const updateSurfaceSkyProxies = (
+  objects: SceneObjects,
+  snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
+  cameraPosition: THREE.Vector3,
+  worldUp: THREE.Vector3,
+) => {
+  const moonDirection = vectorFromPlain(snapshot.moonGeocentricKm).normalize();
+  const sunDirection = vectorFromPlain(snapshot.sunDirection).normalize();
+  const moonVisibility = surfaceDirectionVisibility(
+    plainFromVector(moonDirection),
+    plainFromVector(worldUp),
+  );
+  const sunVisibility = surfaceDirectionVisibility(
+    plainFromVector(sunDirection),
+    plainFromVector(worldUp),
+  );
+  const moonRadius = skyProxyRadiusForAngularSize(
+    SURFACE_SKY_BODY_DISTANCE,
+    MOON_RADIUS_KM,
+    snapshot.moonDistanceKm,
+  );
+  const sunRadius = skyProxyRadiusForAngularSize(
+    SURFACE_SKY_BODY_DISTANCE,
+    SUN_RADIUS_KM,
+    snapshot.sunDistanceKm,
+  );
+
+  objects.surfaceMoonProxy.position.copy(
+    cameraPosition.clone().add(moonDirection.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)),
+  );
+  objects.surfaceMoonProxy.scale.setScalar(moonRadius);
+  objects.surfaceMoonProxy.material.opacity = moonVisibility;
+  objects.surfaceMoonProxy.visible = moonVisibility > 0.02;
+
+  objects.surfaceSunProxy.position.copy(
+    cameraPosition.clone().add(sunDirection.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)),
+  );
+  objects.surfaceSunProxy.scale.setScalar(sunRadius);
+  objects.surfaceSunProxy.material.opacity = sunVisibility;
+  objects.surfaceSunProxy.visible = sunVisibility > 0.02;
 };
 
 export default function MoonPhaseSandbox() {
@@ -589,6 +748,7 @@ export default function MoonPhaseSandbox() {
 
     const camera = new THREE.PerspectiveCamera(50, 1, 0.005, 2200);
     camera.position.copy(SPACE_CAMERA_POSITION);
+    scene.add(camera);
 
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
@@ -691,6 +851,9 @@ export default function MoonPhaseSandbox() {
     );
     sunMesh.add(sunHalo);
 
+    const infiniteSunDisk = createInfiniteSunDisk();
+    camera.add(infiniteSunDisk);
+
     const sunLight = new THREE.DirectionalLight(0xffffff, 5.4);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.set(2048, 2048);
@@ -713,6 +876,35 @@ export default function MoonPhaseSandbox() {
     skyDome.visible = false;
     scene.add(skyDome);
 
+    const surfaceMoonProxy = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 64, 32),
+      new THREE.MeshStandardMaterial({
+        map: moonTexture,
+        bumpMap: moonBump,
+        bumpScale: 0.012,
+        roughness: 0.94,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+    );
+    surfaceMoonProxy.renderOrder = 6;
+    surfaceMoonProxy.visible = false;
+    scene.add(surfaceMoonProxy);
+
+    const surfaceSunProxy = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 64, 32),
+      new THREE.MeshBasicMaterial({
+        color: 0xfff1b8,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+      }),
+    );
+    surfaceSunProxy.renderOrder = 7;
+    surfaceSunProxy.visible = false;
+    scene.add(surfaceSunProxy);
+
     const labels = {
       earth: createLabelSprite('Earth'),
       moon: createLabelSprite('Moon'),
@@ -731,9 +923,12 @@ export default function MoonPhaseSandbox() {
       earthMesh,
       moonMesh,
       sunMesh,
+      infiniteSunDisk,
       sunLight,
       earthAtmosphere,
       skyDome,
+      surfaceMoonProxy,
+      surfaceSunProxy,
       moonPathLine,
       eclipseLine,
       lunarEclipseTint,
@@ -769,21 +964,20 @@ export default function MoonPhaseSandbox() {
       toTarget: THREE.Vector3,
       onComplete: () => void,
       duration = 950,
+      toUp = WORLD_CAMERA_UP,
     ) => {
-      const fromTarget = modeRef.current === 'surface' && surfaceRef.current
-        ? getSurfaceCameraVectors(objects, surfaceRef.current).target
-        : camera.position.clone().add(vectorFromPlain(getCameraBasis(
-          spaceCameraRef.current.yaw,
-          spaceCameraRef.current.pitch,
-        ).forward));
+      const currentDirection = new THREE.Vector3();
+      camera.getWorldDirection(currentDirection);
 
       transitionRef.current = {
         startTime: performance.now(),
         duration,
         fromPosition: camera.position.clone(),
-        fromTarget,
+        fromTarget: camera.position.clone().add(currentDirection.multiplyScalar(50)),
+        fromUp: camera.up.clone(),
         toPosition,
         toTarget,
+        toUp: toUp.clone().normalize(),
         onComplete,
       };
       modeRef.current = 'transition';
@@ -802,7 +996,7 @@ export default function MoonPhaseSandbox() {
         pose,
         pitch: body === 'earth' ? 0.02 : 0.06,
       };
-      const { eye, target } = getSurfaceCameraVectors(objects, surface);
+      const { eye, target, headUp } = getSurfaceCameraVectors(objects, surface);
 
       surfaceRef.current = surface;
       setSurfaceBody(body);
@@ -810,7 +1004,7 @@ export default function MoonPhaseSandbox() {
       beginTransition(eye, target, () => {
         modeRef.current = 'surface';
         setMode('surface');
-      });
+      }, 950, headUp);
     };
 
     const returnToSpace = () => {
@@ -823,6 +1017,7 @@ export default function MoonPhaseSandbox() {
       beginTransition(spaceView.position, spaceView.target, () => {
         modeRef.current = 'space';
         setMode('space');
+        camera.up.copy(WORLD_CAMERA_UP);
         setSpaceCameraFromLookAt(camera.position, spaceView.target, spaceCameraRef.current);
         applySpaceCameraLook(camera, spaceCameraRef.current);
       });
@@ -838,6 +1033,7 @@ export default function MoonPhaseSandbox() {
       beginTransition(spaceView.position, spaceView.target, () => {
         modeRef.current = 'space';
         setMode('space');
+        camera.up.copy(WORLD_CAMERA_UP);
         setSpaceCameraFromLookAt(camera.position, spaceView.target, spaceCameraRef.current);
         applySpaceCameraLook(camera, spaceCameraRef.current);
       }, 700);
@@ -921,12 +1117,8 @@ export default function MoonPhaseSandbox() {
       }
 
       const surface = surfaceRef.current;
-      surface.pose = moveSurfacePose(surface.pose, BODY_CONFIG[surface.body].radius, {
-        forwardDistance: 0,
-        rightDistance: 0,
-        turnRadians: -event.movementX * SURFACE_LOOK_SENSITIVITY,
-      });
-      surface.pitch = clampCameraPitch(surface.pitch - event.movementY * SURFACE_LOOK_SENSITIVITY);
+      surface.pose = turnSurfacePose(surface.pose, -event.movementX * SURFACE_LOOK_SENSITIVITY);
+      surface.pitch = clampSurfacePitch(surface.pitch - event.movementY * SURFACE_LOOK_SENSITIVITY);
     };
 
     const onPointerLockChange = () => {
@@ -1009,10 +1201,23 @@ export default function MoonPhaseSandbox() {
       const snapshot = latestSnapshot;
       const moonPosition = getMoonScenePosition(snapshot, scaleModeRef.current);
       const sunDirection = vectorFromPlain(snapshot.sunDirection).normalize();
-      const sunPosition = sunDirection.clone().multiplyScalar(getSunDistance(scaleModeRef.current));
+      const compactSunPosition = getCompactSunPosition(sunDirection);
+      const surfaceForScene = surfaceRef.current;
+      const sunRenderMode = getSunRenderMode(
+        scaleModeRef.current,
+        modeRef.current,
+        surfaceForScene?.body ?? null,
+      );
+      const trueDistanceEarthSurface = modeRef.current === 'surface'
+        && surfaceForScene?.body === 'earth'
+        && scaleModeRef.current === 'true';
 
       moonGroup.position.copy(moonPosition);
-      sunMesh.position.copy(sunPosition);
+      sunMesh.position.copy(compactSunPosition);
+      moonGroup.visible = !trueDistanceEarthSurface;
+      sunMesh.visible = sunRenderMode === 'finite-scene';
+      updateInfiniteSunDisk(objects, snapshot, sunRenderMode === 'infinite-space');
+      setSurfaceSkyProxiesHidden(objects);
       sunLight.position.copy(sunDirection.clone().multiplyScalar(180));
       sunLight.target.position.set(0, 0, 0);
       earthGroup.rotation.y = snapshot.earthRotationRadians;
@@ -1023,20 +1228,29 @@ export default function MoonPhaseSandbox() {
 
       labels.earth.visible = labelsVisibleRef.current && modeRef.current === 'space';
       labels.moon.visible = labelsVisibleRef.current && modeRef.current === 'space';
-      labels.sun.visible = labelsVisibleRef.current && modeRef.current === 'space';
+      labels.sun.visible = labelsVisibleRef.current
+        && modeRef.current === 'space'
+        && sunRenderMode === 'finite-scene';
       labels.path.visible = labelsVisibleRef.current && modeRef.current === 'space';
       labels.eclipse.visible = labelsVisibleRef.current && labels.eclipse.visible && modeRef.current === 'space';
       labels.earth.position.set(0, EARTH_SCENE_RADIUS + 6.2, 0);
       labels.moon.position.copy(moonPosition).add(new THREE.Vector3(0, MOON_SCENE_RADIUS + 4.3, 0));
-      labels.sun.position.copy(sunPosition).add(new THREE.Vector3(0, 14, 0));
+      labels.sun.position.copy(compactSunPosition).add(new THREE.Vector3(0, 14, 0));
 
       const transition = transitionRef.current;
       if (transition) {
         const amount = Math.min(1, (now - transition.startTime) / transition.duration);
         const eased = easeInOutCubic(amount);
         const transitionTarget = new THREE.Vector3();
+        const transitionUp = new THREE.Vector3();
         camera.position.lerpVectors(transition.fromPosition, transition.toPosition, eased);
         transitionTarget.lerpVectors(transition.fromTarget, transition.toTarget, eased);
+        transitionUp.lerpVectors(transition.fromUp, transition.toUp, eased);
+        camera.up.copy(
+          transitionUp.lengthSq() > 1e-8
+            ? transitionUp.normalize()
+            : WORLD_CAMERA_UP,
+        );
         camera.lookAt(transitionTarget);
         if (amount >= 1) {
           transitionRef.current = null;
@@ -1059,14 +1273,11 @@ export default function MoonPhaseSandbox() {
           });
         }
 
-        const { eye, target } = getSurfaceCameraVectors(objects, surface);
-        const bodyGroup = getBodyGroup(objects, surface.body);
-        const worldUp = vectorFromPlain(surface.pose.up)
-          .applyQuaternion(bodyGroup.quaternion)
-          .normalize();
+        const { eye, target, headUp, worldUp } = getSurfaceCameraVectors(objects, surface);
         const sky = getSurfaceSkyState(snapshot.sunDirection, plainFromVector(worldUp));
 
         camera.position.copy(eye);
+        camera.up.copy(headUp);
         camera.lookAt(target);
         skyDome.visible = surface.body === 'earth';
         skyDome.position.copy(camera.position);
@@ -1075,6 +1286,9 @@ export default function MoonPhaseSandbox() {
         skyDome.material.uniforms.daylight.value = sky.daylight;
         skyDome.material.uniforms.twilight.value = sky.twilight;
         skyDome.material.uniforms.night.value = sky.night;
+        if (surface.body === 'earth' && scaleModeRef.current === 'true') {
+          updateSurfaceSkyProxies(objects, snapshot, camera.position, worldUp);
+        }
       } else {
         skyDome.visible = false;
         if (modeRef.current === 'space') {
@@ -1107,9 +1321,12 @@ export default function MoonPhaseSandbox() {
         const surface = surfaceRef.current;
         if (surface) {
           const coords = surfaceLatitudeLongitude(surface.pose);
+          const longitudeRadians = surface.body === 'earth'
+            ? -coords.longitudeRadians
+            : coords.longitudeRadians;
           setSurfaceCoords({
             latitude: coords.latitudeRadians * 180 / Math.PI,
-            longitude: coords.longitudeRadians * 180 / Math.PI,
+            longitude: longitudeRadians * 180 / Math.PI,
           });
         }
       }

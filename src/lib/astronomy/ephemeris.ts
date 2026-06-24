@@ -10,6 +10,7 @@ import {
   NextLunarEclipse,
   SearchGlobalSolarEclipse,
   SearchLunarEclipse,
+  SiderealTime,
 } from 'astronomy-engine';
 
 export interface Vec3 {
@@ -65,6 +66,7 @@ export interface EarthMoonSunSnapshot {
 
 export const EARTH_RADIUS_KM = 6371;
 export const MOON_RADIUS_KM = 1737.4;
+export const SUN_RADIUS_KM = 695700;
 export const MEAN_MOON_DISTANCE_KM = 384400;
 export const EARTH_SIDEREAL_DAY_MS = 86164.0905 * 1000;
 export const MOON_SYNODIC_PERIOD_DAYS = 29.530588853;
@@ -93,6 +95,33 @@ export const normalizeVec3 = (vector: Vec3): Vec3 => {
     y: vector.y / length,
     z: vector.z / length,
   };
+};
+
+export const apparentAngularRadiusRadians = (
+  bodyRadiusKm: number,
+  observerDistanceKm: number,
+): number => Math.atan2(bodyRadiusKm, observerDistanceKm);
+
+export const apparentAngularDiameterDegrees = (
+  bodyRadiusKm: number,
+  observerDistanceKm: number,
+): number => apparentAngularRadiusRadians(bodyRadiusKm, observerDistanceKm) * 360 / Math.PI;
+
+export const skyProxyRadiusForAngularSize = (
+  proxyDistance: number,
+  bodyRadiusKm: number,
+  observerDistanceKm: number,
+): number => proxyDistance * Math.tan(
+  apparentAngularRadiusRadians(bodyRadiusKm, observerDistanceKm),
+);
+
+export const surfaceDirectionVisibility = (
+  direction: Vec3,
+  surfaceUp: Vec3,
+  horizonFade = 0.035,
+): number => {
+  const altitudeSine = dotVec3(normalizeVec3(direction), normalizeVec3(surfaceUp));
+  return smoothstep(-horizonFade, horizonFade, altitudeSine);
 };
 
 const toSceneKilometers = (vector: { x: number; y: number; z: number }): Vec3 => ({
@@ -273,6 +302,9 @@ export const rotationAngleForDate = (
   return normalizeDegrees(turns * 360) * Math.PI / 180 + phaseRadians;
 };
 
+export const earthRotationAngleForDate = (date: Date): number =>
+  SiderealTime(date) * 15 * Math.PI / 180;
+
 const dotVec3 = (a: Vec3, b: Vec3): number =>
   a.x * b.x + a.y * b.y + a.z * b.z;
 
@@ -307,7 +339,7 @@ export const getEarthMoonSunSnapshot = (date: Date): EarthMoonSunSnapshot => {
     phase: getMoonPhaseSummary(date),
     eclipseState: getEclipseState(date),
     surfaceSky: getSurfaceSkyState(sunDirection, { x: 0, y: 1, z: 0 }),
-    earthRotationRadians: rotationAngleForDate(date, EARTH_SIDEREAL_DAY_MS),
+    earthRotationRadians: earthRotationAngleForDate(date),
     moonRotationRadians: rotationAngleForDate(
       date,
       MOON_SYNODIC_PERIOD_DAYS * DAY_MS,

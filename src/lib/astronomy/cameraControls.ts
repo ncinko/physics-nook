@@ -7,6 +7,9 @@ import {
 } from './surfaceNavigation.ts';
 
 export type CameraMode = 'space' | 'surface' | 'transition';
+export type AstronomyScaleMode = 'compact' | 'true';
+export type SurfaceBodyId = 'earth' | 'moon' | null;
+export type SunRenderMode = 'finite-scene' | 'infinite-space' | 'surface-proxy';
 
 export interface CameraBasis {
   forward: Vec3;
@@ -54,3 +57,15 @@ export const canUseClickForDescent = (
   mode: CameraMode,
   pointerMoved: boolean,
 ): boolean => mode === 'space' && !pointerMoved;
+
+export const getSunRenderMode = (
+  scaleMode: AstronomyScaleMode,
+  mode: CameraMode,
+  surfaceBody: SurfaceBodyId = null,
+): SunRenderMode => {
+  if (scaleMode === 'true' && mode === 'space') return 'infinite-space';
+  if (scaleMode === 'true' && mode === 'surface' && surfaceBody === 'earth') {
+    return 'surface-proxy';
+  }
+  return 'finite-scene';
+};

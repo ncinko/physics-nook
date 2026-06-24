@@ -267,7 +267,7 @@ export function ChickenCompanion({ action = 'flee' }: ChickenCompanionProps) {
           position: 'fixed',
           pointerEvents: 'auto',
           cursor: 'pointer',
-          zIndex: 1,
+          zIndex: 70,
           opacity: 0.92,
           willChange: 'left, bottom, transform',
         }}

@@ -14,7 +14,10 @@ import {
 import {
   CHICKEN_ROUNDS,
   chickenCountForRound,
+  chickenCountGameScore,
   scoreChickenEstimate,
+  selectBestChickenCountScoresByUniqueName,
+  validateChickenCountScoreSubmission,
 } from '../../src/lib/measurement/chickenCount.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
@@ -198,5 +201,98 @@ assert.equal(chickenCountForRound(99, () => 1), 200);
 }
 
 console.log('Chicken-count scoring tests passed.');
+
+// --- Chicken counting: cloud leaderboard validation and ranking ---
+
+{
+  const rounds = [
+    scoreChickenEstimate({ trueCount: 30, estimate: 31, uncertainty: 3, elapsedSeconds: 4 }),
+    scoreChickenEstimate({ trueCount: 72, estimate: 70, uncertainty: 5, elapsedSeconds: 8 }),
+    scoreChickenEstimate({ trueCount: 150, estimate: 148, uncertainty: 8, elapsedSeconds: 12 }),
+  ].map(({ trueCount, estimate, uncertainty, elapsedSeconds, score }) => ({
+    trueCount,
+    estimate,
+    uncertainty,
+    elapsedSeconds,
+    score,
+  }));
+  const validation = validateChickenCountScoreSubmission({
+    name: '  Henrietta   ',
+    score: chickenCountGameScore(rounds),
+    rounds,
+  });
+
+  assert.equal(validation.ok, true);
+  assert.equal(validation.name, 'Henrietta');
+  assert.equal(validation.rounds.length, 3);
+  assert.equal(validation.score, chickenCountGameScore(rounds));
+  assert.ok(validation.totalError > 0);
+
+  const mismatched = validateChickenCountScoreSubmission({
+    name: 'Henrietta',
+    score: validation.score + 1,
+    rounds,
+  });
+  assert.equal(mismatched.ok, false, 'a final score that does not match the rounds is rejected');
+
+  const outOfRange = validateChickenCountScoreSubmission({
+    name: 'Henrietta',
+    score: rounds[0].score + rounds[1].score + rounds[2].score,
+    rounds: [{ ...rounds[0], trueCount: 999 }, rounds[1], rounds[2]],
+  });
+  assert.equal(outOfRange.ok, false, 'round true counts must match their configured ranges');
+}
+
+{
+  const now = Date.now();
+  const ranked = selectBestChickenCountScoresByUniqueName([
+    {
+      name: 'Ada',
+      score: 350,
+      totalError: 12,
+      totalElapsedSeconds: 24,
+      round1Count: 30,
+      round2Count: 70,
+      round3Count: 120,
+      createdAt: now + 20,
+    },
+    {
+      name: 'ada ',
+      score: 360,
+      totalError: 20,
+      totalElapsedSeconds: 30,
+      round1Count: 31,
+      round2Count: 75,
+      round3Count: 130,
+      createdAt: now + 30,
+    },
+    {
+      name: 'Berta',
+      score: 360,
+      totalError: 8,
+      totalElapsedSeconds: 38,
+      round1Count: 32,
+      round2Count: 80,
+      round3Count: 140,
+      createdAt: now + 10,
+    },
+    {
+      name: 'Clara',
+      score: 360,
+      totalError: 8,
+      totalElapsedSeconds: 34,
+      round1Count: 32,
+      round2Count: 80,
+      round3Count: 140,
+      createdAt: now + 40,
+    },
+  ]);
+
+  assert.equal(ranked[0].name, 'Clara', 'ties prefer lower total error, then faster total time');
+  assert.equal(ranked[1].name, 'Berta');
+  assert.equal(ranked[2].name, 'ada ', "a player's best score is kept");
+}
+
+console.log('Chicken-count leaderboard tests passed.');
 
 console.log('All measurement tests passed.');

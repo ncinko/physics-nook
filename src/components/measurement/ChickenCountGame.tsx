@@ -1,13 +1,20 @@
-import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { Cloud, Trophy, WifiOff } from 'lucide-react';
 import { Button, ControlBar } from '../shared/InlineControls';
 import { Readout } from '../shared/Readout';
 import {
+  CHICKEN_COUNT_DEFAULTS,
   CHICKEN_ROUND_SECONDS,
   CHICKEN_ROUNDS,
+  chickenCountGameScore,
   chickenCountForRound,
   scoreChickenEstimate,
+  selectBestChickenCountScoresByUniqueName,
+  type ChickenCountLeaderboardRound,
+  type ChickenCountLeaderboardScore,
   type ChickenScore,
 } from '../../lib/measurement/chickenCount';
+import { sanitizeLeaderboardName } from '../../lib/kinematics/stopZones';
 import {
   CHICKEN_COLS,
   CHICKEN_PALETTE,
@@ -183,6 +190,23 @@ interface ChickenCountGameProps {
   className?: string;
 }
 
+type ApiStatus = 'checking' | 'online' | 'offline';
+type ChickenCountScoreEntry = ChickenCountLeaderboardScore & { id?: string };
+
+const toLeaderboardRound = (round: ChickenScore): ChickenCountLeaderboardRound => ({
+  trueCount: round.trueCount,
+  estimate: round.estimate,
+  uncertainty: round.uncertainty,
+  elapsedSeconds: round.elapsedSeconds,
+  score: round.score,
+});
+
+const totalErrorForRounds = (rounds: ChickenScore[]) =>
+  Math.round(rounds.reduce((sum, round) => sum + round.error, 0) * 10) / 10;
+
+const totalElapsedForRounds = (rounds: ChickenScore[]) =>
+  Math.round(rounds.reduce((sum, round) => sum + round.elapsedSeconds, 0) * 10) / 10;
+
 export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) {
   const [status, setStatus] = useState<GameStatus>('idle');
   const [roundIndex, setRoundIndex] = useState(0);
@@ -198,6 +222,14 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
   const estimateInputRef = useRef<HTMLInputElement | null>(null);
   const endAtRef = useRef<number | null>(null);
   const finishedRef = useRef(false);
+  const runIdRef = useRef<string | null>(null);
+  const submittedRef = useRef(false);
+  const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
+  const [cloudScores, setCloudScores] = useState<ChickenCountScoreEntry[]>([]);
+  const [localScores, setLocalScores] = useState<ChickenCountScoreEntry[]>([]);
+  const [playerName, setPlayerName] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
   const chickens = useMemo(() => createChickenSpecs(trueCount, seed), [seed, trueCount]);
   const estimate = parseNonNegative(estimateInput);
@@ -221,6 +253,128 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
   const gameComplete = status === 'idle' && roundResults.length >= CHICKEN_ROUNDS.length;
   const gameScore =
     roundResults.reduce((sum, score) => sum + score.score, 0) + (status === 'revealed' ? (displayedResult?.score ?? 0) : 0);
+  const leaderboardScores = selectBestChickenCountScoresByUniqueName(
+    apiStatus === 'online' ? cloudScores : localScores,
+  );
+  const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
+
+  const loadLocalScores = useCallback((): ChickenCountScoreEntry[] => {
+    if (typeof window === 'undefined') {
+      return [];
+    }
+    try {
+      const raw = window.localStorage.getItem(CHICKEN_COUNT_DEFAULTS.localStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        return selectBestChickenCountScoresByUniqueName(parsed as ChickenCountScoreEntry[]);
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }, []);
+
+  const saveLocalScore = useCallback(
+    (score: ChickenCountScoreEntry) => {
+      const next = selectBestChickenCountScoresByUniqueName([...loadLocalScores(), score]);
+      try {
+        window.localStorage.setItem(CHICKEN_COUNT_DEFAULTS.localStorageKey, JSON.stringify(next));
+      } catch {
+        // Local scores are a fallback; the game still works if storage is blocked.
+      }
+      setLocalScores(next);
+      return next;
+    },
+    [loadLocalScores],
+  );
+
+  const refreshLeaderboard = useCallback(async () => {
+    try {
+      const response = await fetch('/api/measurement/chicken-count/leaderboard?limit=10', {
+        headers: { accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Chicken count leaderboard request failed: ${response.status}`);
+      }
+      const body = await response.json();
+      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    }
+  }, []);
+
+  const createServerRun = useCallback(async () => {
+    try {
+      const response = await fetch('/api/measurement/chicken-count/run', {
+        method: 'POST',
+        headers: { accept: 'application/json' },
+      });
+      if (!response.ok) {
+        throw new Error(`Chicken count run request failed: ${response.status}`);
+      }
+      const body = await response.json();
+      runIdRef.current = typeof body.runId === 'string' ? body.runId : null;
+      setApiStatus(runIdRef.current ? 'online' : 'offline');
+    } catch {
+      runIdRef.current = null;
+      setApiStatus('offline');
+    }
+  }, []);
+
+  const handleScoreSubmit = useCallback(async () => {
+    if (submittedRef.current || roundResults.length < CHICKEN_ROUNDS.length) {
+      return;
+    }
+
+    submittedRef.current = true;
+    setSubmitted(true);
+
+    const rounds = roundResults.map(toLeaderboardRound);
+    const score = chickenCountGameScore(rounds);
+    const entry: ChickenCountScoreEntry = {
+      name: sanitizeLeaderboardName(playerName),
+      score,
+      totalError: totalErrorForRounds(roundResults),
+      totalElapsedSeconds: totalElapsedForRounds(roundResults),
+      round1Count: rounds[0].trueCount,
+      round2Count: rounds[1].trueCount,
+      round3Count: rounds[2].trueCount,
+      createdAt: Date.now(),
+    };
+
+    saveLocalScore(entry);
+
+    if (!runIdRef.current) {
+      setApiStatus('offline');
+      return;
+    }
+
+    setIsPosting(true);
+    try {
+      const response = await fetch('/api/measurement/chicken-count/leaderboard', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'content-type': 'application/json' },
+        body: JSON.stringify({
+          runId: runIdRef.current,
+          name: entry.name,
+          score: entry.score,
+          rounds,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Chicken count score submit failed: ${response.status}`);
+      }
+      const body = await response.json();
+      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+      setApiStatus('online');
+    } catch {
+      setApiStatus('offline');
+    } finally {
+      setIsPosting(false);
+      runIdRef.current = null;
+    }
+  }, [playerName, roundResults, saveLocalScore]);
 
   const prepareRound = (nextRoundIndex: number, keepResults: ChickenScore[]) => {
     setRoundIndex(nextRoundIndex);
@@ -297,7 +451,23 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
     return () => observer.disconnect();
   }, []);
 
-  const startGame = () => prepareRound(0, []);
+  useEffect(() => {
+    setLocalScores(loadLocalScores());
+    void refreshLeaderboard();
+  }, [loadLocalScores, refreshLeaderboard]);
+
+  const armRun = () => {
+    submittedRef.current = false;
+    runIdRef.current = null;
+    setSubmitted(false);
+    setPlayerName('');
+    void createServerRun();
+  };
+
+  const startGame = () => {
+    armRun();
+    prepareRound(0, []);
+  };
 
   const revealNow = () => {
     if (status === 'running') {
@@ -343,8 +513,8 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
               {gameComplete
                 ? `Game score ${gameScore}`
                 : status === 'idle'
-                ? ''
-                : ``}
+                ? 'Three rounds, bigger flocks each time.'
+                : `${roundConfig.min}-${roundConfig.max} chickens`}
             </p>
           </div>
           <div className="rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-1 text-right font-mono text-sm font-semibold tabular-nums">
@@ -412,6 +582,54 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
           <p className="m-0 text-sm leading-6 text-[var(--text-muted)]">
             Count the flock, report an estimate with uncertainty, then repeat for three rounds.
           </p>
+        )}
+
+        {gameComplete && (
+          <div className="grid gap-3 rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-3">
+            {!submitted ? (
+              <form
+                className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleScoreSubmit();
+                }}
+              >
+                <label className="grid gap-1 text-sm font-medium">
+                  <span>Leaderboard name</span>
+                  <input
+                    value={playerName}
+                    onChange={(event) => setPlayerName(event.target.value)}
+                    maxLength={24}
+                    placeholder="Player"
+                    autoComplete="off"
+                    className="rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                  />
+                </label>
+                <ControlBar align="start" className="sm:items-end sm:justify-end">
+                  <Button type="submit" disabled={isPosting} className="inline-flex items-center gap-2 disabled:opacity-60">
+                    <Trophy aria-hidden="true" size={16} />
+                    {isPosting ? 'Posting...' : 'Submit score'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      submittedRef.current = true;
+                      setSubmitted(true);
+                    }}
+                  >
+                    Skip
+                  </Button>
+                </ControlBar>
+              </form>
+            ) : (
+              <p className="m-0 text-sm text-[var(--text-muted)]">
+                {isPosting ? 'Posting score...' : 'Score recorded below.'}
+              </p>
+            )}
+
+            <ChickenLeaderboard label={leaderboardLabel} status={apiStatus} scores={leaderboardScores} />
+          </div>
         )}
 
         {status === 'running' && (
@@ -487,5 +705,59 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
         }
       `}</style>
     </section>
+  );
+}
+
+function formatScoreDate(createdAt: number) {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) {
+    return '--';
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(new Date(createdAt));
+}
+
+function ChickenLeaderboard({
+  label,
+  status,
+  scores,
+}: {
+  label: string;
+  status: ApiStatus;
+  scores: ChickenCountScoreEntry[];
+}) {
+  return (
+    <div className="rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h4 className="m-0 text-sm font-semibold">{label}</h4>
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)]">
+          {status === 'online' ? <Cloud aria-hidden="true" size={14} /> : <WifiOff aria-hidden="true" size={14} />}
+          {status}
+        </span>
+      </div>
+      {scores.length > 0 ? (
+        <ol className="m-0 list-none space-y-0 p-0">
+          {scores.map((score, index) => (
+            <li
+              key={`${score.id ?? score.name}-${score.score}-${score.createdAt}-${index}`}
+              className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 border-b border-[var(--grid-line)] py-1.5 text-sm last:border-b-0"
+            >
+              <span className="text-right font-semibold text-[var(--text-muted)]">#{index + 1}</span>
+              <span className="min-w-0">
+                <span className="block truncate font-semibold">{score.name}</span>
+                <span className="block text-xs text-[var(--text-muted)]">
+                  error {score.totalError.toFixed(score.totalError % 1 === 0 ? 0 : 1)} - {formatScoreDate(score.createdAt)}
+                </span>
+              </span>
+              <span className="font-mono font-bold tabular-nums text-[var(--accent-blue)]">{score.score}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
+      )}
+    </div>
   );
 }

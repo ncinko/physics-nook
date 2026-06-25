@@ -343,11 +343,16 @@ const createSurfaceSkyDome = () =>
           float upDot = dot(direction, up);
           float horizon = pow(1.0 - abs(upDot), 3.0);
           float sunGlow = smoothstep(0.12, 0.98, sunDot);
-          float duskBand = smoothstep(-0.25, 0.12, sunDot) * (1.0 - smoothstep(0.12, 0.48, sunDot));
+          vec3 sunHorizon = sun - up * dot(sun, up);
+          vec3 viewHorizon = direction - up * upDot;
+          sunHorizon = sunHorizon / max(length(sunHorizon), 0.001);
+          viewHorizon = viewHorizon / max(length(viewHorizon), 0.001);
+          float sunAzimuth = dot(viewHorizon, sunHorizon);
+          float duskBand = horizon * (0.24 + 0.76 * smoothstep(-0.28, 0.84, sunAzimuth));
 
           vec3 nightColor = mix(vec3(0.004, 0.008, 0.028), vec3(0.018, 0.034, 0.075), max(upDot, 0.0));
           vec3 dayColor = mix(vec3(0.38, 0.62, 0.98), vec3(0.08, 0.21, 0.48), clamp(upDot, 0.0, 1.0));
-          vec3 twilightColor = vec3(1.0, 0.36, 0.17) * duskBand * (0.34 + horizon);
+          vec3 twilightColor = vec3(1.0, 0.36, 0.17) * duskBand;
           vec3 horizonColor = mix(vec3(0.08, 0.1, 0.18), vec3(0.74, 0.82, 0.94), daylight);
           vec3 color = mix(nightColor, dayColor, daylight);
 
@@ -707,8 +712,8 @@ export default function MoonPhaseSandbox() {
   const [speed, setSpeed] = useState(1);
   const [scaleMode, setScaleMode] = useState<ScaleMode>('compact');
   const [labelsVisible, setLabelsVisible] = useState(true);
-  const [timePanelOpen, setTimePanelOpen] = useState(true);
-  const [readoutsVisible, setReadoutsVisible] = useState(true);
+  const [timePanelOpen, setTimePanelOpen] = useState(false);
+  const [readoutsVisible, setReadoutsVisible] = useState(false);
   const [mode, setMode] = useState<CameraMode>('space');
   const [surfaceBody, setSurfaceBody] = useState<BodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });

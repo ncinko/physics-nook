@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
-  Clock,
   EyeOff,
   Gauge,
   Info,
@@ -27,36 +26,48 @@ import {
   advanceSimulationTime,
   applySpaceLookDrag,
   applySpaceTranslation,
+  buildLiveEarthWmsUrl,
   canUseClickForDescent,
   clampCameraPitch,
   clampSurfacePitch,
+  compositeLiveEarthLayers,
   createSurfacePose,
   formatSpeedLabel,
   getBinarySystemSnapshot,
   getCameraBasis,
   getEarthMoonSunSnapshot,
+  getSurfaceSkyBodies,
   getSurfaceSkyState,
   getSurfaceViewFrame,
   getSunRenderMode,
   isAlienCaught,
+  LIVE_EARTH_TEXTURE_HEIGHT,
+  LIVE_EARTH_TEXTURE_WIDTH,
+  liveEarthTextureKey,
   moveAlienTowardPose,
   moveSurfacePose,
   nextAlienWorldMode,
   apparentAngularRadiusRadians,
+  resolveLiveEarthLayers,
   scaleBinaryScenePosition,
   skyProxyRadiusForAngularSize,
   speedFromLogSlider,
   surfaceDirectionVisibility,
   surfaceLatitudeLongitude,
   turnSurfacePose,
+  BRIGHT_STAR_CATALOG,
+  celestialDirectionFromRaDec,
+  starVisualStyle,
   type AlienWorldMode,
   type AstronomyScaleMode,
   type BinarySystemSnapshot,
   type CameraMode,
   type EclipseState,
   type MoonPhaseSummary,
+  type ResolvedLiveEarthLayer,
   type SpaceLookState,
   type SurfacePose,
+  type SurfaceSkyBodySnapshot,
   type Vec3,
 } from '../../lib/astronomy/index.ts';
 import './moonPhaseSandbox.css';
@@ -71,6 +82,7 @@ interface SceneObjects {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
+  starField: THREE.Points<THREE.BufferGeometry, THREE.ShaderMaterial>;
   earthGroup: THREE.Group;
   moonGroup: THREE.Group;
   binaryGroup: THREE.Group;
@@ -90,6 +102,7 @@ interface SceneObjects {
   earthAtmosphere: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   surfaceMoonProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
+  surfaceEarthProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
   surfaceSunProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   binaryPrimaryProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   binarySecondaryProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
@@ -148,6 +161,10 @@ const ALIEN_IDLE_SPEED_RATIO = 0.24;
 const COMPACT_SUN_DISTANCE = 260;
 const INFINITE_SUN_DISTANCE = 1200;
 const INFINITE_SUN_HALO_SCALE = 7;
+const STAR_FIELD_RADIUS = 1800;
+const LIVE_EARTH_TEXTURE_CACHE_LIMIT = 8;
+const STAR_OCCLUSION_FEATHER_RADIANS = 0.005;
+const STAR_HORIZON_FEATHER = 0.026;
 const WORLD_CAMERA_UP = new THREE.Vector3(0, 1, 0);
 
 const BODY_CONFIG: Record<BodyId, {
@@ -206,41 +223,279 @@ const seededUnit = (index: number, salt: number) => {
   return value - Math.floor(value);
 };
 
+const createProceduralStarEntries = () => {
+  const count = 620;
+  return Array.from({ length: count }, (_, index) => ({
+    direction: {
+      x: Math.cos(seededUnit(index, 2) * Math.PI * 2) * Math.sqrt(1 - (seededUnit(index, 1) * 2 - 1) ** 2),
+      y: seededUnit(index, 1) * 2 - 1,
+      z: Math.sin(seededUnit(index, 2) * Math.PI * 2) * Math.sqrt(1 - (seededUnit(index, 1) * 2 - 1) ** 2),
+    },
+    color: {
+      x: 0.7 + seededUnit(index, 4) * 0.25,
+      y: 0.74 + seededUnit(index, 5) * 0.2,
+      z: 0.9 + seededUnit(index, 6) * 0.1,
+    },
+    size: 0.65 + seededUnit(index, 7) * 1.15,
+    alpha: 0.08 + seededUnit(index, 8) * 0.22,
+  }));
+};
+
 const createStarField = () => {
-  const count = 2200;
+  const catalogStars = BRIGHT_STAR_CATALOG.map((star) => {
+    const style = starVisualStyle(star);
+    return {
+      direction: celestialDirectionFromRaDec(star.raHours, star.decDegrees),
+      color: style.color,
+      size: style.size,
+      alpha: style.alpha,
+    };
+  });
+  const stars = catalogStars.length > 0
+    ? [...createProceduralStarEntries(), ...catalogStars]
+    : createProceduralStarEntries();
+  const count = stars.length;
   const positions = new Float32Array(count * 3);
   const colors = new Float32Array(count * 3);
+  const sizes = new Float32Array(count);
+  const alphas = new Float32Array(count);
 
-  for (let index = 0; index < count; index += 1) {
-    const z = seededUnit(index, 1) * 2 - 1;
-    const theta = seededUnit(index, 2) * Math.PI * 2;
-    const radius = Math.sqrt(1 - z * z);
-    const distance = 780 + seededUnit(index, 3) * 540;
-    const colorMix = 0.72 + seededUnit(index, 4) * 0.28;
+  stars.forEach((star, index) => {
+    const direction = vectorFromPlain(star.direction).normalize();
 
-    positions[index * 3] = Math.cos(theta) * radius * distance;
-    positions[index * 3 + 1] = z * distance;
-    positions[index * 3 + 2] = Math.sin(theta) * radius * distance;
-    colors[index * 3] = colorMix;
-    colors[index * 3 + 1] = colorMix * (0.92 + seededUnit(index, 5) * 0.1);
-    colors[index * 3 + 2] = 1;
-  }
+    positions[index * 3] = direction.x * STAR_FIELD_RADIUS;
+    positions[index * 3 + 1] = direction.y * STAR_FIELD_RADIUS;
+    positions[index * 3 + 2] = direction.z * STAR_FIELD_RADIUS;
+    colors[index * 3] = star.color.x;
+    colors[index * 3 + 1] = star.color.y;
+    colors[index * 3 + 2] = star.color.z;
+    sizes[index] = star.size;
+    alphas[index] = star.alpha;
+  });
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+  geometry.setAttribute('alpha', new THREE.BufferAttribute(alphas, 1));
+  geometry.userData.baseAlphas = Array.from(alphas);
 
-  return new THREE.Points(
-    geometry,
-    new THREE.PointsMaterial({
-      size: 1.2,
-      sizeAttenuation: true,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.88,
-      depthWrite: false,
-    }),
+  const material = new THREE.ShaderMaterial({
+    vertexShader: `
+      attribute float size;
+      attribute float alpha;
+      attribute vec3 color;
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        vColor = color;
+        vAlpha = alpha;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        gl_PointSize = size;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vColor;
+      varying float vAlpha;
+
+      void main() {
+        vec2 centered = gl_PointCoord - vec2(0.5);
+        float radius = length(centered) * 2.0;
+        if (radius > 1.0) discard;
+        float core = 1.0 - smoothstep(0.12, 1.0, radius);
+        float glow = pow(max(0.0, 1.0 - radius), 2.2);
+        gl_FragColor = vec4(vColor, vAlpha * max(core, glow * 0.72));
+      }
+    `,
+    blending: THREE.AdditiveBlending,
+    depthTest: true,
+    depthWrite: false,
+    fog: false,
+    transparent: true,
+  });
+  material.toneMapped = false;
+
+  const points = new THREE.Points(geometry, material);
+  points.frustumCulled = false;
+  points.renderOrder = -30;
+  return points;
+};
+
+interface StarBlocker {
+  direction: THREE.Vector3;
+  angularRadius: number;
+  feather: number;
+}
+
+const smoothstep = (edge0: number, edge1: number, value: number) => {
+  const amount = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
+  return amount * amount * (3 - 2 * amount);
+};
+
+const addDirectionalStarBlocker = (
+  blockers: StarBlocker[],
+  direction: THREE.Vector3,
+  angularRadius: number,
+  feather = STAR_OCCLUSION_FEATHER_RADIANS,
+) => {
+  if (angularRadius <= 0 || direction.lengthSq() < 1e-8) return;
+  blockers.push({
+    direction: direction.clone().normalize(),
+    angularRadius,
+    feather,
+  });
+};
+
+const addSceneSphereStarBlocker = (
+  blockers: StarBlocker[],
+  cameraPosition: THREE.Vector3,
+  center: THREE.Vector3,
+  radius: number,
+  visible: boolean,
+) => {
+  if (!visible || radius <= 0) return;
+  const offset = center.clone().sub(cameraPosition);
+  const distance = offset.length();
+  if (distance <= 1e-6) return;
+  const angularRadius = Math.asin(Math.min(1, radius / distance));
+  addDirectionalStarBlocker(
+    blockers,
+    offset,
+    angularRadius,
+    Math.max(STAR_OCCLUSION_FEATHER_RADIANS, angularRadius * 0.035),
   );
+};
+
+const addProxyStarBlocker = (
+  blockers: StarBlocker[],
+  cameraPosition: THREE.Vector3,
+  proxy: THREE.Object3D,
+) => {
+  if (!proxy.visible) return;
+  const center = new THREE.Vector3();
+  proxy.getWorldPosition(center);
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    center,
+    Math.max(proxy.scale.x, proxy.scale.y, proxy.scale.z),
+    true,
+  );
+};
+
+const collectStarBlockers = (
+  objects: SceneObjects,
+  snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
+): StarBlocker[] => {
+  const blockers: StarBlocker[] = [];
+  const cameraPosition = objects.camera.position;
+
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.earthGroup.position,
+    EARTH_ATMOSPHERE_RADIUS,
+    objects.earthGroup.visible,
+  );
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.moonGroup.position,
+    MOON_SCENE_RADIUS,
+    objects.moonGroup.visible,
+  );
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.sunMesh.position,
+    15.5,
+    objects.sunMesh.visible,
+  );
+  addDirectionalStarBlocker(
+    blockers,
+    vectorFromPlain(snapshot.sunDirection),
+    apparentAngularRadiusRadians(SUN_RADIUS_KM, snapshot.sunDistanceKm) * 2.2,
+    0.006,
+  );
+  addProxyStarBlocker(blockers, cameraPosition, objects.surfaceMoonProxy);
+  addProxyStarBlocker(blockers, cameraPosition, objects.surfaceEarthProxy);
+  addProxyStarBlocker(blockers, cameraPosition, objects.surfaceSunProxy);
+  addProxyStarBlocker(blockers, cameraPosition, objects.binaryPrimaryProxy);
+  addProxyStarBlocker(blockers, cameraPosition, objects.binarySecondaryProxy);
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.binaryPrimaryStar.position,
+    objects.binaryPrimaryStar.scale.x * 1.55,
+    objects.binaryPrimaryStar.visible,
+  );
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.binarySecondaryStar.position,
+    objects.binarySecondaryStar.scale.x * 1.55,
+    objects.binarySecondaryStar.visible,
+  );
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.binaryPlanetGroup.position,
+    objects.binaryPlanetMesh.scale.x * 7.8,
+    objects.binaryGroup.visible,
+  );
+  addSceneSphereStarBlocker(
+    blockers,
+    cameraPosition,
+    objects.binaryMoonGroup.position,
+    BINARY_MOON_SCENE_RADIUS,
+    objects.binaryMoonGroup.visible,
+  );
+
+  return blockers;
+};
+
+const updateStarFieldOcclusion = (
+  objects: SceneObjects,
+  snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
+  horizonUp: THREE.Vector3 | null,
+) => {
+  const geometry = objects.starField.geometry;
+  const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute;
+  const alphaAttribute = geometry.getAttribute('alpha') as THREE.BufferAttribute;
+  const blockers = collectStarBlockers(objects, snapshot);
+
+  for (let index = 0; index < alphaAttribute.count; index += 1) {
+    const starDirection = new THREE.Vector3(
+      positionAttribute.getX(index),
+      positionAttribute.getY(index),
+      positionAttribute.getZ(index),
+    ).normalize();
+    const baseAlphas = geometry.userData.baseAlphas as number[] | undefined;
+    let opacity = baseAlphas?.[index] ?? alphaAttribute.getX(index);
+
+    if (horizonUp) {
+      opacity *= smoothstep(
+        -STAR_HORIZON_FEATHER,
+        STAR_HORIZON_FEATHER,
+        starDirection.dot(horizonUp),
+      );
+    }
+
+    blockers.forEach((blocker) => {
+      const dot = Math.max(-1, Math.min(1, starDirection.dot(blocker.direction)));
+      const angle = Math.acos(dot);
+      opacity *= smoothstep(
+        Math.max(0, blocker.angularRadius - blocker.feather),
+        blocker.angularRadius + blocker.feather,
+        angle,
+      );
+    });
+
+    alphaAttribute.setX(index, opacity);
+  }
+
+  alphaAttribute.needsUpdate = true;
 };
 
 const createPathLine = (pointCount: number, color: number, opacity: number) => {
@@ -684,6 +939,105 @@ const getInitialRuntimeDate = () => {
   return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
 };
 
+const getCanvasImageSize = (image: CanvasImageSource) => {
+  const candidate = image as HTMLImageElement & {
+    naturalWidth?: number;
+    naturalHeight?: number;
+    videoWidth?: number;
+    videoHeight?: number;
+    width: number;
+    height: number;
+  };
+  const width = Number(candidate.naturalWidth || candidate.videoWidth || candidate.width);
+  const height = Number(candidate.naturalHeight || candidate.videoHeight || candidate.height);
+  return {
+    width: Number.isFinite(width) ? Math.floor(width) : 0,
+    height: Number.isFinite(height) ? Math.floor(height) : 0,
+  };
+};
+
+const imageToEarthImageData = (
+  image: CanvasImageSource | undefined,
+  width: number,
+  height: number,
+) => {
+  if (!image) return null;
+
+  const imageSize = getCanvasImageSize(image);
+  if (imageSize.width <= 0 || imageSize.height <= 0) return null;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return null;
+
+  try {
+    context.imageSmoothingEnabled = true;
+    context.drawImage(image, 0, 0, width, height);
+    return context.getImageData(0, 0, width, height);
+  } catch {
+    return null;
+  }
+};
+
+const createLiveEarthCompositeTexture = (
+  layers: Array<{ layer: ResolvedLiveEarthLayer; texture: THREE.Texture }>,
+  fallbackTexture: THREE.Texture,
+  anisotropy: number,
+) => {
+  const fallbackImage = fallbackTexture.image as CanvasImageSource | undefined;
+  const baseData = imageToEarthImageData(fallbackImage, LIVE_EARTH_TEXTURE_WIDTH, LIVE_EARTH_TEXTURE_HEIGHT);
+  if (!baseData) return null;
+
+  const compositeLayers = layers
+    .map(({ layer, texture }) => {
+      const imageData = imageToEarthImageData(texture.image as CanvasImageSource | undefined, baseData.width, baseData.height);
+      if (!imageData) return null;
+      return {
+        id: layer.cacheKey,
+        imageData,
+        priority: layer.provider.priority,
+        opacity: layer.provider.blendOpacity,
+      };
+    })
+    .filter((layer): layer is NonNullable<typeof layer> => layer !== null);
+
+  const firstComposite = compositeLiveEarthLayers(baseData, compositeLayers);
+  const validLayers = firstComposite.stats.filter((stat) => {
+    const source = layers.find(({ layer }) => layer.cacheKey === stat.id);
+    return source ? stat.validShare >= source.layer.provider.minValidShare : stat.validShare > 0;
+  });
+
+  if (validLayers.length === 0) return null;
+  const validLayerKeys = new Set(validLayers.map((layer) => layer.id));
+  const composite = validLayers.length === compositeLayers.length
+    ? firstComposite
+    : compositeLiveEarthLayers(
+      baseData,
+      compositeLayers.filter((layer) => validLayerKeys.has(layer.id)),
+    );
+
+  const outputCanvas = document.createElement('canvas');
+  outputCanvas.width = composite.imageData.width;
+  outputCanvas.height = composite.imageData.height;
+  const outputContext = outputCanvas.getContext('2d');
+  if (!outputContext) return null;
+
+  const outputData = outputContext.createImageData(composite.imageData.width, composite.imageData.height);
+  outputData.data.set(composite.imageData.data);
+  outputContext.putImageData(outputData, 0, 0);
+
+  const texture = new THREE.CanvasTexture(outputCanvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = anisotropy;
+
+  return {
+    texture,
+    validLayerKeys: Array.from(validLayerKeys),
+  };
+};
+
 const getBodyCenter = (objects: SceneObjects, body: BodyId) => {
   if (body === 'earth') return objects.earthGroup.position;
   if (body === 'moon') return objects.moonGroup.position;
@@ -798,9 +1152,50 @@ const setEclipseIndicator = (
 
 const setSurfaceSkyProxiesHidden = (objects: SceneObjects) => {
   objects.surfaceMoonProxy.visible = false;
+  objects.surfaceEarthProxy.visible = false;
   objects.surfaceSunProxy.visible = false;
   objects.surfaceMoonProxy.material.opacity = 0;
+  objects.surfaceEarthProxy.material.opacity = 0;
   objects.surfaceSunProxy.material.opacity = 0;
+};
+
+const updateSurfaceSphereProxy = (
+  proxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>,
+  body: SurfaceSkyBodySnapshot | null,
+  cameraPosition: THREE.Vector3,
+  worldUp: THREE.Vector3,
+  bodyRadiusKm: number,
+  bodyQuaternion: THREE.Quaternion,
+) => {
+  if (!body) {
+    proxy.visible = false;
+    proxy.material.opacity = 0;
+    return;
+  }
+
+  const direction = vectorFromPlain(body.direction).normalize();
+  const visibility = surfaceDirectionVisibility(
+    plainFromVector(direction),
+    plainFromVector(worldUp),
+    body.angularRadiusRadians,
+  );
+
+  if (visibility <= 0) {
+    proxy.visible = false;
+    proxy.material.opacity = 0;
+    return;
+  }
+
+  const radius = skyProxyRadiusForAngularSize(
+    SURFACE_SKY_BODY_DISTANCE,
+    bodyRadiusKm,
+    body.distanceKm,
+  );
+  proxy.position.copy(cameraPosition.clone().add(direction.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)));
+  proxy.quaternion.copy(bodyQuaternion);
+  proxy.scale.setScalar(radius);
+  proxy.material.opacity = visibility;
+  proxy.visible = true;
 };
 
 const setBinaryStarProxiesHidden = (objects: SceneObjects) => {
@@ -854,41 +1249,40 @@ const updateSurfaceSkyProxies = (
   worldUp: THREE.Vector3,
   surfaceBody: BodyId,
 ) => {
-  const moonDirection = vectorFromPlain(snapshot.moonGeocentricKm).normalize();
-  const sunOffsetKm = surfaceBody === 'moon'
-    ? vectorFromPlain(snapshot.sunGeocentricKm).sub(vectorFromPlain(snapshot.moonGeocentricKm))
-    : vectorFromPlain(snapshot.sunGeocentricKm);
-  const sunDirection = sunOffsetKm.clone().normalize();
-  const sunDistanceKm = sunOffsetKm.length();
-  const moonVisibility = surfaceBody === 'earth'
-    ? surfaceDirectionVisibility(
-      plainFromVector(moonDirection),
-      plainFromVector(worldUp),
-      apparentAngularRadiusRadians(MOON_RADIUS_KM, snapshot.moonDistanceKm),
-    )
-    : 0;
+  if (surfaceBody !== 'earth' && surfaceBody !== 'moon') {
+    setSurfaceSkyProxiesHidden(objects);
+    return;
+  }
+
+  const skyBodies = getSurfaceSkyBodies(snapshot, surfaceBody, plainFromVector(worldUp));
+  const sunDirection = vectorFromPlain(skyBodies.sun.direction).normalize();
   const sunVisibility = surfaceDirectionVisibility(
     plainFromVector(sunDirection),
     plainFromVector(worldUp),
-    apparentAngularRadiusRadians(SUN_RADIUS_KM, sunDistanceKm),
-  );
-  const moonRadius = skyProxyRadiusForAngularSize(
-    SURFACE_SKY_BODY_DISTANCE,
-    MOON_RADIUS_KM,
-    snapshot.moonDistanceKm,
+    skyBodies.sun.angularRadiusRadians,
   );
   const sunRadius = skyProxyRadiusForAngularSize(
     SURFACE_SKY_BODY_DISTANCE,
     SUN_RADIUS_KM,
-    sunDistanceKm,
+    skyBodies.sun.distanceKm,
   );
 
-  objects.surfaceMoonProxy.position.copy(
-    cameraPosition.clone().add(moonDirection.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)),
+  updateSurfaceSphereProxy(
+    objects.surfaceMoonProxy,
+    skyBodies.moon,
+    cameraPosition,
+    worldUp,
+    MOON_RADIUS_KM,
+    objects.moonGroup.quaternion,
   );
-  objects.surfaceMoonProxy.scale.setScalar(moonRadius);
-  objects.surfaceMoonProxy.material.opacity = moonVisibility;
-  objects.surfaceMoonProxy.visible = moonVisibility > 0;
+  updateSurfaceSphereProxy(
+    objects.surfaceEarthProxy,
+    skyBodies.earth,
+    cameraPosition,
+    worldUp,
+    EARTH_RADIUS_KM,
+    objects.earthGroup.quaternion,
+  );
 
   objects.surfaceSunProxy.position.copy(
     cameraPosition.clone().add(sunDirection.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)),
@@ -1218,13 +1612,30 @@ export default function MoonPhaseSandbox() {
     setSpaceCameraFromLookAt(camera.position, initialSpaceView.target, spaceCameraRef.current);
     applySpaceCameraLook(camera, spaceCameraRef.current);
 
-    scene.add(createStarField());
+    const starField = createStarField();
+    scene.add(starField);
     scene.add(new THREE.AmbientLight(0x182033, 0.12));
 
     const textureLoader = new THREE.TextureLoader();
-    const earthTexture = textureLoader.load('/textures/astronomy/earth-blue-marble-july.jpg');
+    textureLoader.setCrossOrigin('anonymous');
+    let baseEarthTextureReady = false;
+    let disposed = false;
+    let pendingLiveEarthDate: Date | null = null;
+    let syncEarthTextureForDate: (date: Date) => void = () => undefined;
+    const earthTexture = textureLoader.load('/textures/astronomy/earth-blue-marble-july.jpg', () => {
+      baseEarthTextureReady = true;
+      if (pendingLiveEarthDate) {
+        const pendingDate = pendingLiveEarthDate;
+        pendingLiveEarthDate = null;
+        syncEarthTextureForDate(pendingDate);
+      }
+    });
     earthTexture.colorSpace = THREE.SRGBColorSpace;
     earthTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const earthTextureCache = new Map<string, THREE.Texture>();
+    const unavailableEarthLayerKeys = new Set<string>();
+    let activeEarthTextureKey = 'static';
+    let loadingEarthTextureKey: string | null = null;
 
     const moonTexture = textureLoader.load('/textures/astronomy/moon-lroc-color-2k.jpg');
     moonTexture.colorSpace = THREE.SRGBColorSpace;
@@ -1241,18 +1652,140 @@ export default function MoonPhaseSandbox() {
     scene.add(moonGroup);
     scene.add(binaryGroup);
 
+    const earthMaterial = new THREE.MeshStandardMaterial({
+      map: earthTexture,
+      roughness: 0.78,
+      metalness: 0,
+    });
     const earthMesh = new THREE.Mesh(
       new THREE.SphereGeometry(EARTH_SCENE_RADIUS, 160, 80),
-      new THREE.MeshStandardMaterial({
-        map: earthTexture,
-        roughness: 0.78,
-        metalness: 0,
-      }),
+      earthMaterial,
     );
     earthMesh.castShadow = true;
     earthMesh.receiveShadow = true;
     earthMesh.userData.body = 'earth';
     earthGroup.add(earthMesh);
+
+    let surfaceEarthMaterial: THREE.MeshStandardMaterial | null = null;
+    const applyEarthTexture = (key: string, texture: THREE.Texture) => {
+      activeEarthTextureKey = key;
+      earthMaterial.map = texture;
+      earthMaterial.needsUpdate = true;
+      if (surfaceEarthMaterial) {
+        surfaceEarthMaterial.map = texture;
+        surfaceEarthMaterial.needsUpdate = true;
+      }
+    };
+
+    const rememberEarthTexture = (key: string, texture: THREE.Texture) => {
+      earthTextureCache.set(key, texture);
+
+      while (earthTextureCache.size > LIVE_EARTH_TEXTURE_CACHE_LIMIT) {
+        const removable = Array.from(earthTextureCache.entries())
+          .find(([cacheKey]) => cacheKey !== activeEarthTextureKey && cacheKey !== key);
+        if (!removable) break;
+        earthTextureCache.delete(removable[0]);
+        removable[1].dispose();
+      }
+    };
+
+    const loadLiveEarthLayerTexture = (layer: ResolvedLiveEarthLayer) =>
+      new Promise<{ layer: ResolvedLiveEarthLayer; texture: THREE.Texture | null }>((resolve) => {
+        textureLoader.load(
+          buildLiveEarthWmsUrl(layer),
+          (texture) => {
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            resolve({ layer, texture });
+          },
+          undefined,
+          () => resolve({ layer, texture: null }),
+        );
+      });
+
+    syncEarthTextureForDate = (date: Date) => {
+      if (!baseEarthTextureReady) {
+        pendingLiveEarthDate = new Date(date);
+        return;
+      }
+
+      const layers = resolveLiveEarthLayers(date)
+        .filter((layer) => !unavailableEarthLayerKeys.has(layer.cacheKey));
+      const key = liveEarthTextureKey(layers);
+      if (key === activeEarthTextureKey || key === loadingEarthTextureKey) return;
+
+      if (key === 'static') {
+        loadingEarthTextureKey = null;
+        applyEarthTexture('static', earthTexture);
+        return;
+      }
+
+      const cached = earthTextureCache.get(key);
+      if (cached) {
+        applyEarthTexture(key, cached);
+        return;
+      }
+
+      loadingEarthTextureKey = key;
+      Promise.all(layers.map(loadLiveEarthLayerTexture)).then((results) => {
+        const loadedLayers = results
+          .filter((result): result is { layer: ResolvedLiveEarthLayer; texture: THREE.Texture } => result.texture !== null);
+
+        results.forEach((result) => {
+          if (!result.texture) unavailableEarthLayerKeys.add(result.layer.cacheKey);
+        });
+
+        if (disposed || loadingEarthTextureKey !== key) {
+          loadedLayers.forEach((result) => result.texture.dispose());
+          return;
+        }
+
+        loadingEarthTextureKey = null;
+
+        if (loadedLayers.length === 0) {
+          applyEarthTexture('static', earthTexture);
+          return;
+        }
+
+        const composite = createLiveEarthCompositeTexture(
+          loadedLayers,
+          earthTexture,
+          renderer.capabilities.getMaxAnisotropy(),
+        );
+        loadedLayers.forEach((result) => result.texture.dispose());
+
+        if (!composite) {
+          loadedLayers.forEach((result) => unavailableEarthLayerKeys.add(result.layer.cacheKey));
+          applyEarthTexture('static', earthTexture);
+          return;
+        }
+
+        loadedLayers.forEach((result) => {
+          if (!composite.validLayerKeys.includes(result.layer.cacheKey)) {
+            unavailableEarthLayerKeys.add(result.layer.cacheKey);
+          }
+        });
+
+        const validKey = liveEarthTextureKey(
+          layers.filter((layer) => composite.validLayerKeys.includes(layer.cacheKey)),
+        );
+
+        if (validKey === 'static') {
+          composite.texture.dispose();
+          applyEarthTexture('static', earthTexture);
+          return;
+        }
+
+        rememberEarthTexture(validKey, composite.texture);
+        applyEarthTexture(validKey, composite.texture);
+      }).catch(() => {
+        if (!disposed && loadingEarthTextureKey === key) {
+          loadingEarthTextureKey = null;
+          applyEarthTexture('static', earthTexture);
+        }
+      });
+    };
+    syncEarthTextureForDate(simTimeRef.current);
 
     const earthAtmosphere = createEarthAtmosphere();
     earthGroup.add(earthAtmosphere);
@@ -1404,8 +1937,27 @@ export default function MoonPhaseSandbox() {
       }),
     );
     surfaceMoonProxy.renderOrder = 7;
+    surfaceMoonProxy.frustumCulled = false;
     surfaceMoonProxy.visible = false;
     scene.add(surfaceMoonProxy);
+
+    surfaceEarthMaterial = new THREE.MeshStandardMaterial({
+      map: earthMaterial.map,
+      roughness: 0.8,
+      metalness: 0,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+    });
+    const surfaceEarthProxy = new THREE.Mesh(
+      new THREE.SphereGeometry(1, 96, 48),
+      surfaceEarthMaterial,
+    );
+    surfaceEarthProxy.renderOrder = 7;
+    surfaceEarthProxy.frustumCulled = false;
+    surfaceEarthProxy.visible = false;
+    scene.add(surfaceEarthProxy);
 
     const surfaceSunProxy = new THREE.Mesh(
       new THREE.CircleGeometry(1, 96),
@@ -1421,11 +1973,14 @@ export default function MoonPhaseSandbox() {
       }),
     );
     surfaceSunProxy.renderOrder = 6;
+    surfaceSunProxy.frustumCulled = false;
     surfaceSunProxy.visible = false;
     scene.add(surfaceSunProxy);
 
     const binaryPrimaryProxy = createStarProxy(0xffd59b);
     const binarySecondaryProxy = createStarProxy(0xbddcff);
+    binaryPrimaryProxy.frustumCulled = false;
+    binarySecondaryProxy.frustumCulled = false;
     scene.add(binaryPrimaryProxy, binarySecondaryProxy);
 
     const alienGroup = createAlienGroup();
@@ -1461,6 +2016,7 @@ export default function MoonPhaseSandbox() {
       scene,
       camera,
       renderer,
+      starField,
       earthGroup,
       moonGroup,
       binaryGroup,
@@ -1480,6 +2036,7 @@ export default function MoonPhaseSandbox() {
       earthAtmosphere,
       skyDome,
       surfaceMoonProxy,
+      surfaceEarthProxy,
       surfaceSunProxy,
       binaryPrimaryProxy,
       binarySecondaryProxy,
@@ -1897,6 +2454,7 @@ export default function MoonPhaseSandbox() {
       simTimeRef.current = typeof date === 'string' ? new Date(date) : date;
       latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
       latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
+      syncEarthTextureForDate(simTimeRef.current);
       setDisplayDate(new Date(simTimeRef.current));
       setPhase(latestSnapshot.phase);
       setEclipseState(latestSnapshot.eclipseState);
@@ -1915,6 +2473,7 @@ export default function MoonPhaseSandbox() {
       if (now - lastSnapshotUpdate > SNAPSHOT_UPDATE_MS) {
         latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
         latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
+        syncEarthTextureForDate(simTimeRef.current);
         lastSnapshotUpdate = now;
       }
 
@@ -1937,14 +2496,20 @@ export default function MoonPhaseSandbox() {
         && isEarthMoonWorld
         && surfaceForScene?.body === 'earth'
         && scaleModeRef.current === 'true';
+      const trueDistanceMoonSurface = modeRef.current === 'surface'
+        && isEarthMoonWorld
+        && surfaceForScene?.body === 'moon'
+        && scaleModeRef.current === 'true';
       const trueDistanceBinarySurface = modeRef.current === 'surface'
         && isBinaryWorld
         && surfaceForScene?.body === 'binaryMoon'
         && activeSceneScaleMode === 'true';
+      let starHorizonUp: THREE.Vector3 | null = null;
 
+      starField.position.copy(camera.position);
       moonGroup.position.copy(moonPosition);
       sunMesh.position.copy(compactSunPosition);
-      earthGroup.visible = isEarthMoonWorld;
+      earthGroup.visible = isEarthMoonWorld && !trueDistanceMoonSurface;
       moonGroup.visible = isEarthMoonWorld && !trueDistanceEarthSurface;
       sunMesh.visible = isEarthMoonWorld && sunRenderMode === 'finite-scene';
       sunLight.visible = isEarthMoonWorld;
@@ -2032,6 +2597,7 @@ export default function MoonPhaseSandbox() {
 
         const { eye, target, headUp, worldUp } = getSurfaceCameraVectors(objects, surface);
         const sky = getSurfaceSkyState(snapshot.sunDirection, plainFromVector(worldUp));
+        starHorizonUp = worldUp.clone();
 
         camera.position.copy(eye);
         camera.up.copy(headUp);
@@ -2097,6 +2663,7 @@ export default function MoonPhaseSandbox() {
         }
       }
 
+      updateStarFieldOcclusion(objects, snapshot, starHorizonUp);
       renderer.render(scene, camera);
       requestRef.current = requestAnimationFrame(animate);
     };
@@ -2104,6 +2671,7 @@ export default function MoonPhaseSandbox() {
     requestRef.current = requestAnimationFrame(animate);
 
     return () => {
+      disposed = true;
       if (requestRef.current !== null) {
         cancelAnimationFrame(requestRef.current);
       }
@@ -2134,6 +2702,7 @@ export default function MoonPhaseSandbox() {
         __moonPhaseSandboxResetCamera?: () => void;
         __moonPhaseSandboxSetDate?: (date: Date | string) => void;
       }).__moonPhaseSandboxSetDate;
+      earthTextureCache.forEach((texture) => texture.dispose());
       renderer.dispose();
       scene.traverse((object) => {
         const mesh = object as THREE.Mesh;
@@ -2254,7 +2823,6 @@ export default function MoonPhaseSandbox() {
       >
         <div className="moon-time-header">
           <div className="moon-date">
-            <Clock size={16} aria-hidden="true" />
             <span>{hydrated ? toDisplayDate(displayDate) : 'Starting clock'}</span>
           </div>
           <button

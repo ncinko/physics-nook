@@ -10,14 +10,20 @@ import {
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
   BINARY_PATH_SAMPLE_COUNT,
+  BRIGHT_STAR_CATALOG,
+  LIVE_EARTH_PROVIDERS,
   apparentAngularRadiusRadians,
   apparentAngularDiameterDegrees,
   applySpaceLookDrag,
   applySpaceTranslation,
   advanceSimulationTime,
   binarySceneScale,
+  blurLiveEarthMask,
+  buildLiveEarthWmsUrl,
   canUseClickForDescent,
+  celestialDirectionFromRaDec,
   clampSurfacePitch,
+  compositeLiveEarthLayers,
   createSurfacePose,
   cross,
   dot,
@@ -27,17 +33,22 @@ import {
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getEclipseState,
+  getSurfaceSkyBodies,
   getSurfaceSkyState,
   getSurfaceViewFrame,
   getSunRenderMode,
   length,
+  liveEarthPixelBlendAlpha,
+  liveEarthTextureKey,
   moonIlluminationFromLongitude,
   moonPhaseNameFromLongitude,
   moveAlienTowardPose,
   moveSurfacePose,
   nextAlienWorldMode,
+  resolveLiveEarthLayers,
   skyProxyRadiusForAngularSize,
   spawnAlienNearPlayer,
+  starVisualStyle,
   surfaceDirectionVisibility,
   isAlienCaught,
   turnSurfacePose,
@@ -77,6 +88,31 @@ const subtractTestVectors = (
   y: a.y - b.y,
   z: a.z - b.z,
 });
+
+const testImageData = (
+  width: number,
+  height: number,
+  pixels: Array<[number, number, number, number]>,
+) => {
+  const data = new Uint8ClampedArray(width * height * 4);
+  pixels.forEach((pixel, index) => {
+    data[index * 4] = pixel[0];
+    data[index * 4 + 1] = pixel[1];
+    data[index * 4 + 2] = pixel[2];
+    data[index * 4 + 3] = pixel[3];
+  });
+  return { width, height, data };
+};
+
+const pixelAt = (
+  data: Uint8ClampedArray,
+  index: number,
+): [number, number, number, number] => [
+  data[index * 4],
+  data[index * 4 + 1],
+  data[index * 4 + 2],
+  data[index * 4 + 3],
+];
 
 const DEGREES = Math.PI / 180;
 
@@ -145,6 +181,135 @@ test('idealized illumination fraction tracks phase longitude', () => {
   closeTo(moonIlluminationFromLongitude(90), 0.5, 1e-12);
   closeTo(moonIlluminationFromLongitude(180), 1, 1e-12);
   closeTo(moonIlluminationFromLongitude(270), 0.5, 1e-12);
+});
+
+test('bright star catalog directions use the scene celestial basis', () => {
+  vectorCloseTo(celestialDirectionFromRaDec(0, 0), { x: 1, y: 0, z: 0 }, 1e-12);
+  vectorCloseTo(celestialDirectionFromRaDec(6, 0), { x: 0, y: 0, z: -1 }, 1e-12);
+  vectorCloseTo(celestialDirectionFromRaDec(0, 90), { x: 0, y: 1, z: 0 }, 1e-12);
+
+  const sirius = BRIGHT_STAR_CATALOG.find((star) => star.name === 'Sirius');
+  assert.ok(BRIGHT_STAR_CATALOG.length >= 40);
+  assert.ok(sirius);
+  closeTo(length(celestialDirectionFromRaDec(sirius.raHours, sirius.decDegrees)), 1, 1e-12);
+  assert.ok(celestialDirectionFromRaDec(sirius.raHours, sirius.decDegrees).y < 0);
+});
+
+test('star visual weighting keeps bright stars larger and more opaque than dim stars', () => {
+  const bright = starVisualStyle({ magnitude: -1.46, bv: 0, spectralClass: 'A1V' });
+  const dim = starVisualStyle({ magnitude: 6.2, bv: 1.5, spectralClass: 'M0III' });
+  const blueWhite = starVisualStyle({ magnitude: 2, bv: -0.25, spectralClass: 'B1V' });
+  const warm = starVisualStyle({ magnitude: 2, bv: 1.55, spectralClass: 'K5III' });
+
+  assert.ok(bright.size > dim.size * 2);
+  assert.ok(bright.alpha > dim.alpha);
+  assert.ok(blueWhite.color.z > warm.color.z);
+  assert.ok(warm.color.x > blueWhite.color.x);
+});
+
+test('live Earth imagery resolves near-now providers to safe cadence buckets', () => {
+  const now = new Date('2026-06-25T19:02:33.000Z');
+  const layers = resolveLiveEarthLayers(new Date('2026-06-25T19:02:33.000Z'), now);
+  const layerIds = layers.map((layer) => layer.provider.id);
+  const goesEast = layers.find((layer) => layer.provider.id === 'nasa-goes-east-geocolor');
+  const mumi = layers.find((layer) => layer.provider.id === 'eumetview-multimission-natural');
+  const viirs = layers.find((layer) => layer.provider.id === 'nasa-viirs-snpp-true-color');
+
+  assert.deepEqual(
+    layerIds,
+    LIVE_EARTH_PROVIDERS.map((provider) => provider.id),
+  );
+  assert.ok(goesEast);
+  assert.equal(goesEast.timeParameter, '2026-06-25T18:10:00Z');
+  assert.ok(mumi);
+  assert.equal(mumi.timeParameter, '2026-06-25T18:00:00Z');
+  assert.ok(viirs);
+  assert.equal(viirs.timeParameter, '2026-06-25');
+  assert.equal(resolveLiveEarthLayers(new Date('2026-06-20T19:02:33.000Z'), now).length, 0);
+});
+
+test('live Earth WMS URLs target public GIBS and EUMETView layers', () => {
+  const now = new Date('2026-06-25T19:02:33.000Z');
+  const layers = resolveLiveEarthLayers(now, now);
+  const goesUrl = buildLiveEarthWmsUrl(layers.find((layer) => layer.provider.id === 'nasa-goes-east-geocolor')!);
+  const eumetUrl = buildLiveEarthWmsUrl(layers.find((layer) => layer.provider.id === 'eumetview-mtg-geocolour')!);
+
+  assert.ok(goesUrl.startsWith('https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?'));
+  assert.ok(goesUrl.includes('LAYERS=GOES-East_ABI_GeoColor'));
+  assert.ok(goesUrl.includes('SRS=EPSG%3A4326'));
+  assert.ok(goesUrl.includes('FORMAT=image%2Fpng'));
+  assert.ok(goesUrl.includes('TRANSPARENT=TRUE'));
+  assert.ok(eumetUrl.startsWith('https://view.eumetsat.int/geoserver/wms?'));
+  assert.ok(eumetUrl.includes('LAYERS=mtg_fd%3Argb_geocolour'));
+  assert.ok(eumetUrl.includes('CRS=CRS%3A84'));
+  assert.ok(eumetUrl.includes('BBOX=-180%2C-89.9999%2C180%2C89.9999'));
+});
+
+test('live Earth pixel mask rejects transparent, black, and near-black no-data', () => {
+  assert.equal(liveEarthPixelBlendAlpha(255, 255, 255, 0), 0);
+  assert.equal(liveEarthPixelBlendAlpha(0, 0, 0, 255), 0);
+  assert.equal(liveEarthPixelBlendAlpha(5, 4, 3, 255), 0);
+  assert.ok(liveEarthPixelBlendAlpha(245, 248, 255, 255) > 0.9);
+  assert.ok(liveEarthPixelBlendAlpha(30, 96, 180, 255) > 0.5);
+});
+
+test('live Earth compositing keeps fallback pixels under no-data regions', () => {
+  const base = testImageData(3, 1, [
+    [20, 80, 140, 255],
+    [40, 100, 160, 255],
+    [60, 120, 180, 255],
+  ]);
+  const live = testImageData(3, 1, [
+    [255, 255, 255, 0],
+    [0, 0, 0, 255],
+    [240, 245, 255, 255],
+  ]);
+  const composite = compositeLiveEarthLayers(base, [{
+    id: 'test',
+    imageData: live,
+    opacity: 1,
+    priority: 1,
+    maskBlurRadius: 0,
+  }], 0);
+
+  assert.deepEqual(pixelAt(composite.imageData.data, 0), [20, 80, 140, 255]);
+  assert.deepEqual(pixelAt(composite.imageData.data, 1), [40, 100, 160, 255]);
+  assert.ok(pixelAt(composite.imageData.data, 2)[0] > 200);
+});
+
+test('live Earth compositing blends overlapping valid providers', () => {
+  const base = testImageData(1, 1, [[0, 0, 0, 255]]);
+  const redLayer = testImageData(1, 1, [[255, 20, 20, 255]]);
+  const blueLayer = testImageData(1, 1, [[20, 20, 255, 255]]);
+  const composite = compositeLiveEarthLayers(base, [
+    { id: 'red', imageData: redLayer, opacity: 1, priority: 1, maskBlurRadius: 0 },
+    { id: 'blue', imageData: blueLayer, opacity: 0.5, priority: 2, maskBlurRadius: 0 },
+  ], 0);
+  const pixel = pixelAt(composite.imageData.data, 0);
+
+  assert.ok(pixel[0] > 100);
+  assert.ok(pixel[2] > 100);
+});
+
+test('live Earth mask blur wraps across the date line', () => {
+  const mask = new Float32Array([1, 0, 0, 0, 0]);
+  const blurred = blurLiveEarthMask(mask, 5, 1, 1);
+
+  assert.ok(blurred[4] > 0);
+  closeTo(blurred[4], blurred[1], 1e-12);
+});
+
+test('live Earth texture key can omit failed provider layers without disabling all live imagery', () => {
+  const now = new Date('2026-06-25T19:02:33.000Z');
+  const layers = resolveLiveEarthLayers(now, now);
+  const fullKey = liveEarthTextureKey(layers);
+  const withoutGoesEast = liveEarthTextureKey(
+    layers.filter((layer) => layer.provider.id !== 'nasa-goes-east-geocolor'),
+  );
+
+  assert.notEqual(fullKey, 'static');
+  assert.notEqual(withoutGoesEast, 'static');
+  assert.ok(!withoutGoesEast.includes('nasa-goes-east-geocolor'));
 });
 
 test('simulation clock pauses, reverses, and advances by signed speed', () => {
@@ -388,6 +553,46 @@ test('true-distance angular helpers produce real Sun and Moon apparent sizes', (
   );
   assert.ok(surfaceDirectionVisibility({ x: 1, y: 0.2, z: 0 }, { x: 0, y: 1, z: 0 }) > 0.99);
   assert.ok(surfaceDirectionVisibility({ x: 1, y: -0.2, z: 0 }, { x: 0, y: 1, z: 0 }) < 0.01);
+});
+
+test('topocentric surface sky bodies preserve Sun, Moon, and Earth apparent sizes', () => {
+  const snapshot = getEarthMoonSunSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+  const earthSky = getSurfaceSkyBodies(snapshot, 'earth', { x: 0, y: 1, z: 0 });
+  const moonNearSideUp = normalizeTestVector({
+    x: -snapshot.moonGeocentricKm.x,
+    y: -snapshot.moonGeocentricKm.y,
+    z: -snapshot.moonGeocentricKm.z,
+  });
+  const moonSky = getSurfaceSkyBodies(snapshot, 'moon', moonNearSideUp);
+  const sunFromEarthDiameter = earthSky.sun.angularRadiusRadians * 360 / Math.PI;
+  const moonFromEarthDiameter = (earthSky.moon?.angularRadiusRadians ?? 0) * 360 / Math.PI;
+  const sunFromMoonDiameter = moonSky.sun.angularRadiusRadians * 360 / Math.PI;
+  const earthFromMoonDiameter = (moonSky.earth?.angularRadiusRadians ?? 0) * 360 / Math.PI;
+
+  assert.ok(sunFromEarthDiameter > 0.52);
+  assert.ok(sunFromEarthDiameter < 0.54);
+  assert.ok(moonFromEarthDiameter > 0.48);
+  assert.ok(moonFromEarthDiameter < 0.56);
+  assert.ok(sunFromMoonDiameter > 0.52);
+  assert.ok(sunFromMoonDiameter < 0.54);
+  assert.ok(earthFromMoonDiameter > 1.8);
+  assert.ok(earthFromMoonDiameter < 2.1);
+  assert.ok(earthFromMoonDiameter > sunFromMoonDiameter * 3.4);
+});
+
+test('topocentric Moon direction includes parallax at the geocentric horizon', () => {
+  const snapshot = getEarthMoonSunSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+  const moonDirection = normalizeTestVector(snapshot.moonGeocentricKm);
+  const poleSafeAxis = Math.abs(moonDirection.y) < 0.9
+    ? { x: 0, y: 1, z: 0 }
+    : { x: 1, y: 0, z: 0 };
+  const horizonUp = normalizeTestVector(cross(moonDirection, poleSafeAxis));
+  const topocentricMoon = getSurfaceSkyBodies(snapshot, 'earth', horizonUp).moon;
+
+  closeTo(dot(moonDirection, horizonUp), 0, 1e-12);
+  assert.ok(topocentricMoon);
+  assert.ok(dot(topocentricMoon.direction, horizonUp) < -0.01);
+  assert.ok(Math.abs(dot(topocentricMoon.direction, horizonUp) - dot(moonDirection, horizonUp)) > 0.01);
 });
 
 test('surface sky-body visibility starts at apparent upper-limb horizon contact', () => {

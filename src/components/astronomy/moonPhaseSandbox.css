@@ -1,4 +1,13 @@
 .moon-phase-sandbox {
+  --moon-panel-bg: rgba(6, 10, 18, 0.76);
+  --moon-panel-border: rgba(203, 213, 225, 0.18);
+  --moon-control-bg: rgba(17, 24, 39, 0.72);
+  --moon-control-border: rgba(203, 213, 225, 0.22);
+  --moon-control-hover: rgba(245, 158, 11, 0.52);
+  --moon-selected-bg: rgba(245, 158, 11, 0.18);
+  --moon-selected-border: rgba(245, 158, 11, 0.62);
+  --moon-selected-text: #ffe8b6;
+  --moon-muted: rgba(226, 232, 240, 0.72);
   position: relative;
   width: 100vw;
   min-height: 100vh;
@@ -42,10 +51,10 @@
 .moon-hud {
   position: absolute;
   z-index: 5;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  background: rgba(5, 10, 20, 0.72);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.26);
-  backdrop-filter: blur(16px);
+  border: 1px solid var(--moon-panel-border);
+  background: var(--moon-panel-bg);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(14px);
 }
 
 .moon-hud-primary {
@@ -56,7 +65,7 @@
   align-items: flex-start;
   gap: 0.55rem;
   border-radius: 0.5rem;
-  padding: 0.65rem;
+  padding: 0.58rem;
 }
 
 .moon-info-toggle {
@@ -76,9 +85,10 @@
 .moon-readouts div {
   width: min(12rem, 24vw);
   min-width: 0;
-  border-radius: 0.45rem;
-  background: rgba(15, 23, 42, 0.72);
-  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(203, 213, 225, 0.1);
+  border-radius: 0.38rem;
+  background: rgba(15, 23, 42, 0.52);
+  padding: 0.5rem 0.6rem;
 }
 
 .moon-readouts .moon-eclipse-readout {
@@ -95,7 +105,7 @@
 .moon-speed output,
 .moon-toggle span,
 .moon-location-pill span {
-  color: rgba(226, 232, 240, 0.78);
+  color: var(--moon-muted);
   font-size: 0.76rem;
   font-weight: 650;
 }
@@ -116,9 +126,9 @@
   bottom: 1rem;
   display: grid;
   width: min(31rem, calc(100vw - 2rem));
-  gap: 0.7rem;
+  gap: 0.62rem;
   border-radius: 0.5rem;
-  padding: 0.85rem;
+  padding: 0.74rem;
 }
 
 .moon-time-panel.is-collapsed {
@@ -170,9 +180,9 @@
 .moon-segmented button {
   appearance: none;
   min-height: 2.15rem;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  border-radius: 0.45rem;
-  background: rgba(15, 23, 42, 0.76);
+  border: 1px solid var(--moon-control-border);
+  border-radius: 0.38rem;
+  background: var(--moon-control-bg);
   color: #f8fafc;
   cursor: pointer;
   font: inherit;
@@ -201,13 +211,53 @@
 .moon-text-button:hover,
 .moon-presets button:hover,
 .moon-segmented button:hover {
-  border-color: rgba(125, 211, 252, 0.7);
-  color: #bae6fd;
+  border-color: var(--moon-control-hover);
+  color: var(--moon-selected-text);
 }
 
 .moon-speed input {
   min-width: 8rem;
   flex: 1;
+  accent-color: #f59e0b;
+}
+
+.moon-speed input[type="range"] {
+  appearance: none;
+  height: 1.4rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.moon-speed input[type="range"]::-webkit-slider-runnable-track {
+  height: 0.32rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.38), rgba(245, 158, 11, 0.62));
+}
+
+.moon-speed input[type="range"]::-moz-range-track {
+  height: 0.32rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.38), rgba(245, 158, 11, 0.62));
+}
+
+.moon-speed input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  margin-top: -0.29rem;
+  border: 2px solid #2a1b05;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+}
+
+.moon-speed input[type="range"]::-moz-range-thumb {
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid #2a1b05;
+  border-radius: 50%;
+  background: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
 }
 
 .moon-speed output {
@@ -229,9 +279,9 @@
 }
 
 .moon-presets button.is-active {
-  border-color: rgba(251, 191, 36, 0.76);
-  background: rgba(251, 191, 36, 0.17);
-  color: #fde68a;
+  border-color: var(--moon-selected-border);
+  background: var(--moon-selected-bg);
+  color: var(--moon-selected-text);
 }
 
 .moon-view-panel {
@@ -246,8 +296,9 @@
 
 .moon-segmented {
   display: inline-flex;
-  border-radius: 0.45rem;
-  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  border-radius: 0.42rem;
+  background: rgba(15, 23, 42, 0.62);
   padding: 0.18rem;
 }
 
@@ -257,8 +308,9 @@
 }
 
 .moon-segmented button[aria-pressed="true"] {
-  background: #38bdf8;
-  color: #04111f;
+  border-color: var(--moon-selected-border);
+  background: var(--moon-selected-bg);
+  color: var(--moon-selected-text);
 }
 
 .moon-segmented button:disabled {
@@ -268,9 +320,45 @@
 
 .moon-toggle {
   gap: 0.42rem;
-  border-radius: 0.45rem;
-  background: rgba(15, 23, 42, 0.76);
+  border: 1px solid rgba(203, 213, 225, 0.12);
+  border-radius: 0.38rem;
+  background: rgba(15, 23, 42, 0.62);
   padding: 0.48rem 0.62rem;
+}
+
+.moon-toggle input {
+  appearance: none;
+  accent-color: #f59e0b;
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  place-items: center;
+  border: 1px solid rgba(203, 213, 225, 0.42);
+  border-radius: 0.22rem;
+  background: rgba(2, 6, 23, 0.52);
+  cursor: pointer;
+}
+
+.moon-toggle input::before {
+  width: 0.48rem;
+  height: 0.48rem;
+  border-radius: 0.14rem;
+  background: #f59e0b;
+  content: "";
+  opacity: 0;
+  transform: scale(0.72);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.moon-toggle input:checked {
+  border-color: var(--moon-selected-border);
+  background: rgba(245, 158, 11, 0.14);
+}
+
+.moon-toggle input:checked::before {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .moon-location-pill {

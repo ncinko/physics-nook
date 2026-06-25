@@ -41,6 +41,21 @@ export interface SurfaceSkyState {
   night: number;
 }
 
+export type SurfaceSkyBody = 'earth' | 'moon';
+
+export interface SurfaceSkyBodySnapshot {
+  direction: Vec3;
+  distanceKm: number;
+  angularRadiusRadians: number;
+}
+
+export interface SurfaceSkyBodies {
+  observerGeocentricKm: Vec3;
+  sun: SurfaceSkyBodySnapshot;
+  moon: SurfaceSkyBodySnapshot | null;
+  earth: SurfaceSkyBodySnapshot | null;
+}
+
 interface EclipseCandidate {
   type: 'solar' | 'lunar';
   kind: string;
@@ -87,6 +102,24 @@ const eclipseCandidateCache = new Map<number, EclipseCandidate[]>();
 const vectorLength = (vector: Vec3) =>
   Math.hypot(vector.x, vector.y, vector.z);
 
+const addVec3 = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x + b.x,
+  y: a.y + b.y,
+  z: a.z + b.z,
+});
+
+const subtractVec3 = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+  z: a.z - b.z,
+});
+
+const scaleVec3 = (vector: Vec3, amount: number): Vec3 => ({
+  x: vector.x * amount,
+  y: vector.y * amount,
+  z: vector.z * amount,
+});
+
 export const normalizeVec3 = (vector: Vec3): Vec3 => {
   const length = vectorLength(vector);
   if (length === 0) return { x: 0, y: 0, z: 0 };
@@ -114,6 +147,44 @@ export const skyProxyRadiusForAngularSize = (
 ): number => proxyDistance * Math.tan(
   apparentAngularRadiusRadians(bodyRadiusKm, observerDistanceKm),
 );
+
+const topocentricBodySnapshot = (
+  observerGeocentricKm: Vec3,
+  targetGeocentricKm: Vec3,
+  bodyRadiusKm: number,
+): SurfaceSkyBodySnapshot => {
+  const offset = subtractVec3(targetGeocentricKm, observerGeocentricKm);
+  const distanceKm = vectorLength(offset);
+
+  return {
+    direction: normalizeVec3(offset),
+    distanceKm,
+    angularRadiusRadians: apparentAngularRadiusRadians(bodyRadiusKm, distanceKm),
+  };
+};
+
+export const getSurfaceSkyBodies = (
+  snapshot: Pick<EarthMoonSunSnapshot, 'moonGeocentricKm' | 'sunGeocentricKm'>,
+  surfaceBody: SurfaceSkyBody,
+  surfaceUp: Vec3,
+): SurfaceSkyBodies => {
+  const up = normalizeVec3(surfaceUp);
+  const earthCenter: Vec3 = { x: 0, y: 0, z: 0 };
+  const observerGeocentricKm = surfaceBody === 'earth'
+    ? scaleVec3(up, EARTH_RADIUS_KM)
+    : addVec3(snapshot.moonGeocentricKm, scaleVec3(up, MOON_RADIUS_KM));
+
+  return {
+    observerGeocentricKm,
+    sun: topocentricBodySnapshot(observerGeocentricKm, snapshot.sunGeocentricKm, SUN_RADIUS_KM),
+    moon: surfaceBody === 'earth'
+      ? topocentricBodySnapshot(observerGeocentricKm, snapshot.moonGeocentricKm, MOON_RADIUS_KM)
+      : null,
+    earth: surfaceBody === 'moon'
+      ? topocentricBodySnapshot(observerGeocentricKm, earthCenter, EARTH_RADIUS_KM)
+      : null,
+  };
+};
 
 export const surfaceDirectionVisibility = (
   direction: Vec3,

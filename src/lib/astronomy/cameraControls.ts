@@ -22,6 +22,11 @@ export interface SpaceMoveInput {
   right: number;
 }
 
+export interface SpaceLookState {
+  yaw: number;
+  pitch: number;
+}
+
 const WORLD_UP: Vec3 = { x: 0, y: 1, z: 0 };
 const PITCH_LIMIT = Math.PI / 2 - 0.02;
 
@@ -41,6 +46,16 @@ export const getCameraBasis = (yawRadians: number, pitchRadians: number): Camera
 
   return { forward, right, up };
 };
+
+export const applySpaceLookDrag = (
+  state: SpaceLookState,
+  deltaX: number,
+  deltaY: number,
+  sensitivity: number,
+): SpaceLookState => ({
+  yaw: state.yaw + deltaX * sensitivity,
+  pitch: clampCameraPitch(state.pitch - deltaY * sensitivity),
+});
 
 export const applySpaceTranslation = (
   position: Vec3,

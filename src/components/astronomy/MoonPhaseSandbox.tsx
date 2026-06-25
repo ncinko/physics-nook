@@ -20,6 +20,7 @@ import {
   SUN_RADIUS_KM,
   TIME_SPEED_PRESETS,
   advanceSimulationTime,
+  applySpaceLookDrag,
   applySpaceTranslation,
   canUseClickForDescent,
   clampCameraPitch,
@@ -42,6 +43,7 @@ import {
   type CameraMode,
   type EclipseState,
   type MoonPhaseSummary,
+  type SpaceLookState,
   type SurfacePose,
   type Vec3,
 } from '../../lib/astronomy/index.ts';
@@ -88,11 +90,6 @@ interface TransitionState {
   toTarget: THREE.Vector3;
   toUp: THREE.Vector3;
   onComplete: () => void;
-}
-
-interface SpaceCameraState {
-  yaw: number;
-  pitch: number;
 }
 
 const EARTH_SCENE_RADIUS = 9.5;
@@ -481,7 +478,7 @@ const getBodyGroup = (objects: SceneObjects, body: BodyId) =>
 const setSpaceCameraFromLookAt = (
   position: THREE.Vector3,
   target: THREE.Vector3,
-  state: SpaceCameraState,
+  state: SpaceLookState,
 ) => {
   const direction = target.clone().sub(position).normalize();
   state.yaw = Math.atan2(direction.x, -direction.z);
@@ -490,11 +487,11 @@ const setSpaceCameraFromLookAt = (
 
 const applySpaceCameraLook = (
   camera: THREE.PerspectiveCamera,
-  state: SpaceCameraState,
+  state: SpaceLookState,
 ) => {
   const basis = getCameraBasis(state.yaw, state.pitch);
   const lookTarget = camera.position.clone().add(vectorFromPlain(basis.forward));
-  camera.up.copy(WORLD_CAMERA_UP);
+  camera.up.copy(vectorFromPlain(basis.up));
   camera.lookAt(lookTarget);
 };
 
@@ -679,7 +676,7 @@ export default function MoonPhaseSandbox() {
   const surfaceRef = useRef<SurfaceState | null>(null);
   const transitionRef = useRef<TransitionState | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const spaceCameraRef = useRef<SpaceCameraState>({ yaw: 0, pitch: -0.18 });
+  const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.18 });
   const pointerLockedRef = useRef(false);
   const pointerRef = useRef({
     down: false,
@@ -1079,9 +1076,11 @@ export default function MoonPhaseSandbox() {
       }
 
       event.preventDefault();
-      spaceCameraRef.current.yaw -= dx * SPACE_LOOK_SENSITIVITY;
-      spaceCameraRef.current.pitch = clampCameraPitch(
-        spaceCameraRef.current.pitch - dy * SPACE_LOOK_SENSITIVITY,
+      spaceCameraRef.current = applySpaceLookDrag(
+        spaceCameraRef.current,
+        dx,
+        dy,
+        SPACE_LOOK_SENSITIVITY,
       );
       applySpaceCameraLook(camera, spaceCameraRef.current);
     };
@@ -1117,7 +1116,7 @@ export default function MoonPhaseSandbox() {
       }
 
       const surface = surfaceRef.current;
-      surface.pose = turnSurfacePose(surface.pose, -event.movementX * SURFACE_LOOK_SENSITIVITY);
+      surface.pose = turnSurfacePose(surface.pose, event.movementX * SURFACE_LOOK_SENSITIVITY);
       surface.pitch = clampSurfacePitch(surface.pitch - event.movementY * SURFACE_LOOK_SENSITIVITY);
     };
 

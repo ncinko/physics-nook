@@ -9,11 +9,13 @@ import {
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
   apparentAngularDiameterDegrees,
+  applySpaceLookDrag,
   applySpaceTranslation,
   advanceSimulationTime,
   canUseClickForDescent,
   clampSurfacePitch,
   createSurfacePose,
+  cross,
   dot,
   earthRotationAngleForDate,
   getCameraBasis,
@@ -47,6 +49,24 @@ const vectorCloseTo = (
   closeTo(actual.y, expected.y, epsilon);
   closeTo(actual.z, expected.z, epsilon);
 };
+
+const normalizeTestVector = (vector: { x: number; y: number; z: number }) => {
+  const magnitude = Math.hypot(vector.x, vector.y, vector.z);
+  return {
+    x: vector.x / magnitude,
+    y: vector.y / magnitude,
+    z: vector.z / magnitude,
+  };
+};
+
+const subtractTestVectors = (
+  a: { x: number; y: number; z: number },
+  b: { x: number; y: number; z: number },
+) => ({
+  x: a.x - b.x,
+  y: a.y - b.y,
+  z: a.z - b.z,
+});
 
 const DEGREES = Math.PI / 180;
 
@@ -177,6 +197,19 @@ test('space camera translation follows camera yaw and pitch', () => {
   assert.ok(applySpaceTranslation(start, pitchedBasis, { forward: 1, right: 0 }, 2).y > 0);
 });
 
+test('space drag yaws horizontally and pitches vertically without changing roll basis', () => {
+  const start = { yaw: 0.25, pitch: 0.1 };
+  const draggedRight = applySpaceLookDrag(start, 20, 0, 0.01);
+  const draggedUp = applySpaceLookDrag(start, 0, -12, 0.01);
+  const basis = getCameraBasis(draggedUp.yaw, draggedUp.pitch);
+
+  assert.ok(draggedRight.yaw > start.yaw);
+  closeTo(draggedRight.pitch, start.pitch, 1e-12);
+  closeTo(draggedUp.yaw, start.yaw, 1e-12);
+  assert.ok(draggedUp.pitch > start.pitch);
+  closeTo(dot(cross(basis.forward, basis.up), basis.right), 1, 1e-12);
+});
+
 test('surface walking preserves the globe radius over long and near-pole moves', () => {
   const radius = EARTH_RADIUS_KM;
   let pose = createSurfacePose(radius, 0, 0, 0);
@@ -210,15 +243,25 @@ test('surface walking preserves the globe radius over long and near-pole moves',
 test('surface controls move across the tangent plane without changing radius', () => {
   const radius = EARTH_RADIUS_KM;
   const start = createSurfacePose(radius, 0.4, -1.2, 0.7);
+  const startFrame = getSurfaceViewFrame(start, 0);
   const moved = moveSurfacePose(start, radius, {
     forwardDistance: 25,
     rightDistance: -40,
   });
+  const rightMoved = moveSurfacePose(start, radius, {
+    forwardDistance: 0,
+    rightDistance: 5,
+  });
+  const rightDisplacement = normalizeTestVector(subtractTestVectors(
+    rightMoved.position,
+    start.position,
+  ));
 
   closeTo(length(moved.position), radius, 1e-6);
   assert.notDeepEqual(moved.position, start.position);
   closeTo(length(moved.forward), 1, 1e-12);
   closeTo(length(moved.right), 1, 1e-12);
+  assert.ok(dot(rightDisplacement, startFrame.bodyRight) > 0.99);
 });
 
 test('surface yaw turns the body heading while pitch remains an independent head tilt', () => {
@@ -242,6 +285,7 @@ test('surface pitch tilts the head without changing the tangent movement basis',
 
   vectorCloseTo(pitchedFrame.bodyForward, flatFrame.bodyForward, 1e-12);
   vectorCloseTo(pitchedFrame.bodyRight, flatFrame.bodyRight, 1e-12);
+  closeTo(dot(cross(pitchedFrame.lookDirection, pitchedFrame.headUp), pitchedFrame.bodyRight), 1, 1e-12);
   assert.ok(dot(pitchedFrame.lookDirection, flatFrame.eyeUp) > 0.65);
   assert.ok(dot(pitchedFrame.headUp, flatFrame.eyeUp) > 0);
 });

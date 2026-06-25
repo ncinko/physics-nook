@@ -91,7 +91,7 @@ const poseFromUpAndForward = (up: Vec3, radius: number, forwardHint: Vec3): Surf
     forward = tangentBasis(unitUp).north;
   }
 
-  const right = normalize(cross(unitUp, forward));
+  const right = normalize(cross(forward, unitUp));
   return {
     position: scale(unitUp, radius),
     up: unitUp,
@@ -156,7 +156,7 @@ export const turnSurfacePose = (
 ): SurfacePose => poseFromUpAndForward(
   pose.up,
   length(pose.position),
-  rotateAroundAxis(pose.forward, pose.up, yawRadians),
+  rotateAroundAxis(pose.forward, pose.up, -yawRadians),
 );
 
 export const getSurfaceViewFrame = (
@@ -170,7 +170,7 @@ export const getSurfaceViewFrame = (
     bodyForward = tangentBasis(eyeUp).north;
   }
 
-  const bodyRight = normalize(cross(eyeUp, bodyForward));
+  const bodyRight = normalize(cross(bodyForward, eyeUp));
   const pitch = clampSurfacePitch(pitchRadians);
   const lookDirection = normalize(add(
     scale(bodyForward, Math.cos(pitch)),

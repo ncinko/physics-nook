@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ChevronDown,
+  ChevronUp,
   Clock,
+  EyeOff,
   Gauge,
+  Info,
   LocateFixed,
   Pause,
   Play,
@@ -700,6 +704,8 @@ export default function MoonPhaseSandbox() {
   const [speed, setSpeed] = useState(1);
   const [scaleMode, setScaleMode] = useState<ScaleMode>('compact');
   const [labelsVisible, setLabelsVisible] = useState(true);
+  const [timePanelOpen, setTimePanelOpen] = useState(true);
+  const [readoutsVisible, setReadoutsVisible] = useState(true);
   const [mode, setMode] = useState<CameraMode>('space');
   const [surfaceBody, setSurfaceBody] = useState<BodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });
@@ -1225,6 +1231,7 @@ export default function MoonPhaseSandbox() {
       updateMoonPathLine(objects, snapshot, scaleModeRef.current);
       setEclipseIndicator(objects, snapshot.eclipseState, moonPosition);
 
+      objects.moonPathLine.visible = labelsVisibleRef.current && modeRef.current === 'space';
       labels.earth.visible = labelsVisibleRef.current && modeRef.current === 'space';
       labels.moon.visible = labelsVisibleRef.current && modeRef.current === 'space';
       labels.sun.visible = labelsVisibleRef.current
@@ -1419,125 +1426,160 @@ export default function MoonPhaseSandbox() {
     : scaleMode;
 
   return (
-    <div className={`moon-phase-sandbox ${mode === 'surface' ? 'is-surface' : ''}`}>
+    <div
+      className={[
+        'moon-phase-sandbox',
+        mode === 'surface' ? 'is-surface' : '',
+        timePanelOpen ? 'has-time-panel-open' : 'has-time-panel-collapsed',
+        readoutsVisible ? 'has-readouts' : 'has-hidden-readouts',
+      ].filter(Boolean).join(' ')}
+    >
       <div ref={mountRef} className="moon-phase-canvas" aria-label="Earth Moon Sun 3D sandbox" />
 
-      <header className="moon-hud moon-hud-primary">
-        <div className="moon-title-block">
-          <div className="moon-kicker">Earth Moon Sun</div>
-          <h1>Moon Phase Sandbox</h1>
-        </div>
-        <div className="moon-readouts">
-          <div>
-            <span>Phase</span>
-            <strong>{phase.phaseName}</strong>
-          </div>
-          <div>
-            <span>Lit</span>
-            <strong>{formatPercent(phase.illuminationFraction)}</strong>
-          </div>
-          <div>
-            <span>View</span>
-            <strong>{locationLabel}</strong>
-          </div>
-          {eclipseState && (
-            <div className="moon-eclipse-readout">
-              <span>Eclipse</span>
-              <strong>{eclipseState.label}</strong>
+      {readoutsVisible ? (
+        <header className="moon-hud moon-hud-primary" aria-label="Moon phase information">
+          <div className="moon-readouts">
+            <div>
+              <span>Phase</span>
+              <strong>{phase.phaseName}</strong>
             </div>
-          )}
-        </div>
-      </header>
+            <div>
+              <span>Lit</span>
+              <strong>{formatPercent(phase.illuminationFraction)}</strong>
+            </div>
+            <div>
+              <span>View</span>
+              <strong>{locationLabel}</strong>
+            </div>
+            {eclipseState && (
+              <div className="moon-eclipse-readout">
+                <span>Eclipse</span>
+                <strong>{eclipseState.label}</strong>
+              </div>
+            )}
+          </div>
+          <button
+            type="button"
+            className="moon-icon-button moon-panel-action"
+            onClick={() => setReadoutsVisible(false)}
+            aria-label="Hide phase information"
+            title="Hide info"
+          >
+            <EyeOff size={17} />
+          </button>
+        </header>
+      ) : (
+        <button
+          type="button"
+          className="moon-hud moon-icon-button moon-info-toggle"
+          onClick={() => setReadoutsVisible(true)}
+          aria-label="Show phase information"
+          title="Show info"
+        >
+          <Info size={17} />
+        </button>
+      )}
 
-      <section className="moon-hud moon-time-panel" aria-label="Time controls">
-        <div className="moon-date">
-          <Clock size={16} aria-hidden="true" />
-          <span>{hydrated ? toDisplayDate(displayDate) : 'Starting clock'}</span>
-        </div>
-        <div className="moon-control-row">
+      <section
+        className={`moon-hud moon-time-panel ${timePanelOpen ? 'is-open' : 'is-collapsed'}`}
+        aria-label="Time controls"
+      >
+        <div className="moon-time-header">
+          <div className="moon-date">
+            <Clock size={16} aria-hidden="true" />
+            <span>{hydrated ? toDisplayDate(displayDate) : 'Starting clock'}</span>
+          </div>
           <button
             type="button"
-            className="moon-icon-button"
-            onClick={() => setRunning((value) => !value)}
-            aria-label={running ? 'Pause time' : 'Play time'}
-            title={running ? 'Pause' : 'Play'}
+            className="moon-icon-button moon-panel-action"
+            onClick={() => setTimePanelOpen((value) => !value)}
+            aria-expanded={timePanelOpen}
+            aria-label={timePanelOpen ? 'Collapse time controls' : 'Expand time controls'}
+            title={timePanelOpen ? 'Collapse time controls' : 'Expand time controls'}
           >
-            {running ? <Pause size={18} /> : <Play size={18} />}
+            {timePanelOpen ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
           </button>
-          <button
-            type="button"
-            className="moon-icon-button"
-            onClick={() => setSimDate(new Date(simTimeRef.current.getTime() - DAY_MS))}
-            aria-label="Step back one day"
-            title="-1 day"
-          >
-            <SkipBack size={18} />
-          </button>
-          <button
-            type="button"
-            className="moon-icon-button"
-            onClick={() => setSimDate(new Date(simTimeRef.current.getTime() + DAY_MS))}
-            aria-label="Step forward one day"
-            title="+1 day"
-          >
-            <SkipForward size={18} />
-          </button>
-          <button
-            type="button"
-            className="moon-text-button"
-            onClick={() => setSimDate(new Date())}
-          >
-            Now
-          </button>
-          <button
-            type="button"
-            className="moon-icon-button"
-            onClick={resetCamera}
-            aria-label="Reset camera"
-            title="Reset camera"
-          >
-            <RotateCcw size={18} />
-          </button>
-          {surfaceBody && (
-            <button
-              type="button"
-              className="moon-text-button"
-              onClick={returnToSpace}
-            >
-              Space
-            </button>
-          )}
         </div>
 
-        <div className="moon-speed">
-          <Gauge size={16} aria-hidden="true" />
-          <input
-            type="range"
-            min="-5"
-            max="5"
-            step="0.02"
-            value={sliderValueForSpeed(speed)}
-            aria-label="Time speed"
-            onChange={(event) => {
-              setSpeed(speedFromLogSlider(Number(event.currentTarget.value)));
-              setRunning(true);
-            }}
-          />
-          <output>{speedLabel}</output>
-        </div>
+        {timePanelOpen && (
+          <>
+            <div className="moon-control-row">
+              <button
+                type="button"
+                className="moon-icon-button"
+                onClick={() => setRunning((value) => !value)}
+                aria-label={running ? 'Pause time' : 'Play time'}
+                title={running ? 'Pause' : 'Play'}
+              >
+                {running ? <Pause size={18} /> : <Play size={18} />}
+              </button>
+              <button
+                type="button"
+                className="moon-icon-button"
+                onClick={() => setSimDate(new Date(simTimeRef.current.getTime() - DAY_MS))}
+                aria-label="Step back one day"
+                title="-1 day"
+              >
+                <SkipBack size={18} />
+              </button>
+              <button
+                type="button"
+                className="moon-icon-button"
+                onClick={() => setSimDate(new Date(simTimeRef.current.getTime() + DAY_MS))}
+                aria-label="Step forward one day"
+                title="+1 day"
+              >
+                <SkipForward size={18} />
+              </button>
+              <button
+                type="button"
+                className="moon-text-button"
+                onClick={() => setSimDate(new Date())}
+              >
+                Now
+              </button>
+              <button
+                type="button"
+                className="moon-icon-button"
+                onClick={resetCamera}
+                aria-label="Reset camera"
+                title="Reset camera"
+              >
+                <RotateCcw size={18} />
+              </button>
+            </div>
 
-        <div className="moon-presets" aria-label="Speed presets">
-          {TIME_SPEED_PRESETS.map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              className={Math.abs(preset - speed) < 0.001 ? 'is-active' : ''}
-              onClick={() => setPresetSpeed(preset)}
-            >
-              {formatSpeedLabel(preset)}
-            </button>
-          ))}
-        </div>
+            <div className="moon-speed">
+              <Gauge size={16} aria-hidden="true" />
+              <input
+                type="range"
+                min="-5"
+                max="5"
+                step="0.02"
+                value={sliderValueForSpeed(speed)}
+                aria-label="Time speed"
+                onChange={(event) => {
+                  setSpeed(speedFromLogSlider(Number(event.currentTarget.value)));
+                  setRunning(true);
+                }}
+              />
+              <output>{speedLabel}</output>
+            </div>
+
+            <div className="moon-presets" aria-label="Speed presets">
+              {TIME_SPEED_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  className={Math.abs(preset - speed) < 0.001 ? 'is-active' : ''}
+                  onClick={() => setPresetSpeed(preset)}
+                >
+                  {formatSpeedLabel(preset)}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </section>
 
       <section className="moon-hud moon-view-panel" aria-label="View controls">
@@ -1565,6 +1607,15 @@ export default function MoonPhaseSandbox() {
           />
           <span>Labels</span>
         </label>
+        {surfaceBody && (
+          <button
+            type="button"
+            className="moon-text-button moon-space-button"
+            onClick={returnToSpace}
+          >
+            Space
+          </button>
+        )}
         <div className="moon-location-pill">
           <LocateFixed size={15} aria-hidden="true" />
           <span>{mode === 'surface' ? controlModeLabel : scaleMode}</span>

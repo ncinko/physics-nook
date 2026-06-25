@@ -5,6 +5,7 @@ import {
   DAY_PER_SECOND_SPEED,
   EARTH_RADIUS_KM,
   HOUR_PER_SECOND_SPEED,
+  MINUTE_PER_SECOND_SPEED,
   MEAN_MOON_DISTANCE_KM,
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
@@ -18,6 +19,7 @@ import {
   cross,
   dot,
   earthRotationAngleForDate,
+  formatSpeedLabel,
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getEclipseState,
@@ -146,6 +148,18 @@ test('simulation clock pauses, reverses, and advances by signed speed', () => {
     advanceSimulationTime(start, 2000, -HOUR_PER_SECOND_SPEED, true).toISOString(),
     '2026-06-24T10:00:00.000Z',
   );
+});
+
+test('time speed labels stay compact for HUD preset buttons', () => {
+  assert.equal(formatSpeedLabel(-DAY_PER_SECOND_SPEED), '-1 day');
+  assert.equal(formatSpeedLabel(-HOUR_PER_SECOND_SPEED), '-1 hour');
+  assert.equal(formatSpeedLabel(-MINUTE_PER_SECOND_SPEED), '-1 min');
+  assert.equal(formatSpeedLabel(1), '1x');
+  assert.equal(formatSpeedLabel(MINUTE_PER_SECOND_SPEED), '1 min');
+  assert.equal(formatSpeedLabel(HOUR_PER_SECOND_SPEED), '1 hour');
+  assert.equal(formatSpeedLabel(DAY_PER_SECOND_SPEED), '1 day');
+  assert.equal(formatSpeedLabel(2 * DAY_PER_SECOND_SPEED), '2 days');
+  assert.ok(!formatSpeedLabel(DAY_PER_SECOND_SPEED).includes('/s'));
 });
 
 test('ephemeris snapshot returns sane Earth-centered Moon and Sun distances', () => {

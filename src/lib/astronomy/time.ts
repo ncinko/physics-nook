@@ -43,13 +43,15 @@ export const formatSpeedLabel = (speedMultiplier: number): string => {
   const absolute = Math.abs(speedMultiplier);
 
   if (absolute >= DAY_PER_SECOND_SPEED) {
-    return `${sign}${Math.round(absolute / DAY_PER_SECOND_SPEED)} days/s`;
+    const amount = Math.round(absolute / DAY_PER_SECOND_SPEED);
+    return `${sign}${amount} ${amount === 1 ? 'day' : 'days'}`;
   }
   if (absolute >= HOUR_PER_SECOND_SPEED) {
-    return `${sign}${Math.round(absolute / HOUR_PER_SECOND_SPEED)} hours/s`;
+    const amount = Math.round(absolute / HOUR_PER_SECOND_SPEED);
+    return `${sign}${amount} ${amount === 1 ? 'hour' : 'hours'}`;
   }
   if (absolute >= MINUTE_PER_SECOND_SPEED) {
-    return `${sign}${Math.round(absolute / MINUTE_PER_SECOND_SPEED)} min/s`;
+    return `${sign}${Math.round(absolute / MINUTE_PER_SECOND_SPEED)} min`;
   }
   return `${speedMultiplier.toFixed(1)}x`;
 };

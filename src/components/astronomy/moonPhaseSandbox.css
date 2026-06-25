@@ -51,45 +51,30 @@
 .moon-hud-primary {
   top: 1rem;
   left: 1rem;
-  right: 1rem;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  max-width: min(58rem, calc(100vw - 2rem));
+  align-items: flex-start;
+  gap: 0.55rem;
   border-radius: 0.5rem;
-  padding: 0.9rem 1rem;
+  padding: 0.65rem;
 }
 
-.moon-title-block {
-  min-width: 12rem;
-}
-
-.moon-kicker {
-  color: #fbbf24;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-.moon-title-block h1 {
-  margin: 0.12rem 0 0;
-  font-size: 1.45rem;
-  font-weight: 750;
-  line-height: 1.1;
-  letter-spacing: 0;
+.moon-info-toggle {
+  top: 1rem;
+  left: 1rem;
+  border-radius: 0.5rem;
 }
 
 .moon-readouts {
   display: flex;
-  max-width: min(56rem, 100%);
+  max-width: min(52rem, 100%);
   flex-wrap: wrap;
   gap: 0.55rem;
-  justify-content: flex-end;
+  justify-content: flex-start;
 }
 
 .moon-readouts div {
-  width: min(13rem, 28vw);
+  width: min(12rem, 24vw);
   min-width: 0;
   border-radius: 0.45rem;
   background: rgba(15, 23, 42, 0.72);
@@ -136,10 +121,15 @@
   padding: 0.85rem;
 }
 
+.moon-time-panel.is-collapsed {
+  width: min(26rem, calc(100vw - 2rem));
+  gap: 0;
+}
+
 .moon-date,
 .moon-speed,
 .moon-control-row,
-.moon-presets,
+.moon-time-header,
 .moon-view-panel,
 .moon-location-pill,
 .moon-toggle {
@@ -152,6 +142,16 @@
   gap: 0.55rem;
 }
 
+.moon-time-header {
+  min-width: 0;
+  gap: 0.55rem;
+}
+
+.moon-time-header .moon-date {
+  min-width: 0;
+  flex: 1;
+}
+
 .moon-date span {
   min-width: 0;
   overflow: hidden;
@@ -159,8 +159,7 @@
   white-space: nowrap;
 }
 
-.moon-control-row,
-.moon-presets {
+.moon-control-row {
   flex-wrap: wrap;
   gap: 0.45rem;
 }
@@ -188,6 +187,10 @@
   padding: 0;
 }
 
+.moon-panel-action {
+  flex: 0 0 auto;
+}
+
 .moon-text-button,
 .moon-presets button,
 .moon-segmented button {
@@ -208,8 +211,21 @@
 }
 
 .moon-speed output {
-  width: 4.7rem;
+  width: 4.3rem;
   text-align: right;
+}
+
+.moon-presets {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.moon-presets button {
+  min-width: 0;
+  padding-right: 0.36rem;
+  padding-left: 0.36rem;
+  white-space: nowrap;
 }
 
 .moon-presets button.is-active {
@@ -221,6 +237,8 @@
 .moon-view-panel {
   bottom: 1rem;
   left: 1rem;
+  max-width: calc(100vw - 2rem);
+  flex-wrap: wrap;
   gap: 0.55rem;
   border-radius: 0.5rem;
   padding: 0.65rem;
@@ -259,13 +277,15 @@
 
 @media (max-width: 760px) {
   .moon-hud-primary {
-    align-items: stretch;
-    flex-direction: column;
+    right: 0.6rem;
+    left: 0.6rem;
+    max-width: none;
     padding: 0.75rem;
   }
 
-  .moon-title-block h1 {
-    font-size: 1.15rem;
+  .moon-info-toggle {
+    top: 0.6rem;
+    left: 0.6rem;
   }
 
   .moon-readouts {
@@ -291,23 +311,23 @@
     padding: 0.65rem;
   }
 
+  .moon-time-panel.is-collapsed {
+    width: auto;
+  }
+
   .moon-view-panel {
     right: 0.6rem;
     bottom: 13.2rem;
     left: 0.6rem;
-    flex-wrap: wrap;
     padding: 0.55rem;
+  }
+
+  .moon-time-panel.is-collapsed + .moon-view-panel {
+    bottom: 4.7rem;
   }
 
   .moon-speed input {
     min-width: 6rem;
-  }
-
-  .moon-presets button:nth-child(1),
-  .moon-presets button:nth-child(2),
-  .moon-presets button:nth-child(6),
-  .moon-presets button:nth-child(7) {
-    display: none;
   }
 }
 
@@ -322,7 +342,13 @@
 
   .moon-control-row {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .moon-presets {
+    grid-template-columns: repeat(7, minmax(3.65rem, 1fr));
+    overflow-x: auto;
+    padding-bottom: 0.1rem;
   }
 
   .moon-icon-button,

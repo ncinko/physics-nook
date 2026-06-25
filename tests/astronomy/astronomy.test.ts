@@ -9,6 +9,7 @@ import {
   MEAN_MOON_DISTANCE_KM,
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
+  apparentAngularRadiusRadians,
   apparentAngularDiameterDegrees,
   applySpaceLookDrag,
   applySpaceTranslation,
@@ -113,6 +114,12 @@ const sunAltitudeDegrees = (
   const sky = getSurfaceSkyState(snapshot.sunDirection, up);
   return Math.asin(sky.sunAltitude) / DEGREES;
 };
+
+const directionAtAltitude = (altitudeRadians: number) => ({
+  x: Math.cos(altitudeRadians),
+  y: Math.sin(altitudeRadians),
+  z: 0,
+});
 
 test('moon phase names follow the conventional longitude quadrants', () => {
   assert.equal(moonPhaseNameFromLongitude(0), 'New Moon');
@@ -374,6 +381,16 @@ test('true-distance angular helpers produce real Sun and Moon apparent sizes', (
   );
   assert.ok(surfaceDirectionVisibility({ x: 1, y: 0.2, z: 0 }, { x: 0, y: 1, z: 0 }) > 0.99);
   assert.ok(surfaceDirectionVisibility({ x: 1, y: -0.2, z: 0 }, { x: 0, y: 1, z: 0 }) < 0.01);
+});
+
+test('surface sky-body visibility starts at apparent upper-limb horizon contact', () => {
+  const up = { x: 0, y: 1, z: 0 };
+  const sunRadius = apparentAngularRadiusRadians(SUN_RADIUS_KM, 149597870.7);
+
+  assert.equal(surfaceDirectionVisibility(directionAtAltitude(-sunRadius * 1.02), up, sunRadius), 0);
+  assert.ok(surfaceDirectionVisibility(directionAtAltitude(-sunRadius * 0.5), up, sunRadius) > 0);
+  closeTo(surfaceDirectionVisibility(directionAtAltitude(0), up, sunRadius), 0.5, 1e-12);
+  assert.equal(surfaceDirectionVisibility(directionAtAltitude(sunRadius), up, sunRadius), 1);
 });
 
 test('Sun render mode uses infinity only for true-distance space view', () => {

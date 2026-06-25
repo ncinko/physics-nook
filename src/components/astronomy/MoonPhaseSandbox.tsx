@@ -71,7 +71,7 @@ interface SceneObjects {
   earthAtmosphere: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   surfaceMoonProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
-  surfaceSunProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  surfaceSunProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   moonPathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   eclipseLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   lunarEclipseTint: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
@@ -634,10 +634,12 @@ const updateSurfaceSkyProxies = (
   const moonVisibility = surfaceDirectionVisibility(
     plainFromVector(moonDirection),
     plainFromVector(worldUp),
+    apparentAngularRadiusRadians(MOON_RADIUS_KM, snapshot.moonDistanceKm),
   );
   const sunVisibility = surfaceDirectionVisibility(
     plainFromVector(sunDirection),
     plainFromVector(worldUp),
+    apparentAngularRadiusRadians(SUN_RADIUS_KM, snapshot.sunDistanceKm),
   );
   const moonRadius = skyProxyRadiusForAngularSize(
     SURFACE_SKY_BODY_DISTANCE,
@@ -655,14 +657,15 @@ const updateSurfaceSkyProxies = (
   );
   objects.surfaceMoonProxy.scale.setScalar(moonRadius);
   objects.surfaceMoonProxy.material.opacity = moonVisibility;
-  objects.surfaceMoonProxy.visible = moonVisibility > 0.02;
+  objects.surfaceMoonProxy.visible = moonVisibility > 0;
 
   objects.surfaceSunProxy.position.copy(
     cameraPosition.clone().add(sunDirection.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)),
   );
+  objects.surfaceSunProxy.quaternion.copy(objects.camera.quaternion);
   objects.surfaceSunProxy.scale.setScalar(sunRadius);
   objects.surfaceSunProxy.material.opacity = sunVisibility;
-  objects.surfaceSunProxy.visible = sunVisibility > 0.02;
+  objects.surfaceSunProxy.visible = sunVisibility > 0;
 };
 
 export default function MoonPhaseSandbox() {
@@ -889,22 +892,27 @@ export default function MoonPhaseSandbox() {
         transparent: true,
         opacity: 0,
         depthWrite: false,
+        depthTest: false,
       }),
     );
-    surfaceMoonProxy.renderOrder = 6;
+    surfaceMoonProxy.renderOrder = 7;
     surfaceMoonProxy.visible = false;
     scene.add(surfaceMoonProxy);
 
     const surfaceSunProxy = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 64, 32),
+      new THREE.CircleGeometry(1, 96),
       new THREE.MeshBasicMaterial({
         color: 0xfff1b8,
         transparent: true,
         opacity: 0,
         depthWrite: false,
+        depthTest: false,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        toneMapped: false,
       }),
     );
-    surfaceSunProxy.renderOrder = 7;
+    surfaceSunProxy.renderOrder = 6;
     surfaceSunProxy.visible = false;
     scene.add(surfaceSunProxy);
 

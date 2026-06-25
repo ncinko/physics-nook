@@ -118,10 +118,18 @@ export const skyProxyRadiusForAngularSize = (
 export const surfaceDirectionVisibility = (
   direction: Vec3,
   surfaceUp: Vec3,
-  horizonFade = 0.035,
+  apparentRadiusRadians = 0,
+  horizonFeatherRadians = 0.001,
 ): number => {
-  const altitudeSine = dotVec3(normalizeVec3(direction), normalizeVec3(surfaceUp));
-  return smoothstep(-horizonFade, horizonFade, altitudeSine);
+  const altitudeSine = Math.max(
+    -1,
+    Math.min(1, dotVec3(normalizeVec3(direction), normalizeVec3(surfaceUp))),
+  );
+  const altitudeRadians = Math.asin(altitudeSine);
+  const radius = Math.max(0, apparentRadiusRadians);
+  const fadeStart = -radius;
+  const fadeEnd = Math.max(radius, fadeStart + horizonFeatherRadians);
+  return smoothstep(fadeStart, fadeEnd, altitudeRadians);
 };
 
 const toSceneKilometers = (vector: { x: number; y: number; z: number }): Vec3 => ({

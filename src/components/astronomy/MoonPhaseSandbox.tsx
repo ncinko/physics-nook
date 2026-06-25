@@ -22,6 +22,7 @@ import {
   MOON_PATH_SAMPLE_COUNT,
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
+  BINARY_PATH_SAMPLE_COUNT,
   TIME_SPEED_PRESETS,
   advanceSimulationTime,
   applySpaceLookDrag,
@@ -31,19 +32,26 @@ import {
   clampSurfacePitch,
   createSurfacePose,
   formatSpeedLabel,
+  getBinarySystemSnapshot,
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getSurfaceSkyState,
   getSurfaceViewFrame,
   getSunRenderMode,
+  isAlienCaught,
+  moveAlienTowardPose,
   moveSurfacePose,
+  nextAlienWorldMode,
   apparentAngularRadiusRadians,
+  scaleBinaryScenePosition,
   skyProxyRadiusForAngularSize,
   speedFromLogSlider,
   surfaceDirectionVisibility,
   surfaceLatitudeLongitude,
   turnSurfacePose,
+  type AlienWorldMode,
   type AstronomyScaleMode,
+  type BinarySystemSnapshot,
   type CameraMode,
   type EclipseState,
   type MoonPhaseSummary,
@@ -53,9 +61,11 @@ import {
 } from '../../lib/astronomy/index.ts';
 import './moonPhaseSandbox.css';
 
-type BodyId = 'earth' | 'moon';
+type WorldMode = AlienWorldMode;
+type BodyId = 'earth' | 'moon' | 'binaryMoon';
 type ScaleMode = AstronomyScaleMode;
 type LabelId = 'earth' | 'moon' | 'sun' | 'path' | 'eclipse';
+type BinaryLabelId = 'primaryStar' | 'secondaryStar' | 'planet' | 'binaryMoon' | 'planetPath' | 'moonPath';
 
 interface SceneObjects {
   scene: THREE.Scene;
@@ -63,19 +73,34 @@ interface SceneObjects {
   renderer: THREE.WebGLRenderer;
   earthGroup: THREE.Group;
   moonGroup: THREE.Group;
+  binaryGroup: THREE.Group;
+  binaryPrimaryStar: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  binarySecondaryStar: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  binaryPlanetGroup: THREE.Group;
+  binaryMoonGroup: THREE.Group;
+  binaryPlanetMesh: THREE.Mesh;
+  binaryMoonMesh: THREE.Mesh;
   earthMesh: THREE.Mesh;
   moonMesh: THREE.Mesh;
   sunMesh: THREE.Mesh;
   infiniteSunDisk: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   sunLight: THREE.DirectionalLight;
+  binaryPrimaryLight: THREE.DirectionalLight;
+  binarySecondaryLight: THREE.DirectionalLight;
   earthAtmosphere: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   skyDome: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   surfaceMoonProxy: THREE.Mesh<THREE.SphereGeometry, THREE.MeshStandardMaterial>;
   surfaceSunProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
+  binaryPrimaryProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
+  binarySecondaryProxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   moonPathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  binaryPlanetPathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  binaryMoonPathLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   eclipseLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   lunarEclipseTint: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
+  alienGroup: THREE.Group;
   labels: Record<LabelId, THREE.Sprite>;
+  binaryLabels: Record<BinaryLabelId, THREE.Sprite>;
 }
 
 interface SurfaceState {
@@ -96,17 +121,30 @@ interface TransitionState {
   onComplete: () => void;
 }
 
+interface AlienState {
+  worldMode: WorldMode;
+  pose: SurfacePose;
+  status: 'idle' | 'caught';
+  bobSeed: number;
+}
+
 const EARTH_SCENE_RADIUS = 9.5;
 const MOON_SCENE_RADIUS = EARTH_SCENE_RADIUS * (MOON_RADIUS_KM / EARTH_RADIUS_KM);
+const BINARY_MOON_SCENE_RADIUS = 2.35;
 const EARTH_ATMOSPHERE_RADIUS = EARTH_SCENE_RADIUS * 1.035;
 const COMPACT_MOON_DISTANCE = EARTH_SCENE_RADIUS * 11.6;
 const SPACE_CAMERA_POSITION = new THREE.Vector3(38, 92, 240);
+const BINARY_SPACE_CAMERA_POSITION = new THREE.Vector3(42, 48, 150);
 const INITIAL_SIM_DATE = new Date('2000-01-01T12:00:00.000Z');
 const SNAPSHOT_UPDATE_MS = 180;
 const UI_SYNC_MS = 220;
 const SPACE_LOOK_SENSITIVITY = 0.0036;
 const SURFACE_LOOK_SENSITIVITY = 0.0024;
 const SURFACE_SKY_BODY_DISTANCE = 420;
+const ALIEN_CATCH_DISTANCE_RATIO = 0.075;
+const ALIEN_RESPAWN_SEED = 0.74;
+const ALIEN_SCALE_EYE_HEIGHT_RATIO = 1.95;
+const ALIEN_IDLE_SPEED_RATIO = 0.24;
 const COMPACT_SUN_DISTANCE = 260;
 const INFINITE_SUN_DISTANCE = 1200;
 const INFINITE_SUN_HALO_SCALE = 7;
@@ -131,6 +169,13 @@ const BODY_CONFIG: Record<BodyId, {
     radius: MOON_SCENE_RADIUS,
     eyeHeight: MOON_SCENE_RADIUS * 0.016,
     walkSpeed: MOON_SCENE_RADIUS * 0.16,
+    fastMultiplier: 3.4,
+  },
+  binaryMoon: {
+    label: 'Binary moon',
+    radius: BINARY_MOON_SCENE_RADIUS,
+    eyeHeight: BINARY_MOON_SCENE_RADIUS * 0.016,
+    walkSpeed: BINARY_MOON_SCENE_RADIUS * 0.16,
     fastMultiplier: 3.4,
   },
 };
@@ -198,24 +243,29 @@ const createStarField = () => {
   );
 };
 
-const createMoonPathLine = () => {
+const createPathLine = (pointCount: number, color: number, opacity: number) => {
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
     'position',
-    new THREE.BufferAttribute(new Float32Array(MOON_PATH_SAMPLE_COUNT * 3), 3),
+    new THREE.BufferAttribute(new Float32Array(pointCount * 3), 3),
   );
-  geometry.setDrawRange(0, MOON_PATH_SAMPLE_COUNT);
+  geometry.setDrawRange(0, pointCount);
 
   return new THREE.Line(
     geometry,
     new THREE.LineBasicMaterial({
-      color: 0x8dd7ff,
+      color,
       transparent: true,
-      opacity: 0.45,
+      opacity,
       depthWrite: false,
     }),
   );
 };
+
+const createMoonPathLine = () => createPathLine(MOON_PATH_SAMPLE_COUNT, 0x8dd7ff, 0.45);
+
+const createBinaryPathLine = (color: number, opacity = 0.34) =>
+  createPathLine(BINARY_PATH_SAMPLE_COUNT, color, opacity);
 
 const createTwoPointLine = (color: number) => {
   const geometry = new THREE.BufferGeometry();
@@ -419,6 +469,134 @@ const createInfiniteSunDisk = () => {
   return disk;
 };
 
+const createBinaryStarMesh = (color: number) => {
+  const star = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 48, 24),
+    new THREE.MeshBasicMaterial({ color }),
+  );
+  const halo = new THREE.Mesh(
+    new THREE.SphereGeometry(1.55, 48, 24),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }),
+  );
+  star.add(halo);
+  return star;
+};
+
+const createStarProxy = (color: number) => {
+  const material = new THREE.MeshBasicMaterial({
+    color,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    depthTest: false,
+    side: THREE.DoubleSide,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  });
+  const proxy = new THREE.Mesh(new THREE.CircleGeometry(1, 96), material);
+  proxy.renderOrder = 6;
+  proxy.visible = false;
+  return proxy;
+};
+
+const createAlienGroup = () => {
+  const group = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({
+    color: 0xa7f3d0,
+    emissive: 0x123c2f,
+    emissiveIntensity: 0.08,
+    roughness: 0.58,
+    metalness: 0.02,
+  });
+  const dark = new THREE.MeshStandardMaterial({
+    color: 0x08111f,
+    roughness: 0.38,
+  });
+  const sparkle = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 0.35,
+    roughness: 0.25,
+  });
+  const blush = new THREE.MeshStandardMaterial({
+    color: 0xff9fb2,
+    emissive: 0x4a1020,
+    emissiveIntensity: 0.05,
+    roughness: 0.72,
+  });
+  const suit = new THREE.MeshStandardMaterial({
+    color: 0xc4b5fd,
+    roughness: 0.7,
+    metalness: 0.04,
+  });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.073, 20, 14), suit);
+  body.scale.set(0.88, 1.08, 0.76);
+  body.position.y = 0.1;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.038, 16, 10), skin);
+  belly.scale.set(1.05, 0.7, 0.34);
+  belly.position.set(0, 0.096, -0.055);
+  group.add(belly);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.088, 24, 16), skin);
+  head.scale.set(1.16, 0.92, 1);
+  head.position.y = 0.214;
+  group.add(head);
+
+  [-1, 1].forEach((side) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.021, 16, 10), dark);
+    eye.scale.set(0.82, 1.18, 0.38);
+    eye.position.set(side * 0.034, 0.222, -0.079);
+    group.add(eye);
+
+    const glint = new THREE.Mesh(new THREE.SphereGeometry(0.0048, 8, 6), sparkle);
+    glint.position.set(side * 0.028, 0.229, -0.087);
+    group.add(glint);
+
+    const cheek = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), blush);
+    cheek.scale.set(1.25, 0.75, 0.28);
+    cheek.position.set(side * 0.059, 0.203, -0.071);
+    group.add(cheek);
+
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0065, 0.008, 0.074, 8), skin);
+    arm.position.set(side * 0.067, 0.112, -0.006);
+    arm.rotation.z = side * 0.52;
+    group.add(arm);
+
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.085, 8), skin);
+    leg.position.set(side * 0.032, 0.043, 0.012);
+    leg.rotation.z = side * 0.13;
+    leg.name = `alien-leg-${side}`;
+    group.add(leg);
+
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), skin);
+    foot.scale.set(1.35, 0.44, 0.92);
+    foot.position.set(side * 0.036, 0.004, -0.008);
+    foot.name = `alien-foot-${side}`;
+    group.add(foot);
+
+    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.068, 8), skin);
+    antenna.position.set(side * 0.03, 0.295, -0.003);
+    antenna.rotation.z = side * 0.34;
+    group.add(antenna);
+
+    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), blush);
+    bead.position.set(side * 0.044, 0.327, -0.004);
+    group.add(bead);
+  });
+
+  group.visible = false;
+  return group;
+};
+
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
@@ -441,6 +619,9 @@ const getMoonScenePosition = (
   scaleMode: ScaleMode,
 ) => getScenePositionFromGeocentric(snapshot.moonGeocentricKm, scaleMode);
 
+const getBinaryScenePosition = (position: Vec3, scaleMode: ScaleMode) =>
+  vectorFromPlain(scaleBinaryScenePosition(position, scaleMode));
+
 const getSpaceView = (
   snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
   scaleMode: ScaleMode,
@@ -456,6 +637,31 @@ const getSpaceView = (
     target,
   };
 };
+
+const getBinarySpaceView = (
+  snapshot: BinarySystemSnapshot,
+  _scaleMode: ScaleMode,
+) => {
+  const scaleMode: ScaleMode = 'compact';
+  const planetPosition = getBinaryScenePosition(snapshot.planetPosition, scaleMode);
+  const moonPosition = getBinaryScenePosition(snapshot.moonPosition, scaleMode);
+  const target = planetPosition.clone().lerp(moonPosition, 0.38);
+  const offset = BINARY_SPACE_CAMERA_POSITION.clone();
+
+  return {
+    position: target.clone().add(offset),
+    target,
+  };
+};
+
+const getActiveSpaceView = (
+  worldMode: WorldMode,
+  earthMoonSnapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
+  binarySnapshot: BinarySystemSnapshot,
+  scaleMode: ScaleMode,
+) => worldMode === 'binarySystem'
+  ? getBinarySpaceView(binarySnapshot, 'compact')
+  : getSpaceView(earthMoonSnapshot, scaleMode);
 
 const toDisplayDate = (date: Date) =>
   new Intl.DateTimeFormat(undefined, {
@@ -478,11 +684,17 @@ const getInitialRuntimeDate = () => {
   return Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
 };
 
-const getBodyCenter = (objects: SceneObjects, body: BodyId) =>
-  body === 'earth' ? objects.earthGroup.position : objects.moonGroup.position;
+const getBodyCenter = (objects: SceneObjects, body: BodyId) => {
+  if (body === 'earth') return objects.earthGroup.position;
+  if (body === 'moon') return objects.moonGroup.position;
+  return objects.binaryMoonGroup.position;
+};
 
-const getBodyGroup = (objects: SceneObjects, body: BodyId) =>
-  body === 'earth' ? objects.earthGroup : objects.moonGroup;
+const getBodyGroup = (objects: SceneObjects, body: BodyId) => {
+  if (body === 'earth') return objects.earthGroup;
+  if (body === 'moon') return objects.moonGroup;
+  return objects.binaryMoonGroup;
+};
 
 const setSpaceCameraFromLookAt = (
   position: THREE.Vector3,
@@ -591,6 +803,13 @@ const setSurfaceSkyProxiesHidden = (objects: SceneObjects) => {
   objects.surfaceSunProxy.material.opacity = 0;
 };
 
+const setBinaryStarProxiesHidden = (objects: SceneObjects) => {
+  objects.binaryPrimaryProxy.visible = false;
+  objects.binarySecondaryProxy.visible = false;
+  objects.binaryPrimaryProxy.material.opacity = 0;
+  objects.binarySecondaryProxy.material.opacity = 0;
+};
+
 const setInfiniteSunDiskHidden = (objects: SceneObjects) => {
   objects.infiniteSunDisk.visible = false;
 };
@@ -633,18 +852,25 @@ const updateSurfaceSkyProxies = (
   snapshot: ReturnType<typeof getEarthMoonSunSnapshot>,
   cameraPosition: THREE.Vector3,
   worldUp: THREE.Vector3,
+  surfaceBody: BodyId,
 ) => {
   const moonDirection = vectorFromPlain(snapshot.moonGeocentricKm).normalize();
-  const sunDirection = vectorFromPlain(snapshot.sunDirection).normalize();
-  const moonVisibility = surfaceDirectionVisibility(
-    plainFromVector(moonDirection),
-    plainFromVector(worldUp),
-    apparentAngularRadiusRadians(MOON_RADIUS_KM, snapshot.moonDistanceKm),
-  );
+  const sunOffsetKm = surfaceBody === 'moon'
+    ? vectorFromPlain(snapshot.sunGeocentricKm).sub(vectorFromPlain(snapshot.moonGeocentricKm))
+    : vectorFromPlain(snapshot.sunGeocentricKm);
+  const sunDirection = sunOffsetKm.clone().normalize();
+  const sunDistanceKm = sunOffsetKm.length();
+  const moonVisibility = surfaceBody === 'earth'
+    ? surfaceDirectionVisibility(
+      plainFromVector(moonDirection),
+      plainFromVector(worldUp),
+      apparentAngularRadiusRadians(MOON_RADIUS_KM, snapshot.moonDistanceKm),
+    )
+    : 0;
   const sunVisibility = surfaceDirectionVisibility(
     plainFromVector(sunDirection),
     plainFromVector(worldUp),
-    apparentAngularRadiusRadians(SUN_RADIUS_KM, snapshot.sunDistanceKm),
+    apparentAngularRadiusRadians(SUN_RADIUS_KM, sunDistanceKm),
   );
   const moonRadius = skyProxyRadiusForAngularSize(
     SURFACE_SKY_BODY_DISTANCE,
@@ -654,7 +880,7 @@ const updateSurfaceSkyProxies = (
   const sunRadius = skyProxyRadiusForAngularSize(
     SURFACE_SKY_BODY_DISTANCE,
     SUN_RADIUS_KM,
-    snapshot.sunDistanceKm,
+    sunDistanceKm,
   );
 
   objects.surfaceMoonProxy.position.copy(
@@ -673,6 +899,204 @@ const updateSurfaceSkyProxies = (
   objects.surfaceSunProxy.visible = sunVisibility > 0;
 };
 
+const updateBinaryStarProxy = (
+  proxy: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>,
+  camera: THREE.PerspectiveCamera,
+  cameraPosition: THREE.Vector3,
+  direction: THREE.Vector3,
+  worldUp: THREE.Vector3,
+  starRadiusKm: number,
+  starDistanceKm: number,
+) => {
+  const angularRadius = apparentAngularRadiusRadians(starRadiusKm, starDistanceKm);
+  const visibility = surfaceDirectionVisibility(
+    plainFromVector(direction),
+    plainFromVector(worldUp),
+    angularRadius,
+  );
+
+  if (visibility <= 0) {
+    proxy.visible = false;
+    proxy.material.opacity = 0;
+    return;
+  }
+
+  const radius = skyProxyRadiusForAngularSize(
+    SURFACE_SKY_BODY_DISTANCE,
+    starRadiusKm,
+    starDistanceKm,
+  );
+  proxy.position.copy(cameraPosition.clone().add(direction.multiplyScalar(SURFACE_SKY_BODY_DISTANCE)));
+  proxy.quaternion.copy(camera.quaternion);
+  proxy.scale.setScalar(radius);
+  proxy.material.opacity = visibility;
+  proxy.visible = true;
+};
+
+const updateBinaryStarProxies = (
+  objects: SceneObjects,
+  snapshot: BinarySystemSnapshot,
+  cameraPosition: THREE.Vector3,
+  worldUp: THREE.Vector3,
+) => {
+  updateBinaryStarProxy(
+    objects.binaryPrimaryProxy,
+    objects.camera,
+    cameraPosition,
+    vectorFromPlain(snapshot.primaryDirectionFromMoon).normalize(),
+    worldUp,
+    snapshot.primaryStar.radiusKm,
+    snapshot.primaryDistanceFromMoonKm,
+  );
+  updateBinaryStarProxy(
+    objects.binarySecondaryProxy,
+    objects.camera,
+    cameraPosition,
+    vectorFromPlain(snapshot.secondaryDirectionFromMoon).normalize(),
+    worldUp,
+    snapshot.secondaryStar.radiusKm,
+    snapshot.secondaryDistanceFromMoonKm,
+  );
+};
+
+const updateBinaryPathLines = (
+  objects: SceneObjects,
+  snapshot: BinarySystemSnapshot,
+  scaleMode: ScaleMode,
+) => {
+  const planetPath = snapshot.planetPath.map((point) => getBinaryScenePosition(point, scaleMode));
+  const moonPath = snapshot.moonPath.map((point) => getBinaryScenePosition(point, scaleMode));
+  updateLinePositions(objects.binaryPlanetPathLine, planetPath);
+  updateLinePositions(objects.binaryMoonPathLine, moonPath);
+
+  const planetLabelPoint = planetPath[Math.floor(planetPath.length * 0.11)] ?? planetPath[0];
+  const moonLabelPoint = moonPath[Math.floor(moonPath.length * 0.28)] ?? moonPath[0];
+  if (planetLabelPoint) {
+    objects.binaryLabels.planetPath.position.copy(planetLabelPoint).add(new THREE.Vector3(0, 7, 0));
+  }
+  if (moonLabelPoint) {
+    objects.binaryLabels.moonPath.position.copy(moonLabelPoint).add(new THREE.Vector3(0, 4.2, 0));
+  }
+};
+
+const updateBinaryScene = (
+  objects: SceneObjects,
+  snapshot: BinarySystemSnapshot,
+  scaleMode: ScaleMode,
+) => {
+  const primaryPosition = getBinaryScenePosition(snapshot.primaryStar.position, scaleMode);
+  const secondaryPosition = getBinaryScenePosition(snapshot.secondaryStar.position, scaleMode);
+  const planetPosition = getBinaryScenePosition(snapshot.planetPosition, scaleMode);
+  const moonPosition = getBinaryScenePosition(snapshot.moonPosition, scaleMode);
+  const radiusScale = scaleMode === 'true' ? 1.18 : 1;
+
+  objects.binaryPrimaryStar.position.copy(primaryPosition);
+  objects.binaryPrimaryStar.scale.setScalar(snapshot.primaryStar.radius * radiusScale);
+  objects.binarySecondaryStar.position.copy(secondaryPosition);
+  objects.binarySecondaryStar.scale.setScalar(snapshot.secondaryStar.radius * radiusScale);
+  objects.binaryPlanetGroup.position.copy(planetPosition);
+  objects.binaryPlanetGroup.rotation.y = (snapshot.date.getTime() / DAY_MS) * 0.22;
+  objects.binaryMoonGroup.position.copy(moonPosition);
+  objects.binaryMoonGroup.rotation.y = (snapshot.date.getTime() / DAY_MS) * 0.45;
+  objects.binaryPlanetMesh.scale.setScalar(snapshot.planetRadius / 7.8);
+  objects.binaryMoonMesh.scale.setScalar(snapshot.moonRadius / BINARY_MOON_SCENE_RADIUS);
+  objects.binaryPrimaryLight.position.copy(primaryPosition);
+  objects.binaryPrimaryLight.target.position.copy(moonPosition);
+  objects.binarySecondaryLight.position.copy(secondaryPosition);
+  objects.binarySecondaryLight.target.position.copy(moonPosition);
+
+  updateBinaryPathLines(objects, snapshot, scaleMode);
+  objects.binaryLabels.primaryStar.position.copy(primaryPosition).add(new THREE.Vector3(0, snapshot.primaryStar.radius + 5.5, 0));
+  objects.binaryLabels.secondaryStar.position.copy(secondaryPosition).add(new THREE.Vector3(0, snapshot.secondaryStar.radius + 4.2, 0));
+  objects.binaryLabels.planet.position.copy(planetPosition).add(new THREE.Vector3(0, snapshot.planetRadius + 5, 0));
+  objects.binaryLabels.binaryMoon.position.copy(moonPosition).add(new THREE.Vector3(0, BINARY_MOON_SCENE_RADIUS + 3.6, 0));
+};
+
+const setLabelRecordVisible = <T extends string>(
+  labels: Record<T, THREE.Sprite>,
+  visible: boolean,
+) => {
+  (Object.keys(labels) as T[]).forEach((key) => {
+    labels[key].visible = visible;
+  });
+};
+
+const isAlienSurface = (worldMode: WorldMode, body: BodyId) =>
+  (worldMode === 'earthMoonSun' && body === 'moon')
+  || (worldMode === 'binarySystem' && body === 'binaryMoon');
+
+const getAlienCatchDistance = (body: BodyId) =>
+  BODY_CONFIG[body].radius * ALIEN_CATCH_DISTANCE_RATIO;
+
+const getSurfaceHorizonArcDistance = (body: BodyId) => {
+  const config = BODY_CONFIG[body];
+  return config.radius * Math.acos(config.radius / (config.radius + config.eyeHeight));
+};
+
+const getAlienIdlePatrolPose = (
+  surface: SurfaceState,
+  now: number,
+  seed: number,
+) => {
+  const config = BODY_CONFIG[surface.body];
+  const horizonDistance = getSurfaceHorizonArcDistance(surface.body);
+  const catchDistance = getAlienCatchDistance(surface.body);
+  const patrolDistance = Math.min(
+    horizonDistance * 0.94,
+    Math.max(horizonDistance * 0.78, catchDistance * 1.7),
+  );
+  const phase = now * 0.00022 + seed;
+  const forwardDistance = patrolDistance * (0.86 + Math.cos(phase * 0.7) * 0.06);
+  const rightDistance = Math.sin(phase) * patrolDistance * 0.48;
+
+  return moveSurfacePose(surface.pose, config.radius, {
+    forwardDistance,
+    rightDistance,
+  });
+};
+
+const placeSurfaceGroup = (
+  group: THREE.Group,
+  bodyGroup: THREE.Group,
+  pose: SurfacePose,
+  radius: number,
+  height: number,
+  scale: number,
+) => {
+  const localUp = vectorFromPlain(pose.up).normalize();
+  const localForward = vectorFromPlain(pose.forward).normalize();
+  const localRight = vectorFromPlain(pose.right).normalize();
+  const worldUp = localUp.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldForward = localForward.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldRight = localRight.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldBackward = worldForward.clone().multiplyScalar(-1);
+  const rotation = new THREE.Matrix4().makeBasis(worldRight, worldUp, worldBackward);
+  const localPosition = localUp.multiplyScalar(radius + height);
+
+  group.position.copy(localPosition.applyQuaternion(bodyGroup.quaternion).add(bodyGroup.position));
+  group.quaternion.setFromRotationMatrix(rotation);
+  group.scale.setScalar(scale);
+  group.visible = true;
+};
+
+const animateAlienLegs = (
+  alienGroup: THREE.Group,
+  now: number,
+  seed: number,
+  walkAmount: number,
+) => {
+  const stride = Math.sin(now * 0.018 + seed * 3.7) * walkAmount;
+  const leftLeg = alienGroup.getObjectByName('alien-leg--1');
+  const rightLeg = alienGroup.getObjectByName('alien-leg-1');
+  const leftFoot = alienGroup.getObjectByName('alien-foot--1');
+  const rightFoot = alienGroup.getObjectByName('alien-foot-1');
+
+  if (leftLeg) leftLeg.rotation.x = stride * 0.5;
+  if (rightLeg) rightLeg.rotation.x = -stride * 0.5;
+  if (leftFoot) leftFoot.rotation.x = -stride * 0.32;
+  if (rightFoot) rightFoot.rotation.x = stride * 0.32;
+};
+
 export default function MoonPhaseSandbox() {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const objectsRef = useRef<SceneObjects | null>(null);
@@ -684,9 +1108,12 @@ export default function MoonPhaseSandbox() {
   const speedRef = useRef(1);
   const scaleModeRef = useRef<ScaleMode>('compact');
   const labelsVisibleRef = useRef(true);
+  const worldModeRef = useRef<WorldMode>('earthMoonSun');
   const modeRef = useRef<CameraMode>('space');
   const surfaceRef = useRef<SurfaceState | null>(null);
   const transitionRef = useRef<TransitionState | null>(null);
+  const alienRef = useRef<AlienState | null>(null);
+  const earthMoonReturnPoseRef = useRef<SurfacePose | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.18 });
   const pointerLockedRef = useRef(false);
@@ -715,6 +1142,7 @@ export default function MoonPhaseSandbox() {
   const [timePanelOpen, setTimePanelOpen] = useState(false);
   const [readoutsVisible, setReadoutsVisible] = useState(false);
   const [mode, setMode] = useState<CameraMode>('space');
+  const [worldMode, setWorldMode] = useState<WorldMode>('earthMoonSun');
   const [surfaceBody, setSurfaceBody] = useState<BodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });
   const [pointerLocked, setPointerLocked] = useState(false);
@@ -748,11 +1176,16 @@ export default function MoonPhaseSandbox() {
   }, [labelsVisible]);
 
   useEffect(() => {
+    worldModeRef.current = worldMode;
+  }, [worldMode]);
+
+  useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return undefined;
 
     const scene = new THREE.Scene();
     let latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
+    let latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
     let lastSnapshotUpdate = 0;
     scene.background = new THREE.Color(0x02040b);
     scene.fog = new THREE.FogExp2(0x02040b, 0.0008);
@@ -775,7 +1208,12 @@ export default function MoonPhaseSandbox() {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     mount.appendChild(renderer.domElement);
 
-    const initialSpaceView = getSpaceView(latestSnapshot, scaleModeRef.current);
+    const initialSpaceView = getActiveSpaceView(
+      worldModeRef.current,
+      latestSnapshot,
+      latestBinarySnapshot,
+      scaleModeRef.current,
+    );
     camera.position.copy(initialSpaceView.position);
     setSpaceCameraFromLookAt(camera.position, initialSpaceView.target, spaceCameraRef.current);
     applySpaceCameraLook(camera, spaceCameraRef.current);
@@ -797,8 +1235,11 @@ export default function MoonPhaseSandbox() {
 
     const earthGroup = new THREE.Group();
     const moonGroup = new THREE.Group();
+    const binaryGroup = new THREE.Group();
+    binaryGroup.visible = false;
     scene.add(earthGroup);
     scene.add(moonGroup);
+    scene.add(binaryGroup);
 
     const earthMesh = new THREE.Mesh(
       new THREE.SphereGeometry(EARTH_SCENE_RADIUS, 160, 80),
@@ -829,6 +1270,57 @@ export default function MoonPhaseSandbox() {
     moonMesh.receiveShadow = true;
     moonMesh.userData.body = 'moon';
     moonGroup.add(moonMesh);
+
+    const binaryPrimaryStar = createBinaryStarMesh(0xffc46b);
+    const binarySecondaryStar = createBinaryStarMesh(0xaed7ff);
+    binaryGroup.add(binaryPrimaryStar, binarySecondaryStar);
+
+    const binaryPlanetGroup = new THREE.Group();
+    const binaryPlanetMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(7.8, 96, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0x7dd3fc,
+        emissive: 0x0f172a,
+        emissiveIntensity: 0.08,
+        roughness: 0.86,
+        metalness: 0.02,
+      }),
+    );
+    binaryPlanetMesh.castShadow = true;
+    binaryPlanetMesh.receiveShadow = true;
+    binaryPlanetMesh.userData.body = 'binaryPlanet';
+    const binaryPlanetBand = new THREE.Mesh(
+      new THREE.SphereGeometry(7.86, 96, 24),
+      new THREE.MeshBasicMaterial({
+        color: 0xe0f2fe,
+        transparent: true,
+        opacity: 0.14,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    binaryPlanetBand.scale.set(1.012, 0.82, 1.012);
+    binaryPlanetGroup.add(binaryPlanetMesh, binaryPlanetBand);
+    binaryGroup.add(binaryPlanetGroup);
+
+    const binaryMoonGroup = new THREE.Group();
+    const binaryMoonMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(BINARY_MOON_SCENE_RADIUS, 96, 48),
+      new THREE.MeshStandardMaterial({
+        color: 0x9c89c9,
+        roughness: 0.94,
+        metalness: 0.01,
+      }),
+    );
+    binaryMoonMesh.castShadow = true;
+    binaryMoonMesh.receiveShadow = true;
+    binaryMoonMesh.userData.body = 'binaryMoon';
+    binaryMoonGroup.add(binaryMoonMesh);
+    binaryGroup.add(binaryMoonGroup);
+
+    const binaryPlanetPathLine = createBinaryPathLine(0x93c5fd, 0.3);
+    const binaryMoonPathLine = createBinaryPathLine(0xd8b4fe, 0.42);
+    binaryGroup.add(binaryPlanetPathLine, binaryMoonPathLine);
 
     const lunarEclipseTint = new THREE.Mesh(
       new THREE.SphereGeometry(MOON_SCENE_RADIUS * 1.025, 64, 32),
@@ -877,6 +1369,17 @@ export default function MoonPhaseSandbox() {
     scene.add(sunLight);
     scene.add(sunLight.target);
 
+    const binaryPrimaryLight = new THREE.DirectionalLight(0xffd6a1, 3.2);
+    const binarySecondaryLight = new THREE.DirectionalLight(0xc7ddff, 1.9);
+    binaryPrimaryLight.castShadow = true;
+    binaryPrimaryLight.shadow.mapSize.set(1024, 1024);
+    binarySecondaryLight.castShadow = true;
+    binarySecondaryLight.shadow.mapSize.set(1024, 1024);
+    binaryPrimaryLight.visible = false;
+    binarySecondaryLight.visible = false;
+    scene.add(binaryPrimaryLight, binaryPrimaryLight.target);
+    scene.add(binarySecondaryLight, binarySecondaryLight.target);
+
     const moonPathLine = createMoonPathLine();
     scene.add(moonPathLine);
 
@@ -921,6 +1424,13 @@ export default function MoonPhaseSandbox() {
     surfaceSunProxy.visible = false;
     scene.add(surfaceSunProxy);
 
+    const binaryPrimaryProxy = createStarProxy(0xffd59b);
+    const binarySecondaryProxy = createStarProxy(0xbddcff);
+    scene.add(binaryPrimaryProxy, binarySecondaryProxy);
+
+    const alienGroup = createAlienGroup();
+    scene.add(alienGroup);
+
     const labels = {
       earth: createLabelSprite('Earth'),
       moon: createLabelSprite('Moon'),
@@ -930,25 +1440,57 @@ export default function MoonPhaseSandbox() {
     };
     scene.add(labels.earth, labels.moon, labels.sun, labels.path, labels.eclipse);
 
+    const binaryLabels = {
+      primaryStar: createLabelSprite('Primary', new THREE.Vector3(5.1, 1.6, 1)),
+      secondaryStar: createLabelSprite('Secondary', new THREE.Vector3(5.6, 1.6, 1)),
+      planet: createLabelSprite('Aster', new THREE.Vector3(4.4, 1.6, 1)),
+      binaryMoon: createLabelSprite('Binary moon', new THREE.Vector3(6.2, 1.6, 1)),
+      planetPath: createLabelSprite('Planet path', new THREE.Vector3(6.2, 1.6, 1)),
+      moonPath: createLabelSprite('Moon path', new THREE.Vector3(5.8, 1.6, 1)),
+    };
+    scene.add(
+      binaryLabels.primaryStar,
+      binaryLabels.secondaryStar,
+      binaryLabels.planet,
+      binaryLabels.binaryMoon,
+      binaryLabels.planetPath,
+      binaryLabels.moonPath,
+    );
+
     const objects: SceneObjects = {
       scene,
       camera,
       renderer,
       earthGroup,
       moonGroup,
+      binaryGroup,
+      binaryPrimaryStar,
+      binarySecondaryStar,
+      binaryPlanetGroup,
+      binaryMoonGroup,
+      binaryPlanetMesh,
+      binaryMoonMesh,
       earthMesh,
       moonMesh,
       sunMesh,
       infiniteSunDisk,
       sunLight,
+      binaryPrimaryLight,
+      binarySecondaryLight,
       earthAtmosphere,
       skyDome,
       surfaceMoonProxy,
       surfaceSunProxy,
+      binaryPrimaryProxy,
+      binarySecondaryProxy,
       moonPathLine,
+      binaryPlanetPathLine,
+      binaryMoonPathLine,
       eclipseLine,
       lunarEclipseTint,
+      alienGroup,
       labels,
+      binaryLabels,
     };
     objectsRef.current = objects;
 
@@ -1000,6 +1542,152 @@ export default function MoonPhaseSandbox() {
       setMode('transition');
     };
 
+    const setActiveWorldMode = (nextWorldMode: WorldMode) => {
+      worldModeRef.current = nextWorldMode;
+      setWorldMode(nextWorldMode);
+    };
+
+    const syncEarthMoonTransforms = () => {
+      moonGroup.position.copy(getMoonScenePosition(latestSnapshot, scaleModeRef.current));
+      earthGroup.rotation.y = latestSnapshot.earthRotationRadians;
+      moonGroup.rotation.y = latestSnapshot.moonRotationRadians;
+    };
+
+    const syncBinaryTransforms = () => {
+      updateBinaryScene(objects, latestBinarySnapshot, 'compact');
+    };
+
+    const createAlienState = (
+      nextWorldMode: WorldMode,
+      surface: SurfaceState,
+    ): AlienState => {
+      const bobSeed = ALIEN_RESPAWN_SEED + simTimeRef.current.getTime() * 0.000001;
+      return {
+        worldMode: nextWorldMode,
+        pose: getAlienIdlePatrolPose(surface, performance.now(), bobSeed),
+        status: 'idle',
+        bobSeed,
+      };
+    };
+
+    const startSurfaceTransition = (
+      surface: SurfaceState,
+      duration = 950,
+    ) => {
+      if (surface.body === 'binaryMoon') {
+        syncBinaryTransforms();
+      } else {
+        syncEarthMoonTransforms();
+      }
+
+      const { eye, target, headUp } = getSurfaceCameraVectors(objects, surface);
+      surfaceRef.current = surface;
+      setSurfaceBody(surface.body);
+      requestPointerLock();
+      beginTransition(eye, target, () => {
+        modeRef.current = 'surface';
+        setMode('surface');
+      }, duration, headUp);
+    };
+
+    const teleportAfterAlienCatch = () => {
+      const currentSurface = surfaceRef.current;
+      if (!currentSurface || !isAlienSurface(worldModeRef.current, currentSurface.body)) return;
+
+      const nextWorldMode = nextAlienWorldMode(worldModeRef.current);
+      if (worldModeRef.current === 'earthMoonSun') {
+        earthMoonReturnPoseRef.current = currentSurface.pose;
+      }
+
+      const nextBody: BodyId = nextWorldMode === 'binarySystem' ? 'binaryMoon' : 'moon';
+      const nextConfig = BODY_CONFIG[nextBody];
+      const savedPose = nextWorldMode === 'earthMoonSun'
+        ? earthMoonReturnPoseRef.current
+        : null;
+      const nextPose = savedPose && nextBody === 'moon'
+        ? savedPose
+        : createSurfacePose(
+          nextConfig.radius,
+          nextWorldMode === 'binarySystem' ? 0.18 : 0.08,
+          nextWorldMode === 'binarySystem' ? -0.72 : -0.42,
+          nextWorldMode === 'binarySystem' ? 0.46 : 0.18,
+        );
+      const nextSurface: SurfaceState = {
+        body: nextBody,
+        pose: nextPose,
+        pitch: 0.06,
+      };
+
+      alienRef.current = createAlienState(nextWorldMode, nextSurface);
+      keysRef.current.clear();
+      setActiveWorldMode(nextWorldMode);
+      startSurfaceTransition(nextSurface, 1250);
+    };
+
+    const updateAlienForSurface = (
+      surface: SurfaceState,
+      elapsed: number,
+      now: number,
+    ) => {
+      const activeWorld = worldModeRef.current;
+      if (!isAlienSurface(activeWorld, surface.body)) {
+        alienGroup.visible = false;
+        return;
+      }
+
+      if (!alienRef.current || alienRef.current.worldMode !== activeWorld) {
+        alienRef.current = createAlienState(activeWorld, surface);
+      }
+
+      const alien = alienRef.current;
+      if (alien.status === 'caught') {
+        alienGroup.visible = false;
+        return;
+      }
+
+      const config = BODY_CONFIG[surface.body];
+      let walkAmount = 0;
+      if (alien.status === 'idle') {
+        const patrolPose = getAlienIdlePatrolPose(surface, now, alien.bobSeed);
+        const distanceToPatrol = vectorFromPlain(patrolPose.position)
+          .distanceTo(vectorFromPlain(alien.pose.position));
+        const strollGate = Math.sin(now * 0.0008 + alien.bobSeed * 2.1);
+        walkAmount = strollGate > -0.2
+          ? 0.25 + Math.max(0, strollGate) * 0.75
+          : 0;
+        const idleStep = Math.min(
+          distanceToPatrol,
+          config.walkSpeed * ALIEN_IDLE_SPEED_RATIO * walkAmount * (elapsed / 1000),
+        );
+        if (idleStep > 0.0001) {
+          alien.pose = moveAlienTowardPose(
+            alien.pose,
+            patrolPose,
+            config.radius,
+            idleStep,
+          );
+        }
+      }
+      animateAlienLegs(alienGroup, now, alien.bobSeed, walkAmount);
+
+      if (isAlienCaught(surface.pose, alien.pose, getAlienCatchDistance(surface.body))) {
+        alien.status = 'caught';
+        alienGroup.visible = false;
+        teleportAfterAlienCatch();
+        return;
+      }
+
+      const bodyGroup = getBodyGroup(objects, surface.body);
+      placeSurfaceGroup(
+        alienGroup,
+        bodyGroup,
+        alien.pose,
+        config.radius,
+        config.eyeHeight * 0.04,
+        config.eyeHeight * ALIEN_SCALE_EYE_HEIGHT_RATIO,
+      );
+    };
+
     const enterSurface = (body: BodyId, worldPoint: THREE.Vector3) => {
       const bodyGroup = getBodyGroup(objects, body);
       const config = BODY_CONFIG[body];
@@ -1012,15 +1700,7 @@ export default function MoonPhaseSandbox() {
         pose,
         pitch: body === 'earth' ? 0.02 : 0.06,
       };
-      const { eye, target, headUp } = getSurfaceCameraVectors(objects, surface);
-
-      surfaceRef.current = surface;
-      setSurfaceBody(body);
-      requestPointerLock();
-      beginTransition(eye, target, () => {
-        modeRef.current = 'surface';
-        setMode('surface');
-      }, 950, headUp);
+      startSurfaceTransition(surface);
     };
 
     const returnToSpace = () => {
@@ -1029,7 +1709,13 @@ export default function MoonPhaseSandbox() {
       }
       surfaceRef.current = null;
       setSurfaceBody(null);
-      const spaceView = getSpaceView(latestSnapshot, scaleModeRef.current);
+      alienGroup.visible = false;
+      const spaceView = getActiveSpaceView(
+        worldModeRef.current,
+        latestSnapshot,
+        latestBinarySnapshot,
+        scaleModeRef.current,
+      );
       beginTransition(spaceView.position, spaceView.target, () => {
         modeRef.current = 'space';
         setMode('space');
@@ -1045,7 +1731,12 @@ export default function MoonPhaseSandbox() {
         return;
       }
 
-      const spaceView = getSpaceView(latestSnapshot, scaleModeRef.current);
+      const spaceView = getActiveSpaceView(
+        worldModeRef.current,
+        latestSnapshot,
+        latestBinarySnapshot,
+        scaleModeRef.current,
+      );
       beginTransition(spaceView.position, spaceView.target, () => {
         modeRef.current = 'space';
         setMode('space');
@@ -1116,11 +1807,20 @@ export default function MoonPhaseSandbox() {
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
 
-      const intersections = raycaster.intersectObjects([earthMesh, moonMesh], false);
+      const intersections = worldModeRef.current === 'binarySystem'
+        ? raycaster.intersectObjects([binaryPlanetMesh, binaryMoonMesh], false)
+        : raycaster.intersectObjects([earthMesh, moonMesh], false);
       const hit = intersections[0];
-      const body = hit?.object.userData.body as BodyId | undefined;
+      const body = hit?.object.userData.body as BodyId | 'binaryPlanet' | undefined;
       if (hit && (body === 'earth' || body === 'moon')) {
         enterSurface(body, hit.point);
+      } else if (hit && body === 'binaryMoon') {
+        enterSurface('binaryMoon', hit.point);
+      } else if (hit && body === 'binaryPlanet') {
+        const landingLocal = binaryMoonGroup.worldToLocal(camera.position.clone())
+          .normalize()
+          .multiplyScalar(BODY_CONFIG.binaryMoon.radius);
+        enterSurface('binaryMoon', binaryMoonGroup.localToWorld(landingLocal));
       }
     };
 
@@ -1196,6 +1896,7 @@ export default function MoonPhaseSandbox() {
     }).__moonPhaseSandboxSetDate = (date: Date | string) => {
       simTimeRef.current = typeof date === 'string' ? new Date(date) : date;
       latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
+      latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
       setDisplayDate(new Date(simTimeRef.current));
       setPhase(latestSnapshot.phase);
       setEclipseState(latestSnapshot.eclipseState);
@@ -1213,48 +1914,85 @@ export default function MoonPhaseSandbox() {
 
       if (now - lastSnapshotUpdate > SNAPSHOT_UPDATE_MS) {
         latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
+        latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
         lastSnapshotUpdate = now;
       }
 
       const snapshot = latestSnapshot;
+      const binarySnapshot = latestBinarySnapshot;
+      const activeWorld = worldModeRef.current;
+      const isEarthMoonWorld = activeWorld === 'earthMoonSun';
+      const isBinaryWorld = activeWorld === 'binarySystem';
+      const activeSceneScaleMode: ScaleMode = isBinaryWorld ? 'compact' : scaleModeRef.current;
       const moonPosition = getMoonScenePosition(snapshot, scaleModeRef.current);
       const sunDirection = vectorFromPlain(snapshot.sunDirection).normalize();
       const compactSunPosition = getCompactSunPosition(sunDirection);
       const surfaceForScene = surfaceRef.current;
       const sunRenderMode = getSunRenderMode(
-        scaleModeRef.current,
+        activeSceneScaleMode,
         modeRef.current,
         surfaceForScene?.body ?? null,
       );
       const trueDistanceEarthSurface = modeRef.current === 'surface'
+        && isEarthMoonWorld
         && surfaceForScene?.body === 'earth'
         && scaleModeRef.current === 'true';
+      const trueDistanceBinarySurface = modeRef.current === 'surface'
+        && isBinaryWorld
+        && surfaceForScene?.body === 'binaryMoon'
+        && activeSceneScaleMode === 'true';
 
       moonGroup.position.copy(moonPosition);
       sunMesh.position.copy(compactSunPosition);
-      moonGroup.visible = !trueDistanceEarthSurface;
-      sunMesh.visible = sunRenderMode === 'finite-scene';
-      updateInfiniteSunDisk(objects, snapshot, sunRenderMode === 'infinite-space');
+      earthGroup.visible = isEarthMoonWorld;
+      moonGroup.visible = isEarthMoonWorld && !trueDistanceEarthSurface;
+      sunMesh.visible = isEarthMoonWorld && sunRenderMode === 'finite-scene';
+      sunLight.visible = isEarthMoonWorld;
+      binaryGroup.visible = isBinaryWorld;
+      binaryPrimaryLight.visible = isBinaryWorld;
+      binarySecondaryLight.visible = isBinaryWorld;
+      binaryPrimaryStar.visible = isBinaryWorld && !trueDistanceBinarySurface;
+      binarySecondaryStar.visible = isBinaryWorld && !trueDistanceBinarySurface;
+      updateInfiniteSunDisk(objects, snapshot, isEarthMoonWorld && sunRenderMode === 'infinite-space');
       setSurfaceSkyProxiesHidden(objects);
+      setBinaryStarProxiesHidden(objects);
       sunLight.position.copy(sunDirection.clone().multiplyScalar(180));
       sunLight.target.position.set(0, 0, 0);
       earthGroup.rotation.y = snapshot.earthRotationRadians;
       moonGroup.rotation.y = snapshot.moonRotationRadians;
       earthAtmosphere.material.uniforms.sunDirection.value.copy(sunDirection);
       updateMoonPathLine(objects, snapshot, scaleModeRef.current);
-      setEclipseIndicator(objects, snapshot.eclipseState, moonPosition);
+      if (isBinaryWorld) {
+        updateBinaryScene(objects, binarySnapshot, activeSceneScaleMode);
+      }
+      if (isEarthMoonWorld) {
+        setEclipseIndicator(objects, snapshot.eclipseState, moonPosition);
+      } else {
+        setEclipseIndicator(objects, null, moonPosition);
+      }
 
-      objects.moonPathLine.visible = labelsVisibleRef.current && modeRef.current === 'space';
-      labels.earth.visible = labelsVisibleRef.current && modeRef.current === 'space';
-      labels.moon.visible = labelsVisibleRef.current && modeRef.current === 'space';
-      labels.sun.visible = labelsVisibleRef.current
+      setLabelRecordVisible(labels, false);
+      setLabelRecordVisible(binaryLabels, false);
+      objects.moonPathLine.visible = isEarthMoonWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      labels.earth.visible = isEarthMoonWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      labels.moon.visible = isEarthMoonWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      labels.sun.visible = isEarthMoonWorld
+        && labelsVisibleRef.current
         && modeRef.current === 'space'
         && sunRenderMode === 'finite-scene';
-      labels.path.visible = labelsVisibleRef.current && modeRef.current === 'space';
-      labels.eclipse.visible = labelsVisibleRef.current && labels.eclipse.visible && modeRef.current === 'space';
+      labels.path.visible = isEarthMoonWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      labels.eclipse.visible = isEarthMoonWorld
+        && labelsVisibleRef.current
+        && Boolean(snapshot.eclipseState)
+        && modeRef.current === 'space';
       labels.earth.position.set(0, EARTH_SCENE_RADIUS + 6.2, 0);
       labels.moon.position.copy(moonPosition).add(new THREE.Vector3(0, MOON_SCENE_RADIUS + 4.3, 0));
       labels.sun.position.copy(compactSunPosition).add(new THREE.Vector3(0, 14, 0));
+      binaryPlanetPathLine.visible = isBinaryWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      binaryMoonPathLine.visible = isBinaryWorld && labelsVisibleRef.current && modeRef.current === 'space';
+      if (isBinaryWorld && labelsVisibleRef.current && modeRef.current === 'space') {
+        setLabelRecordVisible(binaryLabels, true);
+      }
 
       const transition = transitionRef.current;
       if (transition) {
@@ -1298,25 +2036,34 @@ export default function MoonPhaseSandbox() {
         camera.position.copy(eye);
         camera.up.copy(headUp);
         camera.lookAt(target);
-        skyDome.visible = surface.body === 'earth';
+        skyDome.visible = isEarthMoonWorld && surface.body === 'earth';
         skyDome.position.copy(camera.position);
         skyDome.material.uniforms.sunDirection.value.copy(sunDirection);
         skyDome.material.uniforms.upDirection.value.copy(worldUp);
         skyDome.material.uniforms.daylight.value = sky.daylight;
         skyDome.material.uniforms.twilight.value = sky.twilight;
         skyDome.material.uniforms.night.value = sky.night;
-        if (surface.body === 'earth' && scaleModeRef.current === 'true') {
-          updateSurfaceSkyProxies(objects, snapshot, camera.position, worldUp);
+        if (
+          isEarthMoonWorld
+          && (surface.body === 'earth' || surface.body === 'moon')
+          && scaleModeRef.current === 'true'
+        ) {
+          updateSurfaceSkyProxies(objects, snapshot, camera.position, worldUp, surface.body);
         }
+        if (trueDistanceBinarySurface) {
+          updateBinaryStarProxies(objects, binarySnapshot, camera.position, worldUp);
+        }
+        updateAlienForSurface(surface, elapsed, now);
       } else {
         skyDome.visible = false;
+        alienGroup.visible = false;
         if (modeRef.current === 'space') {
           const keys = keysRef.current;
           const forwardRaw = Number(keyed(keys, 'w', 'arrowup')) - Number(keyed(keys, 's', 'arrowdown'));
           const rightRaw = Number(keyed(keys, 'd', 'arrowright')) - Number(keyed(keys, 'a', 'arrowleft'));
           const input = normalizedAxisInput(forwardRaw, rightRaw);
           const speedBoost = keys.has('shift') ? 4 : 1;
-          const baseSpeed = scaleModeRef.current === 'true' ? 185 : 58;
+          const baseSpeed = activeSceneScaleMode === 'true' ? 185 : 58;
           const distance = baseSpeed * speedBoost * (elapsed / 1000);
 
           if (input.forward !== 0 || input.right !== 0) {
@@ -1430,13 +2177,17 @@ export default function MoonPhaseSandbox() {
     ? `${BODY_CONFIG[surfaceBody].label} ${surfaceCoords.latitude.toFixed(1)} deg, ${surfaceCoords.longitude.toFixed(1)} deg`
     : mode === 'transition'
       ? 'Transition'
-      : 'Space';
+      : worldMode === 'binarySystem'
+        ? 'Binary space'
+        : 'Space';
+
+  const hudScaleMode: ScaleMode = worldMode === 'binarySystem' ? 'compact' : scaleMode;
 
   const controlModeLabel = mode === 'surface'
     ? pointerLocked
       ? 'Mouse look'
       : 'Click for mouse look'
-    : scaleMode;
+    : hudScaleMode;
 
   return (
     <div
@@ -1452,19 +2203,23 @@ export default function MoonPhaseSandbox() {
       {readoutsVisible ? (
         <header className="moon-hud moon-hud-primary" aria-label="Moon phase information">
           <div className="moon-readouts">
-            <div>
-              <span>Phase</span>
-              <strong>{phase.phaseName}</strong>
-            </div>
-            <div>
-              <span>Lit</span>
-              <strong>{formatPercent(phase.illuminationFraction)}</strong>
-            </div>
+            {worldMode === 'earthMoonSun' && (
+              <>
+                <div>
+                  <span>Phase</span>
+                  <strong>{phase.phaseName}</strong>
+                </div>
+                <div>
+                  <span>Lit</span>
+                  <strong>{formatPercent(phase.illuminationFraction)}</strong>
+                </div>
+              </>
+            )}
             <div>
               <span>View</span>
               <strong>{locationLabel}</strong>
             </div>
-            {eclipseState && (
+            {worldMode === 'earthMoonSun' && eclipseState && (
               <div className="moon-eclipse-readout">
                 <span>Eclipse</span>
                 <strong>{eclipseState.label}</strong>
@@ -1596,22 +2351,30 @@ export default function MoonPhaseSandbox() {
       </section>
 
       <section className="moon-hud moon-view-panel" aria-label="View controls">
-        <div className="moon-segmented">
-          <button
-            type="button"
-            aria-pressed={scaleMode === 'compact'}
-            onClick={() => setScaleMode('compact')}
-          >
-            Compact
-          </button>
-          <button
-            type="button"
-            aria-pressed={scaleMode === 'true'}
-            onClick={() => setScaleMode('true')}
-          >
-            True distance
-          </button>
-        </div>
+        {worldMode === 'earthMoonSun' ? (
+          <div className="moon-segmented">
+            <button
+              type="button"
+              aria-pressed={scaleMode === 'compact'}
+              onClick={() => setScaleMode('compact')}
+            >
+              Compact
+            </button>
+            <button
+              type="button"
+              aria-pressed={scaleMode === 'true'}
+              onClick={() => setScaleMode('true')}
+            >
+              True distance
+            </button>
+          </div>
+        ) : (
+          <div className="moon-segmented" aria-label="Binary system scale">
+            <button type="button" aria-pressed="true" disabled>
+              Compact
+            </button>
+          </div>
+        )}
         <label className="moon-toggle">
           <input
             type="checkbox"
@@ -1631,7 +2394,7 @@ export default function MoonPhaseSandbox() {
         )}
         <div className="moon-location-pill">
           <LocateFixed size={15} aria-hidden="true" />
-          <span>{mode === 'surface' ? controlModeLabel : scaleMode}</span>
+          <span>{mode === 'surface' ? controlModeLabel : hudScaleMode}</span>
         </div>
       </section>
     </div>

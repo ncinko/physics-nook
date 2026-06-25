@@ -261,6 +261,11 @@
   color: #04111f;
 }
 
+.moon-segmented button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .moon-toggle {
   gap: 0.42rem;
   border-radius: 0.45rem;

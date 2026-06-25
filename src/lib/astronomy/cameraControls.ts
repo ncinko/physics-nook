@@ -8,7 +8,7 @@ import {
 
 export type CameraMode = 'space' | 'surface' | 'transition';
 export type AstronomyScaleMode = 'compact' | 'true';
-export type SurfaceBodyId = 'earth' | 'moon' | null;
+export type SurfaceBodyId = 'earth' | 'moon' | 'binaryMoon' | null;
 export type SunRenderMode = 'finite-scene' | 'infinite-space' | 'surface-proxy';
 
 export interface CameraBasis {
@@ -79,7 +79,7 @@ export const getSunRenderMode = (
   surfaceBody: SurfaceBodyId = null,
 ): SunRenderMode => {
   if (scaleMode === 'true' && mode === 'space') return 'infinite-space';
-  if (scaleMode === 'true' && mode === 'surface' && surfaceBody === 'earth') {
+  if (scaleMode === 'true' && mode === 'surface' && (surfaceBody === 'earth' || surfaceBody === 'moon')) {
     return 'surface-proxy';
   }
   return 'finite-scene';

@@ -9,11 +9,13 @@ import {
   MEAN_MOON_DISTANCE_KM,
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
+  BINARY_PATH_SAMPLE_COUNT,
   apparentAngularRadiusRadians,
   apparentAngularDiameterDegrees,
   applySpaceLookDrag,
   applySpaceTranslation,
   advanceSimulationTime,
+  binarySceneScale,
   canUseClickForDescent,
   clampSurfacePitch,
   createSurfacePose,
@@ -21,6 +23,7 @@ import {
   dot,
   earthRotationAngleForDate,
   formatSpeedLabel,
+  getBinarySystemSnapshot,
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getEclipseState,
@@ -30,9 +33,13 @@ import {
   length,
   moonIlluminationFromLongitude,
   moonPhaseNameFromLongitude,
+  moveAlienTowardPose,
   moveSurfacePose,
+  nextAlienWorldMode,
   skyProxyRadiusForAngularSize,
+  spawnAlienNearPlayer,
   surfaceDirectionVisibility,
+  isAlienCaught,
   turnSurfacePose,
 } from '../../src/lib/astronomy/index.ts';
 
@@ -400,10 +407,77 @@ test('Sun render mode uses infinity only for true-distance space view', () => {
   assert.equal(getSunRenderMode('compact', 'space'), 'finite-scene');
   assert.equal(getSunRenderMode('true', 'space'), 'infinite-space');
   assert.equal(getSunRenderMode('true', 'surface', 'earth'), 'surface-proxy');
-  assert.equal(getSunRenderMode('true', 'surface', 'moon'), 'finite-scene');
+  assert.equal(getSunRenderMode('true', 'surface', 'moon'), 'surface-proxy');
+  assert.equal(getSunRenderMode('true', 'surface', 'binaryMoon'), 'finite-scene');
   assert.ok(sunDiameter > 0.52);
   assert.ok(sunDiameter < 0.54);
   assert.ok(eclipseSnapshot.sunDistanceKm > eclipseSnapshot.moonDistanceKm * 300);
+});
+
+test('binary system snapshot returns bounded bodies and orbit samples', () => {
+  const snapshot = getBinarySystemSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+
+  assert.equal(binarySceneScale('compact'), 1);
+  assert.equal(binarySceneScale('true'), 1);
+  assert.equal(snapshot.planetPath.length, BINARY_PATH_SAMPLE_COUNT);
+  assert.equal(snapshot.moonPath.length, BINARY_PATH_SAMPLE_COUNT);
+  assert.ok(length(snapshot.primaryStar.position) > 1);
+  assert.ok(length(snapshot.secondaryStar.position) > 1);
+  assert.ok(length(snapshot.planetPosition) > 260);
+  const moonPlanetDistance = length(subtractTestVectors(snapshot.moonPosition, snapshot.planetPosition));
+  assert.ok(moonPlanetDistance > snapshot.planetRadius + snapshot.moonRadius + 12);
+  assert.ok(length(subtractTestVectors(snapshot.planetPosition, snapshot.primaryStar.position)) > 240);
+  assert.ok(length(subtractTestVectors(snapshot.planetPosition, snapshot.secondaryStar.position)) > 240);
+  closeTo(length(snapshot.primaryDirectionFromMoon), 1, 1e-12);
+  closeTo(length(snapshot.secondaryDirectionFromMoon), 1, 1e-12);
+  assert.ok(snapshot.primaryDistanceFromMoonKm > 240_000_000);
+  assert.ok(snapshot.secondaryDistanceFromMoonKm > 240_000_000);
+});
+
+test('binary star surface proxies preserve physical-looking angular sizes', () => {
+  const snapshot = getBinarySystemSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+  const primaryDiameter = apparentAngularDiameterDegrees(
+    snapshot.primaryStar.radiusKm,
+    snapshot.primaryDistanceFromMoonKm,
+  );
+  const secondaryDiameter = apparentAngularDiameterDegrees(
+    snapshot.secondaryStar.radiusKm,
+    snapshot.secondaryDistanceFromMoonKm,
+  );
+
+  assert.ok(primaryDiameter > 0.2);
+  assert.ok(primaryDiameter < 1.6);
+  assert.ok(secondaryDiameter > 0.1);
+  assert.ok(secondaryDiameter < 1.2);
+});
+
+test('alien idle meander preserves radius while moving toward a patrol target', () => {
+  const player = createSurfacePose(MOON_RADIUS_KM, 0, 0, 0);
+  const alien = spawnAlienNearPlayer(player, MOON_RADIUS_KM);
+  const patrolTarget = moveSurfacePose(player, MOON_RADIUS_KM, {
+    forwardDistance: MOON_RADIUS_KM * 0.16,
+    rightDistance: MOON_RADIUS_KM * 0.05,
+  });
+  const startDistance = length(subtractTestVectors(alien.position, patrolTarget.position));
+  const moved = moveAlienTowardPose(alien, patrolTarget, MOON_RADIUS_KM, MOON_RADIUS_KM * 0.04);
+  const endDistance = length(subtractTestVectors(moved.position, patrolTarget.position));
+
+  closeTo(length(moved.position), MOON_RADIUS_KM, 1e-6);
+  assert.ok(endDistance < startDistance);
+});
+
+test('alien catch and world mapping use reversible moon portal rules', () => {
+  const player = createSurfacePose(MOON_RADIUS_KM, 0, 0, 0);
+  const alien = moveSurfacePose(player, MOON_RADIUS_KM, {
+    forwardDistance: MOON_RADIUS_KM * 0.01,
+    rightDistance: 0,
+  });
+  const farAlien = spawnAlienNearPlayer(player, MOON_RADIUS_KM);
+
+  assert.equal(isAlienCaught(player, alien, MOON_RADIUS_KM * 0.02), true);
+  assert.equal(isAlienCaught(player, farAlien, MOON_RADIUS_KM * 0.02), false);
+  assert.equal(nextAlienWorldMode('earthMoonSun'), 'binarySystem');
+  assert.equal(nextAlienWorldMode('binarySystem'), 'earthMoonSun');
 });
 
 test('sampled Moon path is not the old flat XZ orbit ring', () => {

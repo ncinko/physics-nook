@@ -406,8 +406,8 @@ test('space roll rotates the camera up and right axes around the look direction'
   closeTo(rolledState.roll, -0.1, 1e-12);
 });
 
-test('space drag yaws horizontally and pitches vertically while preserving roll', () => {
-  const start = { yaw: 0.25, pitch: 0.1, roll: 0.4 };
+test('space drag yaws horizontally and pitches vertically without roll', () => {
+  const start = { yaw: 0.25, pitch: 0.1, roll: 0 };
   const draggedRight = applySpaceLookDrag(start, 20, 0, 0.01);
   const draggedUp = applySpaceLookDrag(start, 0, -12, 0.01);
   const basis = getCameraBasis(draggedUp.yaw, draggedUp.pitch, draggedUp.roll);
@@ -419,6 +419,19 @@ test('space drag yaws horizontally and pitches vertically while preserving roll'
   assert.ok(draggedUp.pitch > start.pitch);
   closeTo(draggedUp.roll, start.roll, 1e-12);
   closeTo(dot(cross(basis.forward, basis.up), basis.right), 1, 1e-12);
+});
+
+test('space drag follows rolled screen axes', () => {
+  const start = { yaw: 0.25, pitch: 0.1, roll: Math.PI / 2 };
+  const draggedRight = applySpaceLookDrag(start, 20, 0, 0.01);
+  const draggedUp = applySpaceLookDrag(start, 0, -12, 0.01);
+
+  closeTo(draggedRight.yaw, start.yaw, 1e-12);
+  assert.ok(draggedRight.pitch < start.pitch);
+  closeTo(draggedRight.roll, start.roll, 1e-12);
+  assert.ok(draggedUp.yaw > start.yaw);
+  closeTo(draggedUp.pitch, start.pitch, 1e-12);
+  closeTo(draggedUp.roll, start.roll, 1e-12);
 });
 
 test('surface walking preserves the globe radius over long and near-pole moves', () => {

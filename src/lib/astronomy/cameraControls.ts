@@ -61,11 +61,18 @@ export const applySpaceLookDrag = (
   deltaX: number,
   deltaY: number,
   sensitivity: number,
-): SpaceLookState => ({
-  yaw: state.yaw + deltaX * sensitivity,
-  pitch: clampCameraPitch(state.pitch - deltaY * sensitivity),
-  roll: state.roll,
-});
+): SpaceLookState => {
+  const cosRoll = Math.cos(state.roll);
+  const sinRoll = Math.sin(state.roll);
+  const yawDelta = (deltaX * cosRoll - deltaY * sinRoll) * sensitivity;
+  const pitchDelta = (-deltaX * sinRoll - deltaY * cosRoll) * sensitivity;
+
+  return {
+    yaw: state.yaw + yawDelta,
+    pitch: clampCameraPitch(state.pitch + pitchDelta),
+    roll: state.roll,
+  };
+};
 
 export const applySpaceRoll = (
   state: SpaceLookState,

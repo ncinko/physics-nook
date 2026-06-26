@@ -25,6 +25,7 @@ import {
   TIME_SPEED_PRESETS,
   advanceSimulationTime,
   applySpaceLookDrag,
+  applySpaceRoll,
   applySpaceTranslation,
   buildLiveEarthWmsUrl,
   canUseClickForDescent,
@@ -152,6 +153,7 @@ const INITIAL_SIM_DATE = new Date('2000-01-01T12:00:00.000Z');
 const SNAPSHOT_UPDATE_MS = 180;
 const UI_SYNC_MS = 220;
 const SPACE_LOOK_SENSITIVITY = 0.0036;
+const SPACE_ROLL_SPEED = Math.PI * 0.55;
 const SURFACE_LOOK_SENSITIVITY = 0.0024;
 const SURFACE_SKY_BODY_DISTANCE = 420;
 const ALIEN_CATCH_DISTANCE_RATIO = 0.075;
@@ -209,12 +211,18 @@ const plainFromVector = (vector: THREE.Vector3): Vec3 => ({
 const keyed = (keys: Set<string>, ...values: string[]) =>
   values.some((value) => keys.has(value));
 
-const normalizedAxisInput = (forward: number, right: number) => {
-  const magnitude = Math.hypot(forward, right);
-  if (magnitude === 0) return { forward: 0, right: 0 };
+const keyName = (event: KeyboardEvent) =>
+  event.code === 'Space' || event.key === ' ' ? 'space' : event.key.toLowerCase();
+
+const SPACE_KEYBOARD_CONTROL_KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e']);
+
+const normalizedAxisInput = (forward: number, right: number, up = 0) => {
+  const magnitude = Math.hypot(forward, right, up);
+  if (magnitude === 0) return { forward: 0, right: 0, up: 0 };
   return {
     forward: forward / magnitude,
     right: right / magnitude,
+    up: up / magnitude,
   };
 };
 
@@ -1058,13 +1066,14 @@ const setSpaceCameraFromLookAt = (
   const direction = target.clone().sub(position).normalize();
   state.yaw = Math.atan2(direction.x, -direction.z);
   state.pitch = clampCameraPitch(Math.asin(Math.max(-1, Math.min(1, direction.y))));
+  state.roll = 0;
 };
 
 const applySpaceCameraLook = (
   camera: THREE.PerspectiveCamera,
   state: SpaceLookState,
 ) => {
-  const basis = getCameraBasis(state.yaw, state.pitch);
+  const basis = getCameraBasis(state.yaw, state.pitch, state.roll);
   const lookTarget = camera.position.clone().add(vectorFromPlain(basis.forward));
   camera.up.copy(vectorFromPlain(basis.up));
   camera.lookAt(lookTarget);
@@ -1509,7 +1518,7 @@ export default function MoonPhaseSandbox() {
   const alienRef = useRef<AlienState | null>(null);
   const earthMoonReturnPoseRef = useRef<SurfacePose | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
-  const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.18 });
+  const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.18, roll: 0 });
   const pointerLockedRef = useRef(false);
   const pointerRef = useRef({
     down: false,
@@ -2409,12 +2418,15 @@ export default function MoonPhaseSandbox() {
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
-      const key = event.key.toLowerCase();
+      const key = keyName(event);
+      const isControlChord = event.ctrlKey || key === 'control';
       if (
         key === 'arrowup'
         || key === 'arrowdown'
         || key === 'arrowleft'
         || key === 'arrowright'
+        || key === 'space'
+        || (isControlChord && SPACE_KEYBOARD_CONTROL_KEYS.has(key))
       ) {
         event.preventDefault();
       }
@@ -2423,7 +2435,7 @@ export default function MoonPhaseSandbox() {
 
     const onKeyUp = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
-      keysRef.current.delete(event.key.toLowerCase());
+      keysRef.current.delete(keyName(event));
     };
 
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
@@ -2627,15 +2639,29 @@ export default function MoonPhaseSandbox() {
           const keys = keysRef.current;
           const forwardRaw = Number(keyed(keys, 'w', 'arrowup')) - Number(keyed(keys, 's', 'arrowdown'));
           const rightRaw = Number(keyed(keys, 'd', 'arrowright')) - Number(keyed(keys, 'a', 'arrowleft'));
-          const input = normalizedAxisInput(forwardRaw, rightRaw);
+          const upRaw = Number(keys.has('space')) - Number(keys.has('control'));
+          const rollRaw = Number(keys.has('e')) - Number(keys.has('q'));
+          const input = normalizedAxisInput(forwardRaw, rightRaw, upRaw);
           const speedBoost = keys.has('shift') ? 4 : 1;
           const baseSpeed = activeSceneScaleMode === 'true' ? 185 : 58;
           const distance = baseSpeed * speedBoost * (elapsed / 1000);
 
-          if (input.forward !== 0 || input.right !== 0) {
+          if (rollRaw !== 0) {
+            spaceCameraRef.current = applySpaceRoll(
+              spaceCameraRef.current,
+              rollRaw * SPACE_ROLL_SPEED * (elapsed / 1000),
+            );
+          }
+
+          if (input.forward !== 0 || input.right !== 0 || input.up !== 0) {
+            const basis = getCameraBasis(
+              spaceCameraRef.current.yaw,
+              spaceCameraRef.current.pitch,
+              spaceCameraRef.current.roll,
+            );
             const nextPosition = applySpaceTranslation(
               plainFromVector(camera.position),
-              getCameraBasis(spaceCameraRef.current.yaw, spaceCameraRef.current.pitch),
+              basis,
               input,
               distance,
             );

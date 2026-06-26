@@ -3,6 +3,7 @@ import {
   add,
   cross,
   normalize,
+  rotateAroundAxis,
   scale,
 } from './surfaceNavigation.ts';
 
@@ -20,11 +21,13 @@ export interface CameraBasis {
 export interface SpaceMoveInput {
   forward: number;
   right: number;
+  up?: number;
 }
 
 export interface SpaceLookState {
   yaw: number;
   pitch: number;
+  roll: number;
 }
 
 const WORLD_UP: Vec3 = { x: 0, y: 1, z: 0 };
@@ -33,7 +36,11 @@ const PITCH_LIMIT = Math.PI / 2 - 0.02;
 export const clampCameraPitch = (pitch: number) =>
   Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, pitch));
 
-export const getCameraBasis = (yawRadians: number, pitchRadians: number): CameraBasis => {
+export const getCameraBasis = (
+  yawRadians: number,
+  pitchRadians: number,
+  rollRadians = 0,
+): CameraBasis => {
   const pitch = clampCameraPitch(pitchRadians);
   const cosPitch = Math.cos(pitch);
   const forward = normalize({
@@ -41,8 +48,10 @@ export const getCameraBasis = (yawRadians: number, pitchRadians: number): Camera
     y: Math.sin(pitch),
     z: -Math.cos(yawRadians) * cosPitch,
   });
-  const right = normalize(cross(forward, WORLD_UP));
-  const up = normalize(cross(right, forward));
+  const unrolledRight = normalize(cross(forward, WORLD_UP));
+  const unrolledUp = normalize(cross(unrolledRight, forward));
+  const right = normalize(rotateAroundAxis(unrolledRight, forward, rollRadians));
+  const up = normalize(rotateAroundAxis(unrolledUp, forward, rollRadians));
 
   return { forward, right, up };
 };
@@ -55,6 +64,15 @@ export const applySpaceLookDrag = (
 ): SpaceLookState => ({
   yaw: state.yaw + deltaX * sensitivity,
   pitch: clampCameraPitch(state.pitch - deltaY * sensitivity),
+  roll: state.roll,
+});
+
+export const applySpaceRoll = (
+  state: SpaceLookState,
+  deltaRadians: number,
+): SpaceLookState => ({
+  ...state,
+  roll: state.roll + deltaRadians,
 });
 
 export const applySpaceTranslation = (
@@ -65,7 +83,8 @@ export const applySpaceTranslation = (
 ): Vec3 => {
   const forwardMove = scale(basis.forward, input.forward * distance);
   const rightMove = scale(basis.right, input.right * distance);
-  return add(position, add(forwardMove, rightMove));
+  const upMove = scale(basis.up, (input.up ?? 0) * distance);
+  return add(position, add(add(forwardMove, rightMove), upMove));
 };
 
 export const canUseClickForDescent = (

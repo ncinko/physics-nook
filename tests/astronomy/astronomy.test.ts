@@ -15,6 +15,7 @@ import {
   apparentAngularRadiusRadians,
   apparentAngularDiameterDegrees,
   applySpaceLookDrag,
+  applySpaceRoll,
   applySpaceTranslation,
   advanceSimulationTime,
   binarySceneScale,
@@ -388,18 +389,35 @@ test('space camera translation follows camera yaw and pitch', () => {
   closeTo(applySpaceTranslation(start, yawedBasis, { forward: 1, right: 0 }, 4).x, 4, 1e-12);
   closeTo(applySpaceTranslation(start, yawedBasis, { forward: 0, right: 1 }, 4).z, 4, 1e-12);
   assert.ok(applySpaceTranslation(start, pitchedBasis, { forward: 1, right: 0 }, 2).y > 0);
+  closeTo(applySpaceTranslation(start, forwardBasis, { forward: 0, right: 0, up: 1 }, 3).y, 3, 1e-12);
 });
 
-test('space drag yaws horizontally and pitches vertically without changing roll basis', () => {
-  const start = { yaw: 0.25, pitch: 0.1 };
+test('space roll rotates the camera up and right axes around the look direction', () => {
+  const flatBasis = getCameraBasis(0, 0);
+  const rolledBasis = getCameraBasis(0, 0, Math.PI / 2);
+  const start = { yaw: 0.25, pitch: 0.1, roll: 0.2 };
+  const rolledState = applySpaceRoll(start, -0.3);
+
+  vectorCloseTo(rolledBasis.forward, flatBasis.forward, 1e-12);
+  vectorCloseTo(rolledBasis.up, flatBasis.right, 1e-12);
+  vectorCloseTo(rolledBasis.right, { x: 0, y: -1, z: 0 }, 1e-12);
+  closeTo(rolledState.yaw, start.yaw, 1e-12);
+  closeTo(rolledState.pitch, start.pitch, 1e-12);
+  closeTo(rolledState.roll, -0.1, 1e-12);
+});
+
+test('space drag yaws horizontally and pitches vertically while preserving roll', () => {
+  const start = { yaw: 0.25, pitch: 0.1, roll: 0.4 };
   const draggedRight = applySpaceLookDrag(start, 20, 0, 0.01);
   const draggedUp = applySpaceLookDrag(start, 0, -12, 0.01);
-  const basis = getCameraBasis(draggedUp.yaw, draggedUp.pitch);
+  const basis = getCameraBasis(draggedUp.yaw, draggedUp.pitch, draggedUp.roll);
 
   assert.ok(draggedRight.yaw > start.yaw);
   closeTo(draggedRight.pitch, start.pitch, 1e-12);
+  closeTo(draggedRight.roll, start.roll, 1e-12);
   closeTo(draggedUp.yaw, start.yaw, 1e-12);
   assert.ok(draggedUp.pitch > start.pitch);
+  closeTo(draggedUp.roll, start.roll, 1e-12);
   closeTo(dot(cross(basis.forward, basis.up), basis.right), 1, 1e-12);
 });
 

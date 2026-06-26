@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "astro dev",
+    "dev:agent": "astro dev --host 127.0.0.1 --port 4321",
+    "dev:agent:alt": "astro dev --host 127.0.0.1 --port 4322",
     "build": "astro build",
     "build:all": "npm run build && npm run game:build",
     "preview": "astro preview",

@@ -5,6 +5,7 @@ Physics Nook is an Astro interactive physics textbook, plus a standalone Vite ga
 ## Commands
 
 - `npm run dev` / `npm run build` / `npm run preview` - Astro site
+- `npm run dev:agent` - Astro site bound to `127.0.0.1:4321` for browser smoke tests; use `npm run dev:agent:alt` for port `4322`
 - `npm run check` - Astro type checking
 - `npm run audit:repo` - repo metadata, catalog, and cleanup guardrails
 - `npm run test:<domain>` - domain tests; run `npm run test:all` for the full suite
@@ -14,6 +15,8 @@ Physics Nook is an Astro interactive physics textbook, plus a standalone Vite ga
 Tests are plain Node scripts run with `--experimental-strip-types` and no test framework. Requires Node >= 22.12.
 
 Use npm only. `package-lock.json` is the canonical lockfile; do not add pnpm, yarn, or bun lockfiles.
+
+For browser smoke tests on Windows, prefer `npm run dev:agent`. If starting it in the background, launch through `powershell.exe` rather than `Start-Process npm` directly, because `npm` resolves to `npm.ps1`. Use port 4321 unless occupied, and stop the spawned Astro/Node process when done.
 
 ## Architecture
 

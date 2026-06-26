@@ -4,6 +4,9 @@ layout: ../../layouts/TextbookLayout.astro
 
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import AdditiveSynthLab from '../../components/waves/AdditiveSynthLab';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import { wavesAndOscillationsPath } from '../../data/modules';
@@ -40,3 +43,71 @@ Below, you also have access to the sound's ADSR envelope (attack, decay, sustain
 ## What the Graphs Mean
 
 The composite waveform shows one repeating cycle of the recipe you are shaping. The live waveform uses a fixed scrolling speed and fixed display scale, so pitch shows up as spatial spacing. The spectrogram turns that same sound into a moving frequency picture: lower notes sit near the bottom, higher harmonics stack above them, and brighter colors mean stronger frequency components.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard title="Harmonic Frequencies" accent="blue">
+    #### Problem
+
+    A note has fundamental frequency $f = 220\ \text{Hz}$. Find the first four harmonic frequencies.
+
+    #### Solve
+
+    Harmonics occur at integer multiples of the fundamental:
+
+    $$
+    f_n = nf.
+    $$
+
+    The first four are $220\ \text{Hz}$, $440\ \text{Hz}$, $660\ \text{Hz}$, and $880\ \text{Hz}$.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Reading a Spectrogram" accent="red">
+    #### Problem
+
+    A spectrogram has bright bands at $180\ \text{Hz}$, $360\ \text{Hz}$, and $540\ \text{Hz}$. What fundamental frequency do these bands suggest?
+
+    #### Solve
+
+    The bands are integer multiples of $180\ \text{Hz}$:
+
+    $$
+    180,\quad 2(180),\quad 3(180).
+    $$
+
+    The likely fundamental is $180\ \text{Hz}$.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Sound Synthesis Checkpoint"
+  questions={[
+    {
+      id: 'fundamental-frequency',
+      question: 'What does the fundamental frequency mainly determine for a musical note?',
+      options: [
+        { id: 'A', text: 'Only the attack time.', isCorrect: false, explanation: 'Attack time is part of the amplitude envelope. It shapes how the note begins, not the pitch itself.' },
+        { id: 'B', text: 'The number of instruments playing.', isCorrect: false, explanation: 'The fundamental belongs to one periodic sound. It does not count instruments.' },
+        { id: 'C', text: 'The perceived pitch of the note.', isCorrect: true, explanation: 'Exactly. The fundamental frequency is the base repetition rate that we usually hear as pitch.' }
+      ]
+    },
+    {
+      id: 'timbre-controls',
+      question: 'Which change most directly changes timbre while keeping the same fundamental pitch?',
+      options: [
+        { id: 'A', text: 'Changing the relative amplitudes of the harmonics.', isCorrect: true, explanation: 'Right. The harmonic mix is one of the main reasons two instruments can play the same pitch but sound different.' },
+        { id: 'B', text: 'Changing the note name by one octave.', isCorrect: false, explanation: 'Moving by an octave changes the fundamental frequency, so the pitch changes.' },
+        { id: 'C', text: 'Muting every harmonic except silence.', isCorrect: false, explanation: 'Silence removes the sound rather than reshaping its timbre.' }
+      ]
+    },
+    {
+      id: 'spectrogram-axis',
+      question: 'What does the vertical position of a bright band in a spectrogram represent?',
+      options: [
+        { id: 'A', text: 'The time when the sound first started.', isCorrect: false, explanation: 'Time runs horizontally in the spectrogram view.' },
+        { id: 'B', text: 'The frequency of a strong component.', isCorrect: true, explanation: 'Correct. Lower bands are lower frequencies, and higher bands are higher frequencies.' },
+        { id: 'C', text: 'The physical size of the speaker.', isCorrect: false, explanation: 'A spectrogram shows frequency content over time, not the size of the sound source.' }
+      ]
+    }
+  ]}
+/>

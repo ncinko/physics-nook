@@ -196,8 +196,8 @@ the final digit implies the reliablity of the measurement (i.e. it's probably be
       id: 'unit-meaning',
       question: 'What does the unit in $12\\ \\text{m/s}$ tell you?',
       options: [
-        { id: 'A', text: 'The quantity is a distance per time.', isCorrect: true, explanation: '$\\text{m/s}$ means meters divided by seconds, so it describes distance traveled per unit time.' },
         { id: 'B', text: 'The quantity is a time per distance.', isCorrect: false, explanation: 'Time per distance would have units like $\\text{s/m}$, not $\\text{m/s}$.' },
+        { id: 'A', text: 'The quantity is a distance per time.', isCorrect: true, explanation: '$\\text{m/s}$ means meters divided by seconds, so it describes distance traveled per unit time.' },
         { id: 'C', text: 'The quantity has no physical dimension.', isCorrect: false, explanation: 'A unit is exactly what gives the number its physical meaning.' }
       ]
     },
@@ -205,9 +205,9 @@ the final digit implies the reliablity of the measurement (i.e. it's probably be
       id: 'prefix-conversion',
       question: 'How many meters is $25\\ \\text{mm}$?',
       options: [
-        { id: 'A', text: '$2.5 \\times 10^{-2}\\ \\text{m}$', isCorrect: true, explanation: 'Milli means $10^{-3}$, so $25\\ \\text{mm}=25\\times10^{-3}\\ \\text{m}=2.5\\times10^{-2}\\ \\text{m}$.' },
         { id: 'B', text: '$2.5 \\times 10^2\\ \\text{m}$', isCorrect: false, explanation: 'Millimeters are smaller than meters, so converting to meters should make the number smaller, not larger.' },
-        { id: 'C', text: '$25 \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: '$10^3$ belongs to kilo, not milli.' }
+        { id: 'C', text: '$25 \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: '$10^3$ belongs to kilo, not milli.' },
+        { id: 'A', text: '$2.5 \\times 10^{-2}\\ \\text{m}$', isCorrect: true, explanation: 'Milli means $10^{-3}$, so $25\\ \\text{mm}=25\\times10^{-3}\\ \\text{m}=2.5\\times10^{-2}\\ \\text{m}$.' }
       ]
     },
     {
@@ -223,8 +223,8 @@ the final digit implies the reliablity of the measurement (i.e. it's probably be
       id: 'sig-fig-notation',
       question: 'What is the best report for $5320 \\pm 180\\ \\text{m}$?',
       options: [
-        { id: 'A', text: '$(5.3 \\pm 0.2) \\times 10^3\\ \\text{m}$', isCorrect: true, explanation: 'Round $180$ to $200$, match the value to the hundreds place, then factor out $10^3$.' },
         { id: 'B', text: '$(5.320 \\pm 0.180) \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: 'This keeps more digits than the uncertainty can support.' },
+        { id: 'A', text: '$(5.3 \\pm 0.2) \\times 10^3\\ \\text{m}$', isCorrect: true, explanation: 'Round $180$ to $200$, match the value to the hundreds place, then factor out $10^3$.' },
         { id: 'C', text: '$(5 \\pm 2) \\times 10^3\\ \\text{m}$', isCorrect: false, explanation: 'The uncertainty is $0.2\\times10^3\\ \\text{m}$, not $2\\times10^3\\ \\text{m}$.' }
       ]
     }

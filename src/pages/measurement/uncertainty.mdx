@@ -186,9 +186,9 @@ If this quantity is about $1$, the uncertainty is likely a good estimate of the 
       id: 'which-rule',
       question: 'You compute a speed $v = d/t$ from a measured distance and time. How do you get the uncertainty in $v$?',
       options: [
-        { id: 'A', text: 'Add the relative (percent) uncertainties of $d$ and $t$.', isCorrect: true, explanation: 'Division combines quantities multiplicatively, so relative uncertainties add: $\\delta v / v = \\delta d / d + \\delta t / t$.' },
         { id: 'B', text: 'Add the absolute uncertainties $\\delta d$ and $\\delta t$.', isCorrect: false, explanation: 'Absolute uncertainties add only for sums and differences. They do not even share units with $v$ here.' },
-        { id: 'C', text: 'Subtract the relative uncertainty of $t$ from that of $d$.', isCorrect: false, explanation: 'Uncertainties never cancel — combining measurements can only increase the uncertainty, so the relative uncertainties add.' }
+        { id: 'C', text: 'Subtract the relative uncertainty of $t$ from that of $d$.', isCorrect: false, explanation: 'Uncertainties never cancel — combining measurements can only increase the uncertainty, so the relative uncertainties add.' },
+        { id: 'A', text: 'Add the relative (percent) uncertainties of $d$ and $t$.', isCorrect: true, explanation: 'Division combines quantities multiplicatively, so relative uncertainties add: $\\delta v / v = \\delta d / d + \\delta t / t$.' }
       ]
     },
     {
@@ -204,8 +204,8 @@ If this quantity is about $1$, the uncertainty is likely a good estimate of the 
       id: 'precision-accuracy',
       question: 'Five repeated readings cluster tightly together but sit well above the true value. How would you describe them?',
       options: [
-        { id: 'A', text: 'Precise but not accurate — a likely systematic error.', isCorrect: true, explanation: 'Tight scatter means high precision; a consistent offset from the truth means low accuracy, the signature of a systematic bias.' },
         { id: 'B', text: 'Accurate but not precise.', isCorrect: false, explanation: 'Accurate means centered on the truth; these are offset. Tight clustering is precision, not accuracy.' },
+        { id: 'A', text: 'Precise but not accurate — a likely systematic error.', isCorrect: true, explanation: 'Tight scatter means high precision; a consistent offset from the truth means low accuracy, the signature of a systematic bias.' },
         { id: 'C', text: 'Both accurate and precise.', isCorrect: false, explanation: 'They are precise, but being offset from the true value means they are not accurate.' }
       ]
     },
@@ -213,9 +213,9 @@ If this quantity is about $1$, the uncertainty is likely a good estimate of the 
       id: 'reporting',
       question: 'A calculation gives $3.14159$ with a raw uncertainty of $0.023$. How should you report it?',
       options: [
-        { id: 'A', text: '$3.14 \\pm 0.02$', isCorrect: true, explanation: 'Round the uncertainty to one significant figure ($0.02$), then round the value to the same decimal place ($3.14$).' },
         { id: 'B', text: '$3.14159 \\pm 0.023$', isCorrect: false, explanation: 'The value claims far more precision than the uncertainty allows. Match the value to the rounded uncertainty.' },
-        { id: 'C', text: '$3.1 \\pm 0.02$', isCorrect: false, explanation: 'The uncertainty is in the hundredths place, so the value should be kept to the hundredths place too: $3.14$.' }
+        { id: 'C', text: '$3.1 \\pm 0.02$', isCorrect: false, explanation: 'The uncertainty is in the hundredths place, so the value should be kept to the hundredths place too: $3.14$.' },
+        { id: 'A', text: '$3.14 \\pm 0.02$', isCorrect: true, explanation: 'Round the uncertainty to one significant figure ($0.02$), then round the value to the same decimal place ($3.14$).' }
       ]
     }
   ]}

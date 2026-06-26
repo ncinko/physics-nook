@@ -7,7 +7,10 @@ canonicalPath: /forces
 
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import DerivationPanel from '../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import {
   ForceFreeNewt,
   FrictionForceNewt,
@@ -107,6 +110,102 @@ Newt has an unusually useful rope: his tongue.
 <TongueTensionNewt client:visible />
 
 A slack rope, string, cable, or tongue does not apply a tension force.  Once it becomes taut, it can pull only along its own length. That is why tension arrows in free-body diagrams point away from the object along the rope.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard title="Weight and Normal Force" accent="blue">
+    #### Problem
+
+    A $12\ \text{kg}$ box rests on a level floor with no vertical acceleration. Find the weight and the normal force magnitude. Use $g = 9.8\ \text{m/s}^2$.
+
+    #### Solve
+
+    The weight is
+
+    $$
+    F_g = mg = (12)(9.8) = 117.6\ \text{N}.
+    $$
+
+    With no vertical acceleration, the upward normal force balances the downward weight:
+
+    $$
+    N = 117.6\ \text{N}.
+    $$
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Spring Force Direction" accent="blue">
+    #### Problem
+
+    A spring with $k = 150\ \text{N/m}$ is stretched $0.08\ \text{m}$ to the right. Find the spring force.
+
+    #### Solve
+
+    Hooke's law gives
+
+    $$
+    F_s = -kx = -(150)(0.08) = -12\ \text{N}.
+    $$
+
+    The negative sign means the spring force points left, back toward equilibrium.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Tension in a Hanging Rope" accent="red">
+    #### Problem
+
+    A $5.0\ \text{kg}$ mass hangs at rest from a vertical rope. What is the rope tension?
+
+    #### Solve
+
+    At rest, the net force is zero. The upward tension balances the downward weight:
+
+    $$
+    T = mg = (5.0)(9.8) = 49\ \text{N}.
+    $$
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Forces Checkpoint"
+  questions={[
+    {
+      id: 'zero-net-force',
+      question: 'If the net force on an object is zero, what must be true about its motion?',
+      options: [
+        { id: 'A', text: 'It must be at rest.', isCorrect: false, explanation: 'Zero net force means zero acceleration. The object could be at rest or moving with constant velocity.' },
+        { id: 'B', text: 'Its velocity stays constant.', isCorrect: true, explanation: 'Exactly. With $\\sum \\vec{F}=0$, the second law gives $\\vec{a}=0$, so velocity does not change.' },
+        { id: 'C', text: 'Its speed must steadily increase.', isCorrect: false, explanation: 'Speed changes require acceleration, and acceleration requires nonzero net force.' }
+      ]
+    },
+    {
+      id: 'spring-restoring-force',
+      question: 'What does the minus sign in $\\vec{F}_s=-k\\vec{x}$ tell you?',
+      options: [
+        { id: 'A', text: 'The spring force is always downward.', isCorrect: false, explanation: 'Downward is not built into the spring law. The direction depends on the displacement from equilibrium.' },
+        { id: 'B', text: 'The spring constant must be negative.', isCorrect: false, explanation: 'The spring constant $k$ is positive. The minus sign sets the force direction.' },
+        { id: 'C', text: 'The spring force points back toward equilibrium.', isCorrect: true, explanation: 'Right. A restoring force opposes the displacement from the relaxed position.' }
+      ]
+    },
+    {
+      id: 'normal-direction',
+      question: 'What sets the direction of the normal force?',
+      options: [
+        { id: 'A', text: 'It points perpendicular to the contact surface.', isCorrect: true, explanation: 'Correct. Normal means perpendicular to the surface at the contact point.' },
+        { id: 'B', text: 'It always points straight up.', isCorrect: false, explanation: 'On a level floor the normal force points up, but on a ramp it points perpendicular to the ramp.' },
+        { id: 'C', text: 'It points opposite the velocity of the object.', isCorrect: false, explanation: 'That describes a common friction direction, not the normal force.' }
+      ]
+    },
+    {
+      id: 'tension-condition',
+      question: 'When can a rope apply a tension force?',
+      options: [
+        { id: 'A', text: 'Only when it is slack.', isCorrect: false, explanation: 'A slack rope cannot transmit a pull.' },
+        { id: 'B', text: 'Only perpendicular to its own length.', isCorrect: false, explanation: 'Tension acts along the rope, not perpendicular to it.' },
+        { id: 'C', text: 'Only when gravity is absent.', isCorrect: false, explanation: 'Ropes can carry tension in ordinary gravitational situations.' },
+        { id: 'D', text: 'When it is taut, pulling along its length.', isCorrect: true, explanation: 'Exactly. A taut rope can pull, and the tension direction follows the rope.' }
+      ]
+    }
+  ]}
+/>
 
 
 

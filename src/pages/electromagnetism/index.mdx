@@ -7,6 +7,7 @@ canonicalPath: /electromagnetism
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
@@ -150,7 +151,7 @@ In these simulations the field updates *instantaneously* as charges move. That i
 
 
 
-<ProblemSolvingSection title="Practice">
+<ProblemSolvingSection title="Problem Solving">
   <WorkedExampleCard title="Field of a Point Charge" accent="blue">
     #### Problem
 
@@ -193,3 +194,37 @@ In these simulations the field updates *instantaneously* as charges move. That i
     If the field were nonzero, the free charges inside would feel a force $\vec{\mathbf F} = q\vec{\mathbf E}$, and a net force means acceleration — not equilibrium. The charges keep rearranging until their own field exactly cancels the interior field everywhere, at which point the motion stops. That equilibrium configuration is precisely the one with $\vec{\mathbf E} = 0$ inside.
   </WorkedExampleCard>
 </ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Electric Field Checkpoint"
+  questions={[
+    {
+      id: 'field-definition',
+      question: 'What does an electric field tell you at a point in space?',
+      options: [
+        { id: 'A', text: 'The total charge stored at that exact point.', isCorrect: false, explanation: 'The field is not charge itself. It describes how a charge placed at that point would be pushed or pulled.' },
+        { id: 'B', text: 'The force per unit positive test charge at that point.', isCorrect: true, explanation: 'Exactly. The definition is $\\vec{\\mathbf E}=\\vec{\\mathbf F}/q_{\\text{test}}$.' },
+        { id: 'C', text: 'The speed a charge must have when it reaches that point.', isCorrect: false, explanation: 'Speed depends on the charge motion and energy history. The field describes force per unit charge.' }
+      ]
+    },
+    {
+      id: 'positive-test-charge',
+      question: 'A positive test charge is placed in an electric field. Which way does the electric force point?',
+      options: [
+        { id: 'A', text: 'Opposite the electric field direction.', isCorrect: false, explanation: 'A negative charge would feel a force opposite the field. The field direction is defined using a positive test charge.' },
+        { id: 'B', text: 'Perpendicular to the electric field direction.', isCorrect: false, explanation: 'The force is parallel or antiparallel to the field depending on the sign of the charge, not automatically perpendicular.' },
+        { id: 'C', text: 'In the same direction as the electric field.', isCorrect: true, explanation: 'Right. Since $\\vec{\\mathbf F}=q\\vec{\\mathbf E}$ and $q>0$, the force has the same direction as $\\vec{\\mathbf E}$.' }
+      ]
+    },
+    {
+      id: 'field-superposition',
+      question: 'How do you find the net electric field from several source charges?',
+      options: [
+        { id: 'A', text: 'Add the individual electric field vectors component by component.', isCorrect: true, explanation: 'Correct. Superposition means the net field is the vector sum $\\vec{\\mathbf E}_{\\text{net}}=\\sum_i \\vec{\\mathbf E}_i$.' },
+        { id: 'B', text: 'Keep only the field from the closest charge.', isCorrect: false, explanation: 'Closer charges can matter more, but every source charge contributes to the vector sum.' },
+        { id: 'C', text: 'Add only the magnitudes and ignore direction.', isCorrect: false, explanation: 'Electric field is a vector, so direction is essential. Opposing fields can partially or completely cancel.' }
+      ]
+    }
+  ]}
+/>

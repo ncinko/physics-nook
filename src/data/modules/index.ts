@@ -1,6 +1,6 @@
 import { homePageMeta, standalonePages } from '../site';
 import { normalizePath } from '../../utils/paths';
-import type { ModuleMeta, ModulePathGroup } from './types';
+import type { ModuleMeta, ModulePage, ModulePathGroup } from './types';
 
 import { mathModule } from './math';
 import { measurementModule } from './measurement';
@@ -142,6 +142,29 @@ export const thermodynamicsPath = {
   pages: thermodynamicsModule.pages,
 } satisfies ModulePathGroup;
 
+export const textbookProgressionGroups = [
+  mathPath,
+  measurementPath,
+  mechanicsPath,
+  wavesAndOscillationsPath,
+  electromagnetismPath,
+  relativityPath,
+  quantumPath,
+] satisfies ModulePathGroup[];
+
+export interface TextbookProgressionEntry {
+  group: ModulePathGroup;
+  groupIndex: number;
+  page: ModulePage;
+  pageIndex: number;
+}
+
+export interface TextbookProgression {
+  current: TextbookProgressionEntry;
+  next?: TextbookProgressionEntry;
+  crossesModule: boolean;
+}
+
 export const gamesPath = {
   id: 'orbitals-game',
   href: orbitalsGameHref,
@@ -173,13 +196,22 @@ export const exploreModuleGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
-  relativityPath,
   wavesAndOscillationsPath,
-  quantumPath,
   electromagnetismPath,
+  relativityPath,
+  quantumPath,
   thermodynamicsPath,
   gamesPath,
 ].filter((group) => group.navVisibility === 'menu');
+
+const textbookProgressionEntries = textbookProgressionGroups.flatMap((group, groupIndex) =>
+  group.pages.map((page, pageIndex) => ({
+    group,
+    groupIndex,
+    page,
+    pageIndex,
+  })),
+);
 
 export const publicPageMeta = [
   homePageMeta,
@@ -202,3 +234,23 @@ export const getModuleByPath = (path: string) =>
 
 export const getPageMetaByPath = (path: string) =>
   publicPageMeta.find((page) => normalizePath(page.canonicalPath) === normalizePath(path));
+
+export const getTextbookProgressByPath = (path: string): TextbookProgression | undefined => {
+  const normalizedPath = normalizePath(path);
+  const currentIndex = textbookProgressionEntries.findIndex(({ page }) => {
+    const normalizedHref = normalizePath(page.href);
+    const normalizedCanonicalPath = normalizePath(page.seo.canonicalPath);
+    return normalizedPath === normalizedHref || normalizedPath === normalizedCanonicalPath;
+  });
+
+  if (currentIndex === -1) return undefined;
+
+  const current = textbookProgressionEntries[currentIndex];
+  const next = textbookProgressionEntries[currentIndex + 1];
+
+  return {
+    current,
+    next,
+    crossesModule: Boolean(next && next.group.id !== current.group.id),
+  };
+};

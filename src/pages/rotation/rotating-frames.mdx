@@ -7,8 +7,11 @@ canonicalPath: /rotation/rotating-frames
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import CentripetalAccelerationExplorer from '../../components/rotation/CentripetalAccelerationExplorer';
 import RotatingShip2D from '../../components/rotation/RotatingShip2D.jsx';
 import { mechanicsPath } from '../../data/modules';
@@ -84,3 +87,67 @@ From the **star frame**, the ball simply travels in a straight line until it str
 If you spent your whole life inside the ship with no window to the stars, you might never call these "apparent." You would simply measure them — and, noticing that they depend on $\dot\theta$, deduce that you live inside a giant rotating circle. In that moment $\dot\theta$ stops being the rate of change of some object's angle and becomes a physical property of your reference frame itself.
 
 That is the heart of the centripetal–centrifugal distinction: **centripetal** is the real inward force that bends a path into a circle, while **centrifugal** and **Coriolis** are the apparent forces you invent to explain that same motion from a frame that is itself turning.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard title="Centripetal Acceleration" accent="blue">
+    #### Problem
+
+    A car moves at $12\ \text{m/s}$ around a circular path of radius $6.0\ \text{m}$. Find the centripetal acceleration.
+
+    #### Solve
+
+    $$
+    a_{\text{cent}} = \frac{v^2}{r} = \frac{12^2}{6.0} = 24\ \text{m/s}^2.
+    $$
+
+    The acceleration points inward, toward the center of the circular path.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Apparent Spin Gravity" accent="red">
+    #### Problem
+
+    A rotating frame has angular speed $\Omega = 0.50\ \text{rad/s}$. At radius $20\ \text{m}$, what centrifugal acceleration would an observer in the rotating frame assign?
+
+    #### Solve
+
+    $$
+    a_{\text{centrifugal}} = \Omega^2 r = (0.50)^2(20) = 5.0\ \text{m/s}^2.
+    $$
+
+    In the rotating frame this apparent acceleration points outward.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Rotating Frames Checkpoint"
+  questions={[
+    {
+      id: 'centripetal-real-force',
+      question: 'From an inertial frame, what does centripetal force describe?',
+      options: [
+        { id: 'A', text: 'A new outward force that appears whenever an object spins.', isCorrect: false, explanation: 'The inertial-frame force needed for circular motion points inward, not outward.' },
+        { id: 'B', text: 'The net inward force needed to bend motion into a circular path.', isCorrect: true, explanation: 'Exactly. Centripetal is a role played by real forces such as tension, gravity, or friction.' },
+        { id: 'C', text: 'A force that exists only inside a rotating coordinate system.', isCorrect: false, explanation: 'That description fits apparent forces such as centrifugal and Coriolis effects, not the real inward force.' }
+      ]
+    },
+    {
+      id: 'centrifugal-frame',
+      question: 'Why does centrifugal force appear in the rotating-frame description?',
+      options: [
+        { id: 'A', text: 'Because objects in circles are pushed outward by a real interaction.', isCorrect: false, explanation: 'From an inertial frame, the needed real interaction points inward. The outward term appears because the observer is using a rotating frame.' },
+        { id: 'B', text: 'Because gravity turns off in rotating systems.', isCorrect: false, explanation: 'Gravity can still act. The centrifugal term is about the non-inertial frame, not about removing other forces.' },
+        { id: 'C', text: 'Because the frame itself is accelerating, so Newton-style laws need an apparent outward term.', isCorrect: true, explanation: 'Right. The apparent force lets a rotating observer use Newton-style bookkeeping inside a non-inertial frame.' }
+      ]
+    },
+    {
+      id: 'coriolis-condition',
+      question: 'When does the Coriolis effect show up in a rotating frame?',
+      options: [
+        { id: 'A', text: 'When an object moves relative to the rotating frame.', isCorrect: true, explanation: 'Correct. The Coriolis term depends on the velocity measured in the rotating frame.' },
+        { id: 'B', text: 'Only when the object is perfectly motionless in that frame.', isCorrect: false, explanation: 'If the object is motionless relative to the rotating frame, the Coriolis term is zero.' },
+        { id: 'C', text: 'Only when the frame is not rotating.', isCorrect: false, explanation: 'Coriolis effects are a signature of rotating frames, not non-rotating inertial frames.' }
+      ]
+    }
+  ]}
+/>

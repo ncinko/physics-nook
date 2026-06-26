@@ -7,6 +7,7 @@ canonicalPath: /electromagnetism/current
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
@@ -110,7 +111,7 @@ which is converted into thermal energy, heating the resistor.
 
 </DerivationPanel>
 
-<ProblemSolvingSection title="Practice">
+<ProblemSolvingSection title="Problem Solving">
   <WorkedExampleCard title="Drift Speed in Copper" accent="blue">
     #### Problem
 
@@ -155,3 +156,37 @@ which is converted into thermal energy, heating the resistor.
     **(b) Parallel:** $\dfrac{1}{R_{eq}} = \dfrac{1}{30} + \dfrac{1}{60} = \dfrac{1}{20}$, so $R_{eq} = 20\,\Omega$ and $I = \dfrac{12}{20} = 0.60\,\text{A}$.
   </WorkedExampleCard>
 </ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Electric Current Checkpoint"
+  questions={[
+    {
+      id: 'electron-drift-direction',
+      question: 'In the Drude model, which way do conduction electrons drift relative to the applied electric field?',
+      options: [
+        { id: 'A', text: 'In the same direction as the electric field.', isCorrect: false, explanation: 'Electrons are negatively charged, so their force and drift are opposite the electric field direction.' },
+        { id: 'B', text: 'Opposite the electric field direction.', isCorrect: true, explanation: 'Exactly. The drift velocity relation includes the negative electron charge, so electrons drift opposite $\\vec{\\mathbf E}$.' },
+        { id: 'C', text: 'Only perpendicular to the field.', isCorrect: false, explanation: 'Collisions randomize the motion, but the small average drift is along or against the field line, not automatically perpendicular.' }
+      ]
+    },
+    {
+      id: 'wire-resistance',
+      question: 'For a uniform wire, what change increases its resistance?',
+      options: [
+        { id: 'A', text: 'Increasing the cross-sectional area while keeping length fixed.', isCorrect: false, explanation: 'A larger area gives charge more conducting path, so it lowers $R=L/(\\sigma A)$.' },
+        { id: 'B', text: 'Increasing the conductivity while keeping geometry fixed.', isCorrect: false, explanation: 'Higher conductivity lowers resistance.' },
+        { id: 'C', text: 'Increasing the length while keeping area and material fixed.', isCorrect: true, explanation: 'Right. Since $R=L/(\\sigma A)$, a longer wire has more resistance.' }
+      ]
+    },
+    {
+      id: 'resistor-power',
+      question: 'A resistor carries current $I$ and has voltage drop $\\Delta V$. Which expression gives the power dissipated?',
+      options: [
+        { id: 'A', text: '$P=I\\Delta V$', isCorrect: true, explanation: 'Correct. Power is energy transfer per time, and charge crossing a voltage drop gives $P=I\\Delta V$.' },
+        { id: 'B', text: '$P=I/\\Delta V$', isCorrect: false, explanation: 'Dividing current by voltage does not give power. For a resistor, $P=I\\Delta V=I^2R$.' },
+        { id: 'C', text: '$P=R/\\Delta V$', isCorrect: false, explanation: 'That combination has the wrong units for power. The current and voltage drop must be multiplied.' }
+      ]
+    }
+  ]}
+/>

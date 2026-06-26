@@ -7,6 +7,7 @@ canonicalPath: /electromagnetism/potential
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
@@ -139,7 +140,7 @@ $$
 E \approx -\frac{\Delta V}{\Delta x}.
 $$
 
-<ProblemSolvingSection title="Practice">
+<ProblemSolvingSection title="Problem Solving">
   <WorkedExampleCard title="Potential of a Point Charge" accent="blue">
     #### Problem
 
@@ -178,3 +179,37 @@ $$
     The negative charge *loses* potential energy moving toward higher potential.
   </WorkedExampleCard>
 </ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Electric Potential Checkpoint"
+  questions={[
+    {
+      id: 'potential-definition',
+      question: 'What does electric potential measure?',
+      options: [
+        { id: 'A', text: 'The force per unit charge at a point.', isCorrect: false, explanation: 'Force per unit charge is electric field. Electric potential is tied to energy per unit charge.' },
+        { id: 'B', text: 'The total force on every charge in the region.', isCorrect: false, explanation: 'Potential is a scalar field, not a force ledger. Force depends on the slope of the potential and on the charge.' },
+        { id: 'C', text: 'Electric potential energy per unit charge.', isCorrect: true, explanation: 'Exactly. The defining relation is $V=U/q$, or equivalently $U=qV$.' }
+      ]
+    },
+    {
+      id: 'equipotential-work',
+      question: 'Why does the electric force do no net work when a charge moves along an equipotential?',
+      options: [
+        { id: 'A', text: 'Because $\\Delta V=0$, so $\\Delta U=q\\Delta V=0$.', isCorrect: true, explanation: 'Right. No change in potential means no change in electric potential energy.' },
+        { id: 'B', text: 'Because the electric field must be zero everywhere on an equipotential.', isCorrect: false, explanation: 'The field does not have to be zero. It is perpendicular to the equipotential surface in the ideal electrostatic picture.' },
+        { id: 'C', text: 'Because only positive charges can move along equipotentials.', isCorrect: false, explanation: 'Either sign of charge can move along an equipotential. The key is that the potential does not change along the path.' }
+      ]
+    },
+    {
+      id: 'field-from-potential',
+      question: 'In one dimension, how is the electric field related to the electric potential?',
+      options: [
+        { id: 'A', text: 'The field points toward increasing potential for every charge.', isCorrect: false, explanation: 'The electric field points in the direction of decreasing potential, while the force on a charge also depends on the charge sign.' },
+        { id: 'B', text: 'The field is the negative slope of the potential, $E\\approx-\\Delta V/\\Delta x$.', isCorrect: true, explanation: 'Correct. This is the electric version of a force pointing downhill on an energy landscape.' },
+        { id: 'C', text: 'The field is unrelated to the potential once charges start moving.', isCorrect: false, explanation: 'The field-potential relationship is exactly what lets the scalar potential describe electric forces in electrostatics.' }
+      ]
+    }
+  ]}
+/>

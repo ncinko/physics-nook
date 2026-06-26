@@ -5,6 +5,8 @@ layout: ../../layouts/TextbookLayout.astro
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import BoundaryReflectionExplorer from '../../components/waves/BoundaryReflectionExplorer.jsx';
 import PulseSuperpositionInline from '../../components/waves/PulseSuperpositionInline.jsx';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
@@ -58,6 +60,34 @@ It is tempting to think an open end should simply let the wave leave. Some energ
 
 When a source keeps driving the same system, the incident and reflected waves overlap again and again. Most driving frequencies result in a mess of partial reinforcement and cancellation. Special frequencies make the phase line up so the total pattern repeats in place. Those are the standing waves and harmonics on the next page.
 
+<ProblemSolvingSection>
+  <WorkedExampleCard title="Fixed-End Reflection" accent="blue">
+    #### Problem
+
+    A string pulse reaches a fixed end. At the boundary, the incident displacement would be $+2\ \text{cm}$. What reflected displacement is needed at that instant?
+
+    #### Solve
+
+    A fixed end must stay at zero total displacement:
+
+    $$
+    y_{\text{incident}} + y_{\text{reflected}} = 0.
+    $$
+
+    So the reflected displacement must be $-2\ \text{cm}$, which is the inverted pulse value.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Open and Closed Pipe Ends" accent="red">
+    #### Problem
+
+    Classify the displacement and pressure behavior at the ends of an ideal pipe: one end closed, one end open.
+
+    #### Reasoning
+
+    At a closed end, the air cannot move through the wall, so displacement is a node and pressure is an antinode. At an open end, pressure stays near the outside atmospheric pressure, so pressure is a node and displacement is an antinode.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
 
 <QuestionSequence
   client:load
@@ -86,8 +116,8 @@ When a source keeps driving the same system, the incident and reflected waves ov
       question: 'Which pair correctly describes ideal pipe-end boundary conditions?',
       options: [
         { id: 'C', text: 'Closed end: pressure node. Open end: displacement node.', isCorrect: false, explanation: 'Those are reversed. Closed ends stop motion and open ends release pressure.' },
-        { id: 'B', text: 'Closed end: displacement or velocity node. Open end: pressure node.', isCorrect: true, explanation: 'Yes. The pressure and displacement descriptions swap node and antinode roles.' },
-        { id: 'A', text: 'Both closed and open ends must be pressure antinodes because sound is a pressure wave.', isCorrect: false, explanation: 'Pressure is only one variable in the sound wave. Air motion matters too, and open ends are pressure nodes in the ideal model.' }
+        { id: 'A', text: 'Both closed and open ends must be pressure antinodes because sound is a pressure wave.', isCorrect: false, explanation: 'Pressure is only one variable in the sound wave. Air motion matters too, and open ends are pressure nodes in the ideal model.' },
+        { id: 'B', text: 'Closed end: displacement or velocity node. Open end: pressure node.', isCorrect: true, explanation: 'Yes. The pressure and displacement descriptions swap node and antinode roles.' }
       ]
     }
   ]}

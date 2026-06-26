@@ -7,6 +7,7 @@ canonicalPath: /rotation
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
@@ -78,7 +79,7 @@ Switching the disk between rigidly fixed and free to spin changes $I$ about the 
 
 <PhysicalPendulum client:only="react" />
 
-<ProblemSolvingSection title="Practice">
+<ProblemSolvingSection title="Problem Solving">
   <WorkedExampleCard title="Angular Acceleration of a Disk" accent="blue">
     #### Problem
 
@@ -135,3 +136,37 @@ Switching the disk between rigidly fixed and free to spin changes $I$ about the 
     $$
   </WorkedExampleCard>
 </ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Rotational Dynamics Checkpoint"
+  questions={[
+    {
+      id: 'maximum-torque',
+      question: 'For a force applied at a fixed radius, when is the torque magnitude largest?',
+      options: [
+        { id: 'A', text: 'When the force points directly along the lever arm.', isCorrect: false, explanation: 'A force along the lever arm has $\\theta=0$, so $\\sin\\theta=0$ and the torque is zero.' },
+        { id: 'B', text: 'When the force is applied at the pivot.', isCorrect: false, explanation: 'At the pivot the lever arm is zero, so the torque is zero regardless of force direction.' },
+        { id: 'C', text: 'When the force is perpendicular to the lever arm.', isCorrect: true, explanation: 'Exactly. $\\tau=rF\\sin\\theta$ is largest when $\\theta=90^\\circ$.' }
+      ]
+    },
+    {
+      id: 'moment-of-inertia',
+      question: 'What happens to moment of inertia when the same mass is moved farther from the rotation axis?',
+      options: [
+        { id: 'A', text: 'It increases, so the object resists angular acceleration more strongly.', isCorrect: true, explanation: 'Right. For a point mass, $I=mr^2$, so distance from the axis matters a lot.' },
+        { id: 'B', text: 'It decreases because the mass has more room to move.', isCorrect: false, explanation: 'Moving mass outward increases $r^2$, which increases moment of inertia.' },
+        { id: 'C', text: 'It stays fixed because only total mass matters.', isCorrect: false, explanation: 'Rotational inertia depends on how the mass is distributed relative to the axis, not only on total mass.' }
+      ]
+    },
+    {
+      id: 'angular-momentum-conservation',
+      question: 'When is angular momentum conserved for a rotating system?',
+      options: [
+        { id: 'A', text: 'Only when the angular speed is zero.', isCorrect: false, explanation: 'A system can have nonzero angular momentum and still conserve it.' },
+        { id: 'B', text: 'When the net external torque on the system is zero.', isCorrect: true, explanation: 'Correct. Net external torque changes angular momentum; without it, $L$ stays constant.' },
+        { id: 'C', text: 'Whenever rotational kinetic energy is changing.', isCorrect: false, explanation: 'Rotational kinetic energy can change for reasons that do not imply angular momentum conservation.' }
+      ]
+    }
+  ]}
+/>

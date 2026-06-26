@@ -21,6 +21,11 @@ export interface SurfaceViewFrame {
   headUp: Vec3;
 }
 
+export interface SurfaceLookState {
+  pose: SurfacePose;
+  pitch: number;
+}
+
 const WORLD_NORTH: Vec3 = { x: 0, y: 1, z: 0 };
 const WORLD_FALLBACK: Vec3 = { x: 0, y: 0, z: -1 };
 const EPSILON = 1e-9;
@@ -158,6 +163,16 @@ export const turnSurfacePose = (
   length(pose.position),
   rotateAroundAxis(pose.forward, pose.up, -yawRadians),
 );
+
+export const applySurfaceLookDrag = (
+  state: SurfaceLookState,
+  deltaX: number,
+  deltaY: number,
+  sensitivity: number,
+): SurfaceLookState => ({
+  pose: turnSurfacePose(state.pose, deltaX * sensitivity),
+  pitch: clampSurfacePitch(state.pitch - deltaY * sensitivity),
+});
 
 export const getSurfaceViewFrame = (
   pose: SurfacePose,

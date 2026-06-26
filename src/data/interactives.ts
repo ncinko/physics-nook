@@ -122,15 +122,6 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['SI units', 'prefixes', 'powers of ten'],
   },
   {
-    id: 'prefix-scale',
-    title: 'Prefix Scale',
-    description: 'Choose a metric prefix and watch it expand into a power of ten, decimal meters, and scientific notation.',
-    href: '/measurement/si-units-scientific-notation#prefix-scale',
-    module: 'Measurement',
-    kind: 'inline',
-    tags: ['SI units', 'prefixes', 'powers of ten'],
-  },
-  {
     id: 'scientific-notation-slider',
     title: 'Scientific Notation Slider',
     description: 'Move a coefficient and exponent to see how scientific notation becomes ordinary decimal notation.',

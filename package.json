@@ -2,6 +2,7 @@
   "name": "physics-nook-astro",
   "type": "module",
   "version": "0.0.1",
+  "packageManager": "npm@11.16.0",
   "engines": {
     "node": ">=22.12.0"
   },
@@ -18,6 +19,7 @@
     "game:preview": "vite preview --config apps/client/vite.config.ts",
     "game:server": "node --experimental-strip-types apps/server/src/server.ts",
     "game:server:watch": "node --experimental-strip-types --watch apps/server/src/server.ts",
+    "audit:repo": "node scripts/repo-audit.mjs",
     "test:kinematics": "node --experimental-strip-types tests/kinematics/run-tests.ts",
     "test:math": "node --experimental-strip-types tests/math/run-tests.ts",
     "test:measurement": "node --experimental-strip-types tests/measurement/run-tests.ts",

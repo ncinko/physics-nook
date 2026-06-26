@@ -24,6 +24,7 @@ Navigation is derived from module groups in `src/data/modules/` and `src/data/na
 
 ## Content Conventions
 
+- Preserve the visual direction in [Design Baseline](design-baseline.md), especially the quiet textbook layout and compact navigation.
 - Keep explanatory content in MDX when possible.
 - Use reusable textbook components for derivations, worked examples, problem-solving sections, and checkpoint questions.
 - Keep page-specific copy in the page file, but move reusable interactive behavior into a component.

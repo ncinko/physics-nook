@@ -23,6 +23,8 @@ Screenshots are useful for local QA, but they should stay untracked unless the p
 
 ## Dependency Updates
 
+Use npm only. `package-lock.json` is the canonical lockfile; do not add pnpm, yarn, or bun lockfiles.
+
 Use small regular updates for patch/minor versions:
 
 ```sh
@@ -42,6 +44,7 @@ Run `npm prune` or start from a fresh `npm ci` if `npm ls --depth=0` reports ext
 Use the full suite before landing broad maintenance work:
 
 ```sh
+npm run audit:repo
 npm run test:all
 npm run check
 npm run build

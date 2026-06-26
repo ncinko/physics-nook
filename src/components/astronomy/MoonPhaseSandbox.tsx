@@ -27,10 +27,10 @@ import {
   applySpaceLookDrag,
   applySpaceRoll,
   applySpaceTranslation,
+  applySurfaceLookDrag,
   buildLiveEarthWmsUrl,
   canUseClickForDescent,
   clampCameraPitch,
-  clampSurfacePitch,
   compositeLiveEarthLayers,
   createSurfacePose,
   formatSpeedLabel,
@@ -55,7 +55,7 @@ import {
   speedFromLogSlider,
   surfaceDirectionVisibility,
   surfaceLatitudeLongitude,
-  turnSurfacePose,
+  validLiveEarthCompositeLayerKeys,
   BRIGHT_STAR_CATALOG,
   celestialDirectionFromRaDec,
   starVisualStyle,
@@ -78,6 +78,7 @@ type BodyId = 'earth' | 'moon' | 'binaryMoon';
 type ScaleMode = AstronomyScaleMode;
 type LabelId = 'earth' | 'moon' | 'sun' | 'path' | 'eclipse';
 type BinaryLabelId = 'primaryStar' | 'secondaryStar' | 'planet' | 'binaryMoon' | 'planetPath' | 'moonPath';
+type SceneStatus = 'initializing' | 'ready' | 'unavailable';
 
 interface SceneObjects {
   scene: THREE.Scene;
@@ -1012,18 +1013,18 @@ const createLiveEarthCompositeTexture = (
     .filter((layer): layer is NonNullable<typeof layer> => layer !== null);
 
   const firstComposite = compositeLiveEarthLayers(baseData, compositeLayers);
-  const validLayers = firstComposite.stats.filter((stat) => {
-    const source = layers.find(({ layer }) => layer.cacheKey === stat.id);
-    return source ? stat.validShare >= source.layer.provider.minValidShare : stat.validShare > 0;
-  });
+  const validLayerKeys = validLiveEarthCompositeLayerKeys(
+    layers.map(({ layer }) => layer),
+    firstComposite.stats,
+  );
 
-  if (validLayers.length === 0) return null;
-  const validLayerKeys = new Set(validLayers.map((layer) => layer.id));
-  const composite = validLayers.length === compositeLayers.length
+  if (validLayerKeys.length === 0) return null;
+  const validLayerKeySet = new Set(validLayerKeys);
+  const composite = validLayerKeys.length === compositeLayers.length
     ? firstComposite
     : compositeLiveEarthLayers(
       baseData,
-      compositeLayers.filter((layer) => validLayerKeys.has(layer.id)),
+      compositeLayers.filter((layer) => validLayerKeySet.has(layer.id)),
     );
 
   const outputCanvas = document.createElement('canvas');
@@ -1042,8 +1043,62 @@ const createLiveEarthCompositeTexture = (
 
   return {
     texture,
-    validLayerKeys: Array.from(validLayerKeys),
+    validLayerKeys,
   };
+};
+
+const createMoonSandboxRenderer = () => {
+  try {
+    return {
+      renderer: new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+      }),
+      lowResource: false,
+    };
+  } catch {
+    return {
+      renderer: new THREE.WebGLRenderer({
+        antialias: false,
+        alpha: false,
+        powerPreference: 'default',
+      }),
+      lowResource: true,
+    };
+  }
+};
+
+const disposeSceneGraph = (scene: THREE.Scene | null) => {
+  if (!scene) return;
+
+  scene.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    mesh.geometry?.dispose?.();
+    const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
+    if (Array.isArray(material)) {
+      material.forEach((item) => item.dispose());
+    } else {
+      material?.dispose?.();
+    }
+  });
+};
+
+const removeRendererCanvas = (
+  renderer: THREE.WebGLRenderer | null,
+  mount: HTMLDivElement,
+) => {
+  const canvas = renderer?.domElement;
+  if (canvas?.parentElement === mount) {
+    mount.removeChild(canvas);
+    return;
+  }
+
+  mount.querySelectorAll('canvas').forEach((candidate) => {
+    if (candidate.parentElement === mount) {
+      mount.removeChild(candidate);
+    }
+  });
 };
 
 const getBodyCenter = (objects: SceneObjects, body: BodyId) => {
@@ -1549,6 +1604,11 @@ export default function MoonPhaseSandbox() {
   const [surfaceBody, setSurfaceBody] = useState<BodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });
   const [pointerLocked, setPointerLocked] = useState(false);
+  const [sceneStatus, setSceneStatus] = useState<SceneStatus>('initializing');
+  const [sceneFailureMessage, setSceneFailureMessage] = useState(
+    'The 3D scene could not start on this machine.',
+  );
+  const [sceneRetryKey, setSceneRetryKey] = useState(0);
 
   const speedLabel = useMemo(() => formatSpeedLabel(speed), [speed]);
 
@@ -1586,7 +1646,14 @@ export default function MoonPhaseSandbox() {
     const mount = mountRef.current;
     if (!mount) return undefined;
 
+    let startupScene: THREE.Scene | null = null;
+    let startupRenderer: THREE.WebGLRenderer | null = null;
+    setSceneStatus('initializing');
+    setSceneFailureMessage('The 3D scene could not start on this machine.');
+
+    try {
     const scene = new THREE.Scene();
+    startupScene = scene;
     let latestSnapshot = getEarthMoonSunSnapshot(simTimeRef.current);
     let latestBinarySnapshot = getBinarySystemSnapshot(simTimeRef.current);
     let lastSnapshotUpdate = 0;
@@ -1597,18 +1664,17 @@ export default function MoonPhaseSandbox() {
     camera.position.copy(SPACE_CAMERA_POSITION);
     scene.add(camera);
 
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: false,
-      powerPreference: 'high-performance',
-    });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    const { renderer, lowResource } = createMoonSandboxRenderer();
+    startupRenderer = renderer;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, lowResource ? 1 : 1.5));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFShadowMap;
+    renderer.shadowMap.enabled = !lowResource;
+    if (!lowResource) {
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+    }
     mount.appendChild(renderer.domElement);
 
     const initialSpaceView = getActiveSpaceView(
@@ -1718,8 +1784,16 @@ export default function MoonPhaseSandbox() {
         return;
       }
 
-      const layers = resolveLiveEarthLayers(date)
-        .filter((layer) => !unavailableEarthLayerKeys.has(layer.cacheKey));
+      let layers: ResolvedLiveEarthLayer[] = [];
+      try {
+        layers = resolveLiveEarthLayers(date)
+          .filter((layer) => !unavailableEarthLayerKeys.has(layer.cacheKey));
+      } catch {
+        loadingEarthTextureKey = null;
+        applyEarthTexture('static', earthTexture);
+        return;
+      }
+
       const key = liveEarthTextureKey(layers);
       if (key === activeEarthTextureKey || key === loadingEarthTextureKey) return;
 
@@ -1756,12 +1830,22 @@ export default function MoonPhaseSandbox() {
           return;
         }
 
-        const composite = createLiveEarthCompositeTexture(
-          loadedLayers,
-          earthTexture,
-          renderer.capabilities.getMaxAnisotropy(),
-        );
-        loadedLayers.forEach((result) => result.texture.dispose());
+        let composite: ReturnType<typeof createLiveEarthCompositeTexture> = null;
+        try {
+          composite = createLiveEarthCompositeTexture(
+            loadedLayers,
+            earthTexture,
+            renderer.capabilities.getMaxAnisotropy(),
+          );
+        } catch {
+          loadedLayers.forEach((result) => {
+            unavailableEarthLayerKeys.add(result.layer.cacheKey);
+          });
+          applyEarthTexture('static', earthTexture);
+          return;
+        } finally {
+          loadedLayers.forEach((result) => result.texture.dispose());
+        }
 
         if (!composite) {
           loadedLayers.forEach((result) => unavailableEarthLayerKeys.add(result.layer.cacheKey));
@@ -1789,6 +1873,7 @@ export default function MoonPhaseSandbox() {
         applyEarthTexture(validKey, composite.texture);
       }).catch(() => {
         if (!disposed && loadingEarthTextureKey === key) {
+          layers.forEach((layer) => unavailableEarthLayerKeys.add(layer.cacheKey));
           loadingEarthTextureKey = null;
           applyEarthTexture('static', earthTexture);
         }
@@ -2312,13 +2397,17 @@ export default function MoonPhaseSandbox() {
       }, 700);
     };
 
+    const releaseCanvasPointer = (pointerId: number) => {
+      if (renderer.domElement.hasPointerCapture?.(pointerId)) {
+        renderer.domElement.releasePointerCapture(pointerId);
+      }
+    };
+
     const onPointerDown = (event: PointerEvent) => {
-      if (modeRef.current === 'surface') {
-        requestPointerLock();
+      if (!event.isPrimary || (event.pointerType === 'mouse' && event.button !== 0)) {
         return;
       }
 
-      if (modeRef.current !== 'space') return;
       pointerRef.current = {
         down: true,
         pointerId: event.pointerId,
@@ -2329,11 +2418,22 @@ export default function MoonPhaseSandbox() {
         moved: false,
       };
       renderer.domElement.setPointerCapture?.(event.pointerId);
+
+      if (modeRef.current === 'surface') {
+        requestPointerLock();
+        event.preventDefault();
+        return;
+      }
+
+      if (modeRef.current !== 'space') {
+        pointerRef.current.down = false;
+        releaseCanvasPointer(event.pointerId);
+      }
     };
 
     const onPointerMove = (event: PointerEvent) => {
       const pointerState = pointerRef.current;
-      if (!pointerState.down || pointerState.pointerId !== event.pointerId || modeRef.current !== 'space') {
+      if (!pointerState.down || pointerState.pointerId !== event.pointerId) {
         return;
       }
 
@@ -2352,6 +2452,24 @@ export default function MoonPhaseSandbox() {
       }
 
       event.preventDefault();
+      if (modeRef.current === 'surface') {
+        if (!pointerLockedRef.current && surfaceRef.current) {
+          const nextSurfaceLook = applySurfaceLookDrag(
+            surfaceRef.current,
+            dx,
+            dy,
+            SURFACE_LOOK_SENSITIVITY,
+          );
+          surfaceRef.current.pose = nextSurfaceLook.pose;
+          surfaceRef.current.pitch = nextSurfaceLook.pitch;
+        }
+        return;
+      }
+
+      if (modeRef.current !== 'space') {
+        return;
+      }
+
       spaceCameraRef.current = applySpaceLookDrag(
         spaceCameraRef.current,
         dx,
@@ -2363,9 +2481,12 @@ export default function MoonPhaseSandbox() {
 
     const onPointerUp = (event: PointerEvent) => {
       const pointerState = pointerRef.current;
-      pointerState.down = false;
-      renderer.domElement.releasePointerCapture?.(event.pointerId);
+      if (pointerState.pointerId !== event.pointerId) return;
 
+      pointerState.down = false;
+      releaseCanvasPointer(event.pointerId);
+
+      if (modeRef.current === 'surface') return;
       if (!canUseClickForDescent(modeRef.current, pointerState.moved)) return;
 
       const rect = renderer.domElement.getBoundingClientRect();
@@ -2391,8 +2512,10 @@ export default function MoonPhaseSandbox() {
     };
 
     const onPointerCancel = (event: PointerEvent) => {
+      if (pointerRef.current.pointerId !== event.pointerId) return;
+
       pointerRef.current.down = false;
-      renderer.domElement.releasePointerCapture?.(event.pointerId);
+      releaseCanvasPointer(event.pointerId);
     };
 
     const onDocumentMouseMove = (event: MouseEvent) => {
@@ -2401,8 +2524,14 @@ export default function MoonPhaseSandbox() {
       }
 
       const surface = surfaceRef.current;
-      surface.pose = turnSurfacePose(surface.pose, event.movementX * SURFACE_LOOK_SENSITIVITY);
-      surface.pitch = clampSurfacePitch(surface.pitch - event.movementY * SURFACE_LOOK_SENSITIVITY);
+      const nextSurfaceLook = applySurfaceLookDrag(
+        surface,
+        event.movementX,
+        event.movementY,
+        SURFACE_LOOK_SENSITIVITY,
+      );
+      surface.pose = nextSurfaceLook.pose;
+      surface.pitch = nextSurfaceLook.pitch;
     };
 
     const onPointerLockChange = () => {
@@ -2438,10 +2567,22 @@ export default function MoonPhaseSandbox() {
       keysRef.current.delete(keyName(event));
     };
 
+    const onWebglContextLost = (event: Event) => {
+      event.preventDefault();
+      disposed = true;
+      if (requestRef.current !== null) {
+        cancelAnimationFrame(requestRef.current);
+        requestRef.current = null;
+      }
+      setSceneFailureMessage('The 3D graphics context stopped on this machine.');
+      setSceneStatus('unavailable');
+    };
+
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('pointercancel', onPointerCancel);
+    renderer.domElement.addEventListener('webglcontextlost', onWebglContextLost);
     document.addEventListener('mousemove', onDocumentMouseMove);
     document.addEventListener('pointerlockchange', onPointerLockChange);
     window.addEventListener('resize', resize);
@@ -2473,6 +2614,8 @@ export default function MoonPhaseSandbox() {
     };
 
     const animate = (now: number) => {
+      if (disposed) return;
+
       const elapsed = Math.min(64, now - lastFrameRef.current);
       lastFrameRef.current = now;
       simTimeRef.current = advanceSimulationTime(
@@ -2696,10 +2839,14 @@ export default function MoonPhaseSandbox() {
 
     requestRef.current = requestAnimationFrame(animate);
 
+    setSceneFailureMessage('The 3D scene could not start on this machine.');
+    setSceneStatus('ready');
+
     return () => {
       disposed = true;
       if (requestRef.current !== null) {
         cancelAnimationFrame(requestRef.current);
+        requestRef.current = null;
       }
       if (document.pointerLockElement === renderer.domElement) {
         document.exitPointerLock();
@@ -2708,6 +2855,7 @@ export default function MoonPhaseSandbox() {
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       renderer.domElement.removeEventListener('pointercancel', onPointerCancel);
+      renderer.domElement.removeEventListener('webglcontextlost', onWebglContextLost);
       document.removeEventListener('mousemove', onDocumentMouseMove);
       document.removeEventListener('pointerlockchange', onPointerLockChange);
       window.removeEventListener('resize', resize);
@@ -2730,20 +2878,30 @@ export default function MoonPhaseSandbox() {
       }).__moonPhaseSandboxSetDate;
       earthTextureCache.forEach((texture) => texture.dispose());
       renderer.dispose();
-      scene.traverse((object) => {
-        const mesh = object as THREE.Mesh;
-        mesh.geometry?.dispose?.();
-        const material = mesh.material as THREE.Material | THREE.Material[] | undefined;
-        if (Array.isArray(material)) {
-          material.forEach((item) => item.dispose());
-        } else {
-          material?.dispose?.();
-        }
-      });
-      mount.removeChild(renderer.domElement);
+      disposeSceneGraph(scene);
+      removeRendererCanvas(renderer, mount);
       objectsRef.current = null;
     };
-  }, []);
+    } catch {
+      if (requestRef.current !== null) {
+        cancelAnimationFrame(requestRef.current);
+        requestRef.current = null;
+      }
+      if (startupRenderer && document.pointerLockElement === startupRenderer.domElement) {
+        document.exitPointerLock();
+      }
+      startupRenderer?.dispose();
+      disposeSceneGraph(startupScene);
+      removeRendererCanvas(startupRenderer, mount);
+      objectsRef.current = null;
+      setPointerLocked(false);
+      setMode('space');
+      setSurfaceBody(null);
+      setSceneFailureMessage('The 3D scene could not start on this machine.');
+      setSceneStatus('unavailable');
+      return undefined;
+    }
+  }, [sceneRetryKey]);
 
   const setSimDate = (date: Date) => {
     const snapshot = getEarthMoonSunSnapshot(date);
@@ -2781,19 +2939,38 @@ export default function MoonPhaseSandbox() {
   const controlModeLabel = mode === 'surface'
     ? pointerLocked
       ? 'Mouse look'
-      : 'Click for mouse look'
+      : 'Drag to look'
     : hudScaleMode;
+  const sceneUnavailable = sceneStatus === 'unavailable';
 
   return (
     <div
       className={[
         'moon-phase-sandbox',
         mode === 'surface' ? 'is-surface' : '',
+        sceneUnavailable ? 'is-scene-unavailable' : '',
+        sceneStatus === 'initializing' ? 'is-scene-initializing' : '',
         timePanelOpen ? 'has-time-panel-open' : 'has-time-panel-collapsed',
         readoutsVisible ? 'has-readouts' : 'has-hidden-readouts',
       ].filter(Boolean).join(' ')}
     >
       <div ref={mountRef} className="moon-phase-canvas" aria-label="Earth Moon Sun 3D sandbox" />
+
+      {sceneUnavailable && (
+        <section className="moon-hud moon-scene-fallback" aria-live="polite">
+          <div>
+            <span>3D scene unavailable</span>
+            <strong>{sceneFailureMessage}</strong>
+          </div>
+          <button
+            type="button"
+            className="moon-text-button"
+            onClick={() => setSceneRetryKey((value) => value + 1)}
+          >
+            Retry
+          </button>
+        </section>
+      )}
 
       {readoutsVisible ? (
         <header className="moon-hud moon-hud-primary" aria-label="Moon phase information">

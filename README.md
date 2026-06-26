@@ -19,6 +19,8 @@ tests/             Node strip-types test runners by domain
 
 ## Common Commands
 
+Use npm for this repo. `package-lock.json` is the canonical lockfile.
+
 Run the Astro site:
 
 ```sh
@@ -31,6 +33,12 @@ Run all domain tests:
 
 ```sh
 npm run test:all
+```
+
+Run the repo cleanup/metadata audit:
+
+```sh
+npm run audit:repo
 ```
 
 Run the standalone game client and server:
@@ -61,6 +69,7 @@ Both Cloudflare Pages projects publish `dist`; the build command decides what ge
 - New learning pages should start with [Adding Content](docs/adding-content.md).
 - New or changed simulations should follow [Adding Simulations](docs/adding-simulations.md).
 - Repo boundaries and ownership live in [Architecture](docs/architecture.md).
+- Visual/layout expectations live in [Design Baseline](docs/design-baseline.md).
 - Cleanup, dependency, and artifact policy live in [Maintenance](docs/maintenance.md).
 
 ## 1D/2D Kinematics Leaderboards

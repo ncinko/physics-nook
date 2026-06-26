@@ -2,11 +2,13 @@
 
 Interactive simulations should be easy to test, easy to embed in lessons, and isolated from unrelated page content.
 
+Before changing the visual style of an interactive shell, read [Design Baseline](design-baseline.md). Inline demos should feel like touchable textbook illustrations; standalone tools can be denser, but should still use the shared controls and theme tokens.
+
 ## Recommended Shape
 
 - Put deterministic model code in `src/lib/<domain>` for Astro-hosted simulations.
 - Put shared multiplayer protocol, validation, and deterministic helpers in `packages/shared/src`.
-- Put React islands in `src/components/<domain>` or `src/components/simulations`.
+- Put React islands in `src/components/<domain>`; the retired `src/components/simulations` catch-all should not be used for new work.
 - Put focused tests in `tests/<domain>`.
 - Register reachable demos and labs in `src/data/interactives.ts` so `/interactives` stays complete.
 
@@ -20,39 +22,39 @@ Use a standalone lab when the interaction is a larger tool: multiple tasks, many
 
 When adding either kind, place an `InteractiveAnchor` immediately before the mounted component, point the catalog entry in `src/data/interactives.ts` at that anchor, and set its `kind` to match how the component is actually mounted.
 
-### Shared UI building blocks
+## Shared UI Building Blocks
 
-Build controls and readouts from the shared primitives so every interactive themes consistently (light/dark/pastel) and reads the same way. Do not hand-roll control rows or info panels with ad-hoc inline styles.
+Build controls and readouts from the shared primitives so every interactive themes consistently and reads the same way. Do not hand-roll control rows or info panels with ad-hoc inline styles.
 
-- `src/components/shared/themeColors.ts` — the `themeColors()` palette plus `getCssColor` / `onThemeChange` for canvas drawing that follows the active theme.
-- `src/components/shared/InlineControls.tsx` — `ControlBar` (a wrapping control row) with `Slider`, `Toggle`, `Select`, and `Button`. Native range/checkbox inputs inherit the theme accent via `global.css`.
-- `src/components/shared/Readout.tsx` — `Readout` with `Readout.Group` / `Readout.Value`; presentation- and count-agnostic (see below).
-- `SimulationBlock` (standalone only) — the breakout shell, header, and fullscreen toggle.
+- `src/components/shared/themeColors.ts` - the `themeColors()` palette plus `getCssColor` / `onThemeChange` for canvas drawing that follows the active theme.
+- `src/components/shared/InlineControls.tsx` - `ControlBar` with `Slider`, `Toggle`, `Select`, and `Button`. Native range/checkbox inputs inherit the theme accent via `global.css`.
+- `src/components/shared/Readout.tsx` - `Readout` with `Readout.Group` / `Readout.Value`; presentation- and count-agnostic.
+- `SimulationBlock` (standalone only) - the breakout shell, header, and fullscreen toggle.
 
 Colors come from CSS custom properties in `global.css` (`--text-primary`, `--grid-line`, `--surface-elevated`, `--accent-*`), mirrored by Tailwind `theme-*` aliases. Use these tokens, not hardcoded hex.
 
-### Scene surfaces
+## Scene Surfaces
 
 Treat a transparent, unboxed scene as the default for inline illustrations. Add a filled background, border, or shadow only when the surface carries useful meaning: for example, it defines a plot or data region, provides necessary contrast, or marks a direct-manipulation boundary. Do not put every animation on a `--sim-bg` panel merely to contain it visually; let simple diagrams and motion illustrations sit naturally in the reading flow.
 
-### Readouts
+## Readouts
 
 Show the fewest values that make the point. Prefer the lightest form: values woven into the caption/prose, or a single grouped `Readout` (`variant="panel"`, the default). Reserve per-value cards (`variant="cards"`) for dashboard-style standalone tools; do not make them the default cadence.
 
-### Inline checklist
+## Inline Checklist
 
 - Mount directly in MDX (no `SimulationBlock`); the component owns its own centering and max width.
 - Default to a transparent scene; add a panel surface only when it improves meaning, contrast, or interaction clarity.
 - Keep controls in one `ControlBar`; keep any readout light (grouped `Readout` or inline values).
 - Read theme colors through `themeColors` / CSS tokens; no hardcoded palettes.
 - Hydrate with `client:visible`, or `client:only="react"` for canvas islands that gain nothing from SSR.
-- `kind: 'inline'` in `interactives.ts`.
+- Set `kind: 'inline'` in `interactives.ts`.
 
-### Standalone checklist
+## Standalone Checklist
 
 - Wrap in `SimulationBlock` (`width`, `title`/`description`, fullscreen) on lesson pages, or use `ImmersiveLayout` for full-screen tools.
 - Use the same `ControlBar` / `Button` / `Readout` primitives so it matches the inline demos.
-- `kind: 'standalone'` in `interactives.ts`.
+- Set `kind: 'standalone'` in `interactives.ts`.
 
 ## Component Boundaries
 
@@ -81,4 +83,4 @@ Current high-value extraction targets when touched:
 - `apps/client/src/main.ts`
 - `apps/client/src/ripple-main.ts`
 - `apps/server/src/server.ts`
-- large files under `src/components/simulations`
+- large domain simulation islands under `src/components/<domain>`

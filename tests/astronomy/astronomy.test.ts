@@ -17,6 +17,7 @@ import {
   applySpaceLookDrag,
   applySpaceRoll,
   applySpaceTranslation,
+  applySurfaceLookDrag,
   advanceSimulationTime,
   binarySceneScale,
   blurLiveEarthMask,
@@ -53,6 +54,7 @@ import {
   surfaceDirectionVisibility,
   isAlienCaught,
   turnSurfacePose,
+  validLiveEarthCompositeLayerKeys,
 } from '../../src/lib/astronomy/index.ts';
 
 const closeTo = (actual: number, expected: number, epsilon: number) => {
@@ -313,6 +315,34 @@ test('live Earth texture key can omit failed provider layers without disabling a
   assert.ok(!withoutGoesEast.includes('nasa-goes-east-geocolor'));
 });
 
+test('live Earth layer validity can reject no-data weather imagery', () => {
+  const now = new Date('2026-06-25T19:02:33.000Z');
+  const layer = resolveLiveEarthLayers(now, now)[0];
+
+  assert.ok(layer);
+  assert.deepEqual(
+    validLiveEarthCompositeLayerKeys([layer], [{
+      id: layer.cacheKey,
+      validShare: layer.provider.minValidShare * 0.5,
+    }]),
+    [],
+  );
+  assert.deepEqual(
+    validLiveEarthCompositeLayerKeys([layer], [{
+      id: layer.cacheKey,
+      validShare: layer.provider.minValidShare,
+    }]),
+    [layer.cacheKey],
+  );
+  assert.deepEqual(
+    validLiveEarthCompositeLayerKeys([layer], [{
+      id: 'unknown-layer',
+      validShare: 0,
+    }]),
+    [],
+  );
+});
+
 test('simulation clock pauses, reverses, and advances by signed speed', () => {
   const start = new Date('2026-06-24T12:00:00.000Z');
 
@@ -512,6 +542,26 @@ test('surface pitch tilts the head without changing the tangent movement basis',
   closeTo(dot(cross(pitchedFrame.lookDirection, pitchedFrame.headUp), pitchedFrame.bodyRight), 1, 1e-12);
   assert.ok(dot(pitchedFrame.lookDirection, flatFrame.eyeUp) > 0.65);
   assert.ok(dot(pitchedFrame.headUp, flatFrame.eyeUp) > 0);
+});
+
+test('surface drag fallback yaws and pitches without changing the globe radius', () => {
+  const pose = createSurfacePose(EARTH_RADIUS_KM, -0.2, 0.9, 0.3);
+  const dragged = applySurfaceLookDrag({ pose, pitch: 0.12 }, 38, -24, 0.01);
+  const pitchOnly = applySurfaceLookDrag({ pose, pitch: 0.12 }, 0, -10000, 0.01);
+  const moved = moveSurfacePose(dragged.pose, EARTH_RADIUS_KM, {
+    forwardDistance: 35,
+    rightDistance: 20,
+  });
+  const draggedFrame = getSurfaceViewFrame(dragged.pose, dragged.pitch);
+
+  closeTo(dot(dragged.pose.up, pose.up), 1, 1e-12);
+  assert.ok(dot(dragged.pose.forward, pose.forward) < 0.96);
+  assert.ok(dragged.pitch > 0.12);
+  vectorCloseTo(pitchOnly.pose.forward, pose.forward, 1e-12);
+  closeTo(pitchOnly.pitch, clampSurfacePitch(100), 1e-12);
+  closeTo(length(moved.position), EARTH_RADIUS_KM, 1e-6);
+  closeTo(dot(draggedFrame.bodyForward, dragged.pose.up), 0, 1e-12);
+  closeTo(dot(draggedFrame.bodyRight, dragged.pose.up), 0, 1e-12);
 });
 
 test('surface head-up frame stays aligned through full-globe and near-pole movement', () => {

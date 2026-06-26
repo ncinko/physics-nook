@@ -184,6 +184,18 @@ export const resolveLiveEarthLayers = (
 export const liveEarthTextureKey = (layers: readonly ResolvedLiveEarthLayer[]) =>
   layers.length === 0 ? 'static' : layers.map((layer) => layer.cacheKey).join('|');
 
+export const validLiveEarthCompositeLayerKeys = (
+  layers: readonly ResolvedLiveEarthLayer[],
+  stats: readonly LiveEarthLayerCompositeStat[],
+) => stats
+  .filter((stat) => {
+    const source = layers.find((layer) => layer.cacheKey === stat.id);
+    return source
+      ? stat.validShare >= source.provider.minValidShare
+      : stat.validShare > 0;
+  })
+  .map((stat) => stat.id);
+
 export const buildLiveEarthWmsUrl = (layer: ResolvedLiveEarthLayer) => {
   const { provider } = layer;
   const params = new URLSearchParams({

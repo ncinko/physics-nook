@@ -97,6 +97,7 @@ interface SceneObjects {
   binaryPlanetMesh: THREE.Mesh;
   binaryMoonMesh: THREE.Mesh;
   earthMesh: THREE.Mesh;
+  earthNightOverlay: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
   moonMesh: THREE.Mesh;
   sunMesh: THREE.Mesh;
   infiniteSunDisk: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -757,6 +758,58 @@ const createEarthAtmosphere = () =>
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
+      transparent: true,
+    }),
+  );
+
+const createEarthNightOverlay = (texture: THREE.Texture) =>
+  new THREE.Mesh(
+    new THREE.SphereGeometry(EARTH_SCENE_RADIUS * 1.006, 160, 80),
+    new THREE.ShaderMaterial({
+      uniforms: {
+        earthMap: { value: texture },
+        sunDirection: { value: new THREE.Vector3(1, 0, 0) },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPosition;
+
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vUv = uv;
+          vWorldPosition = worldPosition.xyz;
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+          gl_Position = projectionMatrix * viewMatrix * worldPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D earthMap;
+        uniform vec3 sunDirection;
+        varying vec2 vUv;
+        varying vec3 vWorldNormal;
+        varying vec3 vWorldPosition;
+
+        void main() {
+          vec3 normalDirection = normalize(vWorldNormal);
+          vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+          float sunFacing = dot(normalDirection, normalize(sunDirection));
+          float viewFacing = max(dot(normalDirection, viewDirection), 0.0);
+          float night = smoothstep(0.06, -0.24, sunFacing);
+          vec3 textureColor = texture2D(earthMap, vUv).rgb;
+          float luminance = dot(textureColor, vec3(0.299, 0.587, 0.114));
+          float warm = smoothstep(0.08, 0.42, textureColor.r - textureColor.b)
+            * smoothstep(0.05, 0.34, textureColor.g - textureColor.b)
+            * smoothstep(0.14, 0.72, luminance);
+          vec3 nightColor = textureColor * vec3(0.11, 0.15, 0.25);
+          nightColor += vec3(1.0, 0.72, 0.28) * warm * 0.24;
+          float limbFade = smoothstep(0.02, 0.18, viewFacing);
+          gl_FragColor = vec4(nightColor, night * limbFade * 0.58);
+        }
+      `,
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
       transparent: true,
     }),
   );
@@ -2466,11 +2519,17 @@ export default function MoonPhaseSandbox() {
     earthMesh.userData.body = 'earth';
     earthGroup.add(earthMesh);
 
+    const earthNightOverlay = createEarthNightOverlay(earthTexture);
+    earthNightOverlay.renderOrder = 2;
+    earthNightOverlay.visible = false;
+    earthGroup.add(earthNightOverlay);
+
     let surfaceEarthMaterial: THREE.MeshStandardMaterial | null = null;
     const applyEarthTexture = (key: string, texture: THREE.Texture) => {
       activeEarthTextureKey = key;
       earthMaterial.map = texture;
       earthMaterial.needsUpdate = true;
+      earthNightOverlay.material.uniforms.earthMap.value = texture;
       if (surfaceEarthMaterial) {
         surfaceEarthMaterial.map = texture;
         surfaceEarthMaterial.needsUpdate = true;
@@ -2852,6 +2911,7 @@ export default function MoonPhaseSandbox() {
       binaryPlanetMesh,
       binaryMoonMesh,
       earthMesh,
+      earthNightOverlay,
       moonMesh,
       sunMesh,
       infiniteSunDisk,
@@ -3456,6 +3516,7 @@ export default function MoonPhaseSandbox() {
       sunMesh.position.copy(compactSunPosition);
       earthGroup.visible = isEarthMoonWorld && !trueDistanceMoonSurface;
       moonGroup.visible = isEarthMoonWorld && !trueDistanceEarthSurface;
+      objects.earthNightOverlay.visible = isEarthMoonWorld && modeRef.current === 'space';
       sunMesh.visible = isEarthMoonWorld && sunRenderMode === 'finite-scene';
       sunLight.visible = isEarthMoonWorld;
       binaryGroup.visible = isBinaryWorld;
@@ -3472,6 +3533,7 @@ export default function MoonPhaseSandbox() {
       earthGroup.rotation.y = snapshot.earthRotationRadians;
       moonGroup.rotation.y = snapshot.moonRotationRadians;
       earthAtmosphere.material.uniforms.sunDirection.value.copy(sunDirection);
+      objects.earthNightOverlay.material.uniforms.sunDirection.value.copy(sunDirection);
       updateMoonPathLine(objects, snapshot, scaleModeRef.current);
       if (isBinaryWorld) {
         updateBinaryScene(objects, binarySnapshot, activeSceneScaleMode);

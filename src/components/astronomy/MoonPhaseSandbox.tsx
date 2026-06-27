@@ -25,7 +25,6 @@ import {
   BINARY_PATH_SAMPLE_COUNT,
   TIME_SPEED_PRESETS,
   advanceSimulationTime,
-  applySpaceLookDrag,
   applySpaceRoll,
   applySpaceTranslation,
   applySurfaceLookDrag,
@@ -1571,7 +1570,7 @@ const spaceLookStateFromBasis = (
   };
 };
 
-const applySpaceKeyLook = (
+const applySpaceLocalLook = (
   state: SpaceLookState,
   yawDelta: number,
   pitchDelta: number,
@@ -3283,11 +3282,10 @@ export default function MoonPhaseSandbox() {
         return;
       }
 
-      spaceCameraRef.current = applySpaceLookDrag(
+      spaceCameraRef.current = applySpaceLocalLook(
         spaceCameraRef.current,
-        dx,
-        dy,
-        SPACE_LOOK_SENSITIVITY,
+        dx * SPACE_LOOK_SENSITIVITY,
+        -dy * SPACE_LOOK_SENSITIVITY,
       );
       if (Math.hypot(dx, dy) > 1) {
         recordTutorialInput('space-look');
@@ -3650,7 +3648,7 @@ export default function MoonPhaseSandbox() {
           const lookDistance = SPACE_KEY_LOOK_SPEED * (elapsed / 1000);
 
           if (yawRaw !== 0 || pitchRaw !== 0) {
-            spaceCameraRef.current = applySpaceKeyLook(
+            spaceCameraRef.current = applySpaceLocalLook(
               spaceCameraRef.current,
               yawRaw * lookDistance,
               pitchRaw * lookDistance,

@@ -2000,7 +2000,7 @@ const getSurfaceCompassState = (
     ? [{
       id: 'alien',
       label: 'Alien',
-      shortLabel: 'Alien',
+      shortLabel: '?',
       offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, alien.pose.up)),
       kind: 'alien' as const,
     }]

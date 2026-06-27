@@ -49,6 +49,7 @@ import {
   moveSurfacePose,
   nextAlienWorldMode,
   resolveLiveEarthLayers,
+  spawnAlienFarFromPlayer,
   skyProxyRadiusForAngularSize,
   spawnAlienNearPlayer,
   starVisualStyle,
@@ -774,6 +775,20 @@ test('alien catch and world mapping use reversible moon portal rules', () => {
   assert.equal(isAlienCaught(player, farAlien, MOON_RADIUS_KM * 0.02), false);
   assert.equal(nextAlienWorldMode('earthMoonSun'), 'binarySystem');
   assert.equal(nextAlienWorldMode('binarySystem'), 'earthMoonSun');
+});
+
+test('alien far spawn keeps the encounter away from the player', () => {
+  const player = createSurfacePose(MOON_RADIUS_KM, 0.18, -0.4, 0.2);
+  const alienA = spawnAlienFarFromPlayer(player, MOON_RADIUS_KM, 2.5);
+  const alienB = spawnAlienFarFromPlayer(player, MOON_RADIUS_KM, 7.25);
+  const distanceA = length(subtractTestVectors(player.position, alienA.position));
+  const distanceB = length(subtractTestVectors(player.position, alienB.position));
+
+  closeTo(length(alienA.position), MOON_RADIUS_KM, 1e-6);
+  closeTo(length(alienB.position), MOON_RADIUS_KM, 1e-6);
+  assert.ok(distanceA > MOON_RADIUS_KM);
+  assert.ok(distanceB > MOON_RADIUS_KM);
+  assert.notDeepEqual(alienA.position, alienB.position);
 });
 
 test('sampled Moon path is not the old flat XZ orbit ring', () => {

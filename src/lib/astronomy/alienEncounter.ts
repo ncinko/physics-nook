@@ -50,6 +50,28 @@ export const spawnAlienNearPlayer = (
   rightDistance: radius * 0.18,
 });
 
+const seededUnit = (seed: number, salt: number) => {
+  const value = Math.sin(seed * 127.1 + salt * 311.7) * 43758.5453123;
+  return value - Math.floor(value);
+};
+
+export const spawnAlienFarFromPlayer = (
+  playerPose: SurfacePose,
+  radius: number,
+  seed = 0,
+): SurfacePose => {
+  const forwardSign = seededUnit(seed, 1) > 0.5 ? 1 : -1;
+  const forwardDistance = radius * forwardSign * (1.25 + seededUnit(seed, 2) * 0.62);
+  const rightDistance = radius * (seededUnit(seed, 3) - 0.5) * 0.9;
+  const turnRadians = (seededUnit(seed, 4) - 0.5) * Math.PI * 2;
+
+  return moveSurfacePose(playerPose, radius, {
+    forwardDistance,
+    rightDistance,
+    turnRadians,
+  });
+};
+
 export const nextAlienWorldMode = (worldMode: AlienWorldMode): AlienWorldMode =>
   worldMode === 'earthMoonSun' ? 'binarySystem' : 'earthMoonSun';
 

@@ -49,6 +49,7 @@ import {
   moveAlienTowardPose,
   moveSurfacePose,
   nextAlienWorldMode,
+  spawnAlienFarFromPlayer,
   apparentAngularRadiusRadians,
   resolveLiveEarthLayers,
   scaleBinaryScenePosition,
@@ -117,6 +118,7 @@ interface SceneObjects {
   alienGroup: THREE.Group;
   northPoleGroup: THREE.Group;
   southPoleGroup: THREE.Group;
+  homeMarkerGroup: THREE.Group;
   penguinFamilyGroup: THREE.Group;
   labels: Record<LabelId, THREE.Sprite>;
   binaryLabels: Record<BinaryLabelId, THREE.Sprite>;
@@ -143,6 +145,7 @@ interface TransitionState {
 interface AlienState {
   worldMode: WorldMode;
   pose: SurfacePose;
+  anchorPose: SurfacePose;
   status: 'idle' | 'caught';
   bobSeed: number;
 }
@@ -179,7 +182,7 @@ interface CompassMarker {
   label: string;
   shortLabel: string;
   offsetDegrees: number;
-  kind: 'cardinal' | 'pole';
+  kind: 'cardinal' | 'pole' | 'home' | 'alien';
 }
 
 interface SurfaceCompassState {
@@ -218,6 +221,7 @@ const TRUE_DISTANCE_SPACE_CAMERA_LIFT = 96;
 const SPACE_CAMERA_SIDE_OFFSET = 22;
 const TRUE_DISTANCE_SPACE_CAMERA_SIDE_OFFSET = 75;
 const POLE_COMPASS_VISIBLE_RADIANS = 0.52;
+const ALIEN_COMPASS_VISIBLE_RADIANS = 0.65;
 const COMPASS_DISPLAY_DEGREES = 110;
 const TUTORIAL_ADVANCE_DELAY_MS = 620;
 const TUTORIAL_STORAGE_KEYS: Record<TutorialMode, string> = {
@@ -247,8 +251,8 @@ const SPACE_TUTORIAL_STEPS: TutorialStep[] = [
   {
     input: 'space-vertical',
     title: 'Change height',
-    prompt: 'Press Space or Ctrl to move vertically.',
-    hint: 'Space / Ctrl',
+    prompt: 'Press Space to rise, or Shift+Space to move down.',
+    hint: 'Space / Shift+Space',
   },
   {
     input: 'space-roll',
@@ -341,8 +345,6 @@ const keyed = (keys: Set<string>, ...values: string[]) =>
 
 const keyName = (event: KeyboardEvent) =>
   event.code === 'Space' || event.key === ' ' ? 'space' : event.key.toLowerCase();
-
-const SPACE_KEYBOARD_CONTROL_KEYS = new Set(['w', 'a', 's', 'd', 'q', 'e']);
 
 const normalizedAxisInput = (forward: number, right: number, up = 0) => {
   const magnitude = Math.hypot(forward, right, up);
@@ -1040,6 +1042,47 @@ const createPoleMarkerGroup = (hemisphere: 'north' | 'south') => {
   return group;
 };
 
+const createHomeMarkerGroup = () => {
+  const group = new THREE.Group();
+  const postMaterial = new THREE.MeshStandardMaterial({
+    color: 0xfacc15,
+    emissive: 0x4a3005,
+    emissiveIntensity: 0.08,
+    roughness: 0.5,
+  });
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfef3c7,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+  });
+  const darkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111827,
+    roughness: 0.62,
+  });
+
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.34, 12), postMaterial);
+  post.position.y = 0.17;
+  group.add(post);
+
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.08, 4), postMaterial);
+  roof.position.y = 0.375;
+  roof.rotation.y = Math.PI / 4;
+  group.add(roof);
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, 0.024, 18), darkMaterial);
+  base.position.y = 0.012;
+  group.add(base);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.004, 8, 42), ringMaterial);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.018;
+  group.add(ring);
+
+  group.visible = false;
+  return group;
+};
+
 const createPenguinGroup = (
   originX: number,
   originZ: number,
@@ -1051,8 +1094,8 @@ const createPenguinGroup = (
   group.userData.originX = originX;
   group.userData.originZ = originZ;
   group.userData.phase = phase;
-  group.userData.radius = 0.035 + phase * 0.006;
-  group.userData.speed = 0.00045 + phase * 0.00007;
+  group.userData.radius = 0.12 + phase * 0.026;
+  group.userData.speed = 0.00032 + phase * 0.00005;
 
   const black = new THREE.MeshStandardMaterial({ color: 0x07111f, roughness: 0.62 });
   const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.54 });
@@ -1109,10 +1152,10 @@ const createPenguinGroup = (
 const createPenguinFamilyGroup = () => {
   const group = new THREE.Group();
   [
-    { x: -0.12, z: -0.05, scale: 0.8, phase: 1 },
-    { x: -0.035, z: 0.035, scale: 0.62, phase: 2 },
-    { x: 0.065, z: -0.02, scale: 0.72, phase: 3 },
-    { x: 0.145, z: 0.065, scale: 0.52, phase: 4 },
+    { x: -0.42, z: -0.18, scale: 0.8, phase: 1 },
+    { x: -0.12, z: 0.3, scale: 0.62, phase: 2 },
+    { x: 0.28, z: -0.08, scale: 0.72, phase: 3 },
+    { x: 0.52, z: 0.26, scale: 0.52, phase: 4 },
   ].forEach((penguin) => {
     group.add(createPenguinGroup(penguin.x, penguin.z, penguin.scale, penguin.phase));
   });
@@ -1878,12 +1921,16 @@ const headingDegreesForSurfacePose = (pose: SurfacePose) => {
     return 0;
   }
   north.normalize();
-  const east = new THREE.Vector3().crossVectors(up, north).normalize();
+  const east = new THREE.Vector3().crossVectors(north, up).normalize();
   const forward = vectorFromPlain(pose.forward).normalize();
   return (Math.atan2(forward.dot(east), forward.dot(north)) * 180 / Math.PI + 360) % 360;
 };
 
-const getSurfaceCompassState = (surface: SurfaceState): SurfaceCompassState => {
+const getSurfaceCompassState = (
+  surface: SurfaceState,
+  homeSurface: SurfaceState | null,
+  alien: AlienState | null,
+): SurfaceCompassState => {
   const headingDegrees = headingDegreesForSurfacePose(surface.pose);
   const cardinalMarkers: CompassMarker[] = [
     { id: 'north', label: 'North', shortLabel: 'N', offsetDegrees: normalizeDegrees(0 - headingDegrees), kind: 'cardinal' },
@@ -1904,22 +1951,47 @@ const getSurfaceCompassState = (surface: SurfaceState): SurfaceCompassState => {
       offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, target.up)),
       kind: 'pole',
     }));
+  const homeMarker = homeSurface?.body === surface.body
+    ? [{
+      id: 'home',
+      label: 'Home',
+      shortLabel: 'Home',
+      offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, homeSurface.pose.up)),
+      kind: 'home' as const,
+    }]
+    : [];
+  const alienDistance = alien && alien.status === 'idle'
+    ? greatCircleDistanceRadians(surface.pose.up, alien.pose.up)
+    : Infinity;
+  const alienMarker = alien
+    && alien.status === 'idle'
+    && alienDistance <= ALIEN_COMPASS_VISIBLE_RADIANS
+    ? [{
+      id: 'alien',
+      label: 'Alien',
+      shortLabel: 'Alien',
+      offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, alien.pose.up)),
+      kind: 'alien' as const,
+    }]
+    : [];
 
   return {
     headingDegrees,
-    markers: [...cardinalMarkers, ...poleMarkers],
+    markers: [...cardinalMarkers, ...poleMarkers, ...homeMarker, ...alienMarker],
   };
 };
 
 const setSurfaceLandmarksHidden = (objects: SceneObjects) => {
   objects.northPoleGroup.visible = false;
   objects.southPoleGroup.visible = false;
+  objects.homeMarkerGroup.visible = false;
   objects.penguinFamilyGroup.visible = false;
 };
 
 const updateSurfaceLandmarks = (
   objects: SceneObjects,
   surface: SurfaceState,
+  homeSurface: SurfaceState | null,
   now: number,
 ) => {
   const config = BODY_CONFIG[surface.body];
@@ -1942,6 +2014,19 @@ const updateSurfaceLandmarks = (
     config.eyeHeight * 0.04,
     markerScale,
   );
+
+  if (homeSurface?.body === surface.body) {
+    placeSurfaceGroup(
+      objects.homeMarkerGroup,
+      bodyGroup,
+      homeSurface.pose,
+      config.radius,
+      config.eyeHeight * 0.045,
+      config.eyeHeight * 4.2,
+    );
+  } else {
+    objects.homeMarkerGroup.visible = false;
+  }
 
   if (surface.body === 'earth') {
     animatePenguinFamily(objects.penguinFamilyGroup, now);
@@ -1990,6 +2075,7 @@ export default function MoonPhaseSandbox() {
   const worldModeRef = useRef<WorldMode>('earthMoonSun');
   const modeRef = useRef<CameraMode>('space');
   const surfaceRef = useRef<SurfaceState | null>(null);
+  const homeSurfaceRef = useRef<SurfaceState | null>(null);
   const transitionRef = useRef<TransitionState | null>(null);
   const alienRef = useRef<AlienState | null>(null);
   const earthMoonReturnPoseRef = useRef<SurfacePose | null>(null);
@@ -2609,8 +2695,9 @@ export default function MoonPhaseSandbox() {
 
     const northPoleGroup = createPoleMarkerGroup('north');
     const southPoleGroup = createPoleMarkerGroup('south');
+    const homeMarkerGroup = createHomeMarkerGroup();
     const penguinFamilyGroup = createPenguinFamilyGroup();
-    scene.add(northPoleGroup, southPoleGroup, penguinFamilyGroup);
+    scene.add(northPoleGroup, southPoleGroup, homeMarkerGroup, penguinFamilyGroup);
 
     const labels = {
       earth: createLabelSprite('Earth'),
@@ -2674,6 +2761,7 @@ export default function MoonPhaseSandbox() {
       alienGroup,
       northPoleGroup,
       southPoleGroup,
+      homeMarkerGroup,
       penguinFamilyGroup,
       labels,
       binaryLabels,
@@ -2748,9 +2836,19 @@ export default function MoonPhaseSandbox() {
       surface: SurfaceState,
     ): AlienState => {
       const bobSeed = ALIEN_RESPAWN_SEED + simTimeRef.current.getTime() * 0.000001;
+      const anchorPose = spawnAlienFarFromPlayer(
+        surface.pose,
+        BODY_CONFIG[surface.body].radius,
+        bobSeed,
+      );
       return {
         worldMode: nextWorldMode,
-        pose: getAlienIdlePatrolPose(surface, performance.now(), bobSeed),
+        pose: getAlienIdlePatrolPose(
+          { ...surface, pose: anchorPose },
+          performance.now(),
+          bobSeed,
+        ),
+        anchorPose,
         status: 'idle',
         bobSeed,
       };
@@ -2804,6 +2902,7 @@ export default function MoonPhaseSandbox() {
         pitch: 0.06,
       };
 
+      homeSurfaceRef.current = nextSurface;
       alienRef.current = createAlienState(nextWorldMode, nextSurface);
       keysRef.current.clear();
       setActiveWorldMode(nextWorldMode);
@@ -2834,7 +2933,11 @@ export default function MoonPhaseSandbox() {
       const config = BODY_CONFIG[surface.body];
       let walkAmount = 0;
       if (alien.status === 'idle') {
-        const patrolPose = getAlienIdlePatrolPose(surface, now, alien.bobSeed);
+        const patrolPose = getAlienIdlePatrolPose(
+          { ...surface, pose: alien.anchorPose },
+          now,
+          alien.bobSeed,
+        );
         const distanceToPatrol = vectorFromPlain(patrolPose.position)
           .distanceTo(vectorFromPlain(alien.pose.position));
         const strollGate = Math.sin(now * 0.0008 + alien.bobSeed * 2.1);
@@ -2886,6 +2989,7 @@ export default function MoonPhaseSandbox() {
         pose,
         pitch: body === 'earth' ? 0.02 : 0.06,
       };
+      homeSurfaceRef.current = surface;
       startSurfaceTransition(surface);
     };
 
@@ -3096,16 +3200,19 @@ export default function MoonPhaseSandbox() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target)) return;
       const key = keyName(event);
-      const isControlChord = event.ctrlKey || key === 'control';
       if (
         key === 'arrowup'
         || key === 'arrowdown'
         || key === 'arrowleft'
         || key === 'arrowright'
         || key === 'space'
-        || (isControlChord && SPACE_KEYBOARD_CONTROL_KEYS.has(key))
       ) {
         event.preventDefault();
+      }
+      if (modeRef.current === 'surface' && key === 'space') {
+        recordTutorialInput('surface-return');
+        returnToSpace();
+        return;
       }
       keysRef.current.add(key);
       if (modeRef.current === 'space') {
@@ -3113,7 +3220,7 @@ export default function MoonPhaseSandbox() {
           recordTutorialInput('space-forward');
         } else if (keyed(new Set([key]), 'a', 'd', 'arrowleft', 'arrowright')) {
           recordTutorialInput('space-strafe');
-        } else if (key === 'space' || key === 'control') {
+        } else if (key === 'space') {
           recordTutorialInput('space-vertical');
         } else if (key === 'q' || key === 'e') {
           recordTutorialInput('space-roll');
@@ -3343,7 +3450,7 @@ export default function MoonPhaseSandbox() {
           updateBinaryStarProxies(objects, binarySnapshot, camera.position, worldUp);
         }
         updateAlienForSurface(surface, elapsed, now);
-        updateSurfaceLandmarks(objects, surface, now);
+        updateSurfaceLandmarks(objects, surface, homeSurfaceRef.current, now);
       } else {
         skyDome.visible = false;
         alienGroup.visible = false;
@@ -3352,10 +3459,12 @@ export default function MoonPhaseSandbox() {
           const keys = keysRef.current;
           const forwardRaw = Number(keyed(keys, 'w', 'arrowup')) - Number(keyed(keys, 's', 'arrowdown'));
           const rightRaw = Number(keyed(keys, 'd', 'arrowright')) - Number(keyed(keys, 'a', 'arrowleft'));
-          const upRaw = Number(keys.has('space')) - Number(keys.has('control'));
+          const upRaw = keys.has('space')
+            ? keys.has('shift') ? -1 : 1
+            : 0;
           const rollRaw = Number(keys.has('e')) - Number(keys.has('q'));
           const input = normalizedAxisInput(forwardRaw, rightRaw, upRaw);
-          const speedBoost = keys.has('shift') ? 4 : 1;
+          const speedBoost = keys.has('shift') && !keys.has('space') ? 4 : 1;
           const baseSpeed = activeSceneScaleMode === 'true' ? 185 : 58;
           const distance = baseSpeed * speedBoost * (elapsed / 1000);
 
@@ -3399,7 +3508,11 @@ export default function MoonPhaseSandbox() {
             latitude: coords.latitudeRadians * 180 / Math.PI,
             longitude: longitudeRadians * 180 / Math.PI,
           });
-          setSurfaceCompass(getSurfaceCompassState(surface));
+          setSurfaceCompass(getSurfaceCompassState(
+            surface,
+            homeSurfaceRef.current,
+            isAlienSurface(worldModeRef.current, surface.body) ? alienRef.current : null,
+          ));
         } else {
           setSurfaceCompass(null);
         }
@@ -3454,6 +3567,7 @@ export default function MoonPhaseSandbox() {
       disposeSceneGraph(scene);
       removeRendererCanvas(renderer, mount);
       objectsRef.current = null;
+      homeSurfaceRef.current = null;
     };
     } catch {
       if (requestRef.current !== null) {
@@ -3467,6 +3581,7 @@ export default function MoonPhaseSandbox() {
       disposeSceneGraph(startupScene);
       removeRendererCanvas(startupRenderer, mount);
       objectsRef.current = null;
+      homeSurfaceRef.current = null;
       setPointerLocked(false);
       setMode('space');
       setSurfaceBody(null);

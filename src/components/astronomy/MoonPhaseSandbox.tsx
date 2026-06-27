@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -3246,7 +3246,7 @@ export default function MoonPhaseSandbox() {
 
     const isTypingTarget = (target: EventTarget | null) => {
       const element = target as HTMLElement | null;
-      return Boolean(element?.closest('input, button, textarea, select'));
+      return Boolean(element?.closest('input, textarea, select, [contenteditable="true"]'));
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -3289,8 +3289,11 @@ export default function MoonPhaseSandbox() {
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
-      if (isTypingTarget(event.target)) return;
       keysRef.current.delete(keyName(event));
+    };
+
+    const clearActiveKeys = () => {
+      keysRef.current.clear();
     };
 
     const onWebglContextLost = (event: Event) => {
@@ -3314,6 +3317,7 @@ export default function MoonPhaseSandbox() {
     window.addEventListener('resize', resize);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', clearActiveKeys);
 
     (window as Window & {
       __moonPhaseSandboxReturnToSpace?: () => void;
@@ -3599,6 +3603,7 @@ export default function MoonPhaseSandbox() {
       window.removeEventListener('resize', resize);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clearActiveKeys);
       delete (window as Window & {
         __moonPhaseSandboxReturnToSpace?: () => void;
         __moonPhaseSandboxResetCamera?: () => void;
@@ -3690,6 +3695,16 @@ export default function MoonPhaseSandbox() {
   const visibleCompassMarkers = surfaceCompass && mode === 'surface'
     ? surfaceCompass.markers.filter((marker) => Math.abs(marker.offsetDegrees) <= COMPASS_DISPLAY_DEGREES)
     : [];
+  const releaseHudButtonFocus = (event: SyntheticEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.moon-hud button')) return;
+    window.setTimeout(() => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (activeElement?.closest('.moon-hud') && activeElement.matches('button')) {
+        activeElement.blur();
+      }
+    }, 0);
+  };
 
   return (
     <div
@@ -3701,6 +3716,7 @@ export default function MoonPhaseSandbox() {
         timePanelOpen ? 'has-time-panel-open' : 'has-time-panel-collapsed',
         readoutsVisible ? 'has-readouts' : 'has-hidden-readouts',
       ].filter(Boolean).join(' ')}
+      onClickCapture={releaseHudButtonFocus}
     >
       <div ref={mountRef} className="moon-phase-canvas" aria-label="Earth Moon Sun 3D sandbox" />
 

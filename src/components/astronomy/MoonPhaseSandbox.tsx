@@ -223,6 +223,8 @@ const TRUE_DISTANCE_SPACE_CAMERA_SIDE_OFFSET = 75;
 const POLE_COMPASS_VISIBLE_RADIANS = 0.52;
 const ALIEN_COMPASS_VISIBLE_RADIANS = 0.65;
 const COMPASS_DISPLAY_DEGREES = 110;
+const IP_LOCATION_ENDPOINT = '/api/ip-location';
+const IP_LOCATION_TIMEOUT_MS = 4200;
 const TUTORIAL_ADVANCE_DELAY_MS = 620;
 const TUTORIAL_STORAGE_KEYS: Record<TutorialMode, string> = {
   space: 'physics-nook:moon-phases:tutorial:space',
@@ -1926,6 +1928,35 @@ const headingDegreesForSurfacePose = (pose: SurfacePose) => {
   return (Math.atan2(forward.dot(east), forward.dot(north)) * 180 / Math.PI + 360) % 360;
 };
 
+const numberFromLocationField = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const readIpLocationCoordinates = (data: unknown) => {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const latitude = numberFromLocationField(record.latitude ?? record.lat);
+  const longitude = numberFromLocationField(record.longitude ?? record.lon);
+  if (latitude === null || longitude === null) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+};
+
+const createEarthHomeSurface = (latitudeDegrees: number, longitudeDegrees: number): SurfaceState => {
+  const latitude = latitudeDegrees * Math.PI / 180;
+  const longitude = -longitudeDegrees * Math.PI / 180;
+  return {
+    body: 'earth',
+    pose: createSurfacePose(EARTH_SCENE_RADIUS, latitude, longitude, 0),
+    pitch: 0.02,
+  };
+};
+
 const getSurfaceCompassState = (
   surface: SurfaceState,
   homeSurface: SurfaceState | null,
@@ -1951,7 +1982,7 @@ const getSurfaceCompassState = (
       offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, target.up)),
       kind: 'pole',
     }));
-  const homeMarker = homeSurface?.body === surface.body
+  const homeMarker = surface.body === 'earth' && homeSurface?.body === 'earth'
     ? [{
       id: 'home',
       label: 'Home',
@@ -2015,7 +2046,7 @@ const updateSurfaceLandmarks = (
     markerScale,
   );
 
-  if (homeSurface?.body === surface.body) {
+  if (surface.body === 'earth' && homeSurface?.body === 'earth') {
     placeSurfaceGroup(
       objects.homeMarkerGroup,
       bodyGroup,
@@ -2211,6 +2242,29 @@ export default function MoonPhaseSandbox() {
     setPhase(snapshot.phase);
     setEclipseState(snapshot.eclipseState);
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), IP_LOCATION_TIMEOUT_MS);
+
+    fetch(IP_LOCATION_ENDPOINT, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: unknown) => {
+        const coordinates = readIpLocationCoordinates(data);
+        if (!coordinates) return;
+        homeSurfaceRef.current = createEarthHomeSurface(
+          coordinates.latitude,
+          coordinates.longitude,
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => window.clearTimeout(timeout));
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => () => {
@@ -2902,7 +2956,6 @@ export default function MoonPhaseSandbox() {
         pitch: 0.06,
       };
 
-      homeSurfaceRef.current = nextSurface;
       alienRef.current = createAlienState(nextWorldMode, nextSurface);
       keysRef.current.clear();
       setActiveWorldMode(nextWorldMode);
@@ -2989,7 +3042,6 @@ export default function MoonPhaseSandbox() {
         pose,
         pitch: body === 'earth' ? 0.02 : 0.06,
       };
-      homeSurfaceRef.current = surface;
       startSurfaceTransition(surface);
     };
 
@@ -3567,7 +3619,6 @@ export default function MoonPhaseSandbox() {
       disposeSceneGraph(scene);
       removeRendererCanvas(renderer, mount);
       objectsRef.current = null;
-      homeSurfaceRef.current = null;
     };
     } catch {
       if (requestRef.current !== null) {
@@ -3581,7 +3632,6 @@ export default function MoonPhaseSandbox() {
       disposeSceneGraph(startupScene);
       removeRendererCanvas(startupRenderer, mount);
       objectsRef.current = null;
-      homeSurfaceRef.current = null;
       setPointerLocked(false);
       setMode('space');
       setSurfaceBody(null);

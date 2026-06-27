@@ -201,7 +201,7 @@ const INITIAL_SIM_DATE = new Date('2000-01-01T12:00:00.000Z');
 const SNAPSHOT_UPDATE_MS = 180;
 const UI_SYNC_MS = 220;
 const SPACE_LOOK_SENSITIVITY = 0.0036;
-const SPACE_KEY_LOOK_SPEED = Math.PI * 0.72;
+const SPACE_KEY_LOOK_SPEED = Math.PI * 0.36;
 const SPACE_ROLL_SPEED = Math.PI * 0.55;
 const SURFACE_LOOK_SENSITIVITY = 0.0024;
 const SURFACE_SKY_BODY_DISTANCE = 420;
@@ -1483,6 +1483,63 @@ const applySpaceCameraLook = (
   const lookTarget = camera.position.clone().add(vectorFromPlain(basis.forward));
   camera.up.copy(vectorFromPlain(basis.up));
   camera.lookAt(lookTarget);
+};
+
+const spaceLookStateFromBasis = (
+  forward: THREE.Vector3,
+  up: THREE.Vector3,
+  fallback: SpaceLookState,
+): SpaceLookState => {
+  const nextForward = forward.clone().normalize();
+  if (nextForward.lengthSq() < 1e-8) return fallback;
+
+  const yaw = Math.atan2(nextForward.x, -nextForward.z);
+  const pitch = clampCameraPitch(Math.asin(Math.max(-1, Math.min(1, nextForward.y))));
+  const unrolledRight = new THREE.Vector3().crossVectors(nextForward, WORLD_CAMERA_UP);
+  if (unrolledRight.lengthSq() < 1e-8) {
+    return { yaw, pitch, roll: fallback.roll };
+  }
+
+  unrolledRight.normalize();
+  const unrolledUp = new THREE.Vector3().crossVectors(unrolledRight, nextForward).normalize();
+  const desiredUp = up.clone().sub(nextForward.clone().multiplyScalar(up.dot(nextForward)));
+  if (desiredUp.lengthSq() < 1e-8) {
+    return { yaw, pitch, roll: fallback.roll };
+  }
+  desiredUp.normalize();
+
+  return {
+    yaw,
+    pitch,
+    roll: Math.atan2(
+      new THREE.Vector3().crossVectors(unrolledUp, desiredUp).dot(nextForward),
+      unrolledUp.dot(desiredUp),
+    ),
+  };
+};
+
+const applySpaceKeyLook = (
+  state: SpaceLookState,
+  yawDelta: number,
+  pitchDelta: number,
+): SpaceLookState => {
+  if (yawDelta === 0 && pitchDelta === 0) return state;
+
+  const basis = getCameraBasis(state.yaw, state.pitch, state.roll);
+  const forward = vectorFromPlain(basis.forward);
+  const right = vectorFromPlain(basis.right);
+  const up = vectorFromPlain(basis.up);
+
+  if (yawDelta !== 0) {
+    forward.applyAxisAngle(up, -yawDelta).normalize();
+    right.applyAxisAngle(up, -yawDelta).normalize();
+  }
+  if (pitchDelta !== 0) {
+    forward.applyAxisAngle(right, pitchDelta).normalize();
+    up.applyAxisAngle(right, pitchDelta).normalize();
+  }
+
+  return spaceLookStateFromBasis(forward, up, state);
 };
 
 const getSurfaceCameraVectors = (
@@ -3531,11 +3588,11 @@ export default function MoonPhaseSandbox() {
           const lookDistance = SPACE_KEY_LOOK_SPEED * (elapsed / 1000);
 
           if (yawRaw !== 0 || pitchRaw !== 0) {
-            spaceCameraRef.current = {
-              ...spaceCameraRef.current,
-              yaw: spaceCameraRef.current.yaw + yawRaw * lookDistance,
-              pitch: clampCameraPitch(spaceCameraRef.current.pitch + pitchRaw * lookDistance),
-            };
+            spaceCameraRef.current = applySpaceKeyLook(
+              spaceCameraRef.current,
+              yawRaw * lookDistance,
+              pitchRaw * lookDistance,
+            );
           }
 
           if (rollRaw !== 0) {

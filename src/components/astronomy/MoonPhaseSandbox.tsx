@@ -11,6 +11,7 @@ import {
   RotateCcw,
   SkipBack,
   SkipForward,
+  X,
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -114,6 +115,9 @@ interface SceneObjects {
   eclipseLine: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
   lunarEclipseTint: THREE.Mesh<THREE.SphereGeometry, THREE.MeshBasicMaterial>;
   alienGroup: THREE.Group;
+  northPoleGroup: THREE.Group;
+  southPoleGroup: THREE.Group;
+  penguinFamilyGroup: THREE.Group;
   labels: Record<LabelId, THREE.Sprite>;
   binaryLabels: Record<BinaryLabelId, THREE.Sprite>;
 }
@@ -143,6 +147,46 @@ interface AlienState {
   bobSeed: number;
 }
 
+type TutorialMode = 'space' | 'surface';
+type TutorialInput =
+  | 'space-look'
+  | 'space-forward'
+  | 'space-strafe'
+  | 'space-vertical'
+  | 'space-roll'
+  | 'space-land'
+  | 'surface-look'
+  | 'surface-walk'
+  | 'surface-strafe'
+  | 'surface-fast'
+  | 'surface-return';
+
+interface TutorialStep {
+  input: TutorialInput;
+  title: string;
+  prompt: string;
+  hint: string;
+}
+
+interface TutorialState {
+  mode: TutorialMode;
+  stepIndex: number;
+  status: 'prompting' | 'advancing';
+}
+
+interface CompassMarker {
+  id: string;
+  label: string;
+  shortLabel: string;
+  offsetDegrees: number;
+  kind: 'cardinal' | 'pole';
+}
+
+interface SurfaceCompassState {
+  headingDegrees: number;
+  markers: CompassMarker[];
+}
+
 const EARTH_SCENE_RADIUS = 9.5;
 const MOON_SCENE_RADIUS = EARTH_SCENE_RADIUS * (MOON_RADIUS_KM / EARTH_RADIUS_KM);
 const BINARY_MOON_SCENE_RADIUS = 2.35;
@@ -169,6 +213,89 @@ const LIVE_EARTH_TEXTURE_CACHE_LIMIT = 8;
 const STAR_OCCLUSION_FEATHER_RADIANS = 0.005;
 const STAR_HORIZON_FEATHER = 0.026;
 const WORLD_CAMERA_UP = new THREE.Vector3(0, 1, 0);
+const SPACE_CAMERA_LIFT = 32;
+const TRUE_DISTANCE_SPACE_CAMERA_LIFT = 96;
+const SPACE_CAMERA_SIDE_OFFSET = 22;
+const TRUE_DISTANCE_SPACE_CAMERA_SIDE_OFFSET = 75;
+const POLE_COMPASS_VISIBLE_RADIANS = 0.52;
+const COMPASS_DISPLAY_DEGREES = 110;
+const TUTORIAL_ADVANCE_DELAY_MS = 620;
+const TUTORIAL_STORAGE_KEYS: Record<TutorialMode, string> = {
+  space: 'physics-nook:moon-phases:tutorial:space',
+  surface: 'physics-nook:moon-phases:tutorial:surface',
+};
+
+const SPACE_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    input: 'space-look',
+    title: 'Look around',
+    prompt: 'Drag the scene to aim the camera.',
+    hint: 'Mouse or touch drag',
+  },
+  {
+    input: 'space-forward',
+    title: 'Fly forward and back',
+    prompt: 'Press W or S to move along your view direction.',
+    hint: 'W / S',
+  },
+  {
+    input: 'space-strafe',
+    title: 'Slide sideways',
+    prompt: 'Press A or D to strafe left and right.',
+    hint: 'A / D',
+  },
+  {
+    input: 'space-vertical',
+    title: 'Change height',
+    prompt: 'Press Space or Ctrl to move vertically.',
+    hint: 'Space / Ctrl',
+  },
+  {
+    input: 'space-roll',
+    title: 'Roll the camera',
+    prompt: 'Press Q or E to roll around the view axis.',
+    hint: 'Q / E',
+  },
+  {
+    input: 'space-land',
+    title: 'Enter surface view',
+    prompt: 'Click Earth or the Moon to land on the surface.',
+    hint: 'Click a body',
+  },
+];
+
+const SURFACE_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    input: 'surface-look',
+    title: 'Look around',
+    prompt: 'Drag the surface view to turn your head.',
+    hint: 'Mouse or touch drag',
+  },
+  {
+    input: 'surface-walk',
+    title: 'Walk',
+    prompt: 'Press W or S to walk forward and back.',
+    hint: 'W / S',
+  },
+  {
+    input: 'surface-strafe',
+    title: 'Sidestep',
+    prompt: 'Press A or D to sidestep.',
+    hint: 'A / D',
+  },
+  {
+    input: 'surface-fast',
+    title: 'Move faster',
+    prompt: 'Press Shift to use the faster movement mode.',
+    hint: 'Shift',
+  },
+  {
+    input: 'surface-return',
+    title: 'Return to space',
+    prompt: 'Use the Space button to leave surface view.',
+    hint: 'Space button',
+  },
+];
 
 const BODY_CONFIG: Record<BodyId, {
   label: string;
@@ -226,6 +353,14 @@ const normalizedAxisInput = (forward: number, right: number, up = 0) => {
     up: up / magnitude,
   };
 };
+
+const normalizeDegrees = (degrees: number) => {
+  const normalized = ((degrees + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 ? 180 : normalized;
+};
+
+const compassPositionPercent = (offsetDegrees: number) =>
+  50 + (offsetDegrees / COMPASS_DISPLAY_DEGREES) * 50;
 
 const seededUnit = (index: number, salt: number) => {
   const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453123;
@@ -861,6 +996,159 @@ const createAlienGroup = () => {
   return group;
 };
 
+const createPoleMarkerGroup = (hemisphere: 'north' | 'south') => {
+  const group = new THREE.Group();
+  const poleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf8fafc,
+    roughness: 0.42,
+    metalness: 0.03,
+  });
+  const stripeMaterial = new THREE.MeshStandardMaterial({
+    color: hemisphere === 'north' ? 0x60a5fa : 0xf97316,
+    roughness: 0.52,
+  });
+  const darkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.58,
+  });
+
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.52, 12), poleMaterial);
+  shaft.position.y = 0.26;
+  group.add(shaft);
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.035, 20), darkMaterial);
+  base.position.y = 0.017;
+  group.add(base);
+
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 10), stripeMaterial);
+  cap.position.y = 0.54;
+  group.add(cap);
+
+  const flag = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.092, 0.012),
+    stripeMaterial,
+  );
+  flag.position.set(0.085, 0.435, -0.004);
+  group.add(flag);
+
+  const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 8), darkMaterial);
+  crossbar.rotation.z = Math.PI / 2;
+  crossbar.position.y = 0.485;
+  group.add(crossbar);
+
+  group.visible = false;
+  return group;
+};
+
+const createPenguinGroup = (
+  originX: number,
+  originZ: number,
+  scale: number,
+  phase: number,
+) => {
+  const group = new THREE.Group();
+  group.name = `penguin-${phase}`;
+  group.userData.originX = originX;
+  group.userData.originZ = originZ;
+  group.userData.phase = phase;
+  group.userData.radius = 0.035 + phase * 0.006;
+  group.userData.speed = 0.00045 + phase * 0.00007;
+
+  const black = new THREE.MeshStandardMaterial({ color: 0x07111f, roughness: 0.62 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf8fafc, roughness: 0.54 });
+  const orange = new THREE.MeshStandardMaterial({ color: 0xfb923c, roughness: 0.56 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.09, 18, 14), black);
+  body.scale.set(0.78, 1.18, 0.66);
+  body.position.y = 0.115;
+  body.name = 'penguin-body';
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 10), white);
+  belly.scale.set(0.82, 1.02, 0.28);
+  belly.position.set(0, 0.105, -0.052);
+  group.add(belly);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.064, 18, 12), black);
+  head.position.y = 0.245;
+  group.add(head);
+
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 8), white);
+  face.scale.set(0.92, 0.82, 0.25);
+  face.position.set(0, 0.242, -0.048);
+  group.add(face);
+
+  [-1, 1].forEach((side) => {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), black);
+    eye.position.set(side * 0.018, 0.254, -0.079);
+    group.add(eye);
+
+    const flipper = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.011, 0.11, 8), black);
+    flipper.position.set(side * 0.068, 0.122, -0.004);
+    flipper.rotation.z = side * 0.42;
+    flipper.name = `penguin-flipper-${side}`;
+    group.add(flipper);
+
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.021, 10, 8), orange);
+    foot.scale.set(1.8, 0.34, 0.78);
+    foot.position.set(side * 0.034, 0.014, -0.032);
+    foot.name = `penguin-foot-${side}`;
+    group.add(foot);
+  });
+
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.042, 12), orange);
+  beak.rotation.x = -Math.PI / 2;
+  beak.position.set(0, 0.239, -0.092);
+  group.add(beak);
+
+  group.position.set(originX, 0, originZ);
+  group.scale.setScalar(scale);
+  return group;
+};
+
+const createPenguinFamilyGroup = () => {
+  const group = new THREE.Group();
+  [
+    { x: -0.12, z: -0.05, scale: 0.8, phase: 1 },
+    { x: -0.035, z: 0.035, scale: 0.62, phase: 2 },
+    { x: 0.065, z: -0.02, scale: 0.72, phase: 3 },
+    { x: 0.145, z: 0.065, scale: 0.52, phase: 4 },
+  ].forEach((penguin) => {
+    group.add(createPenguinGroup(penguin.x, penguin.z, penguin.scale, penguin.phase));
+  });
+  group.visible = false;
+  return group;
+};
+
+const animatePenguinFamily = (penguinFamilyGroup: THREE.Group, now: number) => {
+  penguinFamilyGroup.children.forEach((child) => {
+    const penguin = child as THREE.Group;
+    const phase = Number(penguin.userData.phase ?? 0);
+    const originX = Number(penguin.userData.originX ?? 0);
+    const originZ = Number(penguin.userData.originZ ?? 0);
+    const radius = Number(penguin.userData.radius ?? 0.04);
+    const speed = Number(penguin.userData.speed ?? 0.0005);
+    const t = now * speed + phase * 1.7;
+    const wobble = Math.sin(t * 6.2) * 0.16;
+    penguin.position.set(
+      originX + Math.cos(t) * radius,
+      Math.abs(Math.sin(t * 6.2)) * 0.004,
+      originZ + Math.sin(t * 0.8) * radius,
+    );
+    penguin.rotation.y = -t + wobble;
+    penguin.rotation.z = wobble * 0.34;
+
+    const leftFoot = penguin.getObjectByName('penguin-foot--1');
+    const rightFoot = penguin.getObjectByName('penguin-foot-1');
+    const leftFlipper = penguin.getObjectByName('penguin-flipper--1');
+    const rightFlipper = penguin.getObjectByName('penguin-flipper-1');
+    if (leftFoot) leftFoot.rotation.x = Math.sin(t * 6.2) * 0.32;
+    if (rightFoot) rightFoot.rotation.x = -Math.sin(t * 6.2) * 0.32;
+    if (leftFlipper) leftFlipper.rotation.z = -0.42 + wobble * 0.45;
+    if (rightFlipper) rightFlipper.rotation.z = 0.42 + wobble * 0.45;
+  });
+};
+
 const easeInOutCubic = (value: number) =>
   value < 0.5 ? 4 * value * value * value : 1 - Math.pow(-2 * value + 2, 3) / 2;
 
@@ -891,13 +1179,30 @@ const getSpaceView = (
   scaleMode: ScaleMode,
 ) => {
   const moonPosition = getMoonScenePosition(snapshot, scaleMode);
-  const target = moonPosition.clone().multiplyScalar(0.38);
-  const offset = scaleMode === 'true'
-    ? new THREE.Vector3(120, 250, 760)
-    : new THREE.Vector3(38, 92, 240);
+  const sunDirection = vectorFromPlain(snapshot.sunDirection).normalize();
+  const side = new THREE.Vector3().crossVectors(sunDirection, WORLD_CAMERA_UP);
+  if (side.lengthSq() < 1e-6) {
+    side.set(1, 0, 0);
+  } else {
+    side.normalize();
+  }
+  const target = moonPosition.clone().multiplyScalar(scaleMode === 'true' ? 0.18 : 0.24);
+  const cameraDistance = scaleMode === 'true'
+    ? COMPACT_SUN_DISTANCE * 1.38
+    : COMPACT_SUN_DISTANCE * 0.52;
+  const cameraLift = scaleMode === 'true'
+    ? TRUE_DISTANCE_SPACE_CAMERA_LIFT
+    : SPACE_CAMERA_LIFT;
+  const sideOffset = scaleMode === 'true'
+    ? TRUE_DISTANCE_SPACE_CAMERA_SIDE_OFFSET
+    : SPACE_CAMERA_SIDE_OFFSET;
+  const position = sunDirection
+    .multiplyScalar(cameraDistance)
+    .add(WORLD_CAMERA_UP.clone().multiplyScalar(cameraLift))
+    .add(side.multiplyScalar(sideOffset));
 
   return {
-    position: target.clone().add(offset),
+    position,
     target,
   };
 };
@@ -1537,6 +1842,122 @@ const placeSurfaceGroup = (
   group.visible = true;
 };
 
+const polePose = (body: BodyId, hemisphere: 'north' | 'south') =>
+  createSurfacePose(
+    BODY_CONFIG[body].radius,
+    hemisphere === 'north' ? Math.PI / 2 : -Math.PI / 2,
+    0,
+    0,
+  );
+
+const greatCircleDistanceRadians = (from: Vec3, to: Vec3) => {
+  const fromVector = vectorFromPlain(from).normalize();
+  const toVector = vectorFromPlain(to).normalize();
+  return Math.acos(Math.max(-1, Math.min(1, fromVector.dot(toVector))));
+};
+
+const bearingOffsetToSurfaceTarget = (
+  pose: SurfacePose,
+  targetUp: Vec3,
+) => {
+  const up = vectorFromPlain(pose.up).normalize();
+  const target = vectorFromPlain(targetUp).normalize();
+  const tangent = target.sub(up.clone().multiplyScalar(target.dot(up)));
+  if (tangent.lengthSq() < 1e-8) return 0;
+  tangent.normalize();
+
+  const forward = vectorFromPlain(pose.forward).normalize();
+  const right = vectorFromPlain(pose.right).normalize();
+  return Math.atan2(tangent.dot(right), tangent.dot(forward)) * 180 / Math.PI;
+};
+
+const headingDegreesForSurfacePose = (pose: SurfacePose) => {
+  const up = vectorFromPlain(pose.up).normalize();
+  const north = WORLD_CAMERA_UP.clone().sub(up.clone().multiplyScalar(WORLD_CAMERA_UP.dot(up)));
+  if (north.lengthSq() < 1e-8) {
+    return 0;
+  }
+  north.normalize();
+  const east = new THREE.Vector3().crossVectors(up, north).normalize();
+  const forward = vectorFromPlain(pose.forward).normalize();
+  return (Math.atan2(forward.dot(east), forward.dot(north)) * 180 / Math.PI + 360) % 360;
+};
+
+const getSurfaceCompassState = (surface: SurfaceState): SurfaceCompassState => {
+  const headingDegrees = headingDegreesForSurfacePose(surface.pose);
+  const cardinalMarkers: CompassMarker[] = [
+    { id: 'north', label: 'North', shortLabel: 'N', offsetDegrees: normalizeDegrees(0 - headingDegrees), kind: 'cardinal' },
+    { id: 'east', label: 'East', shortLabel: 'E', offsetDegrees: normalizeDegrees(90 - headingDegrees), kind: 'cardinal' },
+    { id: 'south', label: 'South', shortLabel: 'S', offsetDegrees: normalizeDegrees(180 - headingDegrees), kind: 'cardinal' },
+    { id: 'west', label: 'West', shortLabel: 'W', offsetDegrees: normalizeDegrees(270 - headingDegrees), kind: 'cardinal' },
+  ];
+  const poleTargets = [
+    { id: 'north-pole', label: 'North pole', shortLabel: 'N pole', up: polePose(surface.body, 'north').up },
+    { id: 'south-pole', label: 'South pole', shortLabel: 'S pole', up: polePose(surface.body, 'south').up },
+  ];
+  const poleMarkers = poleTargets
+    .filter((target) => greatCircleDistanceRadians(surface.pose.up, target.up) <= POLE_COMPASS_VISIBLE_RADIANS)
+    .map((target): CompassMarker => ({
+      id: target.id,
+      label: target.label,
+      shortLabel: target.shortLabel,
+      offsetDegrees: normalizeDegrees(bearingOffsetToSurfaceTarget(surface.pose, target.up)),
+      kind: 'pole',
+    }));
+
+  return {
+    headingDegrees,
+    markers: [...cardinalMarkers, ...poleMarkers],
+  };
+};
+
+const setSurfaceLandmarksHidden = (objects: SceneObjects) => {
+  objects.northPoleGroup.visible = false;
+  objects.southPoleGroup.visible = false;
+  objects.penguinFamilyGroup.visible = false;
+};
+
+const updateSurfaceLandmarks = (
+  objects: SceneObjects,
+  surface: SurfaceState,
+  now: number,
+) => {
+  const config = BODY_CONFIG[surface.body];
+  const bodyGroup = getBodyGroup(objects, surface.body);
+  const markerScale = config.eyeHeight * 5.8;
+
+  placeSurfaceGroup(
+    objects.northPoleGroup,
+    bodyGroup,
+    polePose(surface.body, 'north'),
+    config.radius,
+    config.eyeHeight * 0.04,
+    markerScale,
+  );
+  placeSurfaceGroup(
+    objects.southPoleGroup,
+    bodyGroup,
+    polePose(surface.body, 'south'),
+    config.radius,
+    config.eyeHeight * 0.04,
+    markerScale,
+  );
+
+  if (surface.body === 'earth') {
+    animatePenguinFamily(objects.penguinFamilyGroup, now);
+    placeSurfaceGroup(
+      objects.penguinFamilyGroup,
+      bodyGroup,
+      polePose('earth', 'south'),
+      config.radius,
+      config.eyeHeight * 0.05,
+      config.eyeHeight * 1.9,
+    );
+  } else {
+    objects.penguinFamilyGroup.visible = false;
+  }
+};
+
 const animateAlienLegs = (
   alienGroup: THREE.Group,
   now: number,
@@ -1575,6 +1996,8 @@ export default function MoonPhaseSandbox() {
   const keysRef = useRef<Set<string>>(new Set());
   const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.18, roll: 0 });
   const pointerLockedRef = useRef(false);
+  const tutorialStateRef = useRef<TutorialState | null>(null);
+  const tutorialAdvanceTimerRef = useRef<number | null>(null);
   const pointerRef = useRef({
     down: false,
     pointerId: -1,
@@ -1603,6 +2026,8 @@ export default function MoonPhaseSandbox() {
   const [worldMode, setWorldMode] = useState<WorldMode>('earthMoonSun');
   const [surfaceBody, setSurfaceBody] = useState<BodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });
+  const [surfaceCompass, setSurfaceCompass] = useState<SurfaceCompassState | null>(null);
+  const [tutorialState, setTutorialState] = useState<TutorialState | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneStatus, setSceneStatus] = useState<SceneStatus>('initializing');
   const [sceneFailureMessage, setSceneFailureMessage] = useState(
@@ -1611,6 +2036,86 @@ export default function MoonPhaseSandbox() {
   const [sceneRetryKey, setSceneRetryKey] = useState(0);
 
   const speedLabel = useMemo(() => formatSpeedLabel(speed), [speed]);
+
+  const setTutorialStateSynced = (nextTutorialState: TutorialState | null) => {
+    tutorialStateRef.current = nextTutorialState;
+    setTutorialState(nextTutorialState);
+  };
+
+  const clearTutorialAdvanceTimer = () => {
+    if (tutorialAdvanceTimerRef.current === null) return;
+    window.clearTimeout(tutorialAdvanceTimerRef.current);
+    tutorialAdvanceTimerRef.current = null;
+  };
+
+  const tutorialStepsForMode = (tutorialMode: TutorialMode) =>
+    tutorialMode === 'space' ? SPACE_TUTORIAL_STEPS : SURFACE_TUTORIAL_STEPS;
+
+  const isTutorialComplete = (tutorialMode: TutorialMode) => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage.getItem(TUTORIAL_STORAGE_KEYS[tutorialMode]) === 'done';
+    } catch {
+      return false;
+    }
+  };
+
+  const markTutorialComplete = (tutorialMode: TutorialMode) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(TUTORIAL_STORAGE_KEYS[tutorialMode], 'done');
+    } catch {
+      // Storage can be unavailable in private or restricted browsing contexts.
+    }
+  };
+
+  const dismissTutorial = () => {
+    const activeTutorial = tutorialStateRef.current;
+    if (activeTutorial) {
+      markTutorialComplete(activeTutorial.mode);
+    }
+    clearTutorialAdvanceTimer();
+    setTutorialStateSynced(null);
+  };
+
+  const recordTutorialInput = (input: TutorialInput) => {
+    const activeTutorial = tutorialStateRef.current;
+    if (!activeTutorial || activeTutorial.status !== 'prompting') return;
+
+    const steps = tutorialStepsForMode(activeTutorial.mode);
+    const step = steps[activeTutorial.stepIndex];
+    if (!step || step.input !== input) return;
+
+    const advancingState: TutorialState = {
+      ...activeTutorial,
+      status: 'advancing',
+    };
+    setTutorialStateSynced(advancingState);
+    clearTutorialAdvanceTimer();
+    tutorialAdvanceTimerRef.current = window.setTimeout(() => {
+      tutorialAdvanceTimerRef.current = null;
+      const latestTutorial = tutorialStateRef.current;
+      if (
+        !latestTutorial
+        || latestTutorial.mode !== advancingState.mode
+        || latestTutorial.stepIndex !== advancingState.stepIndex
+      ) {
+        return;
+      }
+
+      if (latestTutorial.stepIndex >= steps.length - 1) {
+        markTutorialComplete(latestTutorial.mode);
+        setTutorialStateSynced(null);
+        return;
+      }
+
+      setTutorialStateSynced({
+        mode: latestTutorial.mode,
+        stepIndex: latestTutorial.stepIndex + 1,
+        status: 'prompting',
+      });
+    }, TUTORIAL_ADVANCE_DELAY_MS);
+  };
 
   useEffect(() => {
     const now = getInitialRuntimeDate();
@@ -1621,6 +2126,28 @@ export default function MoonPhaseSandbox() {
     setEclipseState(snapshot.eclipseState);
     setHydrated(true);
   }, []);
+
+  useEffect(() => () => {
+    clearTutorialAdvanceTimer();
+  }, []);
+
+  useEffect(() => {
+    if (sceneStatus !== 'ready' || (mode !== 'space' && mode !== 'surface')) return;
+
+    const activeTutorial = tutorialStateRef.current;
+    if (activeTutorial?.mode === mode) return;
+    if (activeTutorial && activeTutorial.mode !== mode) {
+      clearTutorialAdvanceTimer();
+      setTutorialStateSynced(null);
+    }
+    if (isTutorialComplete(mode)) return;
+
+    setTutorialStateSynced({
+      mode,
+      stepIndex: 0,
+      status: 'prompting',
+    });
+  }, [mode, sceneStatus]);
 
   useEffect(() => {
     runningRef.current = running;
@@ -2080,6 +2607,11 @@ export default function MoonPhaseSandbox() {
     const alienGroup = createAlienGroup();
     scene.add(alienGroup);
 
+    const northPoleGroup = createPoleMarkerGroup('north');
+    const southPoleGroup = createPoleMarkerGroup('south');
+    const penguinFamilyGroup = createPenguinFamilyGroup();
+    scene.add(northPoleGroup, southPoleGroup, penguinFamilyGroup);
+
     const labels = {
       earth: createLabelSprite('Earth'),
       moon: createLabelSprite('Moon'),
@@ -2140,6 +2672,9 @@ export default function MoonPhaseSandbox() {
       eclipseLine,
       lunarEclipseTint,
       alienGroup,
+      northPoleGroup,
+      southPoleGroup,
+      penguinFamilyGroup,
       labels,
       binaryLabels,
     };
@@ -2360,6 +2895,7 @@ export default function MoonPhaseSandbox() {
       }
       surfaceRef.current = null;
       setSurfaceBody(null);
+      setSurfaceCompass(null);
       alienGroup.visible = false;
       const spaceView = getActiveSpaceView(
         worldModeRef.current,
@@ -2454,6 +2990,9 @@ export default function MoonPhaseSandbox() {
       event.preventDefault();
       if (modeRef.current === 'surface') {
         if (!pointerLockedRef.current && surfaceRef.current) {
+          if (Math.hypot(dx, dy) > 1) {
+            recordTutorialInput('surface-look');
+          }
           const nextSurfaceLook = applySurfaceLookDrag(
             surfaceRef.current,
             dx,
@@ -2476,6 +3015,9 @@ export default function MoonPhaseSandbox() {
         dy,
         SPACE_LOOK_SENSITIVITY,
       );
+      if (Math.hypot(dx, dy) > 1) {
+        recordTutorialInput('space-look');
+      }
       applySpaceCameraLook(camera, spaceCameraRef.current);
     };
 
@@ -2500,10 +3042,13 @@ export default function MoonPhaseSandbox() {
       const hit = intersections[0];
       const body = hit?.object.userData.body as BodyId | 'binaryPlanet' | undefined;
       if (hit && (body === 'earth' || body === 'moon')) {
+        recordTutorialInput('space-land');
         enterSurface(body, hit.point);
       } else if (hit && body === 'binaryMoon') {
+        recordTutorialInput('space-land');
         enterSurface('binaryMoon', hit.point);
       } else if (hit && body === 'binaryPlanet') {
+        recordTutorialInput('space-land');
         const landingLocal = binaryMoonGroup.worldToLocal(camera.position.clone())
           .normalize()
           .multiplyScalar(BODY_CONFIG.binaryMoon.radius);
@@ -2523,6 +3068,9 @@ export default function MoonPhaseSandbox() {
         return;
       }
 
+      if (Math.hypot(event.movementX, event.movementY) > 1) {
+        recordTutorialInput('surface-look');
+      }
       const surface = surfaceRef.current;
       const nextSurfaceLook = applySurfaceLookDrag(
         surface,
@@ -2560,6 +3108,25 @@ export default function MoonPhaseSandbox() {
         event.preventDefault();
       }
       keysRef.current.add(key);
+      if (modeRef.current === 'space') {
+        if (keyed(new Set([key]), 'w', 's', 'arrowup', 'arrowdown')) {
+          recordTutorialInput('space-forward');
+        } else if (keyed(new Set([key]), 'a', 'd', 'arrowleft', 'arrowright')) {
+          recordTutorialInput('space-strafe');
+        } else if (key === 'space' || key === 'control') {
+          recordTutorialInput('space-vertical');
+        } else if (key === 'q' || key === 'e') {
+          recordTutorialInput('space-roll');
+        }
+      } else if (modeRef.current === 'surface') {
+        if (key === 'shift') {
+          recordTutorialInput('surface-fast');
+        } else if (keyed(new Set([key]), 'w', 's', 'arrowup', 'arrowdown')) {
+          recordTutorialInput('surface-walk');
+        } else if (keyed(new Set([key]), 'a', 'd', 'arrowleft', 'arrowright')) {
+          recordTutorialInput('surface-strafe');
+        }
+      }
     };
 
     const onKeyUp = (event: KeyboardEvent) => {
@@ -2676,6 +3243,7 @@ export default function MoonPhaseSandbox() {
       updateInfiniteSunDisk(objects, snapshot, isEarthMoonWorld && sunRenderMode === 'infinite-space');
       setSurfaceSkyProxiesHidden(objects);
       setBinaryStarProxiesHidden(objects);
+      setSurfaceLandmarksHidden(objects);
       sunLight.position.copy(sunDirection.clone().multiplyScalar(180));
       sunLight.target.position.set(0, 0, 0);
       earthGroup.rotation.y = snapshot.earthRotationRadians;
@@ -2775,9 +3343,11 @@ export default function MoonPhaseSandbox() {
           updateBinaryStarProxies(objects, binarySnapshot, camera.position, worldUp);
         }
         updateAlienForSurface(surface, elapsed, now);
+        updateSurfaceLandmarks(objects, surface, now);
       } else {
         skyDome.visible = false;
         alienGroup.visible = false;
+        setSurfaceLandmarksHidden(objects);
         if (modeRef.current === 'space') {
           const keys = keysRef.current;
           const forwardRaw = Number(keyed(keys, 'w', 'arrowup')) - Number(keyed(keys, 's', 'arrowdown'));
@@ -2829,6 +3399,9 @@ export default function MoonPhaseSandbox() {
             latitude: coords.latitudeRadians * 180 / Math.PI,
             longitude: longitudeRadians * 180 / Math.PI,
           });
+          setSurfaceCompass(getSurfaceCompassState(surface));
+        } else {
+          setSurfaceCompass(null);
         }
       }
 
@@ -2897,6 +3470,7 @@ export default function MoonPhaseSandbox() {
       setPointerLocked(false);
       setMode('space');
       setSurfaceBody(null);
+      setSurfaceCompass(null);
       setSceneFailureMessage('The 3D scene could not start on this machine.');
       setSceneStatus('unavailable');
       return undefined;
@@ -2942,6 +3516,15 @@ export default function MoonPhaseSandbox() {
       : 'Drag to look'
     : hudScaleMode;
   const sceneUnavailable = sceneStatus === 'unavailable';
+  const activeTutorialSteps = tutorialState
+    ? tutorialStepsForMode(tutorialState.mode)
+    : [];
+  const activeTutorialStep = tutorialState
+    ? activeTutorialSteps[tutorialState.stepIndex] ?? null
+    : null;
+  const visibleCompassMarkers = surfaceCompass && mode === 'surface'
+    ? surfaceCompass.markers.filter((marker) => Math.abs(marker.offsetDegrees) <= COMPASS_DISPLAY_DEGREES)
+    : [];
 
   return (
     <div
@@ -2972,22 +3555,52 @@ export default function MoonPhaseSandbox() {
         </section>
       )}
 
+      {activeTutorialStep && tutorialState && (
+        <section
+          className={`moon-hud moon-tutorial ${tutorialState.status === 'advancing' ? 'is-advancing' : ''}`}
+          aria-live="polite"
+          aria-label={`${tutorialState.mode} camera tutorial`}
+        >
+          <div className="moon-tutorial-header">
+            <span>
+              {tutorialState.mode === 'space' ? 'Space controls' : 'Surface controls'}
+              {' '}
+              {tutorialState.stepIndex + 1}/{activeTutorialSteps.length}
+            </span>
+            <button
+              type="button"
+              className="moon-icon-button moon-tutorial-close"
+              onClick={dismissTutorial}
+              aria-label="Close tutorial"
+              title="Close tutorial"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="moon-tutorial-body">
+            <strong>{activeTutorialStep.title}</strong>
+            <p>{activeTutorialStep.prompt}</p>
+            <kbd>{activeTutorialStep.hint}</kbd>
+          </div>
+        </section>
+      )}
+
       {readoutsVisible ? (
         <header className="moon-hud moon-hud-primary" aria-label="Moon phase information">
           <div className="moon-readouts">
             {worldMode === 'earthMoonSun' && (
               <>
-                <div>
+                <div className="moon-readout-phase">
                   <span>Phase</span>
                   <strong>{phase.phaseName}</strong>
                 </div>
-                <div>
+                <div className="moon-readout-lit">
                   <span>Lit</span>
                   <strong>{formatPercent(phase.illuminationFraction)}</strong>
                 </div>
               </>
             )}
-            <div>
+            <div className="moon-readout-view">
               <span>View</span>
               <strong>{locationLabel}</strong>
             </div>
@@ -3121,6 +3734,24 @@ export default function MoonPhaseSandbox() {
         )}
       </section>
 
+      {mode === 'surface' && surfaceCompass && (
+        <section className="moon-hud moon-surface-compass" aria-label="Surface compass">
+          <div className="moon-compass-bar">
+            <span className="moon-compass-center" aria-hidden="true" />
+            {visibleCompassMarkers.map((marker) => (
+              <span
+                key={marker.id}
+                className={`moon-compass-marker is-${marker.kind}`}
+                style={{ left: `${compassPositionPercent(marker.offsetDegrees)}%` }}
+                title={marker.label}
+              >
+                {marker.shortLabel}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="moon-hud moon-view-panel" aria-label="View controls">
         {worldMode === 'earthMoonSun' ? (
           <div className="moon-segmented">
@@ -3158,7 +3789,10 @@ export default function MoonPhaseSandbox() {
           <button
             type="button"
             className="moon-text-button moon-space-button"
-            onClick={returnToSpace}
+            onClick={() => {
+              recordTutorialInput('surface-return');
+              returnToSpace();
+            }}
           >
             Space
           </button>

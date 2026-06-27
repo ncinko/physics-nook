@@ -116,19 +116,28 @@
 
 .moon-readouts {
   display: flex;
-  max-width: min(52rem, 100%);
+  max-width: min(61rem, 100%);
   flex-wrap: wrap;
   gap: 0.55rem;
   justify-content: flex-start;
 }
 
 .moon-readouts div {
-  width: min(12rem, 24vw);
+  flex: 0 1 11rem;
   min-width: 0;
   border: 1px solid rgba(203, 213, 225, 0.1);
   border-radius: 0.38rem;
   background: rgba(15, 23, 42, 0.52);
   padding: 0.5rem 0.6rem;
+}
+
+.moon-readouts .moon-readout-lit {
+  flex: 0 0 5.2rem;
+}
+
+.moon-readouts .moon-readout-view {
+  flex: 1 1 19rem;
+  min-width: min(19rem, 42vw);
 }
 
 .moon-readouts .moon-eclipse-readout {
@@ -159,6 +168,80 @@
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.moon-readouts .moon-readout-view strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.moon-tutorial {
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  width: min(22rem, calc(100vw - 2rem));
+  gap: 0.6rem;
+  border-radius: 0.5rem;
+  padding: 0.68rem;
+  transition: border-color 160ms ease, transform 160ms ease;
+}
+
+.moon-tutorial.is-advancing {
+  border-color: rgba(245, 158, 11, 0.5);
+  transform: translateY(0.08rem);
+}
+
+.moon-tutorial-header,
+.moon-tutorial-body {
+  display: grid;
+}
+
+.moon-tutorial-header {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.moon-tutorial-header span {
+  color: var(--moon-muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.moon-tutorial-close {
+  width: 1.9rem;
+  min-height: 1.9rem;
+}
+
+.moon-tutorial-body {
+  gap: 0.34rem;
+}
+
+.moon-tutorial-body strong {
+  color: #ffffff;
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.moon-tutorial-body p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.86);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.moon-tutorial-body kbd {
+  justify-self: start;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  border-radius: 0.3rem;
+  background: rgba(245, 158, 11, 0.13);
+  color: #ffedc3;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.18rem 0.42rem;
 }
 
 .moon-time-panel {
@@ -408,6 +491,61 @@
   padding: 0.5rem 0.68rem;
 }
 
+.moon-surface-compass {
+  left: 50%;
+  bottom: 4.6rem;
+  width: min(30rem, calc(100vw - 2rem));
+  border-color: rgba(203, 213, 225, 0.13);
+  border-radius: 0.38rem;
+  background: rgba(6, 10, 18, 0.44);
+  padding: 0.35rem 0.7rem;
+  transform: translateX(-50%);
+}
+
+.moon-compass-bar {
+  position: relative;
+  height: 1.42rem;
+  overflow: hidden;
+}
+
+.moon-compass-bar::before {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(226, 232, 240, 0.38), transparent);
+  content: "";
+}
+
+.moon-compass-center {
+  position: absolute;
+  top: 0.18rem;
+  left: 50%;
+  width: 1px;
+  height: 1.04rem;
+  background: rgba(255, 232, 182, 0.78);
+  box-shadow: 0 0 0.75rem rgba(245, 158, 11, 0.28);
+}
+
+.moon-compass-marker {
+  position: absolute;
+  top: 50%;
+  min-width: 1.9rem;
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 0.72rem;
+  font-weight: 780;
+  text-align: center;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.moon-compass-marker.is-pole {
+  min-width: 3.1rem;
+  color: #fed7aa;
+  text-shadow: 0 0 0.65rem rgba(251, 146, 60, 0.38);
+}
+
 @media (max-width: 760px) {
   .moon-hud-primary {
     right: 0.6rem;
@@ -423,13 +561,18 @@
 
   .moon-readouts {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr) 5.2rem;
     justify-content: stretch;
   }
 
   .moon-readouts div {
-    width: auto;
+    min-width: 0;
     padding: 0.45rem 0.5rem;
+  }
+
+  .moon-readouts .moon-readout-view {
+    grid-column: 1 / -1;
+    min-width: 0;
   }
 
   .moon-readouts strong {
@@ -459,16 +602,35 @@
     bottom: 4.7rem;
   }
 
+  .moon-tutorial {
+    top: 0.6rem;
+    right: 0.6rem;
+    width: min(21rem, calc(100vw - 1.2rem));
+  }
+
+  .moon-surface-compass {
+    bottom: 9.3rem;
+    width: min(28rem, calc(100vw - 1.2rem));
+  }
+
   .moon-speed input {
     min-width: 6rem;
   }
 }
 
 @media (max-width: 440px) {
+  .moon-hud-primary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
   .moon-readouts {
+    width: 100%;
     grid-template-columns: 1fr 1fr;
   }
 
+  .moon-readouts .moon-readout-view,
   .moon-readouts div:last-child {
     grid-column: 1 / -1;
   }
@@ -488,5 +650,17 @@
   .moon-text-button {
     width: 100%;
     min-width: 0;
+  }
+
+  .moon-hud-primary .moon-panel-action {
+    width: 2.25rem;
+  }
+
+  .moon-tutorial-close {
+    width: 1.9rem;
+  }
+
+  .moon-surface-compass {
+    bottom: 10.2rem;
   }
 }

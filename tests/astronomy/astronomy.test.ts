@@ -6,6 +6,7 @@ import {
   EARTH_RADIUS_KM,
   HOUR_PER_SECOND_SPEED,
   MINUTE_PER_SECOND_SPEED,
+  MINUTE_MS,
   MEAN_MOON_DISTANCE_KM,
   MOON_RADIUS_KM,
   SUN_RADIUS_KM,
@@ -228,6 +229,15 @@ test('live Earth imagery resolves near-now providers to safe cadence buckets', (
   assert.equal(mumi.timeParameter, '2026-06-25T18:00:00Z');
   assert.ok(viirs);
   assert.equal(viirs.timeParameter, '2026-06-25');
+  assert.equal(resolveLiveEarthLayers(new Date('2026-06-20T19:02:33.000Z'), now).length, 0);
+});
+
+test('live Earth imagery falls back to static texture more than one hour in the future', () => {
+  const now = new Date('2026-06-25T19:02:33.000Z');
+
+  assert.ok(resolveLiveEarthLayers(new Date(now.getTime() + 59 * MINUTE_MS), now).length > 0);
+  assert.ok(resolveLiveEarthLayers(new Date(now.getTime() + 60 * MINUTE_MS), now).length > 0);
+  assert.equal(resolveLiveEarthLayers(new Date(now.getTime() + 61 * MINUTE_MS), now).length, 0);
   assert.equal(resolveLiveEarthLayers(new Date('2026-06-20T19:02:33.000Z'), now).length, 0);
 });
 

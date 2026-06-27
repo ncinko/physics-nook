@@ -1,6 +1,7 @@
-import { DAY_MS, MINUTE_MS } from './time.ts';
+import { DAY_MS, HOUR_MS, MINUTE_MS } from './time.ts';
 
 export const LIVE_EARTH_WINDOW_MS = 3 * DAY_MS;
+export const LIVE_EARTH_FUTURE_WINDOW_MS = HOUR_MS;
 export const LIVE_EARTH_TEXTURE_WIDTH = 2048;
 export const LIVE_EARTH_TEXTURE_HEIGHT = 1024;
 export const LIVE_EARTH_MASK_BLUR_RADIUS = 4;
@@ -163,7 +164,11 @@ export const resolveLiveEarthLayers = (
   now = new Date(),
   providers: readonly LiveEarthProvider[] = LIVE_EARTH_PROVIDERS,
 ): ResolvedLiveEarthLayer[] => {
-  if (Math.abs(now.getTime() - simulationDate.getTime()) > LIVE_EARTH_WINDOW_MS) {
+  const offsetFromNow = simulationDate.getTime() - now.getTime();
+  if (
+    offsetFromNow > LIVE_EARTH_FUTURE_WINDOW_MS
+    || Math.abs(offsetFromNow) > LIVE_EARTH_WINDOW_MS
+  ) {
     return [];
   }
 

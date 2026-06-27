@@ -201,6 +201,7 @@ const INITIAL_SIM_DATE = new Date('2000-01-01T12:00:00.000Z');
 const SNAPSHOT_UPDATE_MS = 180;
 const UI_SYNC_MS = 220;
 const SPACE_LOOK_SENSITIVITY = 0.0036;
+const SPACE_KEY_LOOK_SPEED = Math.PI * 0.72;
 const SPACE_ROLL_SPEED = Math.PI * 0.55;
 const SURFACE_LOOK_SENSITIVITY = 0.0024;
 const SURFACE_SKY_BODY_DISTANCE = 420;
@@ -235,8 +236,8 @@ const SPACE_TUTORIAL_STEPS: TutorialStep[] = [
   {
     input: 'space-look',
     title: 'Look around',
-    prompt: 'Drag the scene to aim the camera.',
-    hint: 'Mouse or touch drag',
+    prompt: 'Drag the scene or press the arrow keys to aim the camera.',
+    hint: 'Drag / Arrow keys',
   },
   {
     input: 'space-forward',
@@ -3268,14 +3269,16 @@ export default function MoonPhaseSandbox() {
       }
       keysRef.current.add(key);
       if (modeRef.current === 'space') {
-        if (keyed(new Set([key]), 'w', 's', 'arrowup', 'arrowdown')) {
+        if (keyed(new Set([key]), 'w', 's')) {
           recordTutorialInput('space-forward');
-        } else if (keyed(new Set([key]), 'a', 'd', 'arrowleft', 'arrowright')) {
+        } else if (keyed(new Set([key]), 'a', 'd')) {
           recordTutorialInput('space-strafe');
         } else if (key === 'space') {
           recordTutorialInput('space-vertical');
         } else if (key === 'q' || key === 'e') {
           recordTutorialInput('space-roll');
+        } else if (keyed(new Set([key]), 'arrowup', 'arrowdown', 'arrowleft', 'arrowright')) {
+          recordTutorialInput('space-look');
         }
       } else if (modeRef.current === 'surface') {
         if (key === 'shift') {
@@ -3513,16 +3516,27 @@ export default function MoonPhaseSandbox() {
         setSurfaceLandmarksHidden(objects);
         if (modeRef.current === 'space') {
           const keys = keysRef.current;
-          const forwardRaw = Number(keyed(keys, 'w', 'arrowup')) - Number(keyed(keys, 's', 'arrowdown'));
-          const rightRaw = Number(keyed(keys, 'd', 'arrowright')) - Number(keyed(keys, 'a', 'arrowleft'));
+          const forwardRaw = Number(keyed(keys, 'w')) - Number(keyed(keys, 's'));
+          const rightRaw = Number(keyed(keys, 'd')) - Number(keyed(keys, 'a'));
           const upRaw = keys.has('space')
             ? keys.has('shift') ? -1 : 1
             : 0;
+          const yawRaw = Number(keys.has('arrowright')) - Number(keys.has('arrowleft'));
+          const pitchRaw = Number(keys.has('arrowup')) - Number(keys.has('arrowdown'));
           const rollRaw = Number(keys.has('e')) - Number(keys.has('q'));
           const input = normalizedAxisInput(forwardRaw, rightRaw, upRaw);
           const speedBoost = keys.has('shift') && !keys.has('space') ? 4 : 1;
           const baseSpeed = activeSceneScaleMode === 'true' ? 185 : 58;
           const distance = baseSpeed * speedBoost * (elapsed / 1000);
+          const lookDistance = SPACE_KEY_LOOK_SPEED * (elapsed / 1000);
+
+          if (yawRaw !== 0 || pitchRaw !== 0) {
+            spaceCameraRef.current = {
+              ...spaceCameraRef.current,
+              yaw: spaceCameraRef.current.yaw + yawRaw * lookDistance,
+              pitch: clampCameraPitch(spaceCameraRef.current.pitch + pitchRaw * lookDistance),
+            };
+          }
 
           if (rollRaw !== 0) {
             spaceCameraRef.current = applySpaceRoll(

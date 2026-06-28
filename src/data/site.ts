@@ -39,6 +39,13 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
   },
   {
+    title: 'Solar System Explorer',
+    description:
+      'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',
+    canonicalPath: '/solar-system',
+    image: '/social/physics-nook-card.svg',
+  },
+  {
     title: 'Pendulum Peg Challenge',
     description:
       'A hidden pendulum game about timing, wrapping a string around a peg, and cutting for the closest landing.',

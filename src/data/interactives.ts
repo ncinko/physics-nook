@@ -41,6 +41,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['moon phases', 'astronomy', '3d'],
   },
   {
+    id: 'solar-system-explorer',
+    title: 'Solar System Explorer',
+    description: 'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',
+    href: '/solar-system',
+    module: 'Featured',
+    kind: 'standalone',
+    tags: ['solar system', 'astronomy', '3d'],
+  },
+  {
     id: 'bunny-number-line',
     title: 'Bunny on the Number Line',
     description: 'Hop a bunny along a number line to meet vectors as one-dimensional hops that add up.',

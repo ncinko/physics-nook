@@ -13,6 +13,8 @@ import {
   BINARY_PATH_SAMPLE_COUNT,
   BRIGHT_STAR_CATALOG,
   LIVE_EARTH_PROVIDERS,
+  SOLAR_SYSTEM_AU_KM,
+  SOLAR_SYSTEM_BODY_IDS,
   apparentAngularRadiusRadians,
   apparentAngularDiameterDegrees,
   applySpaceLookDrag,
@@ -36,10 +38,13 @@ import {
   getCameraBasis,
   getEarthMoonSunSnapshot,
   getEclipseState,
+  getSolarSystemBodyScenePosition,
+  getSolarSystemSnapshot,
   getSurfaceSkyBodies,
   getSurfaceSkyState,
   getSurfaceViewFrame,
   getSunRenderMode,
+  isSolarSystemBodyLandable,
   length,
   liveEarthPixelBlendAlpha,
   liveEarthTextureKey,
@@ -53,6 +58,7 @@ import {
   skyProxyRadiusForAngularSize,
   spawnAlienNearPlayer,
   starVisualStyle,
+  solarSystemSceneDistanceForKilometers,
   surfaceDirectionVisibility,
   isAlienCaught,
   turnSurfacePose,
@@ -414,6 +420,75 @@ test('Earth rotation keeps California daylight aligned with local afternoon', ()
   assert.ok(
     sunAltitudeDegrees(evening, latitude, longitude) < 0,
     'California should be near/after sunset around 8:52 PM PDT on June 24, 2026',
+  );
+});
+
+test('solar system snapshot keeps the Sun centered and includes v1 bodies', () => {
+  const snapshot = getSolarSystemSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+
+  assert.deepEqual(snapshot.bodies.map((body) => body.id), [...SOLAR_SYSTEM_BODY_IDS]);
+  vectorCloseTo(snapshot.bodyMap.sun.heliocentricKm, { x: 0, y: 0, z: 0 }, 1e-12);
+  assert.equal(snapshot.bodyMap.sun.distanceFromSunKm, 0);
+});
+
+test('solar system snapshot returns sane heliocentric and lunar distances', () => {
+  const snapshot = getSolarSystemSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+  const earthDistance = snapshot.bodyMap.earth.distanceFromSunKm;
+  const moonOffset = subtractTestVectors(
+    snapshot.bodyMap.moon.heliocentricKm,
+    snapshot.bodyMap.earth.heliocentricKm,
+  );
+  const moonDistance = length(moonOffset);
+
+  assert.ok(earthDistance > 0.98 * SOLAR_SYSTEM_AU_KM);
+  assert.ok(earthDistance < 1.03 * SOLAR_SYSTEM_AU_KM);
+  assert.ok(snapshot.bodyMap.jupiter.distanceFromSunKm > earthDistance * 4.5);
+  assert.ok(snapshot.bodyMap.neptune.distanceFromSunKm > snapshot.bodyMap.jupiter.distanceFromSunKm * 4);
+  assert.ok(moonDistance > 350000);
+  assert.ok(moonDistance < 410000);
+  closeTo(snapshot.bodyMap.moon.distanceFromParentKm, moonDistance, 1e-6);
+});
+
+test('solar system scene scaling is compact-monotonic and true-distance linear', () => {
+  const snapshot = getSolarSystemSnapshot(new Date('2026-06-24T12:00:00.000Z'));
+  const mercuryCompact = solarSystemSceneDistanceForKilometers(
+    snapshot.bodyMap.mercury.distanceFromSunKm,
+    'compact',
+  );
+  const earthCompact = solarSystemSceneDistanceForKilometers(
+    snapshot.bodyMap.earth.distanceFromSunKm,
+    'compact',
+  );
+  const jupiterCompact = solarSystemSceneDistanceForKilometers(
+    snapshot.bodyMap.jupiter.distanceFromSunKm,
+    'compact',
+  );
+  const earthTrue = solarSystemSceneDistanceForKilometers(
+    snapshot.bodyMap.earth.distanceFromSunKm,
+    'true',
+  );
+  const jupiterTrue = solarSystemSceneDistanceForKilometers(
+    snapshot.bodyMap.jupiter.distanceFromSunKm,
+    'true',
+  );
+  const earthScene = getSolarSystemBodyScenePosition(snapshot.bodyMap.earth, snapshot, 'true');
+  const moonScene = getSolarSystemBodyScenePosition(snapshot.bodyMap.moon, snapshot, 'true');
+
+  assert.ok(mercuryCompact < earthCompact);
+  assert.ok(earthCompact < jupiterCompact);
+  closeTo(
+    jupiterTrue / earthTrue,
+    snapshot.bodyMap.jupiter.distanceFromSunKm / snapshot.bodyMap.earth.distanceFromSunKm,
+    1e-12,
+  );
+  closeTo(length(earthScene), earthTrue, 1e-12);
+  assert.ok(length(subtractTestVectors(moonScene, earthScene)) >= 8.5);
+});
+
+test('solar system landable bodies are solid worlds only', () => {
+  assert.deepEqual(
+    SOLAR_SYSTEM_BODY_IDS.filter(isSolarSystemBodyLandable),
+    ['mercury', 'venus', 'earth', 'moon', 'mars', 'pluto'],
   );
 });
 

@@ -1,0 +1,59 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ToolLaunchCard from '../../components/astronomy/ToolLaunchCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import { astronomyPath } from '../../data/modules';
+
+<ModuleHero module={astronomyPath} currentPath="/astronomy" />
+
+<div id="page-content"></div>
+
+# Astronomy
+
+Astronomy is the oldest quantitative science, with detailed celestial observations going back at least 3000 years.  From these observations, humans made sense of patterns in nature--allowing them to better predict future events.  Earth-based astronomy adds a small difficulty to this sense-making process: the Earth is simultaneously spinning and orbiting the Sun, while the Moon and planets are following their own orbits. Untangling what is *really happening* from what we *see* from Earth is most of the work.
+
+From the ground, the sky looks **geocentric**.  The Sun rises and sets, stars wheel overhead, and planets drift against them. That appearance is real, but it is a *frame of reference* effect. The Sun does not move around us; the Earth turns and orbits, and our viewpoint rides along.
+
+Observational puzzles can be solved by switching frames:
+
+- **Phases** make sense once you stop watching the Moon from Earth and instead look down on the Sun–Earth–Moon geometry from outside.
+- **Retrograde motion** — when a planet appears to reverse direction in Earth's sky — is apparent when you look at the entire solar system evolving in time.
+
+
+## Astronomical scale
+
+Distances in the solar system are so large that we use the **astronomical unit (AU)**, the average Earth–Sun distance:
+
+$$
+1\,\text{AU} \approx 1.496 \times 10^{11}\,\text{m}.
+$$
+
+Light takes about $8.3$ minutes to cross one AU. Neptune orbits near $30\,\text{AU}$, so sunlight reaches it roughly four hours after it leaves the Sun. 
+## Gravity
+Moving beyond pattern identification, we eventually began discovering the "laws" of nature which dictate the motion of both the celestial bodies.
+Every orbit in this module is governed by Newton's law of gravitation,
+
+$$
+F = G\,\frac{m_1 m_2}{r^2}.
+$$
+
+The same inverse-square attraction holds the Moon to Earth, the planets to the Sun, and sets the timing of phases and seasons. 
+
+Work through the two lessons in order, or jump straight into one of the following explorers.
+
+<ToolLaunchCard
+  title="Moon Phase Explorer"
+  description="A 3D Earth–Moon–Sun system. Advance time, watch the lit fraction swing through the phases, and drop down to the surface of Earth or the Moon to see the same sky from the ground."
+  href="/moon-phases"
+  cta="Open explorer"
+/>
+
+<ToolLaunchCard
+  title="Solar System Explorer"
+  description="A Sun-centered 3D solar system. Fly between orbits, speed up time to watch the planets lap one another, and land on the solid worlds."
+  href="/solar-system"
+  cta="Open explorer"
+/>

@@ -19,6 +19,7 @@ export const interactiveKindLabels: Record<InteractiveKind, string> = {
 
 export const interactiveModuleOrder = [
   'Featured',
+  'Astronomy',
   'Math',
   'Measurement',
   'Mechanics',
@@ -33,10 +34,10 @@ export const interactiveModuleOrder = [
 export const interactiveEntries: InteractiveEntry[] = [
   {
     id: 'moon-phase-sandbox',
-    title: 'Moon Phase Sandbox',
+    title: 'Moon Phase Explorer',
     description: 'Explore the Earth-Moon-Sun system in 3D, advance time, and walk on Earth or the Moon.',
     href: '/moon-phases',
-    module: 'Featured',
+    module: 'Astronomy',
     kind: 'standalone',
     tags: ['moon phases', 'astronomy', '3d'],
   },
@@ -45,7 +46,7 @@ export const interactiveEntries: InteractiveEntry[] = [
     title: 'Solar System Explorer',
     description: 'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',
     href: '/solar-system',
-    module: 'Featured',
+    module: 'Astronomy',
     kind: 'standalone',
     tags: ['solar system', 'astronomy', '3d'],
   },

@@ -15,6 +15,7 @@ import { collisionsModule } from './collisions';
 import { energyModule } from './energy';
 import { electromagnetismModule } from './electromagnetism';
 import { rotationModule } from './rotation';
+import { astronomyModule } from './astronomy';
 
 export * from './types';
 
@@ -35,6 +36,7 @@ export const modules: ModuleMeta[] = [
   energyModule,
   electromagnetismModule,
   rotationModule,
+  astronomyModule,
 ];
 
 export const featuredModule = modules.find((module) => module.featured) ?? modules[0];
@@ -85,6 +87,16 @@ export const mechanicsPath = {
     // Rotating Frames page is surfaced in navigation.
     rotationModule.pages[1],
   ],
+} satisfies ModulePathGroup;
+
+export const astronomyPath = {
+  id: 'astronomy',
+  href: astronomyModule.href,
+  navLabel: astronomyModule.navLabel,
+  summary: astronomyModule.summary,
+  cardEyebrow: astronomyModule.cardEyebrow,
+  navVisibility: 'menu',
+  pages: astronomyModule.pages,
 } satisfies ModulePathGroup;
 
 export const relativityPath = {
@@ -146,6 +158,7 @@ export const textbookProgressionGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
+  astronomyPath,
   wavesAndOscillationsPath,
   electromagnetismPath,
   relativityPath,
@@ -196,6 +209,7 @@ export const exploreModuleGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
+  astronomyPath,
   wavesAndOscillationsPath,
   electromagnetismPath,
   relativityPath,

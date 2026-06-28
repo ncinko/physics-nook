@@ -1,0 +1,127 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ToolLaunchCard from '../../components/astronomy/ToolLaunchCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { astronomyPath } from '../../data/modules';
+
+<ModuleHero module={astronomyPath} currentPath="/astronomy/orbits" />
+
+<div id="page-content"></div>
+
+# Solar System
+
+The planets are not scattered at random. They orbit the Sun on nearly circular, nearly coplanar paths, all in the same direction, with timing set by a single force. Three laws found by Johannes Kepler — before Newton explained *why* — capture the pattern.
+
+## Kepler's Laws
+
+**1 — orbits are ellipses.** Each planet moves on an ellipse with the Sun at one focus. Most planetary orbits are only slightly elongated, so they look almost circular, but the offset matters for precise predictions.
+
+**2 — equal areas in equal times.** The line from the Sun to a planet sweeps out equal areas in equal intervals. A planet therefore moves **faster when closer** to the Sun and slower when farther — a direct consequence of angular-momentum conservation.
+
+**3 — period and size are linked.** The square of the orbital period is proportional to the cube of the orbit's average radius. In units of years and astronomical units, the constant is exactly one for objects orbiting the Sun:
+
+$$
+\left(\frac{T}{\text{yr}}\right)^2 = \left(\frac{a}{\text{AU}}\right)^3.
+$$
+
+This is why larger orbits take dramatically longer: Mercury laps the Sun every $0.24$ years while Neptune needs about $165$. Gravity is the reason — closer to the Sun the attraction is stronger, demanding a higher orbital speed, and the path around is shorter too. Inner planets are both faster and have less ground to cover, so they lap the outer ones again and again.
+
+<ToolLaunchCard
+  title="Solar System Explorer"
+  href="/solar-system"
+  cta="Open explorer"
+/>
+
+## Heliocentric Motion
+
+A **heliocentric** model places the Sun at the center. This is a convenient reference frame for viewing the planets, as their primary motion is simply around the Sun.  But many planets have moons, which are not solely orbiting the Sun. The Moon orbits Earth, while the Earth-Moon system orbits the Sun.  So in a heliocentric view, the Moon's path is the *combination* of both motions — a small loop riding along a big one.
+
+The same two-frame thinking explains a famous puzzle. Throughout most of the year, an outer planet like Mars drifts slowly eastward against the stars.  For a few weeks it appears to stop, reverse into **retrograde**, and then resume. Since Earth is on a faster inner orbit, we overtake Mars on the inside.  From our point of view, Mars appears to slide *backward* against the distant background.  
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Kepler's Third Law for a New Planet" accent="blue">
+    #### Problem
+
+    A planet orbits the Sun at an average distance of $a = 4\,\text{AU}$. How long is its year?
+
+    #### Use
+
+    $$
+    \left(\frac{T}{\text{yr}}\right)^2 = \left(\frac{a}{\text{AU}}\right)^3.
+    $$
+
+    #### Solve
+
+    $$
+    T^2 = 4^3 = 64 \quad\Rightarrow\quad T = \sqrt{64} = 8\,\text{years}.
+    $$
+
+    #### Check
+
+    A larger orbit means a longer year, and $8$ years for $4\,\text{AU}$ is reasonable — it falls between Mars ($1.5\,\text{AU}$, $1.9$ yr) and Jupiter ($5.2\,\text{AU}$, $11.9$ yr).
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Jupiter's Distance in Kilometers" accent="red">
+    #### Problem
+
+    Jupiter is about $5.2\,\text{AU}$ from the Sun. Estimate that distance in kilometers, using $1\,\text{AU} \approx 1.496 \times 10^8\,\text{km}$.
+
+    #### Solve
+
+    $$
+    5.2 \times (1.496 \times 10^8) \approx 7.78 \times 10^8\,\text{km}.
+    $$
+
+    #### Check
+
+    That is several times Earth's distance from the Sun, which matches Jupiter's place well out in the solar system — and shows why AU is the friendlier unit.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Orbits Checkpoint"
+  questions={[
+    {
+      id: 'second-law',
+      question: "Kepler's second law says a planet sweeps equal areas in equal times. What does this imply about its speed?",
+      options: [
+        { id: 'A', text: 'It moves faster when closer to the Sun and slower when farther away.', isCorrect: true, explanation: 'Right. To sweep the same area with a shorter Sun-to-planet line, the planet must move faster near the Sun.' },
+        { id: 'B', text: 'It moves at constant speed all the way around.', isCorrect: false, explanation: 'Constant speed would only sweep equal areas on a perfect circle. On an ellipse the speed changes with distance.' },
+        { id: 'C', text: 'It moves faster when farther from the Sun.', isCorrect: false, explanation: 'It is the reverse: the planet is slowest at its farthest point and fastest at its closest.' }
+      ]
+    },
+    {
+      id: 'third-law',
+      question: 'A planet orbits the Sun at 9 AU. Using $T^2 = a^3$ (years and AU), what is its orbital period?',
+      options: [
+        { id: 'A', text: 'About 9 years.', isCorrect: false, explanation: 'That would assume $T = a$. The law is $T^2 = a^3$, so the period grows faster than the distance.' },
+        { id: 'B', text: 'About 27 years.', isCorrect: true, explanation: 'Correct: $a^3 = 9^3 = 729$, and $T = \\sqrt{729} = 27$ years.' },
+        { id: 'C', text: 'About 81 years.', isCorrect: false, explanation: 'That is $9^2$. You need the square root of $a^3 = 729$, which is 27 years.' }
+      ]
+    },
+    {
+      id: 'retrograde',
+      question: 'Why does Mars sometimes appear to move backward (retrograde) against the stars?',
+      options: [
+        { id: 'A', text: 'Mars actually reverses direction in its orbit for a few weeks.', isCorrect: false, explanation: 'Mars never reverses. It moves steadily forward; only its apparent path against the background loops.' },
+        { id: 'B', text: 'Faster-moving Earth overtakes Mars on the inside, so Mars appears to slip backward.', isCorrect: true, explanation: 'Exactly. Retrograde motion is a frame effect from Earth passing Mars on a faster inner orbit.' },
+        { id: 'C', text: 'Mars is pulled backward by Jupiter\\\'s gravity.', isCorrect: false, explanation: 'Jupiter\\\'s tug is far too small to reverse Mars. The apparent reversal is purely a viewing-geometry effect.' }
+      ]
+    },
+    {
+      id: 'parent-relative',
+      question: 'Why does the Moon need parent-relative information in a Sun-centered solar-system model?',
+      options: [
+        { id: 'A', text: 'Because the Moon orbits Earth while Earth orbits the Sun, so its Sun-centered path combines both motions.', isCorrect: true, explanation: 'Right. The Moon\\\'s heliocentric position is the small Moon-around-Earth loop riding on Earth\\\'s big orbit.' },
+        { id: 'B', text: 'Because the Moon does not really move through space.', isCorrect: false, explanation: 'The Moon moves around Earth, and travels around the Sun along with Earth.' },
+        { id: 'C', text: 'Because the Moon is sometimes farther from the Sun than Neptune.', isCorrect: false, explanation: 'The Moon stays close to Earth, about one AU from the Sun.' }
+      ]
+    }
+  ]}
+/>

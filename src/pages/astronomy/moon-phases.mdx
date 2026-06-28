@@ -1,0 +1,111 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import ToolLaunchCard from '../../components/astronomy/ToolLaunchCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { astronomyPath } from '../../data/modules';
+
+<ModuleHero module={astronomyPath} currentPath="/astronomy/moon-phases" />
+
+<div id="page-content"></div>
+
+# Moon
+
+The Moon does not change shape, and it makes no light of its own. Phases and eclipses are entirely a matter of **geometry** in the Sun-Earth-Moon system.
+
+At any instant the Sun illuminates exactly one hemisphere of the Moon — the half facing the Sun. The phase we observe is simply **how much of that lit half can be seen from Earth**:
+
+- **New moon** — the Moon sits between us and the Sun, so its lit side faces away. We see the dark side.
+- **Full moon** — the Moon is opposite the Sun, so the entire lit side faces us.
+- **Quarters** — the Moon is off to the side, and we see the lit half edge-on as a half disk.
+
+We say the Moon is **waxing** when the lit fraction we see is growing from new toward full, and **waning** when it is shrinking from full back toward new.
+
+<ToolLaunchCard
+  title="Moon Phase Explorer"
+  href="/moon-phases"
+  cta="Open explorer"
+/>
+
+## Lunar month
+
+The Moon completes one orbit relative to the distant stars in the **sidereal month**, about $27.3$ days. But the cycle of phases — new moon to new moon — is the **synodic month**, about $29.5$ days. The phases take longer because Earth is also moving: while the Moon circles us, Earth advances along its own orbit, so the Sun's direction shifts and the Moon must travel a little *extra* each cycle to catch back up to the Sun–Earth line:
+
+$$
+\frac{1}{T_{\text{syn}}} = \frac{1}{T_{\text{sid}}} - \frac{1}{T_{\text{Earth}}}.
+$$
+
+This is the same "catching up" idea that explains retrograde motion in the next lesson — Earth's own motion hiding in the appearance.
+
+We also only ever see one side of the Moon. That is not because it fails to spin — it is **tidally locked**, rotating exactly once per orbit. Earth's gravity raised a slight bulge on the Moon and, over billions of years, friction dragged its spin into step with its orbit, so the same hemisphere always faces home. In the explorer you can stand on the Moon and watch Earth hang nearly fixed in the sky to confirm it.
+
+## Eclipses
+
+If phases come purely from alignment, why isn't there a solar eclipse at every new moon and a lunar eclipse at every full moon? Because the Moon's orbit is tilted about $5^\circ$ relative to the plane of Earth's orbit (the ecliptic). Most months the Moon passes a little above or below the Sun–Earth line, and its shadow misses. Eclipses happen only when a new or full moon lands near a **node** — one of the two points where the tilted orbit crosses the ecliptic plane. That double requirement, right phase *and* near a node, is why eclipses come in seasons rather than monthly.
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="From Sidereal to Synodic Month" accent="blue">
+    #### Problem
+
+    The Moon's sidereal period is $T_{\text{sid}} = 27.3\,\text{days}$ and Earth's orbital period is $T_{\text{Earth}} = 365.25\,\text{days}$. Find the synodic month — the time from one new moon to the next.
+
+    #### Use
+
+    $$
+    \frac{1}{T_{\text{syn}}} = \frac{1}{T_{\text{sid}}} - \frac{1}{T_{\text{Earth}}}.
+    $$
+
+    #### Solve
+
+    $$
+    \frac{1}{T_{\text{syn}}} = \frac{1}{27.3} - \frac{1}{365.25}
+    \approx 0.03663 - 0.00274 = 0.03389\,\text{day}^{-1}.
+    $$
+
+    $$
+    T_{\text{syn}} \approx \frac{1}{0.03389} \approx 29.5\,\text{days}.
+    $$
+
+    #### Check
+
+    The synodic month is about $2.2$ days longer than the sidereal month — the extra time the Moon needs to catch up with the moving Sun–Earth line, and it matches the familiar length of the cycle of phases.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Moon Phases Checkpoint"
+  questions={[
+    {
+      id: 'what-sets-phase',
+      question: 'What determines the phase of the Moon we see from Earth?',
+      options: [
+        { id: 'A', text: 'How much of the Moon the Sun happens to be lighting that night.', isCorrect: false, explanation: 'The Sun always lights exactly half the Moon. What changes is how much of that lit half faces us.' },
+        { id: 'B', text: 'The Sun–Earth–Moon angle, which sets how much of the lit half faces us.', isCorrect: true, explanation: 'Exactly. Half the Moon is always lit; the phase is the fraction of that lit hemisphere turned toward Earth, fixed by the geometry.' },
+        { id: 'C', text: 'The Earth\\\'s shadow falling across part of the Moon.', isCorrect: false, explanation: 'Earth\\\'s shadow on the Moon is a lunar eclipse, a rare event. Ordinary phases are about which part of the lit half we can see.' }
+      ]
+    },
+    {
+      id: 'synodic',
+      question: 'Why is the synodic month (new moon to new moon, ~29.5 days) longer than the sidereal month (~27.3 days)?',
+      options: [
+        { id: 'A', text: 'Earth moves along its orbit, so the Moon must travel extra to realign with the Sun.', isCorrect: true, explanation: 'Right. The Moon finishes one orbit relative to the stars in 27.3 days, but it needs about two more days to catch up with the shifted Sun–Earth line.' },
+        { id: 'B', text: 'The Moon slows down near full moon, stretching the cycle.', isCorrect: false, explanation: 'The Moon does not pause at full moon. The difference comes from Earth\\\'s motion around the Sun, not a change in the Moon\\\'s speed.' },
+        { id: 'C', text: 'The Moon\\\'s orbit grows slightly larger each month.', isCorrect: false, explanation: 'The orbit is essentially stable over a month. The extra ~2 days come from Earth advancing along its own orbit.' }
+      ]
+    },
+    {
+      id: 'eclipses',
+      question: 'Why isn\\\'t there a solar eclipse at every new moon?',
+      options: [
+        { id: 'A', text: 'New moons are too dim for the shadow to form.', isCorrect: false, explanation: 'Eclipses are about geometry, not brightness. A new moon\\\'s shadow exists; it usually just misses Earth.' },
+        { id: 'B', text: 'The Moon\\\'s orbit is tilted ~5°, so most new moons pass above or below the Sun–Earth line.', isCorrect: true, explanation: 'Correct. An eclipse needs the right phase and the Moon near a node where its tilted orbit crosses the ecliptic.' },
+        { id: 'C', text: 'The Moon is only sometimes between Earth and the Sun.', isCorrect: false, explanation: 'The Moon is between Earth and the Sun at every new moon by definition. The tilt is what usually makes the shadow miss.' }
+      ]
+    }
+  ]}
+/>

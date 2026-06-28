@@ -212,3 +212,38 @@ export const surfaceLatitudeLongitude = (pose: SurfacePose) => {
     longitudeRadians: Math.atan2(up.z, up.x),
   };
 };
+
+export const normalizeCompassDegrees = (degrees: number) => {
+  const normalized = ((degrees + 180) % 360 + 360) % 360 - 180;
+  return normalized === -180 ? 180 : normalized;
+};
+
+export const greatCircleDistanceRadians = (from: Vec3, to: Vec3) => {
+  const fromVector = normalize(from);
+  const toVector = normalize(to);
+  return Math.acos(Math.max(-1, Math.min(1, dot(fromVector, toVector))));
+};
+
+export const bearingOffsetToSurfaceTarget = (
+  pose: SurfacePose,
+  targetUp: Vec3,
+) => {
+  const up = normalize(pose.up);
+  const target = normalize(targetUp);
+  const tangent = normalize(projectToTangent(target, up));
+  if (length(tangent) < EPSILON) return 0;
+
+  const forward = normalize(pose.forward);
+  const right = normalize(pose.right);
+  return Math.atan2(dot(tangent, right), dot(tangent, forward)) * 180 / Math.PI;
+};
+
+export const headingDegreesForSurfacePose = (pose: SurfacePose) => {
+  const up = normalize(pose.up);
+  const north = normalize(projectToTangent(WORLD_NORTH, up));
+  if (length(north) < EPSILON) return 0;
+
+  const east = normalize(cross(north, up));
+  const forward = normalize(pose.forward);
+  return (Math.atan2(dot(forward, east), dot(forward, north)) * 180 / Math.PI + 360) % 360;
+};

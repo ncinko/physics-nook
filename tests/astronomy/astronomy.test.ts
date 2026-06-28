@@ -44,6 +44,8 @@ import {
   getSurfaceSkyState,
   getSurfaceViewFrame,
   getSunRenderMode,
+  greatCircleDistanceRadians,
+  headingDegreesForSurfacePose,
   isSolarSystemBodyLandable,
   length,
   liveEarthPixelBlendAlpha,
@@ -53,6 +55,8 @@ import {
   moveAlienTowardPose,
   moveSurfacePose,
   nextAlienWorldMode,
+  normalizeCompassDegrees,
+  bearingOffsetToSurfaceTarget,
   resolveLiveEarthLayers,
   spawnAlienFarFromPlayer,
   skyProxyRadiusForAngularSize,
@@ -602,6 +606,24 @@ test('surface controls move across the tangent plane without changing radius', (
   closeTo(length(moved.forward), 1, 1e-12);
   closeTo(length(moved.right), 1, 1e-12);
   assert.ok(dot(rightDisplacement, startFrame.bodyRight) > 0.99);
+});
+
+test('surface compass helpers keep cardinal headings and target bearings consistent', () => {
+  const radius = EARTH_RADIUS_KM;
+  const facingNorth = createSurfacePose(radius, 0, 0, 0);
+  const facingEast = createSurfacePose(radius, 0, 0, -Math.PI / 2);
+  const northPole = createSurfacePose(radius, Math.PI / 2, 0, 0);
+  const eastTarget = createSurfacePose(radius, 0, -Math.PI / 2, 0);
+  const westTarget = createSurfacePose(radius, 0, Math.PI / 2, 0);
+
+  closeTo(headingDegreesForSurfacePose(facingNorth), 0, 1e-12);
+  closeTo(headingDegreesForSurfacePose(facingEast), 90, 1e-12);
+  closeTo(bearingOffsetToSurfaceTarget(facingNorth, northPole.up), 0, 1e-12);
+  closeTo(bearingOffsetToSurfaceTarget(facingNorth, eastTarget.up), 90, 1e-12);
+  closeTo(bearingOffsetToSurfaceTarget(facingNorth, westTarget.up), -90, 1e-12);
+  closeTo(greatCircleDistanceRadians(eastTarget.up, westTarget.up), Math.PI, 1e-12);
+  assert.equal(normalizeCompassDegrees(181), -179);
+  assert.equal(normalizeCompassDegrees(-181), 179);
 });
 
 test('surface yaw turns the body heading while pitch remains an independent head tilt', () => {

@@ -11,6 +11,7 @@ import {
   RotateCcw,
   SkipBack,
   SkipForward,
+  X,
 } from 'lucide-react';
 import * as THREE from 'three';
 
@@ -36,8 +37,12 @@ import {
   getSolarSystemOrbitScenePoints,
   getSolarSystemSnapshot,
   getSurfaceViewFrame,
+  greatCircleDistanceRadians,
+  headingDegreesForSurfacePose,
   isSolarSystemBodyLandable,
   moveSurfacePose,
+  normalizeCompassDegrees,
+  bearingOffsetToSurfaceTarget,
   solarSystemSceneDistanceForKilometers,
   speedFromLogSlider,
   starVisualStyle,
@@ -66,6 +71,9 @@ interface SceneObjects {
   atmospheres: Partial<Record<SolarSystemBodyId, AtmosphereMesh>>;
   orbitLines: Partial<Record<SolarSystemBodyId, THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>>>;
   labels: Record<SolarSystemBodyId, THREE.Sprite>;
+  northPoleGroup: THREE.Group;
+  southPoleGroup: THREE.Group;
+  homeMarkerGroup: THREE.Group;
   sunLight: THREE.PointLight;
 }
 
@@ -90,9 +98,57 @@ interface TransitionState {
 interface BodyReadout {
   name: string;
   distance: string;
-  year: string;
-  day: string;
+  orbit: string;
+  spin: string;
   landing: string;
+}
+
+interface CompassMarker {
+  id: string;
+  label: string;
+  shortLabel: string;
+  offsetDegrees: number;
+  kind: 'cardinal' | 'pole' | 'home';
+}
+
+interface SurfaceCompassState {
+  headingDegrees: number;
+  markers: CompassMarker[];
+}
+
+interface SurfaceInfoReadout {
+  body: string;
+  controls: string;
+  latitude: string;
+  longitude: string;
+  landmark: string;
+}
+
+type TutorialMode = 'space' | 'surface';
+type TutorialInput =
+  | 'space-look'
+  | 'space-forward'
+  | 'space-strafe'
+  | 'space-vertical'
+  | 'space-roll'
+  | 'space-land'
+  | 'surface-look'
+  | 'surface-walk'
+  | 'surface-strafe'
+  | 'surface-fast'
+  | 'surface-return';
+
+interface TutorialStep {
+  input: TutorialInput;
+  title: string;
+  prompt: string;
+  hint: string;
+}
+
+interface TutorialState {
+  mode: TutorialMode;
+  stepIndex: number;
+  status: 'prompting' | 'advancing';
 }
 
 const INITIAL_SIM_DATE = new Date('2000-01-01T12:00:00.000Z');
@@ -105,6 +161,88 @@ const SURFACE_LOOK_SENSITIVITY = 0.0024;
 const STAR_FIELD_RADIUS = 4600;
 const WORLD_CAMERA_UP = new THREE.Vector3(0, 1, 0);
 const ACTIVE_SOLAR_SCALE_MODE: ScaleMode = 'true';
+const DEFAULT_SOLAR_BODY: SolarSystemBodyId = 'sun';
+const POLE_COMPASS_VISIBLE_RADIANS = 0.52;
+const COMPASS_DISPLAY_DEGREES = 110;
+const IP_LOCATION_ENDPOINT = '/api/ip-location';
+const IP_LOCATION_TIMEOUT_MS = 4200;
+const TUTORIAL_ADVANCE_DELAY_MS = 620;
+const TUTORIAL_STORAGE_KEYS: Record<TutorialMode, string> = {
+  space: 'physics-nook:solar-system:tutorial:space',
+  surface: 'physics-nook:solar-system:tutorial:surface',
+};
+
+const SPACE_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    input: 'space-look',
+    title: 'Look around',
+    prompt: 'Drag the scene or press the arrow keys to aim the camera.',
+    hint: 'Drag / Arrow keys',
+  },
+  {
+    input: 'space-forward',
+    title: 'Fly forward and back',
+    prompt: 'Press W or S to move along your view direction.',
+    hint: 'W / S',
+  },
+  {
+    input: 'space-strafe',
+    title: 'Slide sideways',
+    prompt: 'Press A or D to strafe left and right.',
+    hint: 'A / D',
+  },
+  {
+    input: 'space-vertical',
+    title: 'Change height',
+    prompt: 'Press Space to rise, or Shift+Space to move down.',
+    hint: 'Space / Shift+Space',
+  },
+  {
+    input: 'space-roll',
+    title: 'Roll the camera',
+    prompt: 'Press Q or E to roll around the view axis.',
+    hint: 'Q / E',
+  },
+  {
+    input: 'space-land',
+    title: 'Enter surface view',
+    prompt: 'Click a solid world to land on the surface.',
+    hint: 'Click a body',
+  },
+];
+
+const SURFACE_TUTORIAL_STEPS: TutorialStep[] = [
+  {
+    input: 'surface-look',
+    title: 'Look around',
+    prompt: 'Drag the surface view to turn your head.',
+    hint: 'Mouse or touch drag',
+  },
+  {
+    input: 'surface-walk',
+    title: 'Walk',
+    prompt: 'Press W or S to walk forward and back.',
+    hint: 'W / S',
+  },
+  {
+    input: 'surface-strafe',
+    title: 'Sidestep',
+    prompt: 'Press A or D to sidestep.',
+    hint: 'A / D',
+  },
+  {
+    input: 'surface-fast',
+    title: 'Move faster',
+    prompt: 'Press Shift to use the faster movement mode.',
+    hint: 'Shift',
+  },
+  {
+    input: 'surface-return',
+    title: 'Return to space',
+    prompt: 'Use the Space button or press Space to leave surface view.',
+    hint: 'Space button / Space',
+  },
+];
 
 const vectorFromPlain = (vector: Vec3) =>
   new THREE.Vector3(vector.x, vector.y, vector.z);
@@ -130,6 +268,9 @@ const normalizedAxisInput = (forward: number, right: number, up = 0) => {
     up: up / magnitude,
   };
 };
+
+const compassPositionPercent = (offsetDegrees: number) =>
+  50 + (offsetDegrees / COMPASS_DISPLAY_DEGREES) * 50;
 
 const toDisplayDate = (date: Date) =>
   new Intl.DateTimeFormat(undefined, {
@@ -180,9 +321,91 @@ const getBodyReadout = (
   return {
     name: body.definition.label,
     distance,
-    year: formatPeriod(body.definition.orbitalPeriodDays),
-    day: formatRotation(body.definition.rotationPeriodHours),
+    orbit: formatPeriod(body.definition.orbitalPeriodDays),
+    spin: formatRotation(body.definition.rotationPeriodHours),
     landing: body.definition.landable ? 'Surface available' : 'Space only',
+  };
+};
+
+const formatDegrees = (value: number, positiveSuffix: string, negativeSuffix: string) => {
+  if (Math.abs(value) < 0.05) return '0.0 deg';
+  return `${Math.abs(value).toFixed(1)} deg ${value >= 0 ? positiveSuffix : negativeSuffix}`;
+};
+
+const numberFromLocationField = (value: unknown) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const readIpLocationCoordinates = (data: unknown) => {
+  if (!data || typeof data !== 'object') return null;
+  const record = data as Record<string, unknown>;
+  const latitude = numberFromLocationField(record.latitude ?? record.lat);
+  const longitude = numberFromLocationField(record.longitude ?? record.lon);
+  if (latitude === null || longitude === null) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return { latitude, longitude };
+};
+
+const createEarthHomeSurface = (latitudeDegrees: number, longitudeDegrees: number): SurfaceState => {
+  const latitude = latitudeDegrees * Math.PI / 180;
+  const longitude = -longitudeDegrees * Math.PI / 180;
+  return {
+    body: 'earth',
+    pose: createSurfacePose(SOLAR_SYSTEM_BODIES.earth.sceneRadius, latitude, longitude, 0),
+    pitch: 0.02,
+  };
+};
+
+const polePose = (bodyId: SolarSystemBodyId, hemisphere: 'north' | 'south') =>
+  createSurfacePose(
+    SOLAR_SYSTEM_BODIES[bodyId].sceneRadius,
+    hemisphere === 'north' ? Math.PI / 2 : -Math.PI / 2,
+    0,
+    0,
+  );
+
+const getSurfaceCompassState = (
+  surface: SurfaceState,
+  homeSurface: SurfaceState | null,
+): SurfaceCompassState => {
+  const headingDegrees = headingDegreesForSurfacePose(surface.pose);
+  const cardinalMarkers: CompassMarker[] = [
+    { id: 'north', label: 'North', shortLabel: 'N', offsetDegrees: normalizeCompassDegrees(0 - headingDegrees), kind: 'cardinal' },
+    { id: 'east', label: 'East', shortLabel: 'E', offsetDegrees: normalizeCompassDegrees(90 - headingDegrees), kind: 'cardinal' },
+    { id: 'south', label: 'South', shortLabel: 'S', offsetDegrees: normalizeCompassDegrees(180 - headingDegrees), kind: 'cardinal' },
+    { id: 'west', label: 'West', shortLabel: 'W', offsetDegrees: normalizeCompassDegrees(270 - headingDegrees), kind: 'cardinal' },
+  ];
+  const poleTargets = [
+    { id: 'north-pole', label: 'North pole', shortLabel: 'N pole', up: polePose(surface.body, 'north').up },
+    { id: 'south-pole', label: 'South pole', shortLabel: 'S pole', up: polePose(surface.body, 'south').up },
+  ];
+  const poleMarkers = poleTargets
+    .filter((target) => greatCircleDistanceRadians(surface.pose.up, target.up) <= POLE_COMPASS_VISIBLE_RADIANS)
+    .map((target): CompassMarker => ({
+      id: target.id,
+      label: target.label,
+      shortLabel: target.shortLabel,
+      offsetDegrees: normalizeCompassDegrees(bearingOffsetToSurfaceTarget(surface.pose, target.up)),
+      kind: 'pole',
+    }));
+  const homeMarker = surface.body === 'earth' && homeSurface?.body === 'earth'
+    ? [{
+      id: 'home',
+      label: 'Home',
+      shortLabel: 'Home',
+      offsetDegrees: normalizeCompassDegrees(bearingOffsetToSurfaceTarget(surface.pose, homeSurface.pose.up)),
+      kind: 'home' as const,
+    }]
+    : [];
+
+  return {
+    headingDegrees,
+    markers: [...cardinalMarkers, ...poleMarkers, ...homeMarker],
   };
 };
 
@@ -386,42 +609,160 @@ const updateLinePositions = (
   line.geometry.computeBoundingSphere();
 };
 
-const createBandTorus = (
-  radius: number,
-  latitudeRadians: number,
-  color: number,
-  opacity: number,
-) => {
-  const bandRadius = Math.max(0.001, Math.cos(latitudeRadians) * radius * 1.006);
-  const band = new THREE.Mesh(
-    new THREE.TorusGeometry(bandRadius, radius * 0.012, 8, 128),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity,
-      depthWrite: false,
-    }),
+const createPoleMarkerGroup = (hemisphere: 'north' | 'south') => {
+  const group = new THREE.Group();
+  const poleMaterial = new THREE.MeshStandardMaterial({
+    color: 0xf8fafc,
+    roughness: 0.42,
+    metalness: 0.03,
+  });
+  const stripeMaterial = new THREE.MeshStandardMaterial({
+    color: hemisphere === 'north' ? 0x60a5fa : 0xf97316,
+    roughness: 0.52,
+  });
+  const darkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x0f172a,
+    roughness: 0.58,
+  });
+
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.016, 0.52, 12), poleMaterial);
+  shaft.position.y = 0.26;
+  group.add(shaft);
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.035, 20), darkMaterial);
+  base.position.y = 0.017;
+  group.add(base);
+
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.035, 16, 10), stripeMaterial);
+  cap.position.y = 0.54;
+  group.add(cap);
+
+  const flag = new THREE.Mesh(
+    new THREE.BoxGeometry(0.18, 0.092, 0.012),
+    stripeMaterial,
   );
-  band.position.y = Math.sin(latitudeRadians) * radius;
-  band.rotation.x = Math.PI / 2;
-  return band;
+  flag.position.set(0.085, 0.435, -0.004);
+  group.add(flag);
+
+  const crossbar = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 8), darkMaterial);
+  crossbar.rotation.z = Math.PI / 2;
+  crossbar.position.y = 0.485;
+  group.add(crossbar);
+
+  group.visible = false;
+  return group;
 };
 
-const addPlanetBands = (group: THREE.Group, bodyId: SolarSystemBodyId) => {
-  const definition = SOLAR_SYSTEM_BODIES[bodyId];
-  if (!definition.hasBands) return;
-
-  const palette = bodyId === 'neptune'
-    ? [0xa7c7ff, 0x244ab5, 0x79a6ff]
-    : [0xf6dfbd, 0xb87958, 0xffefd0, 0x8f5b47];
-  [-0.52, -0.28, -0.09, 0.13, 0.34, 0.58].forEach((latitude, index) => {
-    group.add(createBandTorus(
-      definition.sceneRadius,
-      latitude,
-      palette[index % palette.length],
-      bodyId === 'neptune' ? 0.2 : 0.34,
-    ));
+const createHomeMarkerGroup = () => {
+  const group = new THREE.Group();
+  const postMaterial = new THREE.MeshStandardMaterial({
+    color: 0xfacc15,
+    emissive: 0x4a3005,
+    emissiveIntensity: 0.08,
+    roughness: 0.5,
   });
+  const ringMaterial = new THREE.MeshBasicMaterial({
+    color: 0xfef3c7,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+  });
+  const darkMaterial = new THREE.MeshStandardMaterial({
+    color: 0x111827,
+    roughness: 0.62,
+  });
+
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.018, 0.34, 12), postMaterial);
+  post.position.y = 0.17;
+  group.add(post);
+
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.08, 4), postMaterial);
+  roof.position.y = 0.375;
+  roof.rotation.y = Math.PI / 4;
+  group.add(roof);
+
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.052, 0.062, 0.024, 18), darkMaterial);
+  base.position.y = 0.012;
+  group.add(base);
+
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.004, 8, 42), ringMaterial);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.018;
+  group.add(ring);
+
+  group.visible = false;
+  return group;
+};
+
+const placeSurfaceGroup = (
+  group: THREE.Group,
+  bodyGroup: THREE.Group,
+  pose: SurfacePose,
+  radius: number,
+  height: number,
+  scale: number,
+) => {
+  const localUp = vectorFromPlain(pose.up).normalize();
+  const localForward = vectorFromPlain(pose.forward).normalize();
+  const localRight = vectorFromPlain(pose.right).normalize();
+  const worldUp = localUp.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldForward = localForward.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldRight = localRight.clone().applyQuaternion(bodyGroup.quaternion).normalize();
+  const worldBackward = worldForward.clone().multiplyScalar(-1);
+  const rotation = new THREE.Matrix4().makeBasis(worldRight, worldUp, worldBackward);
+  const localPosition = localUp.multiplyScalar(radius + height);
+
+  group.position.copy(localPosition.applyQuaternion(bodyGroup.quaternion).add(bodyGroup.position));
+  group.quaternion.setFromRotationMatrix(rotation);
+  group.scale.setScalar(scale);
+  group.visible = true;
+};
+
+const setSurfaceLandmarksHidden = (objects: SceneObjects) => {
+  objects.northPoleGroup.visible = false;
+  objects.southPoleGroup.visible = false;
+  objects.homeMarkerGroup.visible = false;
+};
+
+const updateSurfaceLandmarks = (
+  objects: SceneObjects,
+  surface: SurfaceState,
+  homeSurface: SurfaceState | null,
+) => {
+  const definition = SOLAR_SYSTEM_BODIES[surface.body];
+  const bodyGroup = objects.bodyGroups[surface.body];
+  const eyeHeight = Math.max(definition.sceneRadius * 0.016, 0.035);
+  const markerScale = Math.max(eyeHeight * 5.8, definition.sceneRadius * 0.04);
+
+  placeSurfaceGroup(
+    objects.northPoleGroup,
+    bodyGroup,
+    polePose(surface.body, 'north'),
+    definition.sceneRadius,
+    eyeHeight * 0.04,
+    markerScale,
+  );
+  placeSurfaceGroup(
+    objects.southPoleGroup,
+    bodyGroup,
+    polePose(surface.body, 'south'),
+    definition.sceneRadius,
+    eyeHeight * 0.04,
+    markerScale,
+  );
+
+  if (surface.body === 'earth' && homeSurface?.body === 'earth') {
+    placeSurfaceGroup(
+      objects.homeMarkerGroup,
+      bodyGroup,
+      homeSurface.pose,
+      definition.sceneRadius,
+      eyeHeight * 0.045,
+      Math.max(eyeHeight * 4.2, definition.sceneRadius * 0.032),
+    );
+  } else {
+    objects.homeMarkerGroup.visible = false;
+  }
 };
 
 const addRings = (group: THREE.Group, bodyId: SolarSystemBodyId) => {
@@ -430,11 +771,13 @@ const addRings = (group: THREE.Group, bodyId: SolarSystemBodyId) => {
 
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(definition.sceneRadius * 1.28, definition.sceneRadius * 2.14, 160),
-    new THREE.MeshBasicMaterial({
+    new THREE.MeshStandardMaterial({
       color: bodyId === 'saturn' ? 0xf8e7b0 : 0xb8f3ff,
       side: THREE.DoubleSide,
       transparent: true,
       opacity: bodyId === 'saturn' ? 0.46 : 0.24,
+      roughness: 0.78,
+      metalness: 0,
       depthWrite: false,
     }),
   );
@@ -482,12 +825,190 @@ const createSunlitAtmosphere = (radius: number, color: number, maxOpacity: numbe
   return atmosphere;
 };
 
+const clampByte = (value: number) => Math.max(0, Math.min(255, Math.round(value)));
+
+const mix = (a: number, b: number, amount: number) => a + (b - a) * amount;
+
+const mixRgb = (
+  a: [number, number, number],
+  b: [number, number, number],
+  amount: number,
+): [number, number, number] => [
+  mix(a[0], b[0], amount),
+  mix(a[1], b[1], amount),
+  mix(a[2], b[2], amount),
+];
+
+const noise2d = (x: number, y: number, seed: number) => {
+  const value = Math.sin(x * 12.9898 + y * 78.233 + seed * 41.371) * 43758.5453123;
+  return value - Math.floor(value);
+};
+
+const smoothNoise = (x: number, y: number, seed: number) => {
+  const cellX = Math.floor(x);
+  const cellY = Math.floor(y);
+  const localX = x - cellX;
+  const localY = y - cellY;
+  const easeX = localX * localX * (3 - 2 * localX);
+  const easeY = localY * localY * (3 - 2 * localY);
+  const top = mix(noise2d(cellX, cellY, seed), noise2d(cellX + 1, cellY, seed), easeX);
+  const bottom = mix(noise2d(cellX, cellY + 1, seed), noise2d(cellX + 1, cellY + 1, seed), easeX);
+  return mix(top, bottom, easeY);
+};
+
+const fractalNoise = (u: number, v: number, seed: number) => {
+  let total = 0;
+  let amplitude = 0.56;
+  let frequency = 3.2;
+  let normalizer = 0;
+
+  for (let octave = 0; octave < 5; octave += 1) {
+    total += smoothNoise(u * frequency, v * frequency, seed + octave * 11.7) * amplitude;
+    normalizer += amplitude;
+    amplitude *= 0.52;
+    frequency *= 2.05;
+  }
+
+  return total / normalizer;
+};
+
+const writePixel = (
+  data: Uint8ClampedArray,
+  index: number,
+  color: [number, number, number],
+) => {
+  data[index] = clampByte(color[0]);
+  data[index + 1] = clampByte(color[1]);
+  data[index + 2] = clampByte(color[2]);
+  data[index + 3] = 255;
+};
+
+const applyTextureSettings = (
+  texture: THREE.Texture,
+  anisotropy: number,
+) => {
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = anisotropy;
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+};
+
+const createProceduralPlanetTexture = (
+  bodyId: SolarSystemBodyId,
+  anisotropy: number,
+) => {
+  const canvas = document.createElement('canvas');
+  const width = bodyId === 'jupiter' || bodyId === 'saturn' ? 1024 : 768;
+  const height = width / 2;
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return applyTextureSettings(new THREE.CanvasTexture(canvas), anisotropy);
+  }
+
+  const image = context.createImageData(width, height);
+  for (let y = 0; y < height; y += 1) {
+    const v = y / (height - 1);
+    const latitude = (v - 0.5) * Math.PI;
+    const pole = Math.abs(v - 0.5) * 2;
+
+    for (let x = 0; x < width; x += 1) {
+      const u = x / width;
+      const seed = SOLAR_SYSTEM_BODY_IDS.indexOf(bodyId) + 1;
+      const fine = fractalNoise(u + Math.sin(latitude) * 0.04, v, seed);
+      const bandNoise = fractalNoise(u * 0.62 + v * 0.18, v * 1.8, seed + 19);
+      let color: [number, number, number];
+
+      if (bodyId === 'mercury') {
+        color = mixRgb([82, 78, 73], [196, 187, 175], fine * 0.78 + 0.08);
+        color = mixRgb(color, [55, 53, 50], Math.max(0, bandNoise - 0.72) * 1.6);
+      } else if (bodyId === 'venus') {
+        const swirl = Math.sin(u * Math.PI * 8 + v * Math.PI * 5 + fine * 3.4) * 0.5 + 0.5;
+        color = mixRgb([174, 120, 51], [255, 218, 143], 0.48 + swirl * 0.34);
+        color = mixRgb(color, [255, 239, 187], Math.max(0, fine - 0.58) * 0.65);
+      } else if (bodyId === 'mars') {
+        color = mixRgb([101, 47, 35], [218, 111, 66], fine * 0.86);
+        color = mixRgb(color, [58, 48, 42], Math.max(0, bandNoise - 0.66) * 1.15);
+        if (pole > 0.86) color = mixRgb(color, [241, 231, 210], (pole - 0.86) / 0.14);
+      } else if (bodyId === 'jupiter') {
+        const bands = Math.sin(v * Math.PI * 24 + fine * 1.7) * 0.5 + 0.5;
+        color = mixRgb([139, 84, 58], [249, 223, 184], bands * 0.72 + 0.16);
+        color = mixRgb(color, [88, 55, 44], Math.max(0, bandNoise - 0.72) * 0.9);
+      } else if (bodyId === 'saturn') {
+        const bands = Math.sin(v * Math.PI * 18 + fine) * 0.5 + 0.5;
+        color = mixRgb([168, 130, 83], [255, 231, 179], bands * 0.62 + 0.22);
+        color = mixRgb(color, [112, 91, 67], Math.max(0, bandNoise - 0.76) * 0.55);
+      } else if (bodyId === 'uranus') {
+        const bands = Math.sin(v * Math.PI * 8 + fine * 0.8) * 0.5 + 0.5;
+        color = mixRgb([93, 177, 184], [198, 251, 255], 0.48 + bands * 0.22);
+        color = mixRgb(color, [232, 255, 255], Math.max(0, pole - 0.62) * 0.18);
+      } else if (bodyId === 'neptune') {
+        const bands = Math.sin(v * Math.PI * 12 + fine * 2.1) * 0.5 + 0.5;
+        color = mixRgb([19, 44, 137], [79, 133, 245], 0.44 + bands * 0.28);
+        color = mixRgb(color, [157, 194, 255], Math.max(0, fine - 0.72) * 0.5);
+      } else if (bodyId === 'pluto') {
+        color = mixRgb([105, 78, 64], [226, 199, 169], fine * 0.76 + 0.1);
+        color = mixRgb(color, [232, 226, 211], Math.max(0, pole - 0.7) * 0.42);
+      } else {
+        const base = new THREE.Color(SOLAR_SYSTEM_BODIES[bodyId].color);
+        color = [
+          base.r * 255 * (0.75 + fine * 0.34),
+          base.g * 255 * (0.75 + fine * 0.34),
+          base.b * 255 * (0.75 + fine * 0.34),
+        ];
+      }
+
+      const shade = 0.9 + fine * 0.16 - pole * 0.04;
+      writePixel(image.data, (y * width + x) * 4, [
+        color[0] * shade,
+        color[1] * shade,
+        color[2] * shade,
+      ]);
+    }
+  }
+
+  context.putImageData(image, 0, 0);
+  if (bodyId === 'jupiter') {
+    context.fillStyle = 'rgba(190, 72, 42, 0.76)';
+    context.beginPath();
+    context.ellipse(width * 0.67, height * 0.58, width * 0.085, height * 0.038, -0.12, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = 'rgba(255, 226, 184, 0.58)';
+    context.lineWidth = Math.max(2, width * 0.004);
+    context.stroke();
+  } else if (bodyId === 'neptune') {
+    context.fillStyle = 'rgba(12, 25, 92, 0.54)';
+    context.beginPath();
+    context.ellipse(width * 0.62, height * 0.43, width * 0.048, height * 0.024, 0.18, 0, Math.PI * 2);
+    context.fill();
+  } else if (bodyId === 'pluto') {
+    context.fillStyle = 'rgba(235, 219, 203, 0.72)';
+    context.beginPath();
+    context.ellipse(width * 0.48, height * 0.42, width * 0.095, height * 0.07, -0.22, 0, Math.PI * 2);
+    context.fill();
+  }
+
+  return applyTextureSettings(new THREE.CanvasTexture(canvas), anisotropy);
+};
+
+const createProceduralSolarTextures = (anisotropy: number) => {
+  const bodyTextures = {} as Partial<Record<SolarSystemBodyId, THREE.Texture>>;
+  SOLAR_SYSTEM_BODY_IDS.forEach((bodyId) => {
+    if (bodyId === 'sun' || bodyId === 'earth' || bodyId === 'moon') return;
+    bodyTextures[bodyId] = createProceduralPlanetTexture(bodyId, anisotropy);
+  });
+  return bodyTextures;
+};
+
 const createSolarBody = (
   bodyId: SolarSystemBodyId,
   textures: {
     earthTexture: THREE.Texture;
     moonTexture: THREE.Texture;
     moonBump: THREE.Texture;
+    bodyTextures: Partial<Record<SolarSystemBodyId, THREE.Texture>>;
   },
 ) => {
   const definition = SOLAR_SYSTEM_BODIES[bodyId];
@@ -513,7 +1034,8 @@ const createSolarBody = (
     });
   } else {
     material = new THREE.MeshStandardMaterial({
-      color: definition.color,
+      map: textures.bodyTextures[bodyId],
+      color: 0xffffff,
       roughness: bodyId === 'mercury' || bodyId === 'mars' || bodyId === 'pluto' ? 0.9 : 0.72,
       metalness: 0,
     });
@@ -541,7 +1063,6 @@ const createSolarBody = (
     group.add(atmosphere);
   }
 
-  addPlanetBands(group, bodyId);
   addRings(group, bodyId);
 
   return { group, mesh, atmosphere };
@@ -763,10 +1284,13 @@ export default function SolarSystemExplorer() {
   const speedRef = useRef(1);
   const scaleModeRef = useRef<ScaleMode>(ACTIVE_SOLAR_SCALE_MODE);
   const labelsVisibleRef = useRef(true);
-  const selectedBodyRef = useRef<SolarSystemBodyId>('earth');
+  const selectedBodyRef = useRef<SolarSystemBodyId>(DEFAULT_SOLAR_BODY);
   const modeRef = useRef<CameraMode>('space');
   const surfaceRef = useRef<SurfaceState | null>(null);
+  const homeSurfaceRef = useRef<SurfaceState | null>(null);
   const transitionRef = useRef<TransitionState | null>(null);
+  const tutorialStateRef = useRef<TutorialState | null>(null);
+  const tutorialAdvanceTimerRef = useRef<number | null>(null);
   const keysRef = useRef<Set<string>>(new Set());
   const spaceCameraRef = useRef<SpaceLookState>({ yaw: 0, pitch: -0.16, roll: 0 });
   const pointerLockedRef = useRef(false);
@@ -784,17 +1308,19 @@ export default function SolarSystemExplorer() {
   const [hydrated, setHydrated] = useState(false);
   const [displayDate, setDisplayDate] = useState(() => simTimeRef.current);
   const [bodyReadout, setBodyReadout] = useState<BodyReadout>(() =>
-    getBodyReadout(initialSnapshot, 'earth'));
+    getBodyReadout(initialSnapshot, DEFAULT_SOLAR_BODY));
   const [running, setRunning] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [scaleMode] = useState<ScaleMode>(ACTIVE_SOLAR_SCALE_MODE);
   const [labelsVisible, setLabelsVisible] = useState(true);
   const [timePanelOpen, setTimePanelOpen] = useState(false);
-  const [readoutsVisible, setReadoutsVisible] = useState(true);
+  const [readoutsVisible, setReadoutsVisible] = useState(false);
   const [mode, setMode] = useState<CameraMode>('space');
-  const [selectedBody, setSelectedBody] = useState<SolarSystemBodyId>('earth');
+  const [selectedBody, setSelectedBody] = useState<SolarSystemBodyId>(DEFAULT_SOLAR_BODY);
   const [surfaceBody, setSurfaceBody] = useState<SolarSystemBodyId | null>(null);
   const [surfaceCoords, setSurfaceCoords] = useState({ latitude: 0, longitude: 0 });
+  const [surfaceCompass, setSurfaceCompass] = useState<SurfaceCompassState | null>(null);
+  const [tutorialState, setTutorialState] = useState<TutorialState | null>(null);
   const [pointerLocked, setPointerLocked] = useState(false);
   const [sceneStatus, setSceneStatus] = useState<SceneStatus>('initializing');
   const [sceneFailureMessage, setSceneFailureMessage] = useState(
@@ -809,6 +1335,86 @@ export default function SolarSystemExplorer() {
     setSelectedBody(bodyId);
   };
 
+  const setTutorialStateSynced = (nextTutorialState: TutorialState | null) => {
+    tutorialStateRef.current = nextTutorialState;
+    setTutorialState(nextTutorialState);
+  };
+
+  const clearTutorialAdvanceTimer = () => {
+    if (tutorialAdvanceTimerRef.current === null) return;
+    window.clearTimeout(tutorialAdvanceTimerRef.current);
+    tutorialAdvanceTimerRef.current = null;
+  };
+
+  const tutorialStepsForMode = (tutorialMode: TutorialMode) =>
+    tutorialMode === 'space' ? SPACE_TUTORIAL_STEPS : SURFACE_TUTORIAL_STEPS;
+
+  const isTutorialComplete = (tutorialMode: TutorialMode) => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage.getItem(TUTORIAL_STORAGE_KEYS[tutorialMode]) === 'done';
+    } catch {
+      return false;
+    }
+  };
+
+  const markTutorialComplete = (tutorialMode: TutorialMode) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(TUTORIAL_STORAGE_KEYS[tutorialMode], 'done');
+    } catch {
+      // Local storage can be unavailable in stricter browser contexts.
+    }
+  };
+
+  const dismissTutorial = () => {
+    const activeTutorial = tutorialStateRef.current;
+    if (activeTutorial) {
+      markTutorialComplete(activeTutorial.mode);
+    }
+    clearTutorialAdvanceTimer();
+    setTutorialStateSynced(null);
+  };
+
+  const recordTutorialInput = (input: TutorialInput) => {
+    const activeTutorial = tutorialStateRef.current;
+    if (!activeTutorial || activeTutorial.status !== 'prompting') return;
+
+    const steps = tutorialStepsForMode(activeTutorial.mode);
+    const step = steps[activeTutorial.stepIndex];
+    if (step?.input !== input) return;
+
+    const advancingState: TutorialState = {
+      ...activeTutorial,
+      status: 'advancing',
+    };
+    setTutorialStateSynced(advancingState);
+    clearTutorialAdvanceTimer();
+    tutorialAdvanceTimerRef.current = window.setTimeout(() => {
+      tutorialAdvanceTimerRef.current = null;
+      const latestTutorial = tutorialStateRef.current;
+      if (
+        !latestTutorial
+        || latestTutorial.mode !== advancingState.mode
+        || latestTutorial.stepIndex !== advancingState.stepIndex
+      ) {
+        return;
+      }
+
+      if (latestTutorial.stepIndex >= steps.length - 1) {
+        markTutorialComplete(latestTutorial.mode);
+        setTutorialStateSynced(null);
+        return;
+      }
+
+      setTutorialStateSynced({
+        mode: latestTutorial.mode,
+        stepIndex: latestTutorial.stepIndex + 1,
+        status: 'prompting',
+      });
+    }, TUTORIAL_ADVANCE_DELAY_MS);
+  };
+
   useEffect(() => {
     const now = getInitialRuntimeDate();
     const snapshot = getSolarSystemSnapshot(now);
@@ -817,6 +1423,51 @@ export default function SolarSystemExplorer() {
     setBodyReadout(getBodyReadout(snapshot, selectedBodyRef.current));
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), IP_LOCATION_TIMEOUT_MS);
+
+    fetch(IP_LOCATION_ENDPOINT, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: unknown) => {
+        const coordinates = readIpLocationCoordinates(data);
+        if (!coordinates) return;
+        homeSurfaceRef.current = createEarthHomeSurface(
+          coordinates.latitude,
+          coordinates.longitude,
+        );
+      })
+      .catch(() => undefined)
+      .finally(() => window.clearTimeout(timeout));
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
+  useEffect(() => () => {
+    clearTutorialAdvanceTimer();
+  }, []);
+
+  useEffect(() => {
+    if (sceneStatus !== 'ready' || (mode !== 'space' && mode !== 'surface')) return;
+
+    const activeTutorial = tutorialStateRef.current;
+    if (activeTutorial?.mode === mode) return;
+    if (activeTutorial && activeTutorial.mode !== mode) {
+      clearTutorialAdvanceTimer();
+      setTutorialStateSynced(null);
+    }
+    if (isTutorialComplete(mode)) return;
+
+    setTutorialStateSynced({
+      mode,
+      stepIndex: 0,
+      status: 'prompting',
+    });
+  }, [mode, sceneStatus]);
 
   useEffect(() => {
     runningRef.current = running;
@@ -873,6 +1524,7 @@ export default function SolarSystemExplorer() {
       moonTexture.anisotropy = renderer.capabilities.getMaxAnisotropy();
       const moonBump = textureLoader.load('/textures/astronomy/moon-ldem-1k.jpg');
       moonBump.anisotropy = renderer.capabilities.getMaxAnisotropy();
+      const bodyTextures = createProceduralSolarTextures(renderer.capabilities.getMaxAnisotropy());
 
       const starField = createStarField();
       scene.add(starField);
@@ -889,7 +1541,12 @@ export default function SolarSystemExplorer() {
       const labels = {} as Record<SolarSystemBodyId, THREE.Sprite>;
 
       SOLAR_SYSTEM_BODY_IDS.forEach((bodyId) => {
-        const { group, mesh, atmosphere } = createSolarBody(bodyId, { earthTexture, moonTexture, moonBump });
+        const { group, mesh, atmosphere } = createSolarBody(bodyId, {
+          earthTexture,
+          moonTexture,
+          moonBump,
+          bodyTextures,
+        });
         bodyGroups[bodyId] = group;
         bodyMeshes[bodyId] = mesh;
         if (atmosphere) {
@@ -912,6 +1569,11 @@ export default function SolarSystemExplorer() {
         }
       });
 
+      const northPoleGroup = createPoleMarkerGroup('north');
+      const southPoleGroup = createPoleMarkerGroup('south');
+      const homeMarkerGroup = createHomeMarkerGroup();
+      scene.add(northPoleGroup, southPoleGroup, homeMarkerGroup);
+
       const objects: SceneObjects = {
         scene,
         camera,
@@ -922,6 +1584,9 @@ export default function SolarSystemExplorer() {
         atmospheres,
         orbitLines,
         labels,
+        northPoleGroup,
+        southPoleGroup,
+        homeMarkerGroup,
         sunLight,
       };
       objectsRef.current = objects;
@@ -989,6 +1654,7 @@ export default function SolarSystemExplorer() {
         setBodyReadout(getBodyReadout(latestSnapshot, bodyId));
         surfaceRef.current = null;
         setSurfaceBody(null);
+        setSurfaceCompass(null);
         if (document.pointerLockElement === renderer.domElement) {
           document.exitPointerLock();
         }
@@ -1024,6 +1690,7 @@ export default function SolarSystemExplorer() {
         setSelectedBodySynced(bodyId);
         surfaceRef.current = surface;
         setSurfaceBody(bodyId);
+        setSurfaceCompass(getSurfaceCompassState(surface, homeSurfaceRef.current));
         requestPointerLock();
         beginTransition(eye, target, () => {
           modeRef.current = 'surface';
@@ -1088,6 +1755,9 @@ export default function SolarSystemExplorer() {
         event.preventDefault();
         if (modeRef.current === 'surface') {
           if (!pointerLockedRef.current && surfaceRef.current) {
+            if (Math.hypot(dx, dy) > 1) {
+              recordTutorialInput('surface-look');
+            }
             const nextSurfaceLook = applySurfaceLookDrag(
               surfaceRef.current,
               dx,
@@ -1102,6 +1772,9 @@ export default function SolarSystemExplorer() {
 
         if (modeRef.current !== 'space') return;
 
+        if (Math.hypot(dx, dy) > 1) {
+          recordTutorialInput('space-look');
+        }
         spaceCameraRef.current = applySpaceLocalLook(
           spaceCameraRef.current,
           dx * SPACE_LOOK_SENSITIVITY,
@@ -1132,6 +1805,7 @@ export default function SolarSystemExplorer() {
         setSelectedBodySynced(bodyId);
         setBodyReadout(getBodyReadout(latestSnapshot, bodyId));
         if (isSolarSystemBodyLandable(bodyId)) {
+          recordTutorialInput('space-land');
           enterSurface(bodyId, hit.point);
         } else {
           focusBody(bodyId);
@@ -1147,6 +1821,9 @@ export default function SolarSystemExplorer() {
       const onDocumentMouseMove = (event: MouseEvent) => {
         if (!pointerLockedRef.current || modeRef.current !== 'surface' || !surfaceRef.current) return;
 
+        if (Math.hypot(event.movementX, event.movementY) > 1) {
+          recordTutorialInput('surface-look');
+        }
         const nextSurfaceLook = applySurfaceLookDrag(
           surfaceRef.current,
           event.movementX,
@@ -1166,13 +1843,39 @@ export default function SolarSystemExplorer() {
       const onKeyDown = (event: KeyboardEvent) => {
         if (shouldIgnoreKeyTarget(event.target)) return;
         const key = keyName(event);
-        keysRef.current.add(key);
         if (
-          [' ', 'space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
+          ['space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)
           || event.code === 'Space'
         ) {
           event.preventDefault();
         }
+        if (modeRef.current === 'surface' && key === 'space') {
+          recordTutorialInput('surface-return');
+          returnToSpace();
+          return;
+        }
+        if (modeRef.current === 'space') {
+          if (key === 'w' || key === 's') {
+            recordTutorialInput('space-forward');
+          } else if (key === 'a' || key === 'd') {
+            recordTutorialInput('space-strafe');
+          } else if (key === 'space') {
+            recordTutorialInput('space-vertical');
+          } else if (key === 'q' || key === 'e') {
+            recordTutorialInput('space-roll');
+          } else if (key.startsWith('arrow')) {
+            recordTutorialInput('space-look');
+          }
+        } else if (modeRef.current === 'surface') {
+          if (key === 'shift') {
+            recordTutorialInput('surface-fast');
+          } else if (key === 'w' || key === 's' || key === 'arrowup' || key === 'arrowdown') {
+            recordTutorialInput('surface-walk');
+          } else if (key === 'a' || key === 'd' || key === 'arrowleft' || key === 'arrowright') {
+            recordTutorialInput('surface-strafe');
+          }
+        }
+        keysRef.current.add(key);
       };
 
       const onKeyUp = (event: KeyboardEvent) => {
@@ -1316,16 +2019,28 @@ export default function SolarSystemExplorer() {
           applySpaceCameraLook(camera, spaceCameraRef.current);
         }
 
+        if (modeRef.current === 'surface' && surfaceRef.current) {
+          updateSurfaceLandmarks(objects, surfaceRef.current, homeSurfaceRef.current);
+        } else {
+          setSurfaceLandmarksHidden(objects);
+        }
+
         if (now - lastUiSyncRef.current > UI_SYNC_MS) {
           const activeSurface = surfaceRef.current;
           setDisplayDate(new Date(simTimeRef.current));
           setBodyReadout(getBodyReadout(latestSnapshot, selectedBodyRef.current));
           if (activeSurface) {
             const coordinates = surfaceLatitudeLongitude(activeSurface.pose);
+            const longitudeRadians = activeSurface.body === 'earth'
+              ? -coordinates.longitudeRadians
+              : coordinates.longitudeRadians;
             setSurfaceCoords({
               latitude: coordinates.latitudeRadians * 180 / Math.PI,
-              longitude: coordinates.longitudeRadians * 180 / Math.PI,
+              longitude: longitudeRadians * 180 / Math.PI,
             });
+            setSurfaceCompass(getSurfaceCompassState(activeSurface, homeSurfaceRef.current));
+          } else {
+            setSurfaceCompass(null);
           }
           lastUiSyncRef.current = now;
         }
@@ -1377,6 +2092,10 @@ export default function SolarSystemExplorer() {
         delete windowWithHooks.__solarSystemExplorerSetDate;
         objectsRef.current = null;
         removeRendererCanvas(renderer, mount);
+        Object.values(bodyTextures).forEach((texture) => texture?.dispose());
+        earthTexture.dispose();
+        moonTexture.dispose();
+        moonBump.dispose();
         renderer.dispose();
         disposeSceneGraph(scene);
       };
@@ -1426,19 +2145,40 @@ export default function SolarSystemExplorer() {
       : `${SOLAR_SYSTEM_BODIES[selectedBody].label} space`;
   const controlModeLabel = mode === 'surface'
     ? pointerLocked ? 'Mouse look' : 'Drag to look'
-    : 'Compact';
+    : 'True distance';
+  const visibleCompassMarkers = surfaceCompass?.markers.filter(
+    (marker) => Math.abs(marker.offsetDegrees) <= COMPASS_DISPLAY_DEGREES,
+  ) ?? [];
+  const surfaceInfoReadout: SurfaceInfoReadout | null = surfaceBody
+    ? {
+      body: SOLAR_SYSTEM_BODIES[surfaceBody].label,
+      controls: controlModeLabel,
+      latitude: formatDegrees(surfaceCoords.latitude, 'N', 'S'),
+      longitude: formatDegrees(surfaceCoords.longitude, 'E', 'W'),
+      landmark: surfaceCompass?.markers
+        .filter((marker) => marker.kind !== 'cardinal')
+        .map((marker) => marker.label)
+        .join(' / ') || 'Poles marked',
+    }
+    : null;
   const selectedDistanceSceneUnits = solarSystemSceneDistanceForKilometers(
     getSolarSystemSnapshot(displayDate, 8).bodyMap[selectedBody].distanceFromSunKm,
     scaleMode,
   );
   const sceneUnavailable = sceneStatus === 'unavailable';
+  const activeTutorialSteps = tutorialState
+    ? tutorialStepsForMode(tutorialState.mode)
+    : [];
+  const activeTutorialStep = tutorialState
+    ? activeTutorialSteps[tutorialState.stepIndex] ?? null
+    : null;
 
   const releaseHudButtonFocus = (event: SyntheticEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement | null;
-    if (!target?.closest('.solar-hud button, .solar-hud select')) return;
+    if (!target?.closest('.solar-hud button')) return;
     window.setTimeout(() => {
       const activeElement = document.activeElement as HTMLElement | null;
-      if (activeElement?.closest('.solar-hud')) {
+      if (activeElement?.matches('button') && activeElement.closest('.solar-hud')) {
         activeElement.blur();
       }
     }, 0);
@@ -1452,6 +2192,7 @@ export default function SolarSystemExplorer() {
         sceneUnavailable ? 'is-scene-unavailable' : '',
         sceneStatus === 'initializing' ? 'is-scene-initializing' : '',
         timePanelOpen ? 'has-time-panel-open' : 'has-time-panel-collapsed',
+        tutorialState ? 'has-tutorial' : '',
       ].filter(Boolean).join(' ')}
       onClickCapture={releaseHudButtonFocus}
     >
@@ -1473,29 +2214,86 @@ export default function SolarSystemExplorer() {
         </section>
       )}
 
+      {activeTutorialStep && tutorialState && (
+        <section
+          className={`solar-hud solar-tutorial ${tutorialState.status === 'advancing' ? 'is-advancing' : ''}`}
+          aria-live="polite"
+          aria-label={`${tutorialState.mode} camera tutorial`}
+        >
+          <div className="solar-tutorial-header">
+            <span>
+              {tutorialState.mode === 'space' ? 'Space controls' : 'Surface controls'}
+              {' '}
+              {tutorialState.stepIndex + 1}/{activeTutorialSteps.length}
+            </span>
+            <button
+              type="button"
+              className="solar-icon-button solar-tutorial-close"
+              onClick={dismissTutorial}
+              aria-label="Close tutorial"
+              title="Close tutorial"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="solar-tutorial-body">
+            <strong>{activeTutorialStep.title}</strong>
+            <p>{activeTutorialStep.prompt}</p>
+            <kbd>{activeTutorialStep.hint}</kbd>
+          </div>
+        </section>
+      )}
+
       {readoutsVisible ? (
         <header className="solar-hud solar-hud-primary" aria-label="Solar system information">
           <div className="solar-readouts">
-            <div>
-              <span>Body</span>
-              <strong>{bodyReadout.name}</strong>
-            </div>
-            <div>
-              <span>Mode</span>
-              <strong>{bodyReadout.landing}</strong>
-            </div>
-            <div className="solar-readout-wide">
-              <span>Distance</span>
-              <strong>{bodyReadout.distance}</strong>
-            </div>
-            <div>
-              <span>Year</span>
-              <strong>{bodyReadout.year}</strong>
-            </div>
-            <div>
-              <span>Day</span>
-              <strong>{bodyReadout.day}</strong>
-            </div>
+            {surfaceInfoReadout ? (
+              <>
+                <div>
+                  <span>Body</span>
+                  <strong>{surfaceInfoReadout.body}</strong>
+                </div>
+                <div>
+                  <span>Controls</span>
+                  <strong>{surfaceInfoReadout.controls}</strong>
+                </div>
+                <div>
+                  <span>Latitude</span>
+                  <strong>{surfaceInfoReadout.latitude}</strong>
+                </div>
+                <div>
+                  <span>Longitude</span>
+                  <strong>{surfaceInfoReadout.longitude}</strong>
+                </div>
+                <div className="solar-readout-wide">
+                  <span>Landmarks</span>
+                  <strong>{surfaceInfoReadout.landmark}</strong>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <span>Body</span>
+                  <strong>{bodyReadout.name}</strong>
+                </div>
+                <div>
+                  <span>Mode</span>
+                  <strong>{bodyReadout.landing}</strong>
+                </div>
+                <div className="solar-readout-wide">
+                  <span>Distance</span>
+                  <strong>{bodyReadout.distance}</strong>
+                </div>
+                <div>
+                  <span>Orbit</span>
+                  <strong>{bodyReadout.orbit}</strong>
+                </div>
+                <div>
+                  <span>Spin</span>
+                  <strong>{bodyReadout.spin}</strong>
+                </div>
+              </>
+            )}
           </div>
           <button
             type="button"
@@ -1522,7 +2320,11 @@ export default function SolarSystemExplorer() {
       <section className="solar-hud solar-body-panel" aria-label="Body focus">
         <select
           value={selectedBody}
-          onChange={(event) => focusBody(event.currentTarget.value as SolarSystemBodyId)}
+          onChange={(event) => {
+            const select = event.currentTarget;
+            focusBody(select.value as SolarSystemBodyId);
+            window.setTimeout(() => select.blur(), 0);
+          }}
           aria-label="Focused body"
         >
           {SOLAR_SYSTEM_BODY_LIST.map((body) => (
@@ -1641,6 +2443,27 @@ export default function SolarSystemExplorer() {
         )}
       </section>
 
+      {mode === 'surface' && surfaceCompass && (
+        <section
+          className="solar-hud solar-surface-compass"
+          aria-label={`Surface compass heading ${Math.round(surfaceCompass.headingDegrees)} degrees`}
+        >
+          <div className="solar-compass-bar">
+            <span className="solar-compass-center" aria-hidden="true" />
+            {visibleCompassMarkers.map((marker) => (
+              <span
+                key={marker.id}
+                className={`solar-compass-marker is-${marker.kind}`}
+                style={{ left: `${compassPositionPercent(marker.offsetDegrees)}%` }}
+                title={marker.label}
+              >
+                {marker.shortLabel}
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="solar-hud solar-view-panel" aria-label="View controls">
         <div className="solar-segmented" aria-label="Scale">
           <button
@@ -1648,7 +2471,7 @@ export default function SolarSystemExplorer() {
             aria-pressed="true"
             disabled
           >
-            Compact
+            True distance
           </button>
         </div>
         <label className="solar-toggle">
@@ -1663,7 +2486,10 @@ export default function SolarSystemExplorer() {
           <button
             type="button"
             className="solar-text-button solar-space-button"
-            onClick={returnToSpace}
+            onClick={() => {
+              recordTutorialInput('surface-return');
+              returnToSpace();
+            }}
           >
             Space
           </button>

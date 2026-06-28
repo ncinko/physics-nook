@@ -2145,7 +2145,7 @@ export default function SolarSystemExplorer() {
       : `${SOLAR_SYSTEM_BODIES[selectedBody].label} space`;
   const controlModeLabel = mode === 'surface'
     ? pointerLocked ? 'Mouse look' : 'Drag to look'
-    : 'True distance';
+    : 'Compact';
   const visibleCompassMarkers = surfaceCompass?.markers.filter(
     (marker) => Math.abs(marker.offsetDegrees) <= COMPASS_DISPLAY_DEGREES,
   ) ?? [];
@@ -2471,7 +2471,7 @@ export default function SolarSystemExplorer() {
             aria-pressed="true"
             disabled
           >
-            True distance
+            Compact
           </button>
         </div>
         <label className="solar-toggle">

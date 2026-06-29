@@ -28,24 +28,64 @@ const DISK_R = 124;
 
 const MOON_TEXTURE = '/textures/astronomy/moon-lroc-color-2k.jpg';
 
-const PHASE_DESCRIPTIONS: Record<string, string> = {
-  'New Moon':
-    'The Moon sits between us and the Sun, so its lit half faces away. We see the unlit side.',
-  'Waxing Crescent':
-    'A sliver of the lit half has rotated into view on the right. The crescent grows night by night.',
-  'First Quarter':
-    'The Moon is a quarter of the way around its orbit. We see the lit half edge-on as a right-lit half disk.',
-  'Waxing Gibbous':
-    'More than half the disk is lit and still growing as the Moon heads toward opposition with the Sun.',
-  'Full Moon':
-    'The Moon is opposite the Sun, so the entire lit half faces us — a fully illuminated disk.',
-  'Waning Gibbous':
-    'Past full, the lit fraction is shrinking. The shadow now creeps in from the right.',
-  'Third Quarter':
-    'Three quarters of the way around. We again see the lit half edge-on, now as a left-lit half disk.',
-  'Waning Crescent':
-    'Only a thin crescent on the left remains lit as the Moon swings back toward the Sun.',
+// Where the bright limb sits on the disk, by clock angle (3 o'clock = 0, going
+// clockwise). The lit limb starts on the right (waxing) or left (waning) from the
+// North Pole and rotates clockwise as the observer moves toward the South Pole.
+const DIRECTION_WORDS: Record<number, string> = {
+  0: 'right',
+  45: 'lower right',
+  90: 'bottom',
+  135: 'lower left',
+  180: 'left',
+  225: 'upper left',
+  270: 'top',
+  315: 'upper right',
 };
+
+const directionWord = (clockAngle: number) =>
+  DIRECTION_WORDS[(((Math.round(clockAngle / 45) * 45) % 360) + 360) % 360];
+
+// Build the phase description, weaving in where the lit/dark side falls for the
+// chosen viewpoint so the left/right language matches the rotated Moon.
+const describePhase = (
+  phaseName: string,
+  litDir: string,
+  darkDir: string,
+  viewpointLabel: string,
+): string => {
+  const from = `Seen from the ${viewpointLabel}, `;
+  switch (phaseName) {
+    case 'New Moon':
+      return 'The Moon sits between us and the Sun, so its lit half faces away. We see the unlit side — the disk is essentially dark from anywhere on Earth.';
+    case 'Waxing Crescent':
+      return `A sliver of the lit half has come into view, and the crescent grows night by night. ${from}the bright crescent hugs the ${litDir}.`;
+    case 'First Quarter':
+      return `The Moon is a quarter of the way around its orbit, so we see the lit half edge-on as a half disk. ${from}the ${litDir} half is the bright one.`;
+    case 'Waxing Gibbous':
+      return `More than half the disk is lit and still growing as the Moon heads toward opposition with the Sun. ${from}the last sliver of shadow clings to the ${darkDir}.`;
+    case 'Full Moon':
+      return 'The Moon is opposite the Sun, so the entire lit half faces us — a fully illuminated disk from anywhere on Earth.';
+    case 'Waning Gibbous':
+      return `Past full, the lit fraction is shrinking. ${from}the shadow now encroaches from the ${darkDir}.`;
+    case 'Third Quarter':
+      return `Three quarters of the way around, we again see the lit half edge-on as a half disk. ${from}the ${litDir} half is the bright one.`;
+    case 'Waning Crescent':
+      return `Only a thin crescent stays lit as the Moon swings back toward the Sun. ${from}that crescent sits on the ${litDir}.`;
+    default:
+      return '';
+  }
+};
+
+// Observer latitude changes the orientation of the Moon in our sky: upright from
+// the North Pole, rotated through the equator (terminator horizontal), and flipped
+// 180deg from the South Pole. The rotation here is a linear north->south stand-in.
+const VIEWPOINTS: { label: string; rotation: number }[] = [
+  { label: 'North Pole', rotation: 0 },
+  { label: 'Northern Hemisphere', rotation: 45 },
+  { label: 'Equator', rotation: 90 },
+  { label: 'Southern Hemisphere', rotation: 135 },
+  { label: 'South Pole', rotation: 180 },
+];
 
 // Screen bearing of the Moon (atan2, y-down) for a given elongation longitude.
 // The Sun is drawn to the left, so its direction from Earth is 180deg; longitude
@@ -85,11 +125,22 @@ const shadowPath = (r: number, illumination: number, waxing: boolean): string =>
 
 export default function MoonPhaseDial() {
   const [longitude, setLongitude] = useState(90);
+  const [viewpointIndex, setViewpointIndex] = useState(0);
+
+  const viewpoint = VIEWPOINTS[viewpointIndex];
+  const cycleViewpoint = () =>
+    setViewpointIndex((index) => (index + 1) % VIEWPOINTS.length);
 
   const illumination = moonIlluminationFromLongitude(longitude);
   const phaseName = moonPhaseNameFromLongitude(longitude);
   const waxing = longitude > 0 && longitude < 180;
-  const description = PHASE_DESCRIPTIONS[phaseName] ?? '';
+
+  // The bright limb starts on the right (waxing) or left (waning), then rotates
+  // clockwise with the viewpoint, matching the rotated lunar disk below.
+  const litClock = (waxing ? 0 : 180) + viewpoint.rotation;
+  const litDir = directionWord(litClock);
+  const darkDir = directionWord(litClock + 180);
+  const description = describePhase(phaseName, litDir, darkDir, viewpoint.label);
 
   const screenDeg = longitudeToScreenDegrees(longitude);
   const moonX = EARTH_X + ORBIT_R * Math.cos(screenDeg * DEG);
@@ -178,9 +229,12 @@ export default function MoonPhaseDial() {
               strokeDasharray="3 7"
             />
 
-            {/* Earth */}
-            <circle cx={EARTH_X} cy={EARTH_Y} r={16} fill="#3b82f6" />
-            <circle cx={EARTH_X} cy={EARTH_Y} r={16} fill="none" stroke="#1d4ed8" strokeWidth={2} />
+            {/* Earth: night side away from the Sun, lit on its Sun-facing (left) half */}
+            <g transform={`translate(${EARTH_X} ${EARTH_Y})`}>
+              <circle r={16} fill="#1e293b" />
+              <path d={`M 0 ${-16} A 16 16 0 0 0 0 16 Z`} fill="#3b82f6" />
+              <circle r={16} fill="none" stroke="#1d4ed8" strokeWidth={2} />
+            </g>
             <text
               x={EARTH_X}
               y={EARTH_Y + 36}
@@ -191,17 +245,6 @@ export default function MoonPhaseDial() {
             >
               Earth
             </text>
-
-            {/* Sight line from Earth to the Moon */}
-            <line
-              x1={EARTH_X}
-              y1={EARTH_Y}
-              x2={moonX}
-              y2={moonY}
-              stroke="var(--accent-blue)"
-              strokeOpacity={0.5}
-              strokeWidth={2}
-            />
 
             {/* Moon: always lit on its Sun-facing (left) half */}
             <g
@@ -234,7 +277,15 @@ export default function MoonPhaseDial() {
       {/* Part 2 — illuminated Moon as seen from Earth, with its description */}
       <figure className="m-0 flex flex-col items-center gap-3">
         <figcaption className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-          View from North Pole
+          View from{' '}
+          <button
+            type="button"
+            onClick={cycleViewpoint}
+            aria-label={`Change viewpoint, currently ${viewpoint.label}. Click to cycle.`}
+            className="rounded-sm font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)] underline decoration-dotted underline-offset-4 transition-colors hover:text-[color:var(--text-primary)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent-blue)]"
+          >
+            {viewpoint.label}
+          </button>
         </figcaption>
         <svg
           viewBox={`0 0 ${DISK_VIEW} ${DISK_VIEW}`}
@@ -250,24 +301,27 @@ export default function MoonPhaseDial() {
             </clipPath>
           </defs>
           <circle cx={DISK_CX} cy={DISK_CY} r={DISK_R} fill="#0b1020" />
-          <image
-            href={MOON_TEXTURE}
-            x={DISK_CX - DISK_R}
-            y={DISK_CY - DISK_R}
-            width={DISK_R * 2}
-            height={DISK_R * 2}
-            preserveAspectRatio="xMidYMid slice"
-            clipPath="url(#moon-disk-clip)"
-          />
-          {/* The shadow path lies within the disk by construction, so it needs no clip. */}
-          {illumination < 0.999 && (
-            <path
-              transform={`translate(${DISK_CX} ${DISK_CY})`}
-              d={shadowPath(DISK_R, illumination, waxing)}
-              fill="#05070f"
-              fillOpacity={0.93}
+          {/* Observer latitude rotates the lunar disk in our sky. */}
+          <g transform={`rotate(${viewpoint.rotation} ${DISK_CX} ${DISK_CY})`}>
+            <image
+              href={MOON_TEXTURE}
+              x={DISK_CX - DISK_R}
+              y={DISK_CY - DISK_R}
+              width={DISK_R * 2}
+              height={DISK_R * 2}
+              preserveAspectRatio="xMidYMid slice"
+              clipPath="url(#moon-disk-clip)"
             />
-          )}
+            {/* The shadow path lies within the disk by construction, so it needs no clip. */}
+            {illumination < 0.999 && (
+              <path
+                transform={`translate(${DISK_CX} ${DISK_CY})`}
+                d={shadowPath(DISK_R, illumination, waxing)}
+                fill="#05070f"
+                fillOpacity={0.93}
+              />
+            )}
+          </g>
           <circle
             cx={DISK_CX}
             cy={DISK_CY}

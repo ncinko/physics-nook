@@ -234,7 +234,7 @@ export default function MoonPhaseDial() {
       {/* Part 2 — illuminated Moon as seen from Earth, with its description */}
       <figure className="m-0 flex flex-col items-center gap-3">
         <figcaption className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]">
-          As seen from Earth
+          View from North Pole
         </figcaption>
         <svg
           viewBox={`0 0 ${DISK_VIEW} ${DISK_VIEW}`}

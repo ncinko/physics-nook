@@ -4,6 +4,8 @@ layout: ../../layouts/TextbookLayout.astro
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ToolLaunchCard from '../../components/astronomy/ToolLaunchCard.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import MoonPhaseDial from '../../components/astronomy/MoonPhaseDial';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
@@ -17,11 +19,11 @@ import { astronomyPath } from '../../data/modules';
 
 The Moon does not change shape, and it makes no light of its own. Phases and eclipses are entirely a matter of **geometry** in the Sun-Earth-Moon system.
 
-At any instant the Sun illuminates exactly one hemisphere of the Moon — the half facing the Sun. The phase we observe is simply **how much of that lit half can be seen from Earth**:
+At any instant the Sun illuminates exactly one hemisphere of the Moon — the half facing the Sun. The phase we observe is simply **how much of that lit half can be seen from Earth**. Drag the Moon around its orbit below to look down on the geometry from outside and watch the phase it produces:
 
-- **New moon** — the Moon sits between us and the Sun, so its lit side faces away. We see the dark side.
-- **Full moon** — the Moon is opposite the Sun, so the entire lit side faces us.
-- **Quarters** — the Moon is off to the side, and we see the lit half edge-on as a half disk.
+<InteractiveAnchor id="moon-phase-dial" />
+
+<MoonPhaseDial client:visible />
 
 We say the Moon is **waxing** when the lit fraction we see is growing from new toward full, and **waning** when it is shrinking from full back toward new.
 

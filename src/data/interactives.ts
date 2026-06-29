@@ -42,6 +42,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['moon phases', 'astronomy', '3d'],
   },
   {
+    id: 'moon-phase-dial',
+    title: 'Moon Phase Dial',
+    description: 'Drag the Moon around its orbit in a top-down Sun-Earth-Moon view and watch the lit fraction and phase name change.',
+    href: '/astronomy/moon-phases#moon-phase-dial',
+    module: 'Astronomy',
+    kind: 'inline',
+    tags: ['moon phases', 'astronomy', 'geometry'],
+  },
+  {
     id: 'solar-system-explorer',
     title: 'Solar System Explorer',
     description: 'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',

@@ -19,8 +19,7 @@ import { astronomyPath } from '../../data/modules';
 
 The Moon does not change shape, and it makes no light of its own. Phases and eclipses are entirely a matter of geometry in the Sun-Earth-Moon system.
 
-At any instant the Sun illuminates exactly one hemisphere of the Moon. The **phase** we observe is simply how much of that lit half can be seen from Earth. Drag the Moon around its orbit below to look down on the geometry from outside and watch the phase it produces:
-
+At any instant the Sun illuminates exactly one hemisphere of the Moon. The **phase** we observe is simply how much of that lit half can be seen from Earth. 
 <InteractiveAnchor id="moon-phase-dial" />
 
 <MoonPhaseDial client:visible />
@@ -36,12 +35,12 @@ We say the Moon is **waxing** when the lit fraction we see is growing from new t
 
 ## Eclipses
 
-If phases come purely from alignment, why isn't there a solar eclipse at every new moon and a lunar eclipse at every full moon? Because the Moon's orbit is tilted about $5^\circ$ relative to the plane of Earth's orbit (the ecliptic). Most months the Moon passes a little above or below the Sun–Earth line, and its shadow misses. Eclipses happen only when a new or full moon lands near a **node** — one of the two points where the tilted orbit crosses the ecliptic plane. That double requirement, right phase *and* near a node, is why eclipses come in seasons rather than monthly.
+If phases come purely from alignment, why isn't there a solar eclipse (the Moon casts a shadow on Earth) at every new moon and a lunar eclipse (Earth casts a shadow on the Moon) at every full moon? Because the Moon's orbit is tilted about $5^\circ$ relative to the plane of Earth's orbit (the ecliptic). Most months the Moon passes a little above or below the Sun–Earth line, and its shadow misses. Eclipses happen only when a new or full moon lands near a **node** — one of the two points where the tilted orbit crosses the ecliptic plane. That double requirement, right phase *and* near a node, is why eclipses come in seasons rather than monthly.
 
 
 ## Lunar month
 
-The Moon completes one orbit relative to the distant stars in the **sidereal month**, about $27.3$ days. But the cycle of phases — new moon to new moon — is the **synodic month**, about $29.5$ days. The phases take longer because Earth is also moving: while the Moon circles us, Earth advances along its own orbit, so the Sun's direction shifts and the Moon must travel a little *extra* each cycle to catch back up to the Sun–Earth line:
+The Moon completes one orbit relative to the distant stars in the **sidereal month**, about $27.3$ days. But one complete cycle of the phases is the **synodic month**, about $29.5$ days. This cycle takes longer because Earth is also moving: while the Moon circles us, Earth advances along its own orbit, so the Sun's direction shifts and the Moon must travel a little *extra* each cycle to catch back up to the Sun–Earth line:
 
 $$
 \frac{1}{T_{\text{syn}}} = \frac{1}{T_{\text{sid}}} - \frac{1}{T_{\text{Earth}}}.

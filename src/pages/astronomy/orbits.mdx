@@ -4,6 +4,8 @@ layout: ../../layouts/TextbookLayout.astro
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import ToolLaunchCard from '../../components/astronomy/ToolLaunchCard.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import KeplerLaws from '../../components/astronomy/KeplerLaws';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
@@ -19,11 +21,13 @@ The planets are not scattered at random. They orbit the Sun on nearly circular, 
 
 ## Kepler's Laws
 
-**1 — orbits are ellipses.** Each planet moves on an ellipse with the Sun at one focus. Most planetary orbits are only slightly elongated, so they look almost circular, but the offset matters for precise predictions.
+Three laws found by Johannes Kepler capture the pattern. Click any law to bring up its description and an interactive — the first is open to start.
 
-**2 — equal areas in equal times.** The line from the Sun to a planet sweeps out equal areas in equal intervals. A planet therefore moves **faster when closer** to the Sun and slower when farther — a direct consequence of angular-momentum conservation.
+<InteractiveAnchor id="kepler-laws" />
 
-**3 — period and size are linked.** The square of the orbital period is proportional to the cube of the orbit's average radius. In units of years and astronomical units, the constant is exactly one for objects orbiting the Sun:
+<KeplerLaws client:visible />
+
+In units of years and astronomical units, the constant in the third law is exactly one for objects orbiting the Sun:
 
 $$
 \left(\frac{T}{\text{yr}}\right)^2 = \left(\frac{a}{\text{AU}}\right)^3.

@@ -60,6 +60,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['solar system', 'astronomy', '3d'],
   },
   {
+    id: 'kepler-laws',
+    title: "Kepler's Laws Explorer",
+    description: "Open each of Kepler's three laws to see its description and a matching interactive: stretch an ellipse, sweep equal areas, and link orbital period to size.",
+    href: '/astronomy/orbits#kepler-laws',
+    module: 'Astronomy',
+    kind: 'inline',
+    tags: ['kepler', 'orbits', 'astronomy'],
+  },
+  {
     id: 'bunny-number-line',
     title: 'Bunny on the Number Line',
     description: 'Hop a bunny along a number line to meet vectors as one-dimensional hops that add up.',

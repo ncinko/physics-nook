@@ -79,19 +79,23 @@ const describePhase = (
 // Observer latitude changes the orientation of the Moon in our sky: upright from
 // the North Pole, rotated through the equator (terminator horizontal), and flipped
 // 180deg from the South Pole. The rotation here is a linear north->south stand-in.
+// It runs counter-clockwise so a waning Moon — eaten from the right at the pole —
+// is eaten from the upper right in the Northern Hemisphere.
 const VIEWPOINTS: { label: string; rotation: number }[] = [
   { label: 'North Pole', rotation: 0 },
-  { label: 'Northern Hemisphere', rotation: 45 },
-  { label: 'Equator', rotation: 90 },
-  { label: 'Southern Hemisphere', rotation: 135 },
-  { label: 'South Pole', rotation: 180 },
+  { label: 'Northern Hemisphere', rotation: -45 },
+  { label: 'Equator', rotation: -90 },
+  { label: 'Southern Hemisphere', rotation: -135 },
+  { label: 'South Pole', rotation: -180 },
 ];
 
 // Screen bearing of the Moon (atan2, y-down) for a given elongation longitude.
 // The Sun is drawn to the left, so its direction from Earth is 180deg; longitude
-// is measured from that Sun direction (new moon = toward the Sun).
+// is measured from that Sun direction (new moon = toward the Sun). Because the SVG
+// y-axis points down, increasing longitude must DEcrease the screen angle so the
+// Moon orbits counter-clockwise, as it does seen from above the North Pole.
 const longitudeToScreenDegrees = (longitude: number) =>
-  normalizeDegrees(longitude + 180);
+  normalizeDegrees(180 - longitude);
 
 const pointerToLongitude = (event: PointerEvent<SVGElement>): number => {
   const svg = event.currentTarget.ownerSVGElement;
@@ -100,7 +104,7 @@ const pointerToLongitude = (event: PointerEvent<SVGElement>): number => {
   const px = ((event.clientX - rect.left) / Math.max(rect.width, 1)) * ORBIT_VIEW;
   const py = ((event.clientY - rect.top) / Math.max(rect.height, 1)) * ORBIT_VIEW;
   const screenDeg = (Math.atan2(py - EARTH_Y, px - EARTH_X) / DEG);
-  return normalizeDegrees(screenDeg - 180);
+  return normalizeDegrees(180 - screenDeg);
 };
 
 // SVG path for the UNLIT region of a disk of radius r centered at (0,0), given

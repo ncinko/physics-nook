@@ -32,6 +32,13 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
   },
   {
+    title: 'Resources',
+    description:
+      'Available modules, curated external resources, and how to use Physics Nook effectively.',
+    canonicalPath: '/resources',
+    image: '/social/physics-nook-card.svg',
+  },
+  {
     title: 'Moon Phase Explorer',
     description:
       'Explore the Earth-Moon-Sun system in 3D, advance time, and walk on Earth or the Moon.',

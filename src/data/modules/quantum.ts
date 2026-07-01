@@ -6,7 +6,7 @@ export const quantumModule: ModuleMeta = {
   title: 'Quantum',
   navLabel: 'Quantum',
   summary:
-    'Move from key experiments into wavefunctions, quantized states, and time evolution.',
+    'The photoelectric effect and double-slit interference, wavefunctions, quantized energy levels, and time evolution.',
   audience: 'Self-learners building a first modern-physics intuition before a formal quantum course.',
   prerequisites: [
     'Core wave vocabulary such as wavelength, frequency, and interference',
@@ -21,7 +21,7 @@ export const quantumModule: ModuleMeta = {
   ],
   status: 'active',
   navVisibility: 'hidden',
-  cardEyebrow: 'Next module',
+  cardEyebrow: 'Quantum',
   accent: '#0891b2',
   heroImage: '/social/physics-nook-card.svg',
   pages: [

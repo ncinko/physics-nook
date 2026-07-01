@@ -6,7 +6,7 @@ export const electromagnetismModule: ModuleMeta = {
   title: 'Electromagnetism',
   navLabel: 'Electromagnetism',
   summary:
-    'Build the field concept from Coulomb’s law, connect it to potential energy, and follow charges into currents and circuits.',
+    'Coulomb’s law, electric fields and field lines, electric potential, and circuits with Ohm’s law.',
   audience: 'Self-learners moving from mechanics into electricity and the field picture.',
   prerequisites: ['Vectors in two dimensions', 'Coulomb’s law and charge', 'Work and potential energy'],
   learningObjectives: [
@@ -17,7 +17,7 @@ export const electromagnetismModule: ModuleMeta = {
   ],
   status: 'active',
   navVisibility: 'menu',
-  cardEyebrow: 'Fields',
+  cardEyebrow: 'Electromagnetism',
   accent: '#6366f1',
   heroImage: '/social/physics-nook-card.svg',
   pages: [

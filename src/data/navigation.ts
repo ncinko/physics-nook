@@ -1,4 +1,3 @@
-import { exploreModuleGroups } from './modules';
 import { normalizePath } from '../utils/paths';
 
 export type NavVisibility = 'primary' | 'menu' | 'hidden';
@@ -11,15 +10,6 @@ export interface NavItem {
   description?: string;
   visibility: NavVisibility;
   match?: NavMatch;
-}
-
-export interface NavSection {
-  id: string;
-  label: string;
-}
-
-export interface NavSectionWithItems extends NavSection {
-  items: NavItem[];
 }
 
 const homeNavItem: NavItem = {
@@ -39,36 +29,14 @@ const interactivesNavItem: NavItem = {
   description: 'A compact catalog of inline demos, standalone labs, and immersive physics sandboxes.',
 };
 
-export const menuNavSections: NavSectionWithItems[] = exploreModuleGroups.map((group) => ({
-  id: group.id,
-  label: group.navLabel,
-  items: group.pages.map((page) => ({
-    label: page.title,
-    href: page.href,
-    section: group.id,
-    description: page.description,
-    visibility: 'menu' as const,
-    match: 'exact' as const,
-  })),
-}));
-
-const hiddenNavItems: NavItem[] = [
-  {
-    label: 'Pendulum Peg Challenge',
-    href: '/oscillations/pendulum-peg',
-    section: 'hidden',
-    visibility: 'hidden',
-    match: 'prefix',
-    description: 'Hidden pendulum timing game kept out of the primary navigation.',
-  },
-];
-
-export const navItems: NavItem[] = [
-  homeNavItem,
-  interactivesNavItem,
-  ...menuNavSections.flatMap((section) => section.items),
-  ...hiddenNavItems,
-];
+const resourcesNavItem: NavItem = {
+  label: 'Resources',
+  href: '/resources',
+  section: 'primary',
+  visibility: 'primary',
+  match: 'exact',
+  description: 'Available modules, curated external resources, and how to use this site.',
+};
 
 export const isNavItemActive = (item: NavItem, currentPath: string) => {
   const normalizedCurrentPath = normalizePath(currentPath);
@@ -84,4 +52,4 @@ export const isNavItemActive = (item: NavItem, currentPath: string) => {
   return normalizedCurrentPath === normalizedHref;
 };
 
-export const primaryNavItems = [homeNavItem, interactivesNavItem];
+export const primaryNavItems = [homeNavItem, interactivesNavItem, resourcesNavItem];

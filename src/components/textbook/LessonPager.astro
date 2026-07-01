@@ -1,0 +1,57 @@
+---
+import { getTextbookProgressByPath } from '../../data/modules';
+
+const progress = getTextbookProgressByPath(Astro.url.pathname);
+const previous = progress?.previous;
+const next = progress?.next;
+
+const previousEyebrow = progress?.crossesModuleBackward
+  ? `Previous module: ${previous?.group.navLabel}`
+  : 'Previous lesson';
+const nextEyebrow = progress?.crossesModule ? `Next module: ${next?.group.navLabel}` : 'Next lesson';
+
+const cardClass =
+  'group block rounded-lg border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_78%,transparent)] p-5 text-[color:var(--text-primary)] shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]';
+---
+
+{(previous || next) && (
+  <footer class="not-prose mt-14 border-t border-[var(--grid-line)] pt-8">
+    <div class:list={['grid gap-4', previous && next ? 'sm:grid-cols-2' : 'sm:grid-cols-1']}>
+      {previous && (
+        <a
+          href={previous.page.href}
+          class:list={[cardClass, previous && next ? 'sm:text-right' : '']}
+          aria-label={`Go to previous lesson: ${previous.page.title}`}
+        >
+          <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)]">
+            {previousEyebrow}
+          </span>
+          <span class="mt-2 block text-xl font-semibold leading-snug">
+            {previous.page.title}
+          </span>
+          <span class="mt-3 block text-sm leading-6 text-[var(--text-muted)]">
+            {previous.page.description}
+          </span>
+        </a>
+      )}
+
+      {next && (
+        <a
+          href={next.page.href}
+          class={cardClass}
+          aria-label={`Go to next lesson: ${next.page.title}`}
+        >
+          <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)]">
+            {nextEyebrow}
+          </span>
+          <span class="mt-2 block text-xl font-semibold leading-snug">
+            {next.page.title}
+          </span>
+          <span class="mt-3 block text-sm leading-6 text-[var(--text-muted)]">
+            {next.page.description}
+          </span>
+        </a>
+      )}
+    </div>
+  </footer>
+)}

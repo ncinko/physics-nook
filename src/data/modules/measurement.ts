@@ -6,7 +6,7 @@ export const measurementModule: ModuleMeta = {
   title: 'Measurement & Uncertainty',
   navLabel: 'Measurement',
   summary:
-    'SI units, scientific notation, uncertainty, and the habits that turn measured numbers into defensible results.',
+    'SI units, scientific notation, measurement uncertainty, and error propagation.',
   audience: 'Self-learners and intro-lab students who want the algebra-level toolkit every experiment reuses.',
   prerequisites: ['Decimals and percentages', 'Rounding', 'Basic algebra'],
   learningObjectives: [

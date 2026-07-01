@@ -6,7 +6,7 @@ export const astronomyModule: ModuleMeta = {
   title: 'Astronomy',
   navLabel: 'Astronomy',
   summary:
-    'Make sense of the sky from the ground up: frames of reference, the scale of the system, and gravity as the force that runs it.',
+    "Frames of reference, lunar phases and eclipses, Kepler's laws, orbital motion, and gravity in the solar system.",
   audience: 'Self-learners and curious skywatchers connecting what they see to why it happens.',
   prerequisites: [
     'Basic geometry',

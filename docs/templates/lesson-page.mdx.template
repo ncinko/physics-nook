@@ -1,0 +1,125 @@
+<!--
+Lesson page template — copy this into src/pages/<domain>/<page-slug>.mdx and fill
+in the placeholders. Mirrors the structure of src/pages/astronomy/orbits.mdx.
+
+Do not save this file itself under src/pages/ — Astro would build it as a route.
+
+Before writing the page, also read:
+- docs/adding-content.md (page setup + metadata registration checklist, prose/math conventions)
+- docs/adding-simulations.md (inline vs. standalone interactive conventions)
+- docs/design-baseline.md (quiet textbook cadence guardrails)
+
+After writing the page, register it (see docs/templates/module-entry.md) and run
+`npm run audit:repo` — it fails the build if the page file and its module/interactive
+metadata don't match.
+-->
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+<!--
+Import only what this page actually uses. Common imports:
+- ModuleHero: required, gives every lesson its within-module page grid.
+- InteractiveAnchor: one per mounted interactive, placed immediately before it.
+- Interactive component(s): from src/components/<domain>/.
+- ProblemSolvingSection + WorkedExampleCard: for worked examples (optional).
+- QuestionSequence: for a checkpoint quiz at the end (optional).
+- <domain>Path: the ModulePathGroup export from src/data/modules, e.g. astronomyPath.
+-->
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import YourInteractiveComponent from '../../components/<domain>/YourInteractiveComponent';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { yourDomainPath } from '../../data/modules';
+
+<ModuleHero module={yourDomainPath} currentPath="/<domain>/<page-slug>" />
+
+<div id="page-content"></div>
+
+# Page Title
+
+<!--
+Opening paragraph: state the phenomenon or question this page answers, in plain
+language, before introducing any formalism. See orbits.mdx's opening paragraph
+for the target voice: short, concrete, leads with what the reader will be able
+to explain by the end.
+-->
+
+## First Concept Heading
+
+Explanatory prose. Bold **key terms** the first time they're defined. Introduce
+the interactive right where it illustrates the point being made, not before or
+after a long block of unrelated text.
+
+<!--
+Inline interactive: one InteractiveAnchor immediately before the component.
+Use client:visible for inline demos (mounts when scrolled into view).
+Set kind: 'inline' in src/data/interactives.ts to match.
+-->
+<InteractiveAnchor id="your-interactive-id" />
+
+<YourInteractiveComponent client:visible />
+
+<!--
+KaTeX math: use \text{} for units inside math mode, e.g.:
+$$
+\left(\frac{T}{\text{yr}}\right)^2 = \left(\frac{a}{\text{AU}}\right)^3.
+$$
+-->
+
+## Second Concept Heading
+
+More prose. Cross-reference earlier ideas explicitly ("the same two-frame
+thinking explains...") rather than repeating setup from scratch.
+
+<!--
+Worked examples: wrap one or more WorkedExampleCard in a ProblemSolvingSection.
+Each card follows Problem / Use / Solve / Check as #### sub-headings. Alternate
+accent="blue" / accent="red" across cards in the same section.
+-->
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Descriptive Problem Title" accent="blue">
+    #### Problem
+
+    State the given quantities and what's being asked.
+
+    #### Use
+
+    State the relevant relation.
+
+    $$
+    \text{equation here}
+    $$
+
+    #### Solve
+
+    Show the substitution and result.
+
+    #### Check
+
+    One sentence sanity-checking the magnitude or direction of the result.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<!--
+Checkpoint quiz: optional, usually one per page, placed at the very end.
+Each option needs an explanation, including the correct one — the explanation
+is what the reader sees after answering, not just a right/wrong flag.
+-->
+<QuestionSequence
+  client:load
+  eyebrow="<Page Title> Checkpoint"
+  questions={[
+    {
+      id: 'unique-question-id',
+      question: 'Question text?',
+      options: [
+        { id: 'A', text: 'Option text.', isCorrect: true, explanation: 'Why this is right.' },
+        { id: 'B', text: 'Option text.', isCorrect: false, explanation: 'Why this is wrong.' },
+        { id: 'C', text: 'Option text.', isCorrect: false, explanation: 'Why this is wrong.' },
+      ],
+    },
+  ]}
+/>

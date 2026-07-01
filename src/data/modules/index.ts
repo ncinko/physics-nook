@@ -75,7 +75,7 @@ export const mechanicsPath = {
   href: kinematicsModule.href,
   navLabel: 'Mechanics',
   summary:
-    'Core motion ideas from one-dimensional graphs to forces, vectors, collisions, and energy.',
+    'One- and two-dimensional kinematics, forces, vectors, collisions, and energy conservation.',
   cardEyebrow: 'Mechanics',
   navVisibility: 'menu',
   pages: [
@@ -114,7 +114,7 @@ export const wavesAndOscillationsPath = {
   href: '/oscillations',
   navLabel: 'Waves & Oscillations',
   summary:
-    'Periodic motion, springs, pendulums, and traveling waves collected under one quieter thread.',
+    'Simple harmonic motion, springs, pendulums, resonance, standing waves, and wave reflection.',
   cardEyebrow: 'Waves & oscillations',
   navVisibility: 'menu',
   pages: [
@@ -174,8 +174,10 @@ export interface TextbookProgressionEntry {
 
 export interface TextbookProgression {
   current: TextbookProgressionEntry;
+  previous?: TextbookProgressionEntry;
   next?: TextbookProgressionEntry;
   crossesModule: boolean;
+  crossesModuleBackward: boolean;
 }
 
 export const gamesPath = {
@@ -260,11 +262,14 @@ export const getTextbookProgressByPath = (path: string): TextbookProgression | u
   if (currentIndex === -1) return undefined;
 
   const current = textbookProgressionEntries[currentIndex];
+  const previous = textbookProgressionEntries[currentIndex - 1];
   const next = textbookProgressionEntries[currentIndex + 1];
 
   return {
     current,
+    previous,
     next,
     crossesModule: Boolean(next && next.group.id !== current.group.id),
+    crossesModuleBackward: Boolean(previous && previous.group.id !== current.group.id),
   };
 };

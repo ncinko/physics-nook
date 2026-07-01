@@ -9,81 +9,79 @@ import { externalResourceGroups } from '../data/externalResources';
   description="Available modules, curated external resources, and how to use Physics Nook effectively."
   canonicalPath="/resources"
 >
-  <main class="pt-20">
-    <section class="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
-      <div class="max-w-3xl border-b border-[var(--grid-line)] pb-8">
-        <p class="mt-4 mb-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
-          Physics Nook pairs interactive graphs and simulations with short explanations.  For students, I would treat this as a set of notes to supplement other resources.  For teachers, this is a growing compilation of "interactives" that were previously scattered across the web (or written and never shared).
-        </p>
-        <p class="mt-4 mb-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
-          This site will not teach you physics, but it may help you gain some intuition or clarify a concept.  To build deep understanding of the subject, you will eventually need to struggle through challenging problems.  There are a few example problems on this site, but they are not meant to be a comprehensive set of practice problems.  
-          For that, I recommend finding one of those paper textbooks humans used to write.
-        </p>
+  <section class="mx-auto max-w-6xl px-4 pb-10 pt-2 sm:px-6 lg:pb-12 lg:pt-4">
+    <div class="mx-auto max-w-3xl pb-8 text-center">
+      <p class="m-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
+        Physics Nook pairs interactive graphs and simulations with short explanations. For students, I would treat this as a set of notes to supplement other resources. For teachers, this is a growing compilation of "<a href="/interactives" class="text-[var(--accent-blue)] underline decoration-[color-mix(in_srgb,var(--accent-blue)_40%,transparent)] underline-offset-2 hover:decoration-current">interactives</a>" that were previously scattered across the web (or written and never shared).
+      </p>
+      <p class="mt-4 mb-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
+        This site will not teach you physics; my hope is that it helps strengthen your intuition or clarify a concept. You will eventually need to struggle through challenging problems. There are a few example problems on this site, but they are not meant to be a comprehensive set of practice problems.
+        For that, I recommend finding one of those paper textbooks humans used to write.
+      </p>
+    </div>
+
+    <div class="mt-10">
+      <h2 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+        Modules
+      </h2>
+      <p class="mt-2 mb-0 text-sm text-[var(--text-muted)]">
+        Everything currently on the site, grouped by topic.
+      </p>
+
+      <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {exploreModuleGroups.map((group) => (
+          <a
+            href={group.href}
+            class="group block rounded-[1.4rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+          >
+            <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)] group-hover:text-[color:color-mix(in_srgb,var(--accent-blue)_70%,black)]">
+              {group.cardEyebrow}
+            </span>
+            <span class="mt-2 block text-sm leading-6 text-[var(--text-muted)]">
+              {group.summary}
+            </span>
+          </a>
+        ))}
       </div>
+    </div>
 
-      <div class="mt-10">
-        <h2 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
-          Modules
-        </h2>
-        <p class="mt-2 mb-0 text-sm text-[var(--text-muted)]">
-          Everything currently on the site, grouped by topic.
-        </p>
+    <div class="mt-14">
+      <h2 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+        Beyond Physics Nook
+      </h2>
+      <p class="mt-2 mb-0 text-sm text-[var(--text-muted)]">
+        A short, hand-picked list of other people's excellent physics resources. Each link opens
+        in a new tab.
+      </p>
 
-        <div class="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {exploreModuleGroups.map((group) => (
-            <a
-              href={group.href}
-              class="group block rounded-[1.4rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
-            >
-              <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)] group-hover:text-[color:color-mix(in_srgb,var(--accent-blue)_70%,black)]">
-                {group.cardEyebrow}
-              </span>
-              <span class="mt-2 block text-sm leading-6 text-[var(--text-muted)]">
-                {group.summary}
-              </span>
-            </a>
-          ))}
-        </div>
-      </div>
-
-      <div class="mt-14">
-        <h2 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">
-          Beyond Physics Nook
-        </h2>
-        <p class="mt-2 mb-0 text-sm text-[var(--text-muted)]">
-          A short, hand-picked list of other people's excellent physics resources. Each link opens
-          in a new tab.
-        </p>
-
-        <div class="mt-5 space-y-8">
-          {externalResourceGroups.map((group) => (
-            <div>
-              <h3 class="m-0 text-base font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
-                {group.label}
-              </h3>
-              <div class="mt-3 overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm">
-                <div class="divide-y divide-[var(--grid-line)]">
-                  {group.resources.map((resource) => (
-                    <a
-                      href={resource.href}
-                      target="_blank"
-                      rel="noreferrer"
-                      class="group grid gap-1 px-4 py-4 transition-colors hover:bg-[color-mix(in_srgb,var(--accent-blue)_6%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-inset md:grid-cols-[minmax(12rem,0.4fr)_minmax(0,1fr)] md:items-center"
-                    >
-                      <h4 class="m-0 text-base font-semibold text-[color:var(--text-primary)] group-hover:text-[var(--accent-blue)]">
-                        {resource.title}
-                      </h4>
-                      <p class="m-0 text-sm leading-6 text-[var(--text-muted)]">
-                        {resource.description}
-                      </p>
-                    </a>
-                  ))}
-                </div>
+      <div class="mt-5 space-y-8">
+        {externalResourceGroups.map((group) => (
+          <div>
+            <h3 class="m-0 text-base font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
+              {group.label}
+            </h3>
+            <div class="mt-3 overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm">
+              <div class="divide-y divide-[var(--grid-line)]">
+                {group.resources.map((resource) => (
+                  <a
+                    href={resource.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    class="group grid gap-1 px-4 py-4 transition-colors hover:bg-[color-mix(in_srgb,var(--accent-blue)_6%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-inset md:grid-cols-[minmax(12rem,0.4fr)_minmax(0,1fr)] md:items-center"
+                  >
+                    <h4 class="m-0 text-base font-semibold text-[color:var(--text-primary)] group-hover:text-[var(--accent-blue)]">
+                      {resource.title}
+                    </h4>
+                    <p class="m-0 text-sm leading-6 text-[var(--text-muted)]">
+                      {resource.description}
+                    </p>
+                  </a>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
-    </section>
-  </main>
+    </div>
+  </section>
 </BaseLayout>

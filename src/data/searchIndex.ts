@@ -44,7 +44,7 @@ const interactiveSearchEntries: SearchEntry[] = interactiveEntries.map((entry) =
 const interactiveBaseHrefs = new Set(interactiveEntries.map((entry) => entry.href.split('#')[0]));
 const primaryNavHrefs = new Set(primaryNavItems.map((item) => normalizePath(item.href)));
 
-// Pages that are always one click away from the navbar (Interactives, Resources, ...)
+// Pages that are always one click away from the navbar (Home, Resources, ...)
 // don't need their own search entry.
 const explorerEntries: SearchEntry[] = standalonePages
   .filter(

@@ -20,15 +20,6 @@ const homeNavItem: NavItem = {
   match: 'exact',
 };
 
-const interactivesNavItem: NavItem = {
-  label: 'Interactives',
-  href: '/interactives',
-  section: 'primary',
-  visibility: 'primary',
-  match: 'exact',
-  description: 'A compact catalog of inline demos, standalone labs, and immersive physics sandboxes.',
-};
-
 const resourcesNavItem: NavItem = {
   label: 'Resources',
   href: '/resources',
@@ -52,4 +43,4 @@ export const isNavItemActive = (item: NavItem, currentPath: string) => {
   return normalizedCurrentPath === normalizedHref;
 };
 
-export const primaryNavItems = [homeNavItem, interactivesNavItem, resourcesNavItem];
+export const primaryNavItems = [homeNavItem, resourcesNavItem];

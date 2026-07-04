@@ -5,9 +5,11 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 const workspaceRoot = fileURLToPath(new URL('../..', import.meta.url));
 const sharedRoot = fileURLToPath(new URL('../../packages/shared', import.meta.url));
 const cacheDir = fileURLToPath(new URL('../../node_modules/.vite-game', import.meta.url));
+const coasterRoot = fileURLToPath(new URL('../../packages/coaster', import.meta.url));
 const mainEntry = fileURLToPath(new URL('./index.html', import.meta.url));
 const orbitalsEntry = fileURLToPath(new URL('./orbitals/index.html', import.meta.url));
 const ripplesEntry = fileURLToPath(new URL('./ripples/index.html', import.meta.url));
+const coasterEntry = fileURLToPath(new URL('./coaster/index.html', import.meta.url));
 const outDir = process.env.CF_PAGES === '1'
   ? fileURLToPath(new URL('../../dist', import.meta.url))
   : 'dist';
@@ -21,7 +23,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     fs: {
-      allow: [root, sharedRoot],
+      allow: [root, sharedRoot, coasterRoot],
     },
   },
   preview: {
@@ -37,6 +39,7 @@ export default defineConfig({
         main: mainEntry,
         orbitals: orbitalsEntry,
         ripples: ripplesEntry,
+        coaster: coasterEntry,
       },
     },
   },

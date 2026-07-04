@@ -1,0 +1,49 @@
+{
+  "top-thrill-dragster": {
+    "span": 145.4922678357857,
+    "sprites": {
+      "0": {
+        "file": "/assets/models/top-thrill-dragster-0.png",
+        "w": 155.5,
+        "h": 81,
+        "ox": 77.74613952636719,
+        "oy": 69.29244995117188
+      },
+      "60": {
+        "file": "/assets/models/top-thrill-dragster-60.png",
+        "w": 89.75,
+        "h": 139.25,
+        "ox": 44.436004638671875,
+        "oy": 70.74230194091797
+      },
+      "120": {
+        "file": "/assets/models/top-thrill-dragster-120.png",
+        "w": 89.25,
+        "h": 139,
+        "ox": 45.482139587402344,
+        "oy": 71.21905517578125
+      },
+      "180": {
+        "file": "/assets/models/top-thrill-dragster-180.png",
+        "w": 155.5,
+        "h": 80.5,
+        "ox": 77.74613952636719,
+        "oy": 69.92293548583984
+      },
+      "240": {
+        "file": "/assets/models/top-thrill-dragster-240.png",
+        "w": 89.75,
+        "h": 195.75,
+        "ox": 45.2787971496582,
+        "oy": 127.41243743896484
+      },
+      "300": {
+        "file": "/assets/models/top-thrill-dragster-300.png",
+        "w": 89.25,
+        "h": 196,
+        "ox": 43.76251220703125,
+        "oy": 127.11892700195312
+      }
+    }
+  }
+}

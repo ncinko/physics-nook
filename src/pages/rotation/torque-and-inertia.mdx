@@ -1,0 +1,169 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Torque and Moment of Inertia
+description: Build the rotational analogs of force and mass — lever arms and τ = rF sin θ, moment of inertia from mass distribution, and Newton's second law for rotation.
+canonicalPath: /rotation/torque-and-inertia
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import LeverArmExplorer from '../../components/rotation/LeverArmExplorer';
+import InertiaRaceBuilder from '../../components/rotation/InertiaRaceBuilder';
+import { rotationPath } from '../../data/modules';
+
+<ModuleHero module={rotationPath} currentPath="/rotation/torque-and-inertia" />
+
+<div id="page-content"></div>
+
+# Torque and Moment of Inertia
+
+Push a door at its handle and it swings open; push with the same force next to the hinge and it barely moves. [Forces](/forces) alone cannot explain the difference — the force was identical both times. What changed is *where* and *in what direction* it was applied. Rotation needs its own version of force, and its own version of mass to resist it.
+
+## Torque: the Turning Effectiveness of a Force
+
+The rotational effectiveness of a force is its **torque**,
+
+$$
+\tau = rF\sin\theta,
+$$
+
+where $r$ is the distance from the pivot to the point where the force acts, and $\theta$ is the angle between the force and the line from the pivot. Two things kill a torque: applying the force close to the pivot (small $r$) and aiming it along the line to the pivot ($\sin\theta = 0$ — all push, no turn).
+
+There is a useful way to read the same formula geometrically. Slide the force along its own line of action and nothing about its turning ability changes; what matters is the perpendicular distance from the pivot to that line, called the **lever arm** $r_\perp = r\sin\theta$. Then $\tau = r_\perp F$: torque is force times lever arm.
+
+<InteractiveAnchor id="lever-arm-explorer" />
+
+<LeverArmExplorer client:visible />
+
+Torque carries a sign — counterclockwise is positive by convention — and the SI unit is the newton-meter ($\text{N·m}$). This is why a longer wrench loosens a stubborn bolt: the same hand force acting on a longer lever arm produces a larger torque.
+
+## Moment of Inertia: Where the Mass Sits
+
+In the linear world, mass measures how much an object resists acceleration. Its rotational twin is the **moment of inertia** $I$ — but with a twist: it depends not just on how much mass there is, but on *how far from the axis* it sits. For a single point mass,
+
+$$
+I = mr^2,
+$$
+
+and for a collection of masses, $I = \sum_i m_i r_i^2$. The $r^2$ is the punchline. Moving a mass twice as far from the axis makes it *four times* harder to spin up. Two objects with identical mass can have wildly different moments of inertia.
+
+<InteractiveAnchor id="inertia-race-builder" />
+
+<InertiaRaceBuilder client:visible />
+
+Summing $mr^2$ over every particle of a solid shape gives compact results for the common cases (mass $m$, outer radius $r$, rod length $L$):
+
+| Shape (axis through center) | Moment of inertia |
+| --- | --- |
+| thin hoop | $mr^2$ |
+| solid disk or cylinder | $\tfrac{1}{2}mr^2$ |
+| solid sphere | $\tfrac{2}{5}mr^2$ |
+| hollow sphere | $\tfrac{2}{3}mr^2$ |
+| thin rod, axis through center | $\tfrac{1}{12}mL^2$ |
+| thin rod, axis through end | $\tfrac{1}{3}mL^2$ |
+
+The ordering makes physical sense: a hoop keeps all of its mass at the full radius, so its coefficient is the largest possible; a solid sphere buries most of its mass near the axis and comes in lowest.
+
+## Newton's Second Law for Rotation
+
+Put the two new quantities together and the familiar law reappears in rotational costume:
+
+$$
+\vec F = m\vec a \quad\longrightarrow\quad \tau_{\text{net}} = I\alpha.
+$$
+
+A net torque produces angular acceleration, in inverse proportion to the moment of inertia. Every intuition from $F = ma$ transfers: double the torque, double the angular acceleration; double the moment of inertia, halve it.
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Torque on a Stubborn Bolt" accent="blue">
+    #### Problem
+
+    A hand applies $40\ \text{N}$ to a wrench at $r = 0.24\ \text{m}$ from the bolt, at $60°$ to the handle. What torque does it produce? What is the best angle?
+
+    #### Use
+
+    $\tau = rF\sin\theta$; torque is maximized when the force is perpendicular to the handle.
+
+    #### Solve
+
+    $$
+    \tau = (0.24)(40)\sin 60° = (0.24)(40)(0.866) \approx 8.3\ \text{N·m}.
+    $$
+
+    At $\theta = 90°$ the same force would give $\tau = (0.24)(40) = 9.6\ \text{N·m}$.
+
+    #### Check
+
+    These are the default settings of the explorer above — drag the angle to $90°$ and watch the lever arm grow to the full $0.24\ \text{m}$. Pushing at $60°$ wastes $\cos 60° = 50\%$ of the force along the handle, but only costs $13\%$ of the torque, because $\sin 60° = 0.87$.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Atwood Machine with a Real Pulley" accent="red">
+    #### Problem
+
+    Masses $m_1 = 1.0\ \text{kg}$ and $m_2 = 1.5\ \text{kg}$ hang from a string over a solid-disk pulley of mass $M = 1.0\ \text{kg}$ and radius $R = 0.10\ \text{m}$. Find the acceleration. (The string does not slip on the pulley.)
+
+    #### Use
+
+    Newton's second law on each mass, $\tau = I\alpha$ on the pulley with $I = \tfrac{1}{2}MR^2$, and the no-slip link $a = R\alpha$. The two string tensions are *different* — their difference is what torques the pulley.
+
+    #### Solve
+
+    Adding the three equations, the tensions cancel and every term of $I/R^2 = \tfrac{1}{2}M$ acts like extra mass to accelerate:
+
+    $$
+    a = \frac{(m_2 - m_1)g}{m_1 + m_2 + \tfrac{1}{2}M}
+      = \frac{(0.5)(9.8)}{1.0 + 1.5 + 0.5}
+      = 1.6\ \text{m/s}^2.
+    $$
+
+    #### Check
+
+    With a massless pulley the answer would be $(0.5)(9.8)/2.5 = 2.0\ \text{m/s}^2$ — the pulley's inertia slows the system, exactly as adding $\tfrac{1}{2}M$ of ordinary mass would. In the limit $M \to 0$ the familiar Atwood result returns.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Torque &amp; Inertia Checkpoint"
+  questions={[
+    {
+      id: 'force-along-arm',
+      question: 'You pull on the very end of a long wrench, but directly along the handle, straight away from the bolt. The torque is:',
+      options: [
+        { id: 'A', text: 'Very large, because the lever arm is long.', isCorrect: false, explanation: 'Distance alone is not enough — a force aimed along the line to the pivot has $\\theta = 0$, so $\\sin\\theta = 0$.' },
+        { id: 'B', text: 'Zero, no matter how hard you pull.', isCorrect: true, explanation: 'Right. The line of action passes through the pivot, so the lever arm $r\\sin\\theta$ is zero — all push, no turn.' },
+        { id: 'C', text: 'Equal to $rF$.', isCorrect: false, explanation: '$rF$ is the maximum possible torque, achieved when the force is perpendicular to the handle ($\\theta = 90°$).' }
+      ]
+    },
+    {
+      id: 'distribution-matters',
+      question: 'A hoop and a solid disk have the same mass and the same radius. Which is harder to spin up about its center?',
+      options: [
+        { id: 'A', text: 'The hoop — its mass all sits at the full radius.', isCorrect: true, explanation: 'Correct. $I_{\\text{hoop}} = mr^2$ versus $I_{\\text{disk}} = \\tfrac{1}{2}mr^2$: the disk hides half its rotational inertia by keeping mass near the axis.' },
+        { id: 'B', text: 'The disk — it is solid, so there is more material.', isCorrect: false, explanation: 'They have the same total mass. What differs is where it sits, and the disk keeps much of it close to the axis.' },
+        { id: 'C', text: 'Neither — equal mass and radius means equal moment of inertia.', isCorrect: false, explanation: 'Moment of inertia depends on the mass distribution, not just the totals: $I = \\sum m_i r_i^2$.' }
+      ]
+    },
+    {
+      id: 'double-radius',
+      question: 'A small mass on a light rod is moved from $r$ to $2r$ from the axis. Its contribution to the moment of inertia:',
+      options: [
+        { id: 'A', text: 'Doubles.', isCorrect: false, explanation: 'That would be true if $I$ grew linearly with $r$, but $I = mr^2$.' },
+        { id: 'B', text: 'Quadruples.', isCorrect: true, explanation: 'Exactly — $I = mr^2$, so doubling $r$ multiplies the contribution by $2^2 = 4$. You can verify this with the rod builder above.' },
+        { id: 'C', text: 'Stays the same, since the mass is unchanged.', isCorrect: false, explanation: 'Unlike plain mass, rotational inertia cares about position: the same kilogram is harder to swing on a longer arm.' }
+      ]
+    },
+    {
+      id: 'tau-i-alpha',
+      question: 'The same net torque is applied to two flywheels. Flywheel B has twice the moment of inertia of flywheel A. How do their angular accelerations compare?',
+      options: [
+        { id: 'A', text: '$\\alpha_B = \\tfrac{1}{2}\\alpha_A$.', isCorrect: true, explanation: 'Right. From $\\tau = I\\alpha$, at fixed torque $\\alpha \\propto 1/I$ — doubling the inertia halves the response.' },
+        { id: 'B', text: '$\\alpha_B = 2\\alpha_A$.', isCorrect: false, explanation: 'More inertia means less angular acceleration for the same torque, not more.' },
+        { id: 'C', text: 'They are equal, because the torque is the same.', isCorrect: false, explanation: 'Equal torque only means equal $I\\alpha$ products — the flywheel with more inertia accelerates more slowly.' }
+      ]
+    }
+  ]}
+/>

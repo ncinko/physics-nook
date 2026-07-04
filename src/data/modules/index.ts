@@ -83,10 +83,19 @@ export const mechanicsPath = {
     forcesModule.pages[0],
     collisionsModule.pages[0],
     energyModule.pages[0],
-    // Rotational Dynamics (rotationModule.pages[0]) is hidden for now; only the
-    // Rotating Frames page is surfaced in navigation.
-    rotationModule.pages[1],
   ],
+} satisfies ModulePathGroup;
+
+export const rotationPath = {
+  id: 'rotation',
+  // Landing page skips the hidden Rotational Dynamics draft (rotationModule.pages[0]).
+  href: rotationModule.pages[1].href,
+  navLabel: rotationModule.navLabel,
+  summary: rotationModule.summary,
+  cardEyebrow: rotationModule.cardEyebrow,
+  navVisibility: 'menu',
+  // pages[0] is the hidden draft index; surface only the public rotation lessons.
+  pages: rotationModule.pages.slice(1),
 } satisfies ModulePathGroup;
 
 export const astronomyPath = {
@@ -158,6 +167,7 @@ export const textbookProgressionGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
+  rotationPath,
   astronomyPath,
   wavesAndOscillationsPath,
   electromagnetismPath,
@@ -211,6 +221,7 @@ export const exploreModuleGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
+  rotationPath,
   astronomyPath,
   wavesAndOscillationsPath,
   electromagnetismPath,

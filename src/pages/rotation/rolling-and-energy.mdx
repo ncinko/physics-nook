@@ -1,0 +1,163 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Rolling Motion and Rotational Energy
+description: Combine translation and spin — rolling without slipping, kinetic energy split between ½mv² and ½Iω², and why shape decides the race down an incline.
+canonicalPath: /rotation/rolling-and-energy
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import RollingRaceLab from '../../components/rotation/RollingRaceLab';
+import { rotationPath } from '../../data/modules';
+
+<ModuleHero module={rotationPath} currentPath="/rotation/rolling-and-energy" />
+
+<div id="page-content"></div>
+
+# Rolling Motion and Rotational Energy
+
+A rolling wheel does two things at once: its center travels forward, and the wheel spins about that center. **Rolling without slipping** is the special case where the two motions are locked together — the tire grips the road instead of skidding across it — and the lock is the same relation that connected angular and linear speed on the [angular kinematics](/rotation/angular-kinematics) page:
+
+$$
+v_{\text{center}} = r\omega.
+$$
+
+Each turn of the wheel carries the center forward by exactly one circumference. One startling consequence: the point of the wheel touching the ground is *momentarily at rest*. The forward motion of the center ($+r\omega$) and the backward sweep of the rim at the bottom ($-r\omega$) cancel exactly. That is why the rim marker's velocity arrow in the wheel tracker shrank to zero at every ground contact — and why a rolling tire can be gripped by *static* friction even at highway speed.
+
+## The Kinetic Energy of Rolling
+
+Because a rolling body both translates and spins, its kinetic energy has two parts:
+
+$$
+K = \underbrace{\tfrac{1}{2}mv^2}_{\text{translation}} + \underbrace{\tfrac{1}{2}I\omega^2}_{\text{rotation}}.
+$$
+
+For round shapes, the moment of inertia is some coefficient $c$ times $mr^2$ — one half for a disk, two fifths for a solid sphere, one for a hoop. Substituting $I = cmr^2$ and $\omega = v/r$ makes the radius disappear:
+
+$$
+K = \tfrac{1}{2}mv^2 + \tfrac{1}{2}(cmr^2)\frac{v^2}{r^2} = \tfrac{1}{2}(1 + c)\,mv^2.
+$$
+
+A rolling object is carrying a hidden energy surcharge: at the same speed, a hoop ($c = 1$) holds *twice* the kinetic energy of a sliding block, with a full half of it tucked into the spin.
+
+## The Race Down the Incline
+
+That surcharge has a famous consequence. Release a hoop, a disk, and a sphere from rest at the top of a ramp and they do not arrive together — and neither mass nor radius has anything to do with the finish order.
+
+<DerivationPanel title="Why a = g sin θ / (1 + c)">
+
+Roll from rest down a slope of angle $\theta$ through a distance $s$ along the surface (a height drop of $s\sin\theta$). Rolling friction does no work at the contact point (it is static, and the contact point is at rest), so mechanical energy is conserved:
+
+$$
+mgs\sin\theta = \tfrac{1}{2}(1 + c)\,mv^2
+\quad\Rightarrow\quad
+v^2 = \frac{2g\sin\theta}{1 + c}\,s.
+$$
+
+Comparing with the kinematic relation $v^2 = 2as$ identifies a constant acceleration
+
+$$
+a = \frac{g\sin\theta}{1 + c}.
+$$
+
+Both $m$ and $r$ have cancelled. Only the *shape coefficient* $c$ survives — the fraction of energy each shape is forced to divert into spinning.
+
+</DerivationPanel>
+
+The smaller the coefficient $c$, the less energy the shape wastes on rotation and the faster it accelerates: solid sphere ($\tfrac{2}{5}$) beats disk ($\tfrac{1}{2}$) beats hollow sphere ($\tfrac{2}{3}$) beats hoop ($1$) — every time, on any planet, at any size. Watch the energy bars in the lab below: every racer converts the same potential energy, but the hoop locks half of it into rotation while the sphere keeps most of it moving forward.
+
+<InteractiveAnchor id="rolling-race-lab" />
+
+<SimulationBlock
+  title="Rolling Race Lab"
+  description="Race a hoop, disk, solid sphere, and hollow sphere down an adjustable incline. The energy bars split each racer's budget into translational and rotational kinetic energy."
+>
+  <RollingRaceLab client:only="react" />
+</SimulationBlock>
+
+A sliding, frictionless block would beat them all ($c = 0$): with no spin to feed, every joule of potential energy goes into forward motion.
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Solid Sphere on a Ramp" accent="blue">
+    #### Problem
+
+    A solid sphere rolls without slipping from rest down a $30°$ incline. Find its acceleration and its speed after $6.0\ \text{m}$ along the slope.
+
+    #### Use
+
+    $a = g\sin\theta/(1 + c)$ with $c = \tfrac{2}{5}$ for a solid sphere, then $v^2 = 2as$.
+
+    #### Solve
+
+    $$
+    a = \frac{(9.8)\sin 30°}{1 + \tfrac{2}{5}} = \frac{4.9}{1.4} = 3.5\ \text{m/s}^2,
+    $$
+
+    $$
+    v = \sqrt{2(3.5)(6.0)} \approx 6.5\ \text{m/s}.
+    $$
+
+    #### Check
+
+    A frictionless sliding block would have $a = g\sin 30° = 4.9\ \text{m/s}^2$ — the rolling sphere is slower because $\tfrac{2}{7}$ of its energy budget ($c/(1+c) = \tfrac{2/5}{7/5}$) is spent on spin. Note that neither the sphere's mass nor its radius was needed.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="The Falling Toilet-Paper Roll" accent="red">
+    #### Problem
+
+    A fresh cylindrical roll is held by the loose end of its paper and released. Treating it as a uniform solid cylinder unrolling without slipping, what is its downward acceleration?
+
+    #### Use
+
+    This is a "rolling" problem turned vertical: the paper acts like an incline of $\theta = 90°$, so $a = g/(1 + c)$ with $c = \tfrac{1}{2}$.
+
+    #### Solve
+
+    $$
+    a = \frac{g}{1 + \tfrac{1}{2}} = \frac{2g}{3} \approx 6.5\ \text{m/s}^2.
+    $$
+
+    #### Check
+
+    The roll falls, but at only two thirds of $g$ — the remaining third of the gravitational energy is spinning the roll up. The paper tension that provides the slowing force is $T = mg/3$, which you can confirm from $ma = mg - T$.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Rolling &amp; Energy Checkpoint"
+  questions={[
+    {
+      id: 'race-winner',
+      question: 'A small steel sphere and a huge wooden sphere (both solid) roll from rest down the same ramp. Who wins?',
+      options: [
+        { id: 'A', text: 'The heavy steel sphere — more weight drives it downhill.', isCorrect: false, explanation: 'Mass cancels: it multiplies both the driving energy and the inertia. Only the shape coefficient survives in $a = g\\sin\\theta/(1+c)$.' },
+        { id: 'B', text: 'They tie — both are solid spheres, so both have $c = 2/5$.', isCorrect: true, explanation: 'Right. Acceleration depends only on the shape coefficient, not on mass or radius — any two solid spheres roll down together.' },
+        { id: 'C', text: 'The large sphere — a bigger radius means more speed per turn.', isCorrect: false, explanation: 'The radius cancels too: $v = r\\omega$ trades a larger $r$ against a slower spin, leaving the energy split unchanged.' }
+      ]
+    },
+    {
+      id: 'missing-energy',
+      question: 'A hoop rolls down a ramp and arrives noticeably slower than a sliding, frictionless block released alongside it. Where did the "missing" kinetic energy go?',
+      options: [
+        { id: 'A', text: 'It was lost to friction as heat.', isCorrect: false, explanation: 'Static friction at a contact point that is momentarily at rest does no work — rolling without slipping conserves mechanical energy.' },
+        { id: 'B', text: 'It is stored as rotational kinetic energy in the spin.', isCorrect: true, explanation: 'Exactly. For a hoop, fully half the energy budget is in $\\tfrac{1}{2}I\\omega^2$ — present, but not helping the forward motion.' },
+        { id: 'C', text: 'The hoop ends with less total energy than the block.', isCorrect: false, explanation: 'Both converted the same potential energy; the hoop just splits its share between translation and rotation.' }
+      ]
+    },
+    {
+      id: 'contact-point',
+      question: 'For a wheel rolling without slipping, the point currently touching the ground is moving:',
+      options: [
+        { id: 'A', text: 'Backward at speed $r\\omega$.', isCorrect: false, explanation: 'That is the rim\'s speed relative to the axle. Adding the axle\'s forward motion $+r\\omega$ gives zero.' },
+        { id: 'B', text: 'Forward at the same speed as the center.', isCorrect: false, explanation: 'Only the axle moves at $v = r\\omega$; rim points have that plus their rotational velocity, which points backward at the bottom.' },
+        { id: 'C', text: 'Not at all — it is momentarily at rest.', isCorrect: true, explanation: 'Correct. Forward translation and backward rotation cancel exactly at the contact point, which is why static (not kinetic) friction governs rolling.' }
+      ]
+    }
+  ]}
+/>

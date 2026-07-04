@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import type { Socket } from 'node:net';
 import { URL, pathToFileURL } from 'node:url';
 
+import { createCoasterWorld } from './coaster.ts';
 import { createRippleWorld } from './ripple.ts';
 import { createSolarWorld } from './solar.ts';
 
@@ -1205,6 +1206,7 @@ const tickRoom = (room: GameRoom): void => {
 export const createGameServer = () => {
   const rippleWorld = createRippleWorld();
   const solarWorld = createSolarWorld();
+  const coasterWorld = createCoasterWorld();
   const server = createServer((request, response) => {
     response.setHeader('access-control-allow-origin', '*');
 
@@ -1234,6 +1236,12 @@ export const createGameServer = () => {
       return;
     }
 
+    if (request.url === '/coaster/health') {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify(coasterWorld.health()));
+      return;
+    }
+
     response.writeHead(426, { 'content-type': 'text/plain' });
     response.end('Use a WebSocket connection for Manatee Royale, Orbitals, or Ripple Tank.');
   });
@@ -1246,6 +1254,7 @@ export const createGameServer = () => {
     clearInterval(loop);
     rippleWorld.close();
     solarWorld.close();
+    coasterWorld.close();
   });
 
   server.on('upgrade', (request, socket) => {
@@ -1278,6 +1287,11 @@ export const createGameServer = () => {
 
       if (url.pathname === '/ripples' || url.pathname === '/ripples/') {
         rippleWorld.accept(netSocket, url.searchParams.get('room') ?? undefined);
+        return;
+      }
+
+      if (url.pathname === '/coaster' || url.pathname === '/coaster/') {
+        coasterWorld.accept(netSocket);
         return;
       }
 

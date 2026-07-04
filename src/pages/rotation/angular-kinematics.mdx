@@ -1,0 +1,170 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Angular Kinematics
+description: Describe spin with radians — angular position, velocity, and acceleration, the v = rω link to linear motion, and the rotational kinematic equations.
+canonicalPath: /rotation/angular-kinematics
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import WheelPointTracker from '../../components/rotation/WheelPointTracker';
+import SpinUpGrapher from '../../components/rotation/SpinUpGrapher';
+import { rotationPath } from '../../data/modules';
+
+<ModuleHero module={rotationPath} currentPath="/rotation/angular-kinematics" />
+
+<div id="page-content"></div>
+
+# Angular Kinematics
+
+A spinning wheel is a strange object to describe with the kinematics of [straight-line motion](/kinematics). Every piece of it is moving, but no two pieces share the same velocity — the rim races along while material near the axle barely crawls. The trick is to stop tracking positions and start tracking a single **angle**. One number, $\theta$, pins down the orientation of the whole wheel, and everything else follows from it.
+
+## Radians: the Natural Angle
+
+Wrap a distance around a circle and you get the natural definition of angle: the **radian**. An angle in radians is the arc length it spans divided by the radius,
+
+$$
+\theta = \frac{s}{r} \quad\Longleftrightarrow\quad s = r\theta.
+$$
+
+One full turn wraps the full circumference $2\pi r$, so a revolution is $2\pi$ radians and a radian is about $57.3°$. Degrees and revolutions are fine for bookkeeping, but $s = r\theta$ — and every formula descended from it — only works when $\theta$ is in radians. It is worth being paranoid about this; it is the single most common error in rotation problems.
+
+## The Angular Vocabulary
+
+Each linear quantity has a rotational twin, built the same way:
+
+| Linear | Angular | Connection |
+| --- | --- | --- |
+| position $x$ | angle $\theta$ (rad) | $s = r\theta$ |
+| velocity $v = \dfrac{dx}{dt}$ | angular velocity $\omega = \dfrac{d\theta}{dt}$ (rad/s) | $v = r\omega$ |
+| acceleration $a = \dfrac{dv}{dt}$ | angular acceleration $\alpha = \dfrac{d\omega}{dt}$ (rad/s²) | $a_t = r\alpha$ |
+
+The connections in the last column are what make the angular description powerful. A rigid body has just *one* $\omega$ — every point sweeps the same angle in the same time — but each point's speed grows with its distance from the axis:
+
+$$
+v = r\omega.
+$$
+
+That is why the rim of a merry-go-round feels fast while the center feels calm: same $\omega$, different $r$.
+
+<InteractiveAnchor id="wheel-point-tracker" />
+
+<WheelPointTracker client:visible />
+
+Signs work like they do on a number line, except the line is bent into a circle: pick a positive rotation direction (counterclockwise, by convention), and $\omega$ and $\alpha$ carry signs relative to it. A wheel spinning counterclockwise ($\omega > 0$) while slowing down has a *clockwise* angular acceleration ($\alpha < 0$) — just as a car moving in the $+x$ direction while braking has a negative $a$.
+
+One caution: $a_t = r\alpha$ is only the **tangential** part of a point's acceleration — the part that changes its speed. Any point moving in a circle *also* has the inward centripetal part $a_c = r\omega^2$, even at constant $\omega$. The [rotating frames](/rotation/rotating-frames) page takes that inward piece apart in detail.
+
+## The Same Old Equations, Rotated
+
+Because $\theta$, $\omega$, and $\alpha$ are defined exactly like $x$, $v$, and $a$, constant-$\alpha$ rotation obeys the same kinematic equations with the letters swapped:
+
+$$
+\omega = \omega_0 + \alpha t, \qquad
+\theta = \theta_0 + \omega_0 t + \tfrac{1}{2}\alpha t^2, \qquad
+\omega^2 = \omega_0^2 + 2\alpha\,\Delta\theta.
+$$
+
+No new problem-solving skills are required — identify what is given, spot the missing variable, and pick the equation that avoids it, exactly as in linear kinematics.
+
+<InteractiveAnchor id="spin-up-grapher" />
+
+<SpinUpGrapher client:visible />
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="From RPM to Radians per Second" accent="blue">
+    #### Problem
+
+    An old hard drive spins at $300\ \text{rpm}$. What is its angular speed in rad/s, and how fast does a point at radius $4.0\ \text{cm}$ move?
+
+    #### Use
+
+    One revolution is $2\pi$ radians, so $\omega = 2\pi \cdot \text{rpm}/60$; then $v = r\omega$.
+
+    #### Solve
+
+    $$
+    \omega = \frac{2\pi (300)}{60} = 10\pi \approx 31.4\ \text{rad/s},
+    $$
+
+    $$
+    v = r\omega = (0.040)(31.4) \approx 1.3\ \text{m/s}.
+    $$
+
+    #### Check
+
+    Five revolutions per second times roughly $6.28$ radians per revolution is indeed about $31$ rad/s. The units only work because radians are dimensionless — a speed in "degrees·meters per second" would mean nothing.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Counting Revolutions During Spin-Up" accent="red">
+    #### Problem
+
+    A turbine starts from rest and accelerates at a constant $\alpha = 2.0\ \text{rad/s}^2$ for $10\ \text{s}$. Find its final angular speed and the number of revolutions it completes.
+
+    #### Use
+
+    Constant-$\alpha$ kinematics from rest: $\omega = \alpha t$ and $\theta = \tfrac{1}{2}\alpha t^2$.
+
+    #### Solve
+
+    $$
+    \omega = (2.0)(10) = 20\ \text{rad/s},
+    $$
+
+    $$
+    \theta = \tfrac{1}{2}(2.0)(10)^2 = 100\ \text{rad}
+    \quad\Rightarrow\quad
+    \frac{100}{2\pi} \approx 15.9\ \text{revolutions}.
+    $$
+
+    #### Check
+
+    The average angular speed is $10\ \text{rad/s}$ (half the final value), and $10\ \text{rad/s} \times 10\ \text{s} = 100\ \text{rad}$ — the two routes agree. You can replay these exact numbers in the grapher above.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Angular Kinematics Checkpoint"
+  questions={[
+    {
+      id: 'omega-vs-speed',
+      question: 'Two children ride a spinning merry-go-round: one near the center, one at the rim. Which quantities do they share?',
+      options: [
+        { id: 'A', text: 'The same angular velocity, but different speeds.', isCorrect: true, explanation: 'Right. A rigid body has one $\\omega$ for every point, while $v = r\\omega$ grows with distance from the axis.' },
+        { id: 'B', text: 'The same speed, but different angular velocities.', isCorrect: false, explanation: 'It is the reverse: they sweep the same angle per second, so $\\omega$ matches while the rim rider covers more distance.' },
+        { id: 'C', text: 'Both the same speed and the same angular velocity.', isCorrect: false, explanation: 'If their speeds matched at different radii, $\\omega = v/r$ would have to differ — impossible on a rigid platform.' }
+      ]
+    },
+    {
+      id: 'radians-required',
+      question: 'A student computes an arc length using $s = r\\theta$ with $\\theta = 90$ (degrees) and gets an absurdly large answer. What went wrong?',
+      options: [
+        { id: 'A', text: 'The formula only holds for full revolutions.', isCorrect: false, explanation: '$s = r\\theta$ works for any angle — provided the angle is expressed in radians.' },
+        { id: 'B', text: 'The angle must be converted to radians first: $90° = \\pi/2 \\approx 1.57$ rad.', isCorrect: true, explanation: 'Exactly. Radians are defined as arc length over radius, so $s = r\\theta$ is only valid in radians — the answer was too large by a factor of $180/\\pi$.' },
+        { id: 'C', text: 'Arc length requires the diameter, not the radius.', isCorrect: false, explanation: 'The radius is correct; the unit of the angle is the problem.' }
+      ]
+    },
+    {
+      id: 'slowing-sign',
+      question: 'A wheel spins counterclockwise (the positive direction) and is slowing down. What are the signs of $\\omega$ and $\\alpha$?',
+      options: [
+        { id: 'A', text: '$\\omega > 0$ and $\\alpha > 0$.', isCorrect: false, explanation: 'If both shared a sign, the spin would be speeding up, not slowing down.' },
+        { id: 'B', text: '$\\omega > 0$ and $\\alpha < 0$.', isCorrect: true, explanation: 'Correct. Slowing down means $\\alpha$ opposes $\\omega$ — the same sign logic as a braking car with positive velocity and negative acceleration.' },
+        { id: 'C', text: '$\\omega < 0$ and $\\alpha < 0$.', isCorrect: false, explanation: 'Counterclockwise rotation is positive $\\omega$ by our convention, and matching signs would mean speeding up.' }
+      ]
+    },
+    {
+      id: 'tangential-vs-centripetal',
+      question: 'A point on a wheel turning at constant angular speed has which of the following?',
+      options: [
+        { id: 'A', text: 'No acceleration at all, since $\\omega$ is constant.', isCorrect: false, explanation: 'Its speed is constant but its direction keeps changing, and changing velocity direction requires acceleration.' },
+        { id: 'B', text: 'Only the inward centripetal acceleration $a_c = r\\omega^2$.', isCorrect: true, explanation: 'Right. With $\\alpha = 0$ the tangential part $a_t = r\\alpha$ vanishes, but the direction change still demands the inward $r\\omega^2$.' },
+        { id: 'C', text: 'Only the tangential acceleration $a_t = r\\alpha$.', isCorrect: false, explanation: 'With constant $\\omega$, $\\alpha = 0$, so the tangential part is exactly the piece that is missing.' }
+      ]
+    }
+  ]}
+/>

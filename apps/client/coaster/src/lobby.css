@@ -1,0 +1,165 @@
+/* Online lobby + multiplayer chrome for Mega Park. Builds on the synced
+   styles.css (setup-screen, btn, panel...) — only online-specific bits here. */
+
+.lobby-screen {
+  gap: 14px;
+}
+
+.lobby-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(320px, 90vw);
+}
+
+.lobby-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.lobby-input {
+  padding: 10px 12px;
+  border: 2px solid rgba(0, 0, 0, 0.25);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.lobby-code-input {
+  width: 7ch;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 700;
+}
+
+.lobby-join-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.lobby-divider {
+  opacity: 0.7;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.lobby-status {
+  opacity: 0.75;
+  font-size: 14px;
+}
+
+.lobby-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #7a2e2e;
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 14px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  z-index: 300;
+  pointer-events: none;
+}
+
+.game-toast {
+  bottom: 190px;
+}
+
+.room-code {
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: 0.25em;
+  padding: 10px 28px 10px calc(28px + 0.25em);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 3px dashed rgba(0, 0, 0, 0.3);
+  user-select: all;
+}
+
+.seat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(320px, 90vw);
+}
+
+.seat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.75);
+  border-left: 6px solid var(--pc, #999);
+  font-weight: 600;
+}
+
+.seat-row.empty {
+  opacity: 0.6;
+  border-left-color: transparent;
+  font-weight: 400;
+  justify-content: center;
+}
+
+.seat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #b33;
+  flex: none;
+}
+
+.seat-dot.on {
+  background: #3a3;
+}
+
+.lobby-leave {
+  margin-top: 4px;
+}
+
+.turn-banner {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 24, 20, 0.85);
+  color: #fff;
+  border-left: 6px solid var(--pc, #999);
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  z-index: 200;
+  pointer-events: none;
+}
+
+.net-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 16, 12, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 400;
+}
+
+.net-overlay-card {
+  background: #fdf6e3;
+  padding: 22px 34px;
+  border-radius: 14px;
+  font-size: 17px;
+  font-weight: 700;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+}

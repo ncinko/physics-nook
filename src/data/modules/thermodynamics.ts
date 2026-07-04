@@ -38,6 +38,7 @@ export const thermodynamicsModule: ModuleMeta = {
           'Start the thermodynamics path with systems, state variables, thermal equilibrium, temperature, and internal energy.',
         canonicalPath: '/thermodynamics',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -53,6 +54,7 @@ export const thermodynamicsModule: ModuleMeta = {
           'Learn the first law of thermodynamics with heat, work, sign conventions, and energy-ledger examples.',
         canonicalPath: '/thermodynamics/first-law',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -68,6 +70,7 @@ export const thermodynamicsModule: ModuleMeta = {
           'Explore entropy through multiplicity, Boltzmann entropy, spontaneous processes, and the second law.',
         canonicalPath: '/thermodynamics/entropy',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -83,6 +86,7 @@ export const thermodynamicsModule: ModuleMeta = {
           'Connect thermodynamic entropy with missing information, Shannon entropy, bit erasure, and Landauer principle.',
         canonicalPath: '/thermodynamics/information-entropy',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
   ],

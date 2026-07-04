@@ -1,0 +1,164 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Angular Momentum
+description: Meet L = Iω and its conservation — spinning skaters, dropped disks, and why kinetic energy can change while angular momentum cannot.
+canonicalPath: /rotation/angular-momentum
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import SkaterSpin from '../../components/rotation/SkaterSpin';
+import DiskDropCollision from '../../components/rotation/DiskDropCollision';
+import { rotationPath } from '../../data/modules';
+
+<ModuleHero module={rotationPath} currentPath="/rotation/angular-momentum" />
+
+<div id="page-content"></div>
+
+# Angular Momentum
+
+Linear momentum $p = mv$ has a rotational twin, built — as always — by swapping mass for moment of inertia and velocity for angular velocity:
+
+$$
+L = I\omega.
+$$
+
+**Angular momentum** measures the "quantity of spin," in units of $\text{kg·m}^2/\text{s}$. And just as force is the rate of change of linear momentum, torque is the rate of change of angular momentum:
+
+$$
+F = \frac{dp}{dt} \quad\longrightarrow\quad \tau = \frac{dL}{dt}.
+$$
+
+This form of Newton's second law is more general than $\tau = I\alpha$, because it still works when the moment of inertia itself changes — and that is where rotation saves its best trick.
+
+## Conservation of Angular Momentum
+
+If the net *external* torque on a system is zero, its angular momentum cannot change:
+
+$$
+\tau_{\text{ext}} = 0 \quad\Longrightarrow\quad L = I\omega = \text{constant}.
+$$
+
+The interesting cases are the ones where $I$ changes while $L$ cannot. A spinning figure skater pulls her arms in: her moment of inertia drops, so her angular velocity *must* rise to keep the product $I\omega$ fixed. No one pushed her. She is not touching anything. The speedup comes entirely from rearranging her own mass.
+
+<InteractiveAnchor id="skater-spin" />
+
+<SkaterSpin client:visible />
+
+Keep an eye on the energy readout while pulling the arms in: $L$ holds still, but the kinetic energy $K = \tfrac{1}{2}I\omega^2 = \tfrac{1}{2}L\omega$ *rises* as $\omega$ does. That energy is not free — the skater's muscles do real work hauling her arms inward against the tendency to fly outward. Conservation of angular momentum is not conservation of energy; the two quantities keep separate books.
+
+The same principle steers real machines: divers tuck to somersault faster and stretch out to enter the water cleanly, cats twist their bodies to land feet-first, and spacecraft spin up reaction wheels one way so the craft turns the other.
+
+## Rotational Collisions
+
+Angular momentum conservation also governs the rotational version of a [collision](/collisions). Drop a stationary disk onto a spinning one and friction between the faces drags them to a common angular velocity — an internal torque pair, invisible to the system's total $L$:
+
+$$
+I_1\omega_1 = (I_1 + I_2)\,\omega_f
+\quad\Longrightarrow\quad
+\omega_f = \frac{I_1\omega_1}{I_1 + I_2}.
+$$
+
+This is the perfectly inelastic collision of the rotational world, and it shares that collision's signature: momentum survives, kinetic energy does not. The friction that locks the disks together turns the difference into heat.
+
+<InteractiveAnchor id="disk-drop-collision" />
+
+<DiskDropCollision client:visible />
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="The Skater's Spin-Up" accent="blue">
+    #### Problem
+
+    A skater spinning at $3.0\ \text{rad/s}$ with arms out ($I = 4.0\ \text{kg·m}^2$) pulls her arms in, dropping her moment of inertia to $2.0\ \text{kg·m}^2$. Find her new angular speed and the change in kinetic energy.
+
+    #### Use
+
+    No external torque acts about the spin axis, so $I_1\omega_1 = I_2\omega_2$; then compare $K = \tfrac{1}{2}I\omega^2$.
+
+    #### Solve
+
+    $$
+    \omega_2 = \frac{I_1\omega_1}{I_2} = \frac{(4.0)(3.0)}{2.0} = 6.0\ \text{rad/s},
+    $$
+
+    $$
+    K_1 = \tfrac{1}{2}(4.0)(3.0)^2 = 18\ \text{J}, \qquad
+    K_2 = \tfrac{1}{2}(2.0)(6.0)^2 = 36\ \text{J}.
+    $$
+
+    #### Check
+
+    Halving $I$ doubled $\omega$ — and doubled the kinetic energy, since $K = \tfrac{1}{2}L\omega$ with $L$ fixed. The extra $18\ \text{J}$ is exactly the work her muscles did pulling the arm mass inward.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Child on a Merry-Go-Round" accent="red">
+    #### Problem
+
+    A playground merry-go-round ($I_{\text{disk}} = 500\ \text{kg·m}^2$) turns at $0.50\ \text{rad/s}$ with a $30\ \text{kg}$ child at its $2.0\ \text{m}$ rim. The child walks to $0.50\ \text{m}$ from the center. Find the new angular speed.
+
+    #### Use
+
+    The child is part of the system, so her $mr^2$ belongs in the total $I$; walking inward changes $I$ but no external torque acts, so $L$ is conserved.
+
+    #### Solve
+
+    $$
+    I_1 = 500 + (30)(2.0)^2 = 620\ \text{kg·m}^2, \qquad
+    I_2 = 500 + (30)(0.50)^2 = 507.5\ \text{kg·m}^2,
+    $$
+
+    $$
+    \omega_2 = \frac{I_1\omega_1}{I_2} = \frac{(620)(0.50)}{507.5} \approx 0.61\ \text{rad/s}.
+    $$
+
+    #### Check
+
+    The platform speeds up by about $22\%$ — the merry-go-round is the skater's trick at playground scale. If the child walked back out, the spin would slow to exactly $0.50\ \text{rad/s}$ again.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Angular Momentum Checkpoint"
+  questions={[
+    {
+      id: 'conservation-condition',
+      question: 'Under what condition is a system\'s angular momentum conserved?',
+      options: [
+        { id: 'A', text: 'When the net external torque on the system is zero.', isCorrect: true, explanation: 'Correct. $\\tau_{\\text{ext}} = dL/dt$, so zero net external torque means $L$ cannot change — internal torques always cancel in pairs.' },
+        { id: 'B', text: 'When its moment of inertia stays constant.', isCorrect: false, explanation: 'A constant $I$ is not required — the skater\'s $I$ changes freely while her $L$ stays fixed. What matters is the absence of external torque.' },
+        { id: 'C', text: 'When its kinetic energy stays constant.', isCorrect: false, explanation: 'The two are independent: the skater\'s kinetic energy rises while her angular momentum is perfectly conserved.' }
+      ]
+    },
+    {
+      id: 'skater-energy-source',
+      question: 'A skater pulls her arms in and spins faster, gaining kinetic energy. Where did that energy come from?',
+      options: [
+        { id: 'A', text: 'From the conserved angular momentum being converted into energy.', isCorrect: false, explanation: 'Momentum and energy are different quantities with different units — one cannot turn into the other.' },
+        { id: 'B', text: 'From the work her muscles do pulling her arms inward.', isCorrect: true, explanation: 'Right. Her arms tend to fly outward, and dragging them in against that tendency takes real muscular work — which lands in the spin as kinetic energy.' },
+        { id: 'C', text: 'Nowhere — her kinetic energy actually stays constant.', isCorrect: false, explanation: 'With $L$ fixed, $K = \\tfrac{1}{2}L\\omega$ grows in proportion to $\\omega$: spinning faster at the same $L$ means more kinetic energy.' }
+      ]
+    },
+    {
+      id: 'disk-drop',
+      question: 'A disk is dropped onto an identical disk spinning freely at $\\omega$. After they lock together, the pair turns at $\\omega/2$. Which statement is true?',
+      options: [
+        { id: 'A', text: 'Angular momentum was conserved, but half the kinetic energy was lost to friction.', isCorrect: true, explanation: 'Exactly. Doubling $I$ halves $\\omega$, keeping $L = I\\omega$ fixed — but $K = \\tfrac{1}{2}I\\omega^2$ drops by half, dissipated while the faces slipped.' },
+        { id: 'B', text: 'Both angular momentum and kinetic energy were conserved.', isCorrect: false, explanation: 'Check the numbers: $K$ falls from $\\tfrac{1}{2}I\\omega^2$ to $\\tfrac{1}{2}(2I)(\\omega/2)^2 = \\tfrac{1}{4}I\\omega^2$. Locking together always costs energy.' },
+        { id: 'C', text: 'Angular momentum was halved along with the angular velocity.', isCorrect: false, explanation: '$L = I\\omega$: the doubled moment of inertia exactly compensates the halved spin rate, so $L$ is unchanged.' }
+      ]
+    },
+    {
+      id: 'what-changes',
+      question: 'As the skater pulls her arms in (no external torque), which quantity does NOT change?',
+      options: [
+        { id: 'A', text: 'Her angular velocity $\\omega$.', isCorrect: false, explanation: '$\\omega$ is exactly what rises — that is the visible spin-up.' },
+        { id: 'B', text: 'Her angular momentum $L$.', isCorrect: true, explanation: 'Correct. With no external torque, $L = I\\omega$ is locked: $I$ falls and $\\omega$ rises in exact compensation.' },
+        { id: 'C', text: 'Her moment of inertia $I$.', isCorrect: false, explanation: 'Pulling mass toward the axis is precisely what reduces $I$ — that is what forces $\\omega$ up.' }
+      ]
+    }
+  ]}
+/>

@@ -151,13 +151,14 @@ function WaitingRoom({ net, room, seat, status, toast }) {
 
 function GameScreen({ net, room, seat, state, status, toast, showToast }) {
   const isHost = room.seats.find((s) => s.seat === seat)?.isHost ?? false;
-  const isMyTurn =
-    state.phase === "draft" ? state.draftPlayerId === seat : state.currentPlayerId === seat;
-
-  const activePlayer =
-    state.phase === "draft"
-      ? state.players[state.draftPlayerId]
-      : state.players.find((p) => p.id === state.currentPlayerId);
+  const drafting = state.phase === "draft";
+  // During the (parallel) draft the server sets draftPlayerId to this seat
+  // until it has confirmed; afterwards turns come from currentPlayerId.
+  const isMyTurn = drafting ? state.draftPlayerId === seat : state.currentPlayerId === seat;
+  const currentPlayer = state.players.find((p) => p.id === state.currentPlayerId);
+  const waitingText = drafting
+    ? "Waiting for the other players to draft…"
+    : `Waiting for ${currentPlayer.name}…`;
 
   const dispatch = (action) => {
     // The synced game-over screen offers "Play Again" via NEW_GAME; online,
@@ -168,21 +169,16 @@ function GameScreen({ net, room, seat, state, status, toast, showToast }) {
       return;
     }
     if (!isMyTurn && state.phase !== "gameOver") {
-      showToast(`It's ${activePlayer.name}'s turn.`);
+      showToast(drafting ? "Waiting for the other players to finish drafting." : `It's ${currentPlayer.name}'s turn.`);
       return;
     }
     net.dispatchAction(action);
   };
 
   // The synced HandTray shows the hand of `currentPlayerId` (hotseat behavior);
-  // online, every player sees their own hand, and staging UI only on their turn.
-  const handState = {
-    ...state,
-    currentPlayerId: seat,
-    selectedAction: isMyTurn ? state.selectedAction : null,
-    selectedCardId: isMyTurn ? state.selectedCardId : null,
-    selectedHexIds: isMyTurn ? state.selectedHexIds : [],
-  };
+  // online, every player sees their own hand. Staging fields (selectedAction &
+  // friends) are already redacted server-side for everyone but the actor.
+  const handState = { ...state, currentPlayerId: seat };
 
   return (
     <div className="table">
@@ -197,8 +193,8 @@ function GameScreen({ net, room, seat, state, status, toast, showToast }) {
       <HandTray state={handState} dispatch={dispatch} />
 
       {!isMyTurn && state.phase !== "gameOver" && (
-        <div className="turn-banner" style={{ "--pc": activePlayer.color }}>
-          Waiting for {activePlayer.name}…
+        <div className="turn-banner" style={drafting ? undefined : { "--pc": currentPlayer.color }}>
+          {waitingText}
         </div>
       )}
 

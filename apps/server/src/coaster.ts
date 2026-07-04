@@ -174,15 +174,32 @@ const parseFrames = (client: CoasterClient, chunk: Buffer): string[] => {
 };
 
 // Hide information a given seat must not see, while preserving array lengths —
-// the synced UI components only read `.length` of hidden collections.
+// the synced UI components only read `.length` of hidden collections. Staging
+// state (selected action/card/hexes, draft picks) is private to the acting
+// player so other clients don't get selection panels opening under them.
 const redactStateFor = (state: CoasterGameState, seat: number): CoasterGameState => {
   const s = state as Record<string, any>;
+  const isCurrent = s.currentPlayerId === seat;
+  const drafting = s.phase === 'draft';
   return {
     ...s,
     deck: (s.deck as unknown[]).map(() => null),
     discard: (s.discard as unknown[]).map(() => null),
-    drawnCards: s.currentPlayerId === seat ? s.drawnCards : null,
-    draftCards: s.draftPlayerId === seat ? s.draftCards : null,
+    drawnCards: isCurrent ? s.drawnCards : null,
+    // Everyone drafts in parallel; each client's "displayed drafter" is itself
+    // until it confirms, then nothing.
+    draftPlayerId: drafting ? (s.draftCards?.[seat] ? seat : null) : s.draftPlayerId,
+    draftCards: Array.isArray(s.draftCards)
+      ? s.draftCards.map((cards: unknown[] | null, pid: number) =>
+          pid === seat ? cards : cards ? cards.map(() => null) : null,
+        )
+      : s.draftCards,
+    draftSelected: Array.isArray(s.draftSelected)
+      ? s.draftSelected.map((sel: unknown[], pid: number) => (pid === seat ? sel : []))
+      : s.draftSelected,
+    selectedAction: isCurrent ? s.selectedAction : null,
+    selectedCardId: isCurrent ? s.selectedCardId : null,
+    selectedHexIds: isCurrent ? s.selectedHexIds : [],
     players: (s.players as Array<Record<string, any>>).map((p) =>
       p.id === seat ? p : { ...p, hand: (p.hand as unknown[]).map(() => null) },
     ),
@@ -459,8 +476,8 @@ export const createCoasterWorld = () => {
 
   const startGame = (room: CoasterRoom): void => {
     let state = createInitialState(room.seats.length) as Record<string, any>;
-    // The reducer bakes default names ("Red (P1)") into players and the opening
-    // message; swap in lobby names once and every later message follows.
+    // The reducer bakes default names ("Red (P1)") into players; swap in lobby
+    // names once and every later reducer message follows.
     state = {
       ...state,
       players: state.players.map((p: Record<string, any>, index: number) => ({
@@ -468,7 +485,6 @@ export const createCoasterWorld = () => {
         name: room.seats[index].name,
       })),
     };
-    state.message = `Opening draft: ${state.players[0].name}, choose 2 of 5 cards to keep.`;
 
     room.state = state;
     room.phase = 'playing';
@@ -514,14 +530,25 @@ export const createCoasterWorld = () => {
     }
 
     const state = room.state as Record<string, any>;
-    const activeSeat = state.phase === 'draft' ? state.draftPlayerId : state.currentPlayerId;
-    if (seat.seat !== activeSeat) {
+    const isDraftAction = action.type === 'TOGGLE_DRAFT_CARD' || action.type === 'CONFIRM_DRAFT';
+    if (state.phase === 'draft') {
+      // Drafting happens in parallel: any seat may act on its own cards.
+      if (!isDraftAction) {
+        sendError(client, 'Finish the draft first.');
+        return;
+      }
+      if (!state.draftCards?.[seat.seat]) {
+        sendError(client, 'You have already drafted.');
+        return;
+      }
+    } else if (isDraftAction || seat.seat !== state.currentPlayerId) {
       sendError(client, 'Not your turn.');
       return;
     }
 
     // Keep payloads to the primitive fields the reducer reads.
     const sanitized: CoasterGameAction = { type: action.type };
+    if (isDraftAction) sanitized.playerId = seat.seat; // server-assigned, never client-supplied
     if (typeof action.hexId === 'string' && action.hexId.length <= 32) sanitized.hexId = action.hexId;
     if (typeof action.cardId === 'string' && action.cardId.length <= 64) sanitized.cardId = action.cardId;
     if (typeof action.action === 'string' && action.action.length <= 32) sanitized.action = action.action;

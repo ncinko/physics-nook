@@ -46,9 +46,13 @@ export function createInitialState(numPlayers) {
   }
   const market = deck.slice(0, MARKET_SIZE);
   deck = deck.slice(MARKET_SIZE);
-  // Opening draft: each player picks DRAFT_KEEP of DRAFT_DEAL dealt cards.
-  const draftCards = deck.slice(0, DRAFT_DEAL);
-  deck = deck.slice(DRAFT_DEAL);
+  // Opening draft: every player at once picks DRAFT_KEEP of DRAFT_DEAL dealt
+  // cards. draftCards[playerId] is null once that player has confirmed.
+  const draftCards = [];
+  for (let i = 0; i < numPlayers; i++) {
+    draftCards.push(deck.slice(0, DRAFT_DEAL));
+    deck = deck.slice(DRAFT_DEAL);
+  }
   return {
     phase: "draft", // draft | playing | drawChoice | gameOver
     season: 1,
@@ -70,10 +74,10 @@ export function createInitialState(numPlayers) {
     actionsUsedThisTurn: [], // each turn is ACTIONS_PER_TURN unique actions
     landBoughtThisTurn: 0, // multi-buy counter (seasons 4+)
     drawnCards: null, // cardIds during drawChoice
-    draftPlayerId: 0,
+    draftPlayerId: 0, // whose draft the UI shows (hotseat: first unconfirmed)
     draftCards,
-    draftSelected: [],
-    message: `Opening draft: ${players[0].name}, choose ${DRAFT_KEEP} of ${DRAFT_DEAL} cards to keep.`,
+    draftSelected: players.map(() => []),
+    message: `Opening draft: everyone picks ${DRAFT_KEEP} of ${DRAFT_DEAL} cards to keep.`,
     log: [],
     lastIncomeReport: null,
     endgameReport: null,
@@ -499,45 +503,55 @@ export function reducer(state, action) {
       return completeAction({ ...s, message: "" }, "draw");
     }
 
-    // --- Opening draft: keep 2 of 5 dealt cards ---
+    // --- Opening draft: everyone keeps 2 of 5 dealt cards, in parallel ---
+    // action.playerId is optional: hotseat omits it (the displayed drafter
+    // acts); networked play passes the acting player's id explicitly.
     case "TOGGLE_DRAFT_CARD": {
       if (state.phase !== "draft") return state;
+      const pid = action.playerId ?? state.draftPlayerId;
+      if (pid === null || !state.draftCards[pid]) return state;
       const i = action.index;
-      let selected = state.draftSelected;
+      let selected = state.draftSelected[pid];
       if (selected.includes(i)) selected = selected.filter((x) => x !== i);
       else if (selected.length < DRAFT_KEEP) selected = [...selected, i];
       else return { ...state, message: `Keep exactly ${DRAFT_KEEP} — deselect one first.` };
-      return { ...state, draftSelected: selected };
+      return {
+        ...state,
+        draftSelected: state.draftSelected.map((s, idx) => (idx === pid ? selected : s))
+      };
     }
 
     case "CONFIRM_DRAFT": {
-      if (state.phase !== "draft" || state.draftSelected.length !== DRAFT_KEEP) return state;
-      const player = state.players.find((p) => p.id === state.draftPlayerId);
-      const kept = state.draftSelected.map((i) => state.draftCards[i]);
-      const rejected = state.draftCards.filter((_, i) => !state.draftSelected.includes(i));
-      let s = updatePlayer(state, player.id, { hand: kept });
-      s = { ...s, discard: [...s.discard, ...rejected] };
+      if (state.phase !== "draft") return state;
+      const pid = action.playerId ?? state.draftPlayerId;
+      if (pid === null || !state.draftCards[pid]) return state;
+      if (state.draftSelected[pid].length !== DRAFT_KEEP) return state;
+      const player = state.players.find((p) => p.id === pid);
+      const cards = state.draftCards[pid];
+      const kept = state.draftSelected[pid].map((i) => cards[i]);
+      const rejected = cards.filter((_, i) => !state.draftSelected[pid].includes(i));
+      let s = updatePlayer(state, pid, { hand: kept });
+      s = {
+        ...s,
+        discard: [...s.discard, ...rejected],
+        draftCards: s.draftCards.map((c, idx) => (idx === pid ? null : c)),
+        draftSelected: s.draftSelected.map((sel, idx) => (idx === pid ? [] : sel))
+      };
       s = addLog(s, `${player.name} drafted ${kept.map((c) => CARDS_BY_ID[c].name).join(" & ")}.`);
 
-      const nextId = state.draftPlayerId + 1;
-      if (nextId < s.players.length) {
-        const { drawn, deck, discard } = drawFromDeck(s, DRAFT_DEAL);
+      const nextId = s.draftCards.findIndex((c) => c !== null);
+      if (nextId !== -1) {
+        const waiting = s.players.filter((p) => s.draftCards[p.id] !== null).map((p) => p.name);
         return {
           ...s,
-          deck,
-          discard,
           draftPlayerId: nextId,
-          draftCards: drawn,
-          draftSelected: [],
-          message: `Opening draft: ${s.players[nextId].name}, choose ${DRAFT_KEEP} of ${DRAFT_DEAL} cards to keep.`
+          message: `Opening draft: waiting on ${waiting.join(", ")}.`
         };
       }
       return {
         ...s,
         phase: "playing",
         draftPlayerId: null,
-        draftCards: null,
-        draftSelected: [],
         message: `Season 1 begins. ${s.players[0].name}'s turn — 2 different actions.`
       };
     }

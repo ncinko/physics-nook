@@ -83,20 +83,20 @@ export default function RightPanel({ state, dispatch }) {
 
       <div className="actions">
         {[
-          ["buyLand", "🏞", "Buy Land"],
-          ["buildAttraction", "🎢", "Build Attraction"],
-          ["upgrade", "⬆", "Upgrade Attraction"],
-          ["buildFacility", "⛏", "Build Camp/Mine"],
-          ["fundraiser", "🎪", "Fundraiser"],
-          ["draw", "🃏", "Draw Cards"]
-        ].map(([key, icon, label]) => (
+          ["buyLand", "Buy Land"],
+          ["buildAttraction", "Build Attraction"],
+          ["upgrade", "Upgrade Attraction"],
+          ["buildFacility", "Build Camp/Mine"],
+          ["fundraiser", "Fundraiser"],
+          ["draw", "Draw Cards"]
+        ].map(([key, label]) => (
           <button
             key={key}
             className={"btn action-btn" + (act === key ? " active" : "")}
             disabled={state.phase !== "playing" || state.actionsUsedThisTurn.includes(key)}
             onClick={() => dispatch({ type: "SELECT_ACTION", action: key })}
           >
-            <span className="action-icon">{icon}</span> {label}
+            {label}
           </button>
         ))}
       </div>
@@ -240,10 +240,10 @@ export default function RightPanel({ state, dispatch }) {
         <summary>⭐ Reputation</summary>
         <div className="rules-box">
           <div>Each attraction earns its card's ⭐/season (+1 per upgrade level).</div>
-          <div>🎢 Rides &amp; coasters: +1⭐/season per adjacent unbuilt scenery (🌲⛰💧).</div>
-          <div>🎠 +1⭐/season per adjacent ride/coaster of a <em>different subtype</em> (wood, steel, family, thrill, water). Shops don't count.</div>
+          <div>Rides &amp; coasters: +1⭐/season per adjacent unbuilt scenery (🌲⛰💧).</div>
+          <div>Rides &amp; coasters: +1⭐/season per adjacent ride/coaster of a <em>different subtype</em> (wood, steel, family, thrill, water). Shops don't count.</div>
           <div>
-            🏆 Endgame: Most Land / Shops / Rides / Coasters —{" "}
+            Endgame: Most Land / Shops / Rides / Coasters —{" "}
             {state.players.length === 2 && "3⭐ to the leader."}
             {state.players.length === 3 && "4⭐ / 2⭐ for 1st / 2nd."}
             {state.players.length === 4 && "5⭐ / 3⭐ / 1⭐ for 1st / 2nd / 3rd."}{" "}
@@ -252,19 +252,19 @@ export default function RightPanel({ state, dispatch }) {
         </div>
       </details>
       <details className="rules-details">
-        <summary>📖 Other Rules</summary>
+        <summary>Other Rules</summary>
         <div className="rules-box">
-          <div>🎯 Each turn: 2 <em>different</em> actions (or End Turn early).</div>
-          <div>🛍 Shops: +$1/season per adjacent ride or coaster (anyone's).</div>
-          <div>💧 Water tiles: only Splash Boats can be built there.</div>
+          <div>Each turn: 2 <em>different</em> actions (or End Turn early).</div>
+          <div>Shops: +$1/season per adjacent ride or coaster (anyone's).</div>
+          <div>Water tiles (💧): only Splash Boats can be built there.</div>
           <div>
-            ⛏ Camps (forest) &amp; mines (hill): ${FACILITY_COST} — +{FACILITY_OUTPUT} resource
+            Camps (forest 🌲) &amp; mines (hill ⛰): ${FACILITY_COST} — +{FACILITY_OUTPUT} resource
             now, +{FACILITY_OUTPUT} &amp; ${FACILITY_INCOME}/season. Developed land: no scenery ⭐
             for neighbors, can't host attractions.
           </div>
-          <div>🔨 Missing wood/steel can be bought for $3 each when building.</div>
-          <div>🗺 Seasons 4–5: buy up to 3 tiles per turn (+$2 per extra tile).</div>
-          <div>🃏 The market and draw pile reshuffle each new season.</div>
+          <div>Missing wood/steel can be bought for $3 each when building.</div>
+          <div>Seasons 4–5: buy up to 3 tiles per turn (+$2 per extra tile).</div>
+          <div>The market and draw pile reshuffle each new season.</div>
         </div>
       </details>
 
@@ -286,38 +286,43 @@ export default function RightPanel({ state, dispatch }) {
         </div>
       )}
 
-      {/* Opening draft modal */}
-      {state.phase === "draft" && state.draftCards && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2 style={{ color: state.players[state.draftPlayerId].color }}>
-              {state.players[state.draftPlayerId].name}: keep 2 of 5
-            </h2>
-            <div className="modal-cards">
-              {state.draftCards.map((cardId, i) => (
-                <div
-                  key={i}
-                  className={"draft-card" + (state.draftSelected.includes(i) ? " picked" : "")}
+      {/* Opening draft modal (shows the first still-drafting player's cards) */}
+      {state.phase === "draft" &&
+        state.draftPlayerId !== null &&
+        state.draftCards[state.draftPlayerId] && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <h2 style={{ color: state.players[state.draftPlayerId].color }}>
+                {state.players[state.draftPlayerId].name}: keep 2 of 5
+              </h2>
+              <div className="modal-cards">
+                {state.draftCards[state.draftPlayerId].map((cardId, i) => (
+                  <div
+                    key={i}
+                    className={
+                      "draft-card" +
+                      (state.draftSelected[state.draftPlayerId].includes(i) ? " picked" : "")
+                    }
+                  >
+                    <Card
+                      card={CARDS_BY_ID[cardId]}
+                      onClick={() => dispatch({ type: "TOGGLE_DRAFT_CARD", index: i })}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="btn-row" style={{ justifyContent: "center" }}>
+                <button
+                  className="btn primary"
+                  disabled={state.draftSelected[state.draftPlayerId].length !== 2}
+                  onClick={() => dispatch({ type: "CONFIRM_DRAFT" })}
                 >
-                  <Card
-                    card={CARDS_BY_ID[cardId]}
-                    onClick={() => dispatch({ type: "TOGGLE_DRAFT_CARD", index: i })}
-                  />
-                </div>
-              ))}
-            </div>
-            <div className="btn-row" style={{ justifyContent: "center" }}>
-              <button
-                className="btn primary"
-                disabled={state.draftSelected.length !== 2}
-                onClick={() => dispatch({ type: "CONFIRM_DRAFT" })}
-              >
-                Keep these {state.draftSelected.length}/2
-              </button>
+                  Keep these {state.draftSelected[state.draftPlayerId].length}/2
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

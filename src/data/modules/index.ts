@@ -88,13 +88,14 @@ export const mechanicsPath = {
 
 export const rotationPath = {
   id: 'rotation',
-  // Landing page skips the hidden Rotational Dynamics draft (rotationModule.pages[0]).
+  // Rotational Dynamics is still a draft; keep the path object available to
+  // pages while hiding the group from public module surfaces.
   href: rotationModule.pages[1].href,
   navLabel: rotationModule.navLabel,
   summary: rotationModule.summary,
   cardEyebrow: rotationModule.cardEyebrow,
-  navVisibility: 'menu',
-  // pages[0] is the hidden draft index; surface only the public rotation lessons.
+  navVisibility: 'hidden',
+  // pages[0] is the draft index; lesson pages can still render their local hero.
   pages: rotationModule.pages.slice(1),
 } satisfies ModulePathGroup;
 
@@ -167,7 +168,6 @@ export const textbookProgressionGroups = [
   mathPath,
   measurementPath,
   mechanicsPath,
-  rotationPath,
   astronomyPath,
   wavesAndOscillationsPath,
   electromagnetismPath,

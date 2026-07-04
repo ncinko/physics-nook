@@ -17,7 +17,7 @@ export const rotationModule: ModuleMeta = {
     'Distinguish centripetal force from the apparent centrifugal and Coriolis effects in a rotating frame',
   ],
   status: 'active',
-  navVisibility: 'menu',
+  navVisibility: 'hidden',
   cardEyebrow: 'Rotational dynamics',
   accent: '#16a34a',
   heroImage: '/social/physics-nook-card.svg',
@@ -51,6 +51,7 @@ export const rotationModule: ModuleMeta = {
           'Learn angular position, velocity, and acceleration with interactive rolling-wheel and spin-up graphers connecting θ, ω, and α to their linear analogs.',
         canonicalPath: '/rotation/angular-kinematics',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -66,6 +67,7 @@ export const rotationModule: ModuleMeta = {
           'Explore torque, lever arms, and moment of inertia with interactive explorers, then connect them through Newton’s second law for rotation, τ = Iα.',
         canonicalPath: '/rotation/torque-and-inertia',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -81,6 +83,7 @@ export const rotationModule: ModuleMeta = {
           'Race a hoop, disk, and spheres down an interactive incline to see rolling without slipping and how kinetic energy splits between translation and rotation.',
         canonicalPath: '/rotation/rolling-and-energy',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -96,6 +99,7 @@ export const rotationModule: ModuleMeta = {
           'Learn angular momentum L = Iω with an interactive figure-skater spin and rotational collisions showing conservation when net external torque is zero.',
         canonicalPath: '/rotation/angular-momentum',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
     {
@@ -111,6 +115,7 @@ export const rotationModule: ModuleMeta = {
           'Distinguish real centripetal force from the apparent centrifugal and Coriolis effects in a rotating reference frame, with an interactive rotating spaceship.',
         canonicalPath: '/rotation/rotating-frames',
         image: '/social/physics-nook-card.svg',
+        noindex: true,
       },
     },
   ],

@@ -26,6 +26,8 @@ const MODEL_SPRITES = modelManifest;
 
 // One image drawn across all tiles of an attraction, oriented along the axis
 // between its two farthest hexes and scaled to the actual placement span.
+// Animated models bake their frames into one vertical sprite sheet; a
+// discrete SMIL translate steps the sheet behind a one-frame clip window.
 function PlacedModel({ attr, model }) {
   const centers = attr.hexes.map((id) => {
     const { q, r } = parseHexId(id);
@@ -48,6 +50,7 @@ function PlacedModel({ attr, model }) {
   const k = (Math.sqrt(best) + TILE_W) / model.span; // fit the actual footprint
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2 + HEX_SIZE * 0.45;
+  const clipId = `model-clip-${attr.id}`;
   return (
     <g pointerEvents="none">
       <ellipse
@@ -58,13 +61,33 @@ function PlacedModel({ attr, model }) {
         transform={`rotate(${angle} ${mx} ${my})`}
         fill="#00000022"
       />
-      <image
-        href={m.file}
-        x={mx - m.ox * k}
-        y={my - m.oy * k}
-        width={m.w * k}
-        height={m.h * k}
-      />
+      {m.frames ? (
+        <g transform={`translate(${mx - m.ox * k}, ${my - m.oy * k}) scale(${k})`}>
+          <clipPath id={clipId}>
+            <rect x="0" y="0" width={m.w} height={m.h} />
+          </clipPath>
+          <g clipPath={`url(#${clipId})`}>
+            <image href={m.file} x="0" y="0" width={m.w} height={m.h * m.frames}>
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                calcMode="discrete"
+                values={Array.from({ length: m.frames }, (_, i) => `0 ${-i * m.h}`).join("; ")}
+                dur={`${model.frameDur * m.frames}s`}
+                repeatCount="indefinite"
+              />
+            </image>
+          </g>
+        </g>
+      ) : (
+        <image
+          href={m.file}
+          x={mx - m.ox * k}
+          y={my - m.oy * k}
+          width={m.w * k}
+          height={m.h * k}
+        />
+      )}
     </g>
   );
 }

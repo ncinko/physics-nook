@@ -56,7 +56,7 @@ function PlacedModel({ attr, model }) {
       <ellipse
         cx={mx}
         cy={my}
-        rx={(model.span * k) / 2 - 4}
+        rx={(model.span * (model.visualScale ?? 1) * k) / 2 - 4}
         ry={5}
         transform={`rotate(${angle} ${mx} ${my})`}
         fill="#00000022"

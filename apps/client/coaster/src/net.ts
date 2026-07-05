@@ -1,4 +1,4 @@
-// WebSocket connection + tiny store for the Mega Park online client.
+// WebSocket connection + tiny store for the coaster slop online client.
 //
 // Seat credentials live in sessionStorage (per-tab, survives reload) so two
 // tabs in one browser hold two different seats; the display name lives in

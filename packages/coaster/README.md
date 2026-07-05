@@ -1,6 +1,6 @@
-# Mega Park (machine-copied — do not edit)
+# coaster slop (machine-copied — do not edit)
 
-Everything in this directory is copied verbatim from the Mega Park repo
+Everything in this directory is copied verbatim from the coaster slop repo
 (`C:\Users\Nick\Desktop\coaster`) by `npm run coaster:sync`. Edits made here
 are silently overwritten by the next sync — make changes in the source repo.
 

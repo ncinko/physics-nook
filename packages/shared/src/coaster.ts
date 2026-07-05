@@ -1,7 +1,7 @@
-// Shared protocol for Mega Park ("coaster") online rooms.
+// Shared protocol for coaster slop ("coaster") online rooms.
 //
 // The game state itself is produced by packages/coaster/game/reducer.js (plain
-// JS, machine-synced from the Mega Park repo) — its shape is owned there, so it
+// JS, machine-synced from the coaster slop repo) — its shape is owned there, so it
 // stays untyped here.
 
 export const COASTER_PROTOCOL_VERSION = 1;

@@ -1,4 +1,4 @@
-// One-command ship for Mega Park: sync from the local repo, build, commit the
+// One-command ship for coaster slop: sync from the local repo, build, commit the
 // synced files, push (Cloudflare Pages deploys the client from git), then
 // deploy the WebSocket server to the VM.
 //
@@ -33,7 +33,7 @@ const confirm = async (question) => {
   return answer === "y" || answer === "yes";
 };
 
-console.log("== 1/4 Sync from the Mega Park repo ==");
+console.log("== 1/4 Sync from the coaster slop repo ==");
 run("node", ["scripts/sync-coaster.mjs"]);
 
 console.log("\n== 2/4 Build the game client (sanity check) ==");
@@ -48,7 +48,7 @@ if (!changes) {
   console.log(changes);
   if (await confirm("Commit and push these synced changes?")) {
     run("git", ["add", "--", ...SYNCED_PATHS]);
-    run("git", ["commit", "-m", "Sync Mega Park from local coaster repo"]);
+    run("git", ["commit", "-m", "Sync coaster slop from local coaster repo"]);
     run("git", ["push"]);
     console.log("Pushed — Cloudflare Pages (physics-nook-game) will rebuild game.physicsnook.com.");
   } else {

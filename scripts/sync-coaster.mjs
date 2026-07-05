@@ -1,4 +1,4 @@
-// Sync the Mega Park board game source from its home repo into this monorepo.
+// Sync the coaster slop board game source from its home repo into this monorepo.
 //
 // Source of truth: C:\Users\Nick\Desktop\coaster (override with COASTER_SRC).
 // Run `npm run coaster:sync` after any change there, review `git diff`, commit.
@@ -74,9 +74,9 @@ for (const name of ["reducer.js", "logic.js", "cards.js", "hex.js"]) {
 
 fs.writeFileSync(
   path.join(repoRoot, "packages/coaster/README.md"),
-  `# Mega Park (machine-copied — do not edit)
+  `# coaster slop (machine-copied — do not edit)
 
-Everything in this directory is copied verbatim from the Mega Park repo
+Everything in this directory is copied verbatim from the coaster slop repo
 (\`C:\\Users\\Nick\\Desktop\\coaster\`) by \`npm run coaster:sync\`. Edits made here
 are silently overwritten by the next sync — make changes in the source repo.
 

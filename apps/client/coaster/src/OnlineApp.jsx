@@ -49,8 +49,8 @@ function MenuScreen({ net, status, toast }) {
 
   return (
     <div className="setup-screen lobby-screen">
-      <h1>🎢 Mega Park</h1>
-      <p>Rival developers compete over one shared mega-park — now online.</p>
+      <h1>🎢 coaster slop</h1>
+      <p>Rival developers compete over one shared park.</p>
 
       <div className="lobby-form">
         <label className="lobby-label">
@@ -111,7 +111,7 @@ function WaitingRoom({ net, room, seat, status, toast }) {
 
   return (
     <div className="setup-screen lobby-screen">
-      <h1>🎢 Mega Park</h1>
+      <h1>🎢 coaster slop</h1>
       <p>Tell your friends the room code:</p>
       <div className="room-code">{room.roomCode}</div>
 
@@ -168,6 +168,12 @@ function GameScreen({ net, room, seat, state, status, toast, showToast }) {
       else showToast("Only the host can start a new game.");
       return;
     }
+    // A trade offer's target isn't the current player, so accepting/declining
+    // must bypass the turn guard (the server checks you're the pending target).
+    if (action.type === "ACCEPT_TRADE" || action.type === "DECLINE_TRADE") {
+      net.dispatchAction(action);
+      return;
+    }
     if (!isMyTurn && state.phase !== "gameOver") {
       showToast(drafting ? "Waiting for the other players to finish drafting." : `It's ${currentPlayer.name}'s turn.`);
       return;
@@ -184,7 +190,7 @@ function GameScreen({ net, room, seat, state, status, toast, showToast }) {
     <div className="table">
       <TopBar state={state} />
       <div className="layout">
-        <LeftPanel state={state} />
+        <LeftPanel state={state} dispatch={dispatch} viewerId={seat} />
         <div className="board-wrap">
           <Board state={state} dispatch={dispatch} />
         </div>

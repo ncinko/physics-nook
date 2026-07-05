@@ -4,7 +4,7 @@ export default function TopBar({ state }) {
   const current = state.players.find((p) => p.id === state.currentPlayerId);
   return (
     <div className="top-bar">
-      <div className="logo">🎢 Mega Park</div>
+      <div className="logo">🎢 coaster slop</div>
       <div className="tracker">
         <span className="tracker-label">Season</span>
         {Array.from({ length: state.maxSeasons }, (_, i) => (

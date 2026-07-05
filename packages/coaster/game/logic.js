@@ -46,14 +46,7 @@ export function isValidLandPurchase(hexId, player, hexesById, surcharge = 0) {
   if (hex.owner !== null) return { ok: false, reason: "This land is already owned." };
   if (player.money < LAND_COST[hex.terrain] + surcharge) return { ok: false, reason: "Not enough money." };
 
-  const ownsAny = Object.values(hexesById).some((h) => h.owner === player.id);
-  if (ownsAny) {
-    const adjacent = neighborIds(hexId).some(
-      (n) => hexesById[n] && hexesById[n].owner === player.id
-    );
-    if (!adjacent) return { ok: false, reason: "Must be adjacent to land you own." };
-  }
-  // First purchase may be anywhere.
+  // Any unowned tile may be purchased, anywhere on the board.
   return { ok: true };
 }
 

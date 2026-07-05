@@ -19,7 +19,7 @@ import type {
   CoasterServerToClientMessage,
 } from '../../../packages/shared/src/coaster.ts';
 
-// Machine-synced from the Mega Park repo (npm run coaster:sync). Pure JS — the
+// Machine-synced from the coaster slop repo (npm run coaster:sync). Pure JS — the
 // import graph must stop at game/*.js (no components, no JSON, no React).
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore untyped synced module
@@ -43,7 +43,21 @@ const ALLOWED_ACTION_TYPES = new Set([
   'KEEP_CARD',
   'TOGGLE_DRAFT_CARD',
   'CONFIRM_DRAFT',
+  'PROPOSE_TRADE',
+  'CANCEL_TRADE',
+  'ACCEPT_TRADE',
+  'DECLINE_TRADE',
 ]);
+
+// A trade offer's resources, coerced to safe non-negative integers.
+const sanitizeTradeResources = (raw: unknown): { money: number; wood: number; steel: number } => {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const clamp = (v: unknown) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(Math.max(n, 0), 999) : 0;
+  };
+  return { money: clamp(r.money), wood: clamp(r.wood), steel: clamp(r.steel) };
+};
 
 const MAX_ROOMS = 50;
 const CLEANUP_INTERVAL_MS = 10 * 60 * 1000;
@@ -531,6 +545,7 @@ export const createCoasterWorld = () => {
 
     const state = room.state as Record<string, any>;
     const isDraftAction = action.type === 'TOGGLE_DRAFT_CARD' || action.type === 'CONFIRM_DRAFT';
+    const isTradeResponse = action.type === 'ACCEPT_TRADE' || action.type === 'DECLINE_TRADE';
     if (state.phase === 'draft') {
       // Drafting happens in parallel: any seat may act on its own cards.
       if (!isDraftAction) {
@@ -541,7 +556,14 @@ export const createCoasterWorld = () => {
         sendError(client, 'You have already drafted.');
         return;
       }
+    } else if (isTradeResponse) {
+      // Only the player being offered the pending trade may accept/decline it.
+      if (!state.pendingTrade || state.pendingTrade.to !== seat.seat) {
+        sendError(client, 'No trade is waiting for your response.');
+        return;
+      }
     } else if (isDraftAction || seat.seat !== state.currentPlayerId) {
+      // Everything else (incl. PROPOSE_TRADE / CANCEL_TRADE) is the turn holder's.
       sendError(client, 'Not your turn.');
       return;
     }
@@ -549,6 +571,18 @@ export const createCoasterWorld = () => {
     // Keep payloads to the primitive fields the reducer reads.
     const sanitized: CoasterGameAction = { type: action.type };
     if (isDraftAction) sanitized.playerId = seat.seat; // server-assigned, never client-supplied
+    if (action.type === 'PROPOSE_TRADE') {
+      if (
+        typeof action.to === 'number' &&
+        Number.isInteger(action.to) &&
+        action.to >= 0 &&
+        action.to < COASTER_MAX_PLAYERS
+      ) {
+        sanitized.to = action.to;
+      }
+      sanitized.offer = sanitizeTradeResources(action.offer);
+      sanitized.request = sanitizeTradeResources(action.request);
+    }
     if (typeof action.hexId === 'string' && action.hexId.length <= 32) sanitized.hexId = action.hexId;
     if (typeof action.cardId === 'string' && action.cardId.length <= 64) sanitized.cardId = action.cardId;
     if (typeof action.action === 'string' && action.action.length <= 32) sanitized.action = action.action;

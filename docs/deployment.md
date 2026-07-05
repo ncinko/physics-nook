@@ -72,9 +72,9 @@ This runs `gcloud compute ssh` to `git pull` and restart the process, then check
 `.env` (e.g. `sudo systemctl restart physics-nook-game`); see
 `scripts/deploy-game-server.mjs` for all options.
 
-## Mega Park (`/coaster/`)
+## coaster slop (`/coaster/`)
 
-Mega Park is an online multiplayer board game whose source of truth is a separate
+coaster slop is an online multiplayer board game whose source of truth is a separate
 local repo (`C:\Users\Nick\Desktop\coaster`, hotseat prototype). Its game logic and
 UI are machine-copied into `packages/coaster/` (plus PNGs into
 `apps/client/public/assets/`) — never edit those mirrors by hand.

@@ -77,6 +77,7 @@ export function createInitialState(numPlayers) {
     draftPlayerId: 0, // whose draft the UI shows (hotseat: first unconfirmed)
     draftCards,
     draftSelected: players.map(() => []),
+    pendingTrade: null, // { from, to, offer:{money,wood,steel}, request:{...} }
     message: `Opening draft: everyone picks ${DRAFT_KEEP} of ${DRAFT_DEAL} cards to keep.`,
     log: [],
     lastIncomeReport: null,
@@ -145,9 +146,32 @@ function completeAction(state, actionKey) {
   };
 }
 
+// Trades move any mix of money/wood/steel each way; helpers below normalize and
+// describe them. Trading is free (no action) and can happen any time on a turn.
+function normalizeTrade(t) {
+  const clamp = (v) => Math.max(0, Math.floor(Number(v) || 0));
+  return { money: clamp(t?.money), wood: clamp(t?.wood), steel: clamp(t?.steel) };
+}
+
+function tradeTotal(t) {
+  return t.money + t.wood + t.steel;
+}
+
+function canCover(player, cost) {
+  return player.money >= cost.money && player.wood >= cost.wood && player.steel >= cost.steel;
+}
+
+function describeTrade(t) {
+  const parts = [];
+  if (t.money) parts.push(`$${t.money}`);
+  if (t.wood) parts.push(`${t.wood} wood`);
+  if (t.steel) parts.push(`${t.steel} steel`);
+  return parts.length ? parts.join(", ") : "nothing";
+}
+
 // Advance to next player; run seasonal income when the season is complete.
 function advanceTurn(state) {
-  let s = { ...clearSelection(state), actionsUsedThisTurn: [] };
+  let s = { ...clearSelection(state), actionsUsedThisTurn: [], pendingTrade: null };
   const numPlayers = s.players.length;
   const turnsTaken = s.turnsTakenThisSeason + 1;
   const seasonComplete = turnsTaken >= numPlayers * s.turnsPerPlayerPerSeason;
@@ -556,6 +580,82 @@ export function reducer(state, action) {
       };
     }
 
+    // --- Resource trades (free; the current player offers, the target accepts) ---
+    case "PROPOSE_TRADE": {
+      if (state.phase !== "playing") return state;
+      if (state.pendingTrade) return { ...state, message: "Resolve the current trade first." };
+      const from = currentPlayer(state);
+      const to = state.players.find((p) => p.id === action.to);
+      if (!to || to.id === from.id) return state;
+      const offer = normalizeTrade(action.offer);
+      const request = normalizeTrade(action.request);
+      if (tradeTotal(offer) + tradeTotal(request) === 0) {
+        return { ...state, message: "Put at least one resource into the trade." };
+      }
+      if (!canCover(from, offer)) {
+        return { ...state, message: "You don't have those resources to offer." };
+      }
+      return {
+        ...state,
+        pendingTrade: { from: from.id, to: to.id, offer, request },
+        message: `${from.name} offered ${to.name} a trade: ${describeTrade(offer)} for ${describeTrade(request)}.`
+      };
+    }
+
+    case "CANCEL_TRADE": {
+      if (!state.pendingTrade) return state;
+      return { ...state, pendingTrade: null, message: "Trade withdrawn." };
+    }
+
+    case "DECLINE_TRADE": {
+      const t = state.pendingTrade;
+      if (!t) return state;
+      const from = state.players.find((p) => p.id === t.from);
+      const to = state.players.find((p) => p.id === t.to);
+      return addLog(
+        { ...state, pendingTrade: null, message: `${to.name} declined the trade.` },
+        `${to.name} declined ${from.name}'s trade.`
+      );
+    }
+
+    case "ACCEPT_TRADE": {
+      const t = state.pendingTrade;
+      if (!t) return state;
+      const from = state.players.find((p) => p.id === t.from);
+      const to = state.players.find((p) => p.id === t.to);
+      // Re-validate at the moment of transfer — holdings may have shifted.
+      if (!canCover(from, t.offer)) {
+        return { ...state, pendingTrade: null, message: `${from.name} no longer has the offered resources — trade cancelled.` };
+      }
+      if (!canCover(to, t.request)) {
+        return { ...state, message: `${to.name} can't cover the requested resources.` };
+      }
+      const players = state.players.map((p) => {
+        if (p.id === from.id) {
+          return {
+            ...p,
+            money: p.money - t.offer.money + t.request.money,
+            wood: p.wood - t.offer.wood + t.request.wood,
+            steel: p.steel - t.offer.steel + t.request.steel
+          };
+        }
+        if (p.id === to.id) {
+          return {
+            ...p,
+            money: p.money - t.request.money + t.offer.money,
+            wood: p.wood - t.request.wood + t.offer.wood,
+            steel: p.steel - t.request.steel + t.offer.steel
+          };
+        }
+        return p;
+      });
+      const s = addLog(
+        { ...state, players, pendingTrade: null },
+        `${from.name} traded ${describeTrade(t.offer)} to ${to.name} for ${describeTrade(t.request)}.`
+      );
+      return { ...s, message: `Trade complete between ${from.name} and ${to.name}.` };
+    }
+
     default:
       return state;
   }
@@ -564,7 +664,7 @@ export function reducer(state, action) {
 function actionPrompt(action) {
   switch (action) {
     case "buyLand":
-      return "Buy Land: click a highlighted hex. First purchase may be anywhere.";
+      return "Buy Land: click any unowned tile on the board.";
     case "buildAttraction":
       return "Build Attraction: select a card from your hand.";
     case "upgrade":

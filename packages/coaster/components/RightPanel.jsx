@@ -60,7 +60,9 @@ export default function RightPanel({ state, dispatch }) {
         )}
         <button
           className="btn primary"
-          onClick={() => dispatch({ type: "NEW_GAME", numPlayers: state.players.length })}
+          onClick={() =>
+            dispatch({ type: "NEW_GAME", numPlayers: state.players.length, boardRadius: state.boardRadius })
+          }
         >
           Play Again
         </button>

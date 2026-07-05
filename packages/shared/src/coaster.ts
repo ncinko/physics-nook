@@ -9,6 +9,11 @@ export const COASTER_PROTOCOL_VERSION = 1;
 export const COASTER_MIN_PLAYERS = 2;
 export const COASTER_MAX_PLAYERS = 4;
 
+// Map sizes the host may pick when starting a game; must match the layouts in
+// packages/coaster/game/hex.js (radius 3 = standard, radius 4 = large).
+export const COASTER_BOARD_RADII: readonly number[] = [3, 4];
+export const COASTER_DEFAULT_BOARD_RADIUS = 3;
+
 export type CoasterGameState = Record<string, unknown>;
 
 export type CoasterGameAction = { type: string } & Record<string, unknown>;
@@ -34,7 +39,7 @@ export type CoasterClientToServerMessage =
   | { type: 'coasterCreate'; name: string }
   | { type: 'coasterJoin'; roomCode: string; name: string; token?: string }
   | { type: 'coasterLeave' }
-  | { type: 'coasterStart' }
+  | { type: 'coasterStart'; boardRadius?: number }
   | { type: 'coasterRestart' }
   | { type: 'coasterAction'; action: CoasterGameAction }
   | { type: 'ping'; clientTime: number };

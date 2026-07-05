@@ -180,8 +180,8 @@ export const createNet = () => {
       sessionStorage.removeItem(TOKEN_KEY);
       patch({ seat: null, roomCode: null, room: null, gameState: null });
     },
-    startGame(): void {
-      send({ type: 'coasterStart' });
+    startGame(boardRadius?: number): void {
+      send({ type: 'coasterStart', boardRadius });
     },
     restartGame(): void {
       send({ type: 'coasterRestart' });

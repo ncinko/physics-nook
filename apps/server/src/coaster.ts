@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  COASTER_BOARD_RADII,
+  COASTER_DEFAULT_BOARD_RADIUS,
   COASTER_MAX_PLAYERS,
   COASTER_MIN_PLAYERS,
   COASTER_PROTOCOL_VERSION,
@@ -88,6 +90,7 @@ type CoasterRoom = {
   seats: CoasterSeatState[];
   hostSeat: number;
   state: CoasterGameState | null; // authoritative, unredacted
+  boardRadius: number; // host's map choice; restarts reuse it
   createdAt: number;
   lastActivityAt: number;
 };
@@ -235,6 +238,7 @@ export const createCoasterWorld = () => {
         phase: room.phase,
         hostSeat: room.hostSeat,
         state: room.state,
+        boardRadius: room.boardRadius,
         createdAt: room.createdAt,
         lastActivityAt: room.lastActivityAt,
         seats: room.seats.map(({ seat, name, token }) => ({ seat, name, token })),
@@ -263,6 +267,9 @@ export const createCoasterWorld = () => {
           phase: entry.phase === 'playing' || entry.phase === 'ended' ? entry.phase : 'lobby',
           hostSeat: typeof entry.hostSeat === 'number' ? entry.hostSeat : 0,
           state: entry.state ?? null,
+          boardRadius: COASTER_BOARD_RADII.includes(entry.boardRadius)
+            ? entry.boardRadius
+            : COASTER_DEFAULT_BOARD_RADIUS,
           createdAt: typeof entry.createdAt === 'number' ? entry.createdAt : Date.now(),
           lastActivityAt: typeof entry.lastActivityAt === 'number' ? entry.lastActivityAt : Date.now(),
           seats: entry.seats.map((seat: Record<string, any>, index: number) => ({
@@ -387,6 +394,7 @@ export const createCoasterWorld = () => {
       seats: [],
       hostSeat: 0,
       state: null,
+      boardRadius: COASTER_DEFAULT_BOARD_RADIUS,
       createdAt: Date.now(),
       lastActivityAt: Date.now(),
     };
@@ -489,7 +497,7 @@ export const createCoasterWorld = () => {
   };
 
   const startGame = (room: CoasterRoom): void => {
-    let state = createInitialState(room.seats.length) as Record<string, any>;
+    let state = createInitialState(room.seats.length, room.boardRadius) as Record<string, any>;
     // The reducer bakes default names ("Red (P1)") into players; swap in lobby
     // names once and every later reducer message follows.
     state = {
@@ -507,7 +515,7 @@ export const createCoasterWorld = () => {
     touch(room);
   };
 
-  const handleStart = (client: CoasterClient, restart: boolean): void => {
+  const handleStart = (client: CoasterClient, restart: boolean, boardRadius?: unknown): void => {
     const room = client.room;
     const seat = seatOf(client);
     if (!room || !seat) {
@@ -525,6 +533,10 @@ export const createCoasterWorld = () => {
     if (room.seats.length < COASTER_MIN_PLAYERS) {
       sendError(client, `Need at least ${COASTER_MIN_PLAYERS} players.`);
       return;
+    }
+    // Restarts reuse the room's map; a fresh start may pick one.
+    if (!restart && typeof boardRadius === 'number' && COASTER_BOARD_RADII.includes(boardRadius)) {
+      room.boardRadius = boardRadius;
     }
     startGame(room);
   };
@@ -624,7 +636,7 @@ export const createCoasterWorld = () => {
     } else if (message.type === 'coasterLeave') {
       handleLeave(client);
     } else if (message.type === 'coasterStart') {
-      handleStart(client, false);
+      handleStart(client, false, message.boardRadius);
     } else if (message.type === 'coasterRestart') {
       handleStart(client, true);
     } else if (message.type === 'coasterAction') {

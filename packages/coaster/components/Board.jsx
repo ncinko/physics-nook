@@ -103,8 +103,9 @@ export default function Board({ state, dispatch }) {
   }, [state.phase, state.selectedAction, state.selectedCardId, state.attractions, state.landBoughtThisTurn, player, hexesByIdMap]);
 
   const pad = HEX_SIZE * 1.3;
-  const w = TILE_W * (BOARD_RADIUS * 2 + 1);
-  const h = HEX_SIZE * 1.5 * (BOARD_RADIUS * 2 + 1) + HEX_SIZE;
+  const boardRadius = state.boardRadius ?? BOARD_RADIUS;
+  const w = TILE_W * (boardRadius * 2 + 1);
+  const h = HEX_SIZE * 1.5 * (boardRadius * 2 + 1) + HEX_SIZE;
   const viewBox = `${-w / 2 - pad} ${-h / 2 - pad * 1.4} ${w + pad * 2} ${h + pad * 2.4}`;
 
   const sorted = useMemo(() => sortForDepth(state.hexes), [state.hexes]);

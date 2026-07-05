@@ -1,7 +1,7 @@
 // Game state reducer. All rule enforcement lives here + logic.js.
 
 import { buildDeck, shuffle, CARDS_BY_ID } from "./cards.js";
-import { createBoard } from "./hex.js";
+import { BOARD_RADIUS, createBoard } from "./hex.js";
 import {
   FACILITY_COST,
   FACILITY_OUTPUT,
@@ -28,7 +28,7 @@ const ACTIONS_PER_TURN = 2;
 const DRAFT_DEAL = 5;
 const DRAFT_KEEP = 2;
 
-export function createInitialState(numPlayers) {
+export function createInitialState(numPlayers, boardRadius = BOARD_RADIUS) {
   let deck = buildDeck();
   const players = [];
   for (let i = 0; i < numPlayers; i++) {
@@ -62,7 +62,8 @@ export function createInitialState(numPlayers) {
     maxSeasons: 5,
     currentPlayerId: 0,
     players,
-    hexes: createBoard(),
+    boardRadius,
+    hexes: createBoard(boardRadius),
     attractions: [],
     deck,
     discard: [],
@@ -270,7 +271,7 @@ function advanceTurn(state) {
 export function reducer(state, action) {
   switch (action.type) {
     case "NEW_GAME":
-      return createInitialState(action.numPlayers);
+      return createInitialState(action.numPlayers, action.boardRadius);
 
     case "SELECT_ACTION": {
       if (state.phase !== "playing") return state;

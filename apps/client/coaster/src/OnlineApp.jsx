@@ -5,6 +5,7 @@ import HandTray from "../../../../packages/coaster/components/HandTray.jsx";
 import LeftPanel from "../../../../packages/coaster/components/LeftPanel.jsx";
 import RightPanel from "../../../../packages/coaster/components/RightPanel.jsx";
 import TopBar from "../../../../packages/coaster/components/TopBar.jsx";
+import { MAP_OPTIONS } from "../../../../packages/coaster/game/hex.js";
 import { PLAYER_COLORS } from "../../../../packages/coaster/game/reducer.js";
 import { getStoredName } from "./net.ts";
 
@@ -108,6 +109,7 @@ function MenuScreen({ net, status, toast }) {
 function WaitingRoom({ net, room, seat, status, toast }) {
   const mySeat = room.seats.find((s) => s.seat === seat);
   const isHost = mySeat?.isHost ?? false;
+  const [boardRadius, setBoardRadius] = useState(MAP_OPTIONS[0].radius);
 
   return (
     <div className="setup-screen lobby-screen">
@@ -132,9 +134,27 @@ function WaitingRoom({ net, room, seat, status, toast }) {
       </div>
 
       {isHost ? (
-        <button className="btn primary big" disabled={!room.canStart} onClick={() => net.startGame()}>
-          {room.canStart ? `Start Game (${room.seats.length} players)` : "Need at least 2 players"}
-        </button>
+        <>
+          <div className="setup-players">
+            <span>Map:</span>
+            {MAP_OPTIONS.map((m) => (
+              <button
+                key={m.radius}
+                className={"btn" + (boardRadius === m.radius ? " active" : "")}
+                onClick={() => setBoardRadius(m.radius)}
+              >
+                {m.name} ({m.recommended})
+              </button>
+            ))}
+          </div>
+          <button
+            className="btn primary big"
+            disabled={!room.canStart}
+            onClick={() => net.startGame(boardRadius)}
+          >
+            {room.canStart ? `Start Game (${room.seats.length} players)` : "Need at least 2 players"}
+          </button>
+        </>
       ) : (
         <div className="lobby-status">Waiting for the host to start…</div>
       )}

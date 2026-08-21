@@ -61,20 +61,29 @@ const PhysicalPendulum = () => {
     }
   }, [isDragging, omega]);
 
-  // Mouse event handlers for dragging the pendulum bob.
-  const handleMouseDown = (e) => {
+  // Pointer event handlers for dragging the pendulum bob. Pointer events cover
+  // mouse, touch, and pen with one code path; capturing the pointer keeps the
+  // drag alive when it wanders outside the SVG.
+  const handlePointerDown = (e) => {
+    // Capture keeps the drag alive past the SVG edge, but it throws if the
+    // pointer is already gone — that must not abort the rest of the handler.
+    try {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
     setIsDragging(true);
     updateDraggedAngle(e);
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     if (isDragging) {
       updateDraggedAngle(e);
     }
   };
 
-  // On mouse up, stop dragging, update amplitude, reset simTime and clear the previous time reference.
-  const handleMouseUp = () => {
+  // On pointer up, stop dragging, update amplitude, reset simTime and clear the previous time reference.
+  const handlePointerUp = () => {
     if (isDragging) {
       setIsDragging(false);
       setAmplitude(draggedAngle);
@@ -83,13 +92,29 @@ const PhysicalPendulum = () => {
     }
   };
 
-  // Helper function: updates the dragged angle based on mouse position.
+  // Helper function: updates the dragged angle based on pointer position.
+  // Maps through the SVG's own matrix rather than the bounding rect, so the
+  // drag still tracks the pointer once the viewBox scales the drawing down on
+  // narrow screens.
   const updateDraggedAngle = (e) => {
-    const svgRect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - svgRect.left;
-    const mouseY = e.clientY - svgRect.top;
-    const dx = mouseX - pivotX;
-    const dy = mouseY - pivotY;
+    const svg = e.currentTarget;
+    let pointerX;
+    let pointerY;
+    const ctm = svg.getScreenCTM?.();
+    if (ctm) {
+      const point = svg.createSVGPoint();
+      point.x = e.clientX;
+      point.y = e.clientY;
+      const local = point.matrixTransform(ctm.inverse());
+      pointerX = local.x;
+      pointerY = local.y;
+    } else {
+      const svgRect = svg.getBoundingClientRect();
+      pointerX = e.clientX - svgRect.left;
+      pointerY = e.clientY - svgRect.top;
+    }
+    const dx = pointerX - pivotX;
+    const dy = pointerY - pivotY;
     // Calculate angle relative to the vertical (downward) direction.
     const angle = Math.atan2(dx, dy);
     setDraggedAngle(angle);
@@ -114,17 +139,21 @@ const PhysicalPendulum = () => {
         <svg
           width="400"
           height="600"
+          // The viewBox lets the whole pendulum scale down instead of being
+          // clipped when the 400px drawing has to fit a phone-width column.
+          viewBox="0 0 400 600"
           style={{
             border: "1px solid var(--grid-line)",
             borderRadius: 12,
             maxWidth: "100%",
+            height: "auto",
             touchAction: "none",
             backgroundColor: "var(--sim-bg)",
           }}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
         >
           {/* Draw the rod */}
           <line

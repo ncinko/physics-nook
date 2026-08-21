@@ -1,4 +1,7 @@
-import { sanitizeLeaderboardName } from '../kinematics/stopZones.ts';
+import {
+  isBlockedLeaderboardName,
+  sanitizeLeaderboardName,
+} from '../kinematics/stopZones.ts';
 
 export const CHICKEN_ROUND_SECONDS = 20;
 
@@ -140,6 +143,14 @@ export const validateChickenCountScoreSubmission = (payload: {
 }): ChickenCountValidationResult => {
   const errors: string[] = [];
   const name = sanitizeLeaderboardName(payload.name);
+
+  // Rejected rather than silently renamed, so the player is told to pick
+  // another one. The game checks first for an inline message; this is the
+  // authoritative gate, because a hand-rolled POST skips the game entirely.
+  if (isBlockedLeaderboardName(payload.name)) {
+    errors.push('name is not allowed. Please choose a different display name.');
+  }
+
   const submittedScore = Number(payload.score);
   const rawRounds = Array.isArray(payload.rounds) ? payload.rounds : [];
   const rounds: ChickenCountLeaderboardRound[] = [];

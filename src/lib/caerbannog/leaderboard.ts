@@ -13,7 +13,10 @@
  * rabbit (and knight) felled across the run, and `goldCollected` is the total
  * gold earned before any was spent in the shop.
  */
-import { sanitizeLeaderboardName } from '../kinematics/stopZones.ts';
+import {
+  isBlockedLeaderboardName,
+  sanitizeLeaderboardName,
+} from '../kinematics/stopZones.ts';
 
 export interface CaerbannogValidationResult {
   ok: boolean;
@@ -57,6 +60,14 @@ export const validateCaerbannogScoreSubmission = (payload: {
 }): CaerbannogValidationResult => {
   const errors: string[] = [];
   const name = sanitizeLeaderboardName(payload.name);
+
+  // Rejected rather than silently renamed, so the player is told to pick
+  // another one. The game checks first for an inline message; this is the
+  // authoritative gate, because a hand-rolled POST skips the game entirely.
+  if (isBlockedLeaderboardName(payload.name)) {
+    errors.push('name is not allowed. Please choose a different display name.');
+  }
+
   const score = Number(payload.score);
   const wave = Number(payload.wave);
   const enemiesSlain = Number(payload.enemiesSlain);

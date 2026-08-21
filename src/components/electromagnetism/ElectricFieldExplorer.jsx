@@ -83,6 +83,9 @@ const ElectricFieldExplorer = () => {
   const [draggingChargeIndex, setDraggingChargeIndex] = useState(null);
   const [draggingTestCharge, setDraggingTestCharge] = useState(false);
   const [animateTestCharge, setAnimateTestCharge] = useState(false);
+  // What an empty-space tap does. Gives touch users the actions that are
+  // Shift-click / Ctrl-click on a keyboard.
+  const [tapAction, setTapAction] = useState("positive");
 
   // Field lines UI
   const [showFieldLines, setShowFieldLines] = useState(false);
@@ -104,7 +107,10 @@ const ElectricFieldExplorer = () => {
 
 
   // Helpers
-  const getMousePos = (canvas, evt) => {
+  // Rect-relative CSS pixels. The backing store is devicePixelRatio-scaled but
+  // the 2D context carries a matching `setTransform`, so scene coordinates are
+  // CSS pixels — don't rescale by canvas.width/rect.width here.
+  const getPointerPos = (canvas, evt) => {
     const rect = canvas.getBoundingClientRect();
     return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
   };
@@ -253,10 +259,19 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     setAnimateTestCharge(false);
   };
 
-  // Mouse handlers (with Ctrl-click delete)
-  const handleMouseDown = (e) => {
+  // Pointer handlers. Touch has no modifier keys, so the `tapAction` picker is
+  // the primary way to choose add-negative/remove; Shift and Ctrl/Cmd stay on as
+  // desktop shortcuts that override whatever the picker is set to.
+  const handlePointerDown = (e) => {
     const canvas = canvasRef.current;
-    const { x, y } = getMousePos(canvas, e);
+    // Capture keeps a drag alive past the canvas edge, but it throws if the
+    // pointer is already gone — that must not abort the rest of the handler.
+    try {
+      canvas.setPointerCapture?.(e.pointerId);
+    } catch {
+      /* pointer already released */
+    }
+    const { x, y } = getPointerPos(canvas, e);
 
     // Never delete the test charge; prioritize dragging it
     const dxT = x - testChargeRef.current.x;
@@ -266,25 +281,28 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
       return;
     }
 
-    const idx = charges.findIndex(c => Math.hypot(x - c.x, y - c.y) < 10);
+    // Touch targets need more slop than a mouse cursor does.
+    const hitRadius = e.pointerType === "mouse" ? 10 : 18;
+    const idx = charges.findIndex(c => Math.hypot(x - c.x, y - c.y) < hitRadius);
 
     // Ctrl-click (or Cmd on Mac) deletes a source charge
-    if (idx !== -1 && (e.ctrlKey || e.metaKey)) {
+    if (idx !== -1 && (e.ctrlKey || e.metaKey || tapAction === "remove")) {
       setCharges(prev => prev.filter((_, i) => i !== idx));
       return;
     }
 
     if (idx !== -1) {
       setDraggingChargeIndex(idx);
-    } else {
-      const newCharge = { x, y, q: e.shiftKey ? -1e-6 : 1e-6 };
+    } else if (tapAction !== "remove") {
+      const negative = e.shiftKey || tapAction === "negative";
+      const newCharge = { x, y, q: negative ? -1e-6 : 1e-6 };
       setCharges(prev => [...prev, newCharge]);
     }
   };
 
-  const handleMouseMove = (e) => {
+  const handlePointerMove = (e) => {
     const canvas = canvasRef.current;
-    const { x, y } = getMousePos(canvas, e);
+    const { x, y } = getPointerPos(canvas, e);
     if (draggingTestCharge) {
       testChargeRef.current = { ...testChargeRef.current, x, y, vx: 0, vy: 0 };
     } else if (draggingChargeIndex !== null) {
@@ -296,7 +314,7 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     }
   };
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     setDraggingTestCharge(false);
     setDraggingChargeIndex(null);
   };
@@ -314,20 +332,21 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     setAnimateTestCharge(false);
   };
 
-  // Bind events to canvas
+  // Bind events to canvas. Pointer capture keeps a drag alive past the canvas
+  // edge, so there's no `pointerleave` teardown to pair with `mouseleave`.
   useEffect(() => {
     const canvas = canvasRef.current;
-    canvas.addEventListener("mousedown", handleMouseDown);
-    canvas.addEventListener("mousemove", handleMouseMove);
-    canvas.addEventListener("mouseup", handleMouseUp);
-    canvas.addEventListener("mouseleave", handleMouseUp);
+    canvas.addEventListener("pointerdown", handlePointerDown);
+    canvas.addEventListener("pointermove", handlePointerMove);
+    canvas.addEventListener("pointerup", handlePointerUp);
+    canvas.addEventListener("pointercancel", handlePointerUp);
     return () => {
-      canvas.removeEventListener("mousedown", handleMouseDown);
-      canvas.removeEventListener("mousemove", handleMouseMove);
-      canvas.removeEventListener("mouseup", handleMouseUp);
-      canvas.removeEventListener("mouseleave", handleMouseUp);
+      canvas.removeEventListener("pointerdown", handlePointerDown);
+      canvas.removeEventListener("pointermove", handlePointerMove);
+      canvas.removeEventListener("pointerup", handlePointerUp);
+      canvas.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [draggingTestCharge, draggingChargeIndex, charges]);
+  }, [draggingTestCharge, draggingChargeIndex, charges, tapAction]);
 
   // Animation
   useEffect(() => {
@@ -442,6 +461,16 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
             { value: "capacitor", label: "Capacitor Plates" },
           ]}
         />
+        <Select
+          label="Tap action"
+          value={tapAction}
+          onChange={setTapAction}
+          options={[
+            { value: "positive", label: "Add positive (+)" },
+            { value: "negative", label: "Add negative (−)" },
+            { value: "remove", label: "Remove charge" },
+          ]}
+        />
         <Toggle label="Show field lines" checked={showFieldLines} onChange={setShowFieldLines} />
         <Slider
           label="Density"
@@ -481,9 +510,11 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
       </ControlBar>
 
       <p style={{ marginTop: "0.5rem" }}>
-        Click to add a charge (Shift = negative). Drag to move.{" "}
-        <strong>Ctrl-click</strong> (or ⌘-click on Mac) a charge to remove
-        it. Drag the green test charge to reposition it.
+        Tap empty space to place a charge, using <strong>Tap action</strong> to pick
+        whether it is positive, negative, or a removal. Drag a charge to move it, and
+        drag the green test charge to reposition it. With a keyboard you can skip the
+        picker: <strong>Shift-click</strong> places a negative charge and{" "}
+        <strong>Ctrl-click</strong> (or ⌘-click on Mac) removes one.
       </p>
     </div>
   );

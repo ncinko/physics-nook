@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { Cloud, Trophy, WifiOff } from 'lucide-react';
+import { Cloud, Dices, Trophy, WifiOff } from 'lucide-react';
 import { Button, ControlBar } from '../shared/InlineControls';
 import { Readout } from '../shared/Readout';
 import {
@@ -14,7 +14,11 @@ import {
   type ChickenCountLeaderboardScore,
   type ChickenScore,
 } from '../../lib/measurement/chickenCount';
-import { sanitizeLeaderboardName } from '../../lib/kinematics/stopZones';
+import {
+  isBlockedLeaderboardName,
+  sanitizeLeaderboardName,
+} from '../../lib/kinematics/stopZones';
+import { generateLeaderboardName } from '../../lib/shared/leaderboardNames';
 import {
   CHICKEN_COLS,
   CHICKEN_PALETTE,
@@ -228,6 +232,7 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
   const [cloudScores, setCloudScores] = useState<ChickenCountScoreEntry[]>([]);
   const [localScores, setLocalScores] = useState<ChickenCountScoreEntry[]>([]);
   const [playerName, setPlayerName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
@@ -324,6 +329,13 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
 
   const handleScoreSubmit = useCallback(async () => {
     if (submittedRef.current || roundResults.length < CHICKEN_ROUNDS.length) {
+      return;
+    }
+
+    // Leave the form open so the player can fix the name. The API validator
+    // enforces the same rule for anything that bypasses this check.
+    if (isBlockedLeaderboardName(playerName)) {
+      setNameError('That name cannot go on a shared board. Try another, or roll one.');
       return;
     }
 
@@ -596,14 +608,37 @@ export function ChickenCountGame({ className = 'my-8' }: ChickenCountGameProps) 
               >
                 <label className="grid gap-1 text-sm font-medium">
                   <span>Leaderboard name</span>
-                  <input
-                    value={playerName}
-                    onChange={(event) => setPlayerName(event.target.value)}
-                    maxLength={24}
-                    placeholder="Player"
-                    autoComplete="off"
-                    className="rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={playerName}
+                      onChange={(event) => {
+                        setPlayerName(event.target.value);
+                        setNameError(null);
+                      }}
+                      maxLength={24}
+                      placeholder="Player"
+                      autoComplete="off"
+                      className="w-full rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      title="Roll a random name"
+                      className="inline-flex shrink-0 items-center gap-2"
+                      onClick={() => {
+                        setPlayerName(generateLeaderboardName());
+                        setNameError(null);
+                      }}
+                    >
+                      <Dices aria-hidden="true" size={16} />
+                      Roll
+                    </Button>
+                  </div>
+                  {nameError ? (
+                    <span role="alert" className="text-xs font-normal text-[var(--accent-red)]">
+                      {nameError}
+                    </span>
+                  ) : null}
                 </label>
                 <ControlBar align="start" className="sm:items-end sm:justify-end">
                   <Button type="submit" disabled={isPosting} className="inline-flex items-center gap-2 disabled:opacity-60">

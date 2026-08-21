@@ -1,4 +1,4 @@
-import { sanitizeLeaderboardName } from './stopZones.ts';
+import { isBlockedLeaderboardName, sanitizeLeaderboardName } from './stopZones.ts';
 
 export interface GoalRushValidationResult {
   ok: boolean;
@@ -40,6 +40,14 @@ export const validateGoalRushScoreSubmission = (payload: {
 }): GoalRushValidationResult => {
   const errors: string[] = [];
   const name = sanitizeLeaderboardName(payload.name);
+
+  // Rejected rather than silently renamed, so the player is told to pick
+  // another one. The game checks first for an inline message; this is the
+  // authoritative gate, because a hand-rolled POST skips the game entirely.
+  if (isBlockedLeaderboardName(payload.name)) {
+    errors.push('name is not allowed. Please choose a different display name.');
+  }
+
   const score = Number(payload.score);
   const goldenHits = Number(payload.goldenHits);
   const normalHits = Number(payload.normalHits);

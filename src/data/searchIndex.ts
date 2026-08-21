@@ -1,4 +1,4 @@
-import { modules } from './modules';
+import { exploreModuleGroups } from './modules';
 import { standalonePages } from './site';
 import { interactiveEntries } from './interactives';
 import { primaryNavItems } from './navigation';
@@ -15,22 +15,26 @@ export interface SearchEntry {
   kind: SearchEntryKind;
 }
 
-const lessonEntries: SearchEntry[] = modules
-  // Excludes modules not yet published to the nav (e.g. Thermodynamics) so an
-  // in-progress module can't be found until it's ready.
-  .filter((module) => module.navVisibility === 'menu')
-  .flatMap((module) =>
-    module.pages
-      .filter((page) => !page.seo.noindex)
-      .map((page) => ({
-        id: `lesson-${page.id}`,
-        title: page.title,
-        description: page.description,
-        href: page.seo.canonicalPath,
-        section: module.navLabel,
-        kind: 'lesson' as const,
-      })),
-  );
+// Indexes the path groups students can actually navigate to rather than the raw
+// `modules` list. Several published modules (Kinematics, Forces, Collisions,
+// Energy, Quantum) are `navVisibility: 'hidden'` because they reach the nav
+// through a grouping like `mechanicsPath`, so filtering on module visibility
+// dropped the entire mechanics core from search. Grouping also keeps a result's
+// section label ("Mechanics") matching the nav label students clicked.
+// `exploreModuleGroups` is already filtered to menu-visible groups, so an
+// in-progress module (e.g. Thermodynamics) still can't be found until it ships.
+const lessonEntries: SearchEntry[] = exploreModuleGroups.flatMap((group) =>
+  group.pages
+    .filter((page) => !page.seo.noindex)
+    .map((page) => ({
+      id: `lesson-${page.id}`,
+      title: page.title,
+      description: page.description,
+      href: page.seo.canonicalPath,
+      section: group.navLabel,
+      kind: 'lesson' as const,
+    })),
+);
 
 const interactiveSearchEntries: SearchEntry[] = interactiveEntries.map((entry) => ({
   id: `interactive-${entry.id}`,

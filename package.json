@@ -25,6 +25,7 @@
     "coaster:sync": "node scripts/sync-coaster.mjs",
     "coaster:ship": "node scripts/coaster-ship.mjs",
     "audit:repo": "node scripts/repo-audit.mjs",
+    "test:shared": "node --experimental-strip-types tests/shared/run-tests.ts",
     "test:kinematics": "node --experimental-strip-types tests/kinematics/run-tests.ts",
     "test:math": "node --experimental-strip-types tests/math/run-tests.ts",
     "test:measurement": "node --experimental-strip-types tests/measurement/run-tests.ts",
@@ -40,7 +41,7 @@
     "test:electromagnetism": "node --experimental-strip-types tests/electromagnetism/run-tests.ts",
     "test:rotation": "node --experimental-strip-types tests/rotation/run-tests.ts",
     "test:hamlet": "node --experimental-strip-types tests/hamlet/run-tests.ts",
-    "test:all": "npm run test:math && npm run test:measurement && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:astronomy && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation && npm run test:hamlet"
+    "test:all": "npm run test:shared && npm run test:math && npm run test:measurement && npm run test:kinematics && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:ripple && npm run test:solar && npm run test:astronomy && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation && npm run test:hamlet"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

@@ -1,11 +1,15 @@
-import { Cloud, Pause, Play, RotateCcw, Timer, Trophy, WifiOff, Zap } from 'lucide-react';
+import { Cloud, Dices, Pause, Play, RotateCcw, Timer, Trophy, WifiOff, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   GOAL_RUSH_DEFAULTS,
   selectBestGoalRushScoresByUniqueName,
   type GoalRushLeaderboardScore,
 } from '../../lib/kinematics/goalRush';
-import { sanitizeLeaderboardName } from '../../lib/kinematics/stopZones';
+import {
+  isBlockedLeaderboardName,
+  sanitizeLeaderboardName,
+} from '../../lib/kinematics/stopZones';
+import { generateLeaderboardName } from '../../lib/shared/leaderboardNames';
 
 type Size = {
   width: number;
@@ -171,6 +175,7 @@ export default function Kinematics2DSandbox() {
   const [localScores, setLocalScores] = useState<GoalRushScoreEntry[]>([]);
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [shellSize, setShellSize] = useState<Size>({ width: 0, height: 0 });
   const [fullscreenActive, setFullscreenActive] = useState(false);
@@ -833,6 +838,13 @@ export default function Kinematics2DSandbox() {
       return;
     }
 
+    // Keep the modal open so the player can fix the name. The API validators
+    // enforce the same rule for anything that bypasses this check.
+    if (isBlockedLeaderboardName(playerName)) {
+      setNameError('That name cannot go on a shared board. Try another, or roll one.');
+      return;
+    }
+
     submittedRef.current = true;
     const score: GoalRushScoreEntry = {
       name: sanitizeLeaderboardName(playerName),
@@ -1023,15 +1035,37 @@ export default function Kinematics2DSandbox() {
             </p>
             <label className="block text-sm font-semibold">
               Display name
-              <input
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-                maxLength={24}
-                placeholder="Initials or display name"
-                className="mt-2 w-full rounded-md border border-[var(--grid-line)] bg-[var(--sim-bg)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
-                autoFocus
-              />
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={playerName}
+                  onChange={(event) => {
+                    setPlayerName(event.target.value);
+                    setNameError(null);
+                  }}
+                  maxLength={24}
+                  placeholder="Initials or display name"
+                  className="w-full rounded-md border border-[var(--grid-line)] bg-[var(--sim-bg)] px-3 py-2 text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  className={buttonClass}
+                  title="Roll a random name"
+                  onClick={() => {
+                    setPlayerName(generateLeaderboardName());
+                    setNameError(null);
+                  }}
+                >
+                  <Dices size={16} aria-hidden="true" />
+                  Roll
+                </button>
+              </div>
             </label>
+            {nameError ? (
+              <p role="alert" className="mt-2 mb-0 text-sm text-[var(--accent-red)]">
+                {nameError}
+              </p>
+            ) : null}
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" className={buttonClass} onClick={() => setNameModalOpen(false)}>
                 Skip

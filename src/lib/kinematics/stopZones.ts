@@ -1,3 +1,5 @@
+import { isBlockedLeaderboardName, sanitizeLeaderboardName } from '../shared/leaderboardNames.ts';
+
 export interface MotionState {
   x: number;
   v: number;
@@ -157,12 +159,10 @@ export const chooseNextZoneCenter = ({
   return candidate;
 };
 
-export const sanitizeLeaderboardName = (name: unknown, fallback = 'Player') => {
-  const value = typeof name === 'string' ? name : '';
-  const collapsed = value.replace(/\s+/g, ' ').trim();
-
-  return (collapsed || fallback).slice(0, 24);
-};
+// Name handling moved to src/lib/shared so every board shares one policy.
+// Re-exported here because the games and API validators already import it from
+// this module.
+export { isBlockedLeaderboardName, sanitizeLeaderboardName } from '../shared/leaderboardNames.ts';
 
 export const validateScoreSubmission = (payload: {
   name?: unknown;
@@ -171,6 +171,14 @@ export const validateScoreSubmission = (payload: {
 }): ScoreValidationResult => {
   const errors: string[] = [];
   const name = sanitizeLeaderboardName(payload.name);
+
+  // Rejected rather than silently renamed, so the player is told to pick
+  // another one. The game checks first for an inline message; this is the
+  // authoritative gate, because a hand-rolled POST skips the game entirely.
+  if (isBlockedLeaderboardName(payload.name)) {
+    errors.push('name is not allowed. Please choose a different display name.');
+  }
+
   const timeMs = Number(payload.timeMs);
   const stops = Number(payload.stops);
 

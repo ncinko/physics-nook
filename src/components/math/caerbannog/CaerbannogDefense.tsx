@@ -61,8 +61,12 @@ import {
   selectBestCaerbannogScoresByUniqueName,
   type CaerbannogLeaderboardScore,
 } from '../../../lib/caerbannog/leaderboard';
-import { sanitizeLeaderboardName } from '../../../lib/kinematics/stopZones';
-import { Cloud, Trophy, WifiOff } from 'lucide-react';
+import {
+  isBlockedLeaderboardName,
+  sanitizeLeaderboardName,
+} from '../../../lib/kinematics/stopZones';
+import { generateLeaderboardName } from '../../../lib/shared/leaderboardNames';
+import { Cloud, Dices, Trophy, WifiOff } from 'lucide-react';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
 import {
   GRENADE_SPRITE,
@@ -218,6 +222,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   const [cloudScores, setCloudScores] = useState<CaerbannogScoreEntry[]>([]);
   const [localScores, setLocalScores] = useState<CaerbannogScoreEntry[]>([]);
   const [playerName, setPlayerName] = useState('');
+  const [nameError, setNameError] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   // Drives the game-over UI (ref guards against a double async submit).
   const [submitted, setSubmitted] = useState(false);
@@ -317,6 +322,14 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     if (submittedRef.current) {
       return;
     }
+
+    // Leave the form open so the player can fix the name. The API validator
+    // enforces the same rule for anything that bypasses this check.
+    if (isBlockedLeaderboardName(playerName)) {
+      setNameError('That name cannot go on a shared board. Try another, or roll one.');
+      return;
+    }
+
     submittedRef.current = true;
     setSubmitted(true);
 
@@ -927,14 +940,36 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
                     void handleScoreSubmit();
                   }}
                 >
-                  <input
-                    value={playerName}
-                    onChange={(event) => setPlayerName(event.target.value)}
-                    maxLength={24}
-                    placeholder="Name for the leaderboard"
-                    className="w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
-                    autoComplete="off"
-                  />
+                  <div className="flex w-full gap-2">
+                    <input
+                      value={playerName}
+                      onChange={(event) => {
+                        setPlayerName(event.target.value);
+                        setNameError(null);
+                      }}
+                      maxLength={24}
+                      placeholder="Name for the leaderboard"
+                      className="w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm text-[var(--text-primary)] outline-none focus:border-[var(--accent-blue)]"
+                      autoComplete="off"
+                    />
+                    <button
+                      type="button"
+                      title="Roll a random name"
+                      onClick={() => {
+                        setPlayerName(generateLeaderboardName());
+                        setNameError(null);
+                      }}
+                      className={`${ghostBtn} mt-0 shrink-0`}
+                    >
+                      <Dices size={15} aria-hidden="true" className="mr-1 inline align-[-2px]" />
+                      Roll
+                    </button>
+                  </div>
+                  {nameError ? (
+                    <p role="alert" className="m-0 text-xs text-[var(--accent-red)]">
+                      {nameError}
+                    </p>
+                  ) : null}
                   <div className="flex justify-center gap-2">
                     <button type="submit" disabled={isPosting} className={`${primaryBtn} mt-0 disabled:opacity-50`}>
                       <Trophy size={15} aria-hidden="true" className="mr-1 inline align-[-2px]" />

@@ -712,8 +712,28 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     cartRef.current = cart;
 
     // --- Input wiring ---
+    // Pointer events cover mouse, touch, and pen on one path. Gestures:
+    // one pointer rotates, two pointers pan and pinch to zoom (the touch
+    // equivalents of left-drag, right-drag, and the scroll wheel).
     let dragType = null;
-    let lastMouse = { x: 0, y: 0 };
+    let lastPointer = { x: 0, y: 0 };
+    const activePointers = new Map();
+    let lastPinchDistance = 0;
+
+    const pointerCentroid = () => {
+      let x = 0;
+      let y = 0;
+      activePointers.forEach((p) => {
+        x += p.x;
+        y += p.y;
+      });
+      return { x: x / activePointers.size, y: y / activePointers.size };
+    };
+
+    const pinchDistance = () => {
+      const [a, b] = [...activePointers.values()];
+      return Math.hypot(a.x - b.x, a.y - b.y);
+    };
 
     const onPointerEnter = () => {
       isPointerOverSimRef.current = true;
@@ -722,7 +742,29 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       isPointerOverSimRef.current = false;
     };
 
+    // Capture is a nice-to-have (it keeps a drag alive past the canvas edge);
+    // it throws if the pointer is already gone, which must not kill the gesture.
+    const capturePointer = (e) => {
+      try {
+        renderer.domElement.setPointerCapture?.(e.pointerId);
+      } catch {
+        /* pointer already released */
+      }
+    };
+
     const onDown = (e) => {
+      activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      capturePointer(e);
+
+      // A second finger switches the gesture to pan + pinch-zoom.
+      if (activePointers.size === 2) {
+        dragType = "PINCH";
+        lastPointer = pointerCentroid();
+        lastPinchDistance = pinchDistance();
+        return;
+      }
+      if (activePointers.size > 2) return;
+
       // Deer click raycast
       const rect = renderer.domElement.getBoundingClientRect();
       const mouse = new THREE.Vector2(
@@ -753,20 +795,59 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
       }
 
       if (e.button === 2) dragType = "PAN";
-      else if (e.button === 0) dragType = "ROTATE";
-      lastMouse = { x: e.clientX, y: e.clientY };
+      else dragType = "ROTATE";
+      lastPointer = { x: e.clientX, y: e.clientY };
     };
 
-    const onUp = () => {
-      dragType = null;
+    const onUp = (e) => {
+      if (e && e.pointerId !== undefined) activePointers.delete(e.pointerId);
+      // Lifting one finger out of a pinch leaves a stale gesture, so restart
+      // the drag from the remaining pointer instead of rotating by the jump.
+      if (activePointers.size === 1) {
+        dragType = "ROTATE";
+        lastPointer = pointerCentroid();
+        return;
+      }
+      if (activePointers.size === 0) dragType = null;
     };
 
     const onMove = (e) => {
+      if (activePointers.has(e.pointerId)) {
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      }
       if (!dragType || cameraModeRef.current === "RIDE") return;
 
-      const dx = e.clientX - lastMouse.x;
-      const dy = e.clientY - lastMouse.y;
-      lastMouse = { x: e.clientX, y: e.clientY };
+      if (dragType === "PINCH") {
+        if (activePointers.size < 2) return;
+        const centroid = pointerCentroid();
+        const distance = pinchDistance();
+        const sensitivity = Math.sqrt(controlsRef.current.zoom) * 0.01;
+        const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+        const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+        controlsRef.current.target.addScaledVector(
+          right,
+          -(centroid.x - lastPointer.x) * sensitivity
+        );
+        controlsRef.current.target.addScaledVector(
+          up,
+          (centroid.y - lastPointer.y) * sensitivity
+        );
+        controlsRef.current.target.y = Math.max(0, controlsRef.current.target.y);
+        // Spreading fingers zooms in, which means decreasing camera distance.
+        if (lastPinchDistance > 0) {
+          controlsRef.current.zoom = Math.max(
+            10,
+            Math.min(400, controlsRef.current.zoom * (lastPinchDistance / distance))
+          );
+        }
+        lastPointer = centroid;
+        lastPinchDistance = distance;
+        return;
+      }
+
+      const dx = e.clientX - lastPointer.x;
+      const dy = e.clientY - lastPointer.y;
+      lastPointer = { x: e.clientX, y: e.clientY };
 
       if (dragType === "ROTATE") {
         controlsRef.current.rotation -= dx * 0.005;
@@ -811,11 +892,13 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
     canvas.style.display = "block";
     canvas.style.zIndex = "0";
     canvas.style.outline = "none";
+    canvas.style.touchAction = "none";
     canvas.addEventListener("pointerenter", onPointerEnter);
     canvas.addEventListener("pointerleave", onPointerLeave);
-    canvas.addEventListener("mousedown", onDown);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("mousemove", onMove);
+    canvas.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("pointermove", onMove);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("contextmenu", onContext);
     window.addEventListener("keydown", onKeyDown);
@@ -1207,9 +1290,10 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
       canvas.removeEventListener("pointerenter", onPointerEnter);
       canvas.removeEventListener("pointerleave", onPointerLeave);
-      canvas.removeEventListener("mousedown", onDown);
-      window.removeEventListener("mouseup", onUp);
-      window.removeEventListener("mousemove", onMove);
+      canvas.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointermove", onMove);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("contextmenu", onContext);
       window.removeEventListener("keydown", onKeyDown);
@@ -1937,7 +2021,7 @@ export default function CoasterBuilder3D({ height = 820, className = "" }) {
 
             {/* Tiny hint */}
             <div className="pointer-events-none self-center mb-2 text-xs text-slate-600/80">
-              Scroll to zoom • Right-drag to pan • WASD to move
+              Drag to orbit • Scroll or pinch to zoom • Right-drag or two-finger drag to pan • WASD to move
             </div>
           </div>
         </div>

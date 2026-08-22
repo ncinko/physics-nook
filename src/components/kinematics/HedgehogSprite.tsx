@@ -1,0 +1,104 @@
+import { useId } from 'react';
+
+import {
+  HEDGEHOG_CELLS,
+  HEDGEHOG_CELL_H,
+  HEDGEHOG_CELL_W,
+  HEDGEHOG_SHEET_H,
+  HEDGEHOG_SHEET_SRC,
+  HEDGEHOG_SHEET_W,
+  type HedgehogFrameName,
+} from './hedgehogSheet';
+
+export * from './hedgehogSheet';
+
+/**
+ * Shows one frame of the hedgehog sprite sheet, anchored at its feet: the local
+ * origin is the bottom-centre of the cell and the body extends upward into
+ * negative y, matching the bunny and chicken sprites. Callers supply their own
+ * outer `translate(...) scale(dir, 1)` transform to position and flip it.
+ *
+ * The frame is selected the same way Hamlet's run cycle works - a clip window
+ * over a single sheet, with the image stepped so the wanted cell lands in the
+ * window - rather than by swapping image sources, so the browser only ever
+ * loads and decodes one file.
+ */
+export function HedgehogSprite({
+  frame = 'walk1',
+  scale = 1,
+}: {
+  frame?: HedgehogFrameName;
+  /** Whole numbers keep the pixel art on exact pixel boundaries. */
+  scale?: number;
+}) {
+  const clipId = useId();
+  const { col, row } = HEDGEHOG_CELLS[frame];
+  const w = HEDGEHOG_CELL_W * scale;
+  const h = HEDGEHOG_CELL_H * scale;
+
+  return (
+    <g>
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={-w / 2} y={-h} width={w} height={h} />
+        </clipPath>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        <image
+          href={HEDGEHOG_SHEET_SRC}
+          x={-w / 2 - col * w}
+          y={-h - row * h}
+          width={HEDGEHOG_SHEET_W * scale}
+          height={HEDGEHOG_SHEET_H * scale}
+          preserveAspectRatio="none"
+          style={{ imageRendering: 'pixelated' }}
+        />
+      </g>
+    </g>
+  );
+}
+
+/**
+ * Blits one frame into a 2D canvas context, anchored at its feet like the SVG
+ * component above, for the canvas-based explorers.
+ *
+ * `rotate` turns the whole character about that anchor. The position-versus-time
+ * graph carries its motion on a vertical rail, so the hedgehog there is given a
+ * quarter turn and climbs the rail instead of walking along a floor; flipping
+ * still reverses which way it faces, because the flip happens in the sprite's
+ * own frame after the rotation.
+ */
+export function drawHedgehogFrame(
+  ctx: CanvasRenderingContext2D,
+  sheet: CanvasImageSource,
+  frame: HedgehogFrameName,
+  {
+    x,
+    y,
+    facing = 1,
+    rotate = 0,
+  }: { x: number; y: number; facing?: 1 | -1; rotate?: number },
+) {
+  const { col, row } = HEDGEHOG_CELLS[frame];
+  ctx.save();
+  ctx.translate(x, y);
+  if (rotate) {
+    ctx.rotate(rotate);
+  }
+  if (facing < 0) {
+    ctx.scale(-1, 1);
+  }
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(
+    sheet,
+    col * HEDGEHOG_CELL_W,
+    row * HEDGEHOG_CELL_H,
+    HEDGEHOG_CELL_W,
+    HEDGEHOG_CELL_H,
+    -HEDGEHOG_CELL_W / 2,
+    -HEDGEHOG_CELL_H,
+    HEDGEHOG_CELL_W,
+    HEDGEHOG_CELL_H,
+  );
+  ctx.restore();
+}

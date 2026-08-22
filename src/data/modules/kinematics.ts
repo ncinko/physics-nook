@@ -13,6 +13,8 @@ export const kinematicsModule: ModuleMeta = {
     'Interpret signed position, velocity, and acceleration in one dimension',
     'Connect average and instantaneous velocity to slopes on a position-time graph',
     'Connect acceleration to changes in velocity over time',
+    'Read displacement and change in velocity as signed areas under motion graphs',
+    'Apply the constant-acceleration equations to free fall with a = -g',
     'Use acceleration controls to solve a stop-in-zones motion challenge',
     'Break two-dimensional motion into horizontal and vertical components',
   ],
@@ -28,11 +30,11 @@ export const kinematicsModule: ModuleMeta = {
       title: '1D Kinematics',
       shortTitle: '1D Motion',
       description:
-        'Learn position, velocity, and acceleration through graph slopes and a stop-in-zones challenge.',
+        'Learn position, velocity, and acceleration through graph slopes, signed areas, free fall, and a stop-in-zones challenge.',
       seo: {
         title: '1D Kinematics',
         description:
-          'Learn one-dimensional kinematics with interactive position and velocity graphs plus a stop-in-zones acceleration challenge.',
+          'Learn one-dimensional kinematics with interactive position, velocity, and acceleration graphs, signed areas, free fall, and a stop-in-zones challenge.',
         canonicalPath: '/kinematics',
         image: '/social/physics-nook-card.svg',
       },

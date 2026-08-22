@@ -1,5 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import {
+  SAMPLE_T_MAX,
+  SAMPLE_T_MIN,
+  accelerationOfT,
+  clampSampleT,
+  pathLengthOfT,
+  positionOfT,
+  velocityOfT,
+} from '../../lib/kinematics/sampleMotion';
+import { hedgehogGait } from '../../lib/kinematics/hedgehogGait';
+import { drawHedgehogFrame } from './HedgehogSprite';
+import { HEDGEHOG_CELL_H, HEDGEHOG_SHEET_SRC } from './hedgehogSheet';
+import { fixed } from '../../utils/format';
+
 type Size = {
   w: number;
   h: number;
@@ -8,18 +22,16 @@ type Size = {
 type DragTarget = 't1' | 't2' | 't0' | 'play' | null;
 
 const FONT_FAMILY = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-const T_MIN = 0;
-const T_MAX = 10;
+const T_MIN = SAMPLE_T_MIN;
+const T_MAX = SAMPLE_T_MAX;
 const Y_MIN = 0;
 const Y_MAX = 10;
 const PAD_L = 64;
 const PAD_R = 104;
-const PAD_T = 20;
+const PAD_T = 30;
 const PAD_B = 58;
 
-const positionOfT = (t: number) => 0.06 * t * t * t - 0.8 * t * t + 3 * t;
-const velocityOfT = (t: number) => 0.18 * t * t - 1.6 * t + 3;
-const clampT = (t: number) => Math.max(T_MIN, Math.min(T_MAX, t));
+const clampT = clampSampleT;
 
 const getCssColor = (name: string, fallback: string) => {
   if (typeof window === 'undefined') {
@@ -55,6 +67,7 @@ export default function VelocityExplorer() {
   const [tMotion, setTMotion] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [dragVersion, setDragVersion] = useState(0);
+  const [sheetReady, setSheetReady] = useState(false);
   const [size, setSize] = useState<Size>({ w: 860, h: 520 });
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -65,6 +78,8 @@ export default function VelocityExplorer() {
   const draggingRef = useRef<DragTarget>(null);
   const velocityDraggingRef = useRef(false);
   const playButtonRef = useRef({ x: 18, y: 18, r: 18 });
+  const sheetRef = useRef<HTMLImageElement | null>(null);
+  const railFacingRef = useRef<1 | -1>(1);
   const velocityGeometryRef = useRef({ left: PAD_L, right: PAD_R, top: 14, bottom: 42 });
 
   const xPix = (t: number) =>
@@ -76,12 +91,7 @@ export default function VelocityExplorer() {
     () => (positionOfT(t2) - positionOfT(t1)) / (t2 - t1),
     [t1, t2],
   );
-  const instantVelocity = useMemo(() => {
-    const left = Math.max(T_MIN, t0 - 0.01);
-    const right = Math.min(T_MAX, t0 + 0.01);
-
-    return (positionOfT(right) - positionOfT(left)) / (right - left);
-  }, [t0]);
+  const instantVelocity = useMemo(() => velocityOfT(t0), [t0]);
   const velocityPlotHeight = Math.max(220, Math.floor(size.h * 0.5));
 
   useEffect(() => {
@@ -135,9 +145,21 @@ export default function VelocityExplorer() {
   }, [isPlaying]);
 
   useEffect(() => {
+    const image = new Image();
+    image.src = HEDGEHOG_SHEET_SRC;
+    image.onload = () => {
+      sheetRef.current = image;
+      setSheetReady(true);
+    };
+    return () => {
+      image.onload = null;
+    };
+  }, []);
+
+  useEffect(() => {
     drawPositionPlot();
     drawVelocityPlot(t0);
-  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion]);
+  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion, sheetReady]);
 
   const drawPositionPlot = () => {
     const canvas = canvasRef.current;
@@ -180,7 +202,7 @@ export default function VelocityExplorer() {
       ctx.lineTo(x, size.h - PAD_B);
       ctx.stroke();
     }
-    for (let i = 0; i <= 10; i += 1) {
+    for (let i = 0; i <= Y_MAX; i += 1) {
       const y = yPix(i);
       ctx.beginPath();
       ctx.moveTo(PAD_L, y);
@@ -214,7 +236,7 @@ export default function VelocityExplorer() {
       ctx.fillText(String(i), xPix(i), size.h - PAD_B + 20);
     }
     ctx.textAlign = 'right';
-    for (let i = 1; i <= 10; i += 1) {
+    for (let i = 1; i <= Y_MAX; i += 1) {
       ctx.fillText(String(i), PAD_L - 8, yPix(i) + 4);
     }
 
@@ -246,7 +268,7 @@ export default function VelocityExplorer() {
     ctx.fillStyle = red;
     ctx.font = `600 14px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`avg v = ${averageVelocity.toFixed(2)} m/s`, (x1 + x2) / 2, (y1 + y2) / 2 + 30);
+    ctx.fillText(`avg v = ${fixed(averageVelocity)} m/s`, (x1 + x2) / 2, (y1 + y2) / 2 + 30);
     ctx.restore();
 
     const slope = instantVelocity;
@@ -266,7 +288,7 @@ export default function VelocityExplorer() {
     ctx.fillStyle = '#166534';
     ctx.font = `600 14px ${FONT_FAMILY}`;
     ctx.textAlign = 'center';
-    ctx.fillText(`v(t) = ${instantVelocity.toFixed(2)} m/s`, xAtT0, Math.max(24, yAtT0 - 28));
+    ctx.fillText(`v(t) = ${fixed(instantVelocity)} m/s`, xAtT0, Math.max(24, yAtT0 - 28));
     ctx.restore();
 
     drawHandle(ctx, x1, y1, red);
@@ -292,7 +314,7 @@ export default function VelocityExplorer() {
       ctx.textAlign = 'center';
       ctx.fillText(activeTime.toFixed(2), x, size.h - PAD_B - 8);
       ctx.textAlign = 'left';
-      ctx.fillText(activePosition.toFixed(2), PAD_L + 8, y + 4);
+      ctx.fillText(fixed(activePosition), PAD_L + 8, y + 4);
       ctx.restore();
     }
 
@@ -302,13 +324,32 @@ export default function VelocityExplorer() {
     ctx.beginPath();
     ctx.arc(motionX, motionY, 5, 0, Math.PI * 2);
     ctx.fill();
+    // The rail runs vertically because position is the vertical axis here, so
+    // the hedgehog is turned a quarter turn and climbs it: a quarter turn
+    // anticlockwise puts its snout along +position, and the gait flip reverses
+    // that when the motion does.
     const railX = size.w - 48;
-    ctx.fillStyle = blue;
-    ctx.beginPath();
-    ctx.arc(railX, Math.max(PAD_T, Math.min(size.h - PAD_B, motionY)), 7, 0, Math.PI * 2);
-    ctx.fill();
+    const railY = Math.max(PAD_T, Math.min(size.h - PAD_B, motionY));
+    const sheet = sheetRef.current;
+    if (sheet) {
+      const pose = hedgehogGait({
+        distance: pathLengthOfT(tMotion),
+        velocity: velocityOfT(tMotion),
+        acceleration: accelerationOfT(tMotion),
+        previousFacing: railFacingRef.current,
+      });
+      railFacingRef.current = pose.facing;
+      drawHedgehogFrame(ctx, sheet, pose.frame, {
+        x: railX + HEDGEHOG_CELL_H / 2,
+        y: railY,
+        facing: pose.facing,
+        rotate: -Math.PI / 2,
+      });
+    }
 
-    playButtonRef.current = { x: railX, y: size.h - PAD_B + 26, r: 18 };
+    // Down in the bottom-left corner, clear of the rail: the hedgehog needs the
+    // full height of the right-hand margin to itself.
+    playButtonRef.current = { x: PAD_L + 18, y: size.h - PAD_B + 26, r: 18 };
     ctx.fillStyle = bg;
     ctx.strokeStyle = grid;
     ctx.lineWidth = 1.5;
@@ -362,7 +403,7 @@ export default function VelocityExplorer() {
     const bottom = 42;
     velocityGeometryRef.current = { left, right, top, bottom };
     const xMap = (t: number) => left + ((t - T_MIN) / (T_MAX - T_MIN)) * (width - left - right);
-    const yMap = (v: number) => height - bottom - ((v + 5) / 10) * (height - top - bottom);
+    const yMap = (v: number) => height - bottom - ((v + 2) / 5) * (height - top - bottom);
 
     ctx.clearRect(0, 0, width, height);
     ctx.fillStyle = panel;
@@ -409,7 +450,7 @@ export default function VelocityExplorer() {
       ctx.fillText(String(i), xMap(i), height - bottom + 19);
     }
     ctx.textAlign = 'right';
-    [-5, -2.5, 0, 2.5, 5].forEach((v) => {
+    [-2, -1, 0, 1, 2, 3].forEach((v) => {
       ctx.fillText(v.toFixed(1), left - 8, yMap(v) + 4);
     });
 
@@ -604,10 +645,9 @@ export default function VelocityExplorer() {
       ref={wrapperRef}
       className="flex h-full min-h-[42rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
     >
-      <div className="grid gap-3 md:grid-cols-3">
-        <Readout label="Average velocity" value={`${averageVelocity.toFixed(2)} m/s`} accent="var(--accent-red)" />
-        <Readout label="Instantaneous velocity" value={`${instantVelocity.toFixed(2)} m/s`} accent="#16a34a" />
-        <Readout label="Marker time" value={`${t0.toFixed(2)} s`} accent="var(--accent-blue)" />
+      <div className="grid gap-3 md:grid-cols-2">
+        <Readout label="Average velocity" value={`${fixed(averageVelocity)} m/s`} accent="var(--accent-red)" />
+        <Readout label="Instantaneous velocity" value={`${fixed(instantVelocity)} m/s`} accent="#16a34a" />
       </div>
 
       <canvas

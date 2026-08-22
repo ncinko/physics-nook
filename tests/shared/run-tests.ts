@@ -148,6 +148,7 @@ const goalRush = validateGoalRushScoreSubmission({
 });
 assert.equal(goalRush.ok, false, 'goal rush should reject a blocked name');
 assert.ok(nameRejected(goalRush.errors));
+assert.equal(goalRush.name, 'Player');
 
 const caerbannog = validateCaerbannogScoreSubmission({
   name: 'FUCK',
@@ -158,6 +159,7 @@ const caerbannog = validateCaerbannogScoreSubmission({
 });
 assert.equal(caerbannog.ok, false, 'caerbannog should reject a blocked name');
 assert.ok(nameRejected(caerbannog.errors));
+assert.equal(caerbannog.name, 'Player');
 
 const chicken = validateChickenCountScoreSubmission({
   name: 'n1gger',
@@ -166,5 +168,9 @@ const chicken = validateChickenCountScoreSubmission({
 });
 assert.equal(chicken.ok, false, 'chicken count should reject a blocked name');
 assert.ok(nameRejected(chicken.errors));
+assert.equal(chicken.name, 'Player');
+
+// The endpoints bind `validation.name`, so even if the `ok` check were ever
+// bypassed the value reaching D1 is the masked one, never the raw payload.
 
 console.log('shared leaderboard name tests passed');

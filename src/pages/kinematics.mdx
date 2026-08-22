@@ -1,7 +1,7 @@
 ---
 layout: ../layouts/TextbookLayout.astro
 title: 1D Kinematics
-description: Learn position, velocity, and acceleration in one dimension with interactive graphs and a stop-in-zones motion challenge.
+description: Learn position, velocity, and acceleration in one dimension through graph slopes, signed areas, free fall, and a stop-in-zones motion challenge.
 canonicalPath: /kinematics
 ---
 
@@ -11,6 +11,8 @@ import ProblemSolvingSection from '../components/textbook/ProblemSolvingSection.
 import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import VelocityExplorer from '../components/kinematics/VelocityExplorer';
+import AccelerationExplorer from '../components/kinematics/AccelerationExplorer';
+import MotionOpener from '../components/kinematics/MotionOpener';
 import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
 import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
@@ -22,12 +24,22 @@ import { mechanicsPath } from '../data/modules';
 
 # 1D Kinematics
 
-Kinematics describes **motion** without asking about the underlying cause.  The motion of an object is characterized by its location in space, **position**, as a function of **time**.  It's convenient to then define two additional quantities:
+
+
+Kinematics describes **motion**.  The motion of an object is characterized by its location in space, **position**, as a function of **time**.  It's convenient to then define two additional quantities:
 
 - **Velocity** tells us how quickly position changes, including direction.
 - **Acceleration** tells us how quickly velocity changes, including direction.
 
 We could continue this process indefinitely, but it turns out that the underlying causes of motion can be directly tied to acceleration.
+
+<InteractiveAnchor id="motion-opener" />
+
+<MotionOpener client:load />
+
+Once you choose a spatial and temporal coordinate system, like the gridlines and stopwatch for the above hedgehog, you can begin describing motion quantitatively.  Most of the confusion surrounding kinematics comes from the colloquial use of physical terms.  For example, speed and velocity are often used interchangeably.  Or for this particular hedgehog, the phrase *slowing down* happens to make sense for both positive and negative acceleration.
+
+To sort these things out clearly, we use mathematical definitions in physics.  Although natural language may be ambiguous, there is rarely ambiguity in mathematical language.  **You should still spend time connecting the mathematics to your understanding of the underlying concepts/phenomena.**  It is boring to view physics as a collection of equations disjoint from reality.
 
 ## Velocity
 
@@ -38,13 +50,11 @@ $$
 = \frac{x_2 - x_1}{t_2 - t_1}.
 $$
 
-If the two moments are indistinguishable (calculus allows us to take the limit as $$t_2 - t_1 \rightarrow 0$$), then we have the instantaneous velocity:
+Note the first sign distinction that arises from this definition: the numerator can be positive or negative.  For horizontal motion, the convention is usually that $x$ increases in the rightward direction.  It follows that moving to the right corresponds to *positive* values of velocity, while moving to the left is *negative* velocity.
 
-$$
-v(t) = \frac{dx}{dt}.
-$$
+When we don't have access to animations or video, it is helpful to make a graph of position and time.  If all motion occurs along one spatial dimension (e.g. a hedgehog running left or right), we end up with a 2D plot.  It is convention to place time along the horizontal axis.
 
-Graphically, average velocity is the slope of a secant line on a position versus time plot. Instantaneous velocity is the slope of the tangent line at a single point.
+Graphically, **average velocity is the slope of a secant line** on a position versus time plot. Instantaneous velocity is the slope of the tangent line at a single moment in time. 
 
 <InteractiveAnchor id="velocity-explorer" />
 
@@ -74,23 +84,72 @@ $$
 = \frac{v_2 - v_1}{t_2 - t_1}.
 $$
 
-This can be a tricky concept to grasp fully, but the good news is that you already have incredible intuition for what it *feels like* to experience acceleration.  The challenge is to connect this everyday experience to these more precise mathematical ideas.
+This can be a tricky concept to grasp fully, but the good news is that you already have incredible intuition for what it *feels like* to experience acceleration.
 
-Note that the relationship between acceleration and velocity is analogous to the relationship between velocity and position.  Velocity is a rate of change (in position).  Acceleration is a rate of change [in velocity].  This means acceleration is also a rate of change [in a rate of change (in position)].
+Note that the relationship between acceleration and velocity is analogous to the relationship between velocity and position.  Velocity is the rate of change of position, and acceleration is the rate of change of velocity, which makes acceleration a rate of change of a rate of change.  That extra layer of nesting is the part that takes getting used to.
 
-As with velocity, instantaneous acceleration is the acceleration at one moment in time:
 
-$$
-a(t) = \frac{dv}{dt}.
-$$
 
-The slope idea repeats: acceleration is the slope of a velocity versus time plot in the same way velocity is the slope of a position versus time plot.
+Once again, we often plot velocity against time and the graphical interpretation repeats: acceleration is the slope of a velocity versus time plot in the same way velocity is the slope of a position versus time plot.
 
 <DerivationPanel title="How can negative acceleration speed something up?">
   Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.
 </DerivationPanel>
 
-The challenge below turns the sign conventions into a control problem. Apply acceleration left or right, watch the position and velocity traces, and stop inside each target zone.
+Drag the red markers to read an average acceleration off the secant, and drag the purple marker to read the instantaneous acceleration off the tangent. The shaded band on the lower graph is the subject of the next section.
+
+<InteractiveAnchor id="acceleration-explorer" />
+
+<SimulationBlock
+  title="Velocity and Acceleration"
+  description="Read average acceleration from a secant slope, instantaneous acceleration from a tangent slope, and the change in velocity from the shaded area."
+>
+  <AccelerationExplorer client:only="react" />
+</SimulationBlock>
+
+## Areas Under the Graphs
+
+Slopes run one way along the chain: position to velocity to acceleration. Areas run back the other way.
+
+Mark off a strip of the velocity graph narrow enough that the velocity barely changes across it. Over that strip the motion is effectively constant-velocity, so the displacement is $v\,\Delta t$ - which is exactly the area of the strip, height times width. Add up every strip between $t_1$ and $t_2$ and you have the whole displacement:
+
+$$
+\Delta x = \text{area under } v(t) \text{ from } t_1 \text{ to } t_2.
+$$
+
+The identical argument one level up reads the change in velocity off the acceleration graph:
+
+$$
+\Delta v = \text{area under } a(t) \text{ from } t_1 \text{ to } t_2.
+$$
+
+That is what the shaded band in the explorer above is measuring. Drag the red markers and watch $\Delta v$ follow the shaded region, while the secant slope on the velocity graph reports the average acceleration over the very same interval.
+
+These areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, area below the axis means the object moved left, and a trip out and back can cover a lot of ink while producing zero displacement. That is exactly the difference between displacement and distance travelled: displacement adds the signed areas, distance adds their absolute values.
+
+<DerivationPanel title="Why does area give displacement when the velocity keeps changing?">
+  Chop the interval into $N$ equal slices of width $\Delta t$. Across one slice the velocity does change, but if the slice is narrow enough that change is small, so treating the velocity as constant at some value $v_k$ inside the slice costs very little:
+
+  $$
+  \Delta x_k \approx v_k \, \Delta t.
+  $$
+
+  That is the area of a rectangle of height $v_k$ and width $\Delta t$. Summing over all the slices,
+
+  $$
+  \Delta x \approx \sum_{k=1}^{N} v_k \, \Delta t,
+  $$
+
+  which is the total area of a staircase of rectangles drawn under the curve. As $N$ grows the staircase hugs the curve more closely and the error shrinks toward nothing. In the limit the sum becomes an integral,
+
+  $$
+  \Delta x = \int_{t_1}^{t_2} v(t)\, dt,
+  $$
+
+  and the area under the curve is exact. This is the same limiting move that turned average velocity into instantaneous velocity, run in reverse.
+</DerivationPanel>
+
+
 
 <InteractiveAnchor id="zone-challenge" />
 
@@ -372,6 +431,101 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
 
     The acceleration points opposite the motion, so the cart should slow to a stop. It does not stop immediately; it continues moving right while its velocity falls to zero, so a positive stopping distance makes sense.
   </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Displacement from a Velocity Graph"
+    accent="red"
+  >
+    #### Problem
+
+    A cart's velocity graph is made of two flat segments. From $t = 0$ to $t = 4.0\,\text{s}$ the velocity holds steady at $+3.0\,\text{m/s}$. From $t = 4.0\,\text{s}$ to $t = 10.0\,\text{s}$ it holds steady at $-2.0\,\text{m/s}$. Find the displacement and the distance travelled over the full ten seconds.
+
+    #### Given
+
+    - $v = +3.0\,\text{m/s}$ for $\Delta t = 4.0\,\text{s}$
+    - $v = -2.0\,\text{m/s}$ for $\Delta t = 6.0\,\text{s}$
+
+    #### Use
+
+    Displacement is the signed area under $v(t)$. Each segment is flat, so each area is just a rectangle:
+
+    $$
+    \Delta x = v\,\Delta t.
+    $$
+
+    #### Solve
+
+    The first rectangle sits above the axis:
+
+    $$
+    \Delta x_1 = (+3.0)(4.0) = +12\,\text{m}.
+    $$
+
+    The second sits below it, so its signed area is negative:
+
+    $$
+    \Delta x_2 = (-2.0)(6.0) = -12\,\text{m}.
+    $$
+
+    Displacement adds the signed areas:
+
+    $$
+    \Delta x = 12 + (-12) = 0\,\text{m}.
+    $$
+
+    Distance adds their absolute values:
+
+    $$
+    d = |12| + |-12| = 24\,\text{m}.
+    $$
+
+    #### Check
+
+    The cart went out 12 m and came back 12 m, so it ends exactly where it started. Zero displacement with 24 m of travel is not a contradiction; it is the whole reason the two quantities need separate names.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="How High Does It Go?"
+    accent="blue"
+  >
+    #### Problem
+
+    A ball is thrown straight up at $12\,\text{m/s}$. How high above the launch point does it rise?
+
+    #### Given
+
+    - $v_i = 12\,\text{m/s}$
+    - $v_f = 0$ at the highest point
+    - $a = -g = -9.8\,\text{m/s}^2$
+
+    #### Use
+
+    The question asks for a displacement and never mentions time, so reach for the equation that has no $t$ in it:
+
+    $$
+    v_f^2 = v_i^2 + 2a\Delta y.
+    $$
+
+    #### Solve
+
+    Substitute the known values:
+
+    $$
+    0 = (12)^2 + 2(-9.8)\Delta y.
+    $$
+
+    Rearrange and solve:
+
+    $$
+    19.6\,\Delta y = 144
+    \qquad \Rightarrow \qquad
+    \Delta y = 7.3\,\text{m}.
+    $$
+
+    #### Check
+
+    A positive $\Delta y$ means the ball finished above where it started, which is right for a throw upward. Note what marks the peak: the velocity reaches zero there, not the acceleration. The acceleration is $-9.8\,\text{m/s}^2$ the entire way.
+  </WorkedExampleCard>
 </ProblemSolvingSection>
 
 <QuestionSequence
@@ -403,6 +557,33 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
         { id: 'C', text: 'Velocity is a line, and position is a parabola.', isCorrect: true, explanation: 'Constant acceleration changes velocity at a constant rate, so $v(t)$ is linear. Position accumulates that changing velocity, so $x(t)$ is quadratic.' },
         { id: 'A', text: 'Velocity is a parabola, and position is a line.', isCorrect: false, explanation: 'A linear position graph would have constant velocity, not changing velocity.' },
         { id: 'B', text: 'Both graphs are horizontal lines.', isCorrect: false, explanation: 'Horizontal velocity would mean zero acceleration. Horizontal position would mean no motion.' }
+      ]
+    },
+    {
+      id: 'area-under-velocity',
+      question: 'On a velocity versus time graph, what does the area between the curve and the time axis tell you?',
+      options: [
+        { id: 'B', text: 'The acceleration over that interval.', isCorrect: false, explanation: 'Acceleration is the $slope$ of a velocity graph, not its area. Slopes go down the chain from position to velocity to acceleration; areas come back up it.' },
+        { id: 'C', text: 'The displacement over that interval.', isCorrect: true, explanation: 'Each narrow strip of the graph contributes $v\\,\\Delta t$, which is a small displacement. Adding the strips gives $\\Delta x$ for the whole interval.' },
+        { id: 'A', text: 'The total distance travelled, no matter what the graph does.', isCorrect: false, explanation: 'Only when the velocity never changes sign. The area is signed, so a section below the axis subtracts. Displacement adds the signed areas; distance adds their absolute values.' }
+      ]
+    },
+    {
+      id: 'free-fall-at-the-peak',
+      question: 'A ball is thrown straight up. At the highest point of its flight, what are its velocity and its acceleration?',
+      options: [
+        { id: 'C', text: '$v = 0$ and $a = 9.8\\,\\text{m/s}^2$ directed downward.', isCorrect: true, explanation: 'The velocity passes through zero at the peak, but it is still changing - from upward to downward - so the acceleration is unchanged at $9.8\\,\\text{m/s}^2$ downward, exactly as it is for the rest of the flight.' },
+        { id: 'A', text: '$v = 0$ and $a = 0$.', isCorrect: false, explanation: 'If the acceleration were zero the velocity would stop changing, and the ball would hover at the top rather than fall back.' },
+        { id: 'B', text: '$v = 0$ and $a$ points upward, which is what brings the ball back down.', isCorrect: false, explanation: 'An upward acceleration would push the ball higher, not bring it back. Gravity points down for the whole flight.' }
+      ]
+    },
+    {
+      id: 'axis-choice',
+      question: 'You solve a problem with rightward chosen as positive and find $a = -2.0\\,\\text{m/s}^2$. A classmate solves the same problem with leftward as positive. What do they find?',
+      options: [
+        { id: 'A', text: '$a = +2.0\\,\\text{m/s}^2$, describing the same physical acceleration.', isCorrect: true, explanation: 'Flipping the axis flips every sign. The acceleration still points the same way in the room; only the label attached to that direction changed.' },
+        { id: 'C', text: '$a = -2.0\\,\\text{m/s}^2$, because acceleration does not depend on the axis.', isCorrect: false, explanation: 'The acceleration itself does not depend on the axis, but the sign you write down does - the sign is what records the direction relative to your chosen positive way.' },
+        { id: 'B', text: 'The problem cannot be solved with leftward as positive.', isCorrect: false, explanation: 'Either choice works. The only rule is that you stay with one convention for the whole problem.' }
       ]
     }
   ]}

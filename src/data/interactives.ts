@@ -177,6 +177,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['vectors', 'unit vectors', 'components'],
   },
   {
+    id: 'motion-opener',
+    title: 'Hedgehog Motion Track',
+    description:
+      'Watch a pixel-art hedgehog act out the motion the kinematics graphs describe, and scrub through it a moment at a time.',
+    href: '/kinematics#motion-opener',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['kinematics', 'motion', 'position'],
+  },
+  {
     id: 'velocity-explorer',
     title: 'Velocity Explorer',
     description: 'Connect position, velocity, and acceleration with graph-driven one-dimensional motion.',
@@ -184,6 +194,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     module: 'Mechanics',
     kind: 'standalone',
     tags: ['kinematics', 'graphs', 'motion'],
+  },
+  {
+    id: 'acceleration-explorer',
+    title: 'Acceleration Explorer',
+    description:
+      'Read average and instantaneous acceleration from a velocity graph, and the change in velocity from the shaded area under a(t).',
+    href: '/kinematics#acceleration-explorer',
+    module: 'Mechanics',
+    kind: 'standalone',
+    tags: ['kinematics', 'graphs', 'acceleration', 'area'],
   },
   {
     id: 'zone-challenge',

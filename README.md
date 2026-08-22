@@ -72,7 +72,7 @@ Both Cloudflare Pages projects publish `dist`; the build command decides what ge
 - Visual/layout expectations live in [Design Baseline](docs/design-baseline.md).
 - Cleanup, dependency, and artifact policy live in [Maintenance](docs/maintenance.md).
 
-## 1D/2D Kinematics Leaderboards
+## Leaderboards
 
 The kinematics challenges use Cloudflare Pages Functions and D1:
 

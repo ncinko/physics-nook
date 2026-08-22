@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import { Pause, Play } from 'lucide-react';
 
 import {
@@ -17,6 +16,12 @@ import { hedgehogGait } from '../../lib/kinematics/hedgehogGait';
 import { drawHedgehogFrame } from './HedgehogSprite';
 import { HEDGEHOG_CELL_H, HEDGEHOG_CELL_W, HEDGEHOG_SHEET_SRC } from './hedgehogSheet';
 import { fixed } from '../../utils/format';
+import {
+  InterpretationToggle,
+  MetricPanel,
+  type Interpretation,
+} from './ExplorerControls';
+import { drawChangeBracket, fillSignedArea } from './plotShading';
 
 type Size = {
   w: number;
@@ -61,19 +66,6 @@ const getCssColor = (name: string, fallback: string) => {
   return value || fallback;
 };
 
-const withAlpha = (color: string, alpha: number) => {
-  const hex = color.trim();
-  if (!/^#([0-9a-f]{6})$/i.test(hex)) {
-    return hex;
-  }
-
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
 export default function AccelerationExplorer() {
   const [t1, setT1] = useState(2);
   const [t2, setT2] = useState(9);
@@ -81,6 +73,7 @@ export default function AccelerationExplorer() {
   const [tMotion, setTMotion] = useState(SAMPLE_T_MIN);
   const [isPlaying, setIsPlaying] = useState(false);
   const [sheetReady, setSheetReady] = useState(false);
+  const [interpretation, setInterpretation] = useState<Interpretation>('slope');
   const [dragVersion, setDragVersion] = useState(0);
   const [size, setSize] = useState<Size>({ w: 860, h: 430 });
 
@@ -115,6 +108,7 @@ export default function AccelerationExplorer() {
   const averageAcceleration = useMemo(() => averageRate(velocityOfT, t1, t2), [t1, t2]);
   const instantAcceleration = useMemo(() => accelerationOfT(t0), [t0]);
   const deltaV = useMemo(() => areaUnderAcceleration(t1, t2), [t1, t2]);
+  const showSlope = interpretation === 'slope';
 
   useEffect(() => {
     const element = wrapperRef.current;
@@ -181,7 +175,7 @@ export default function AccelerationExplorer() {
     drawVelocityPlot();
     drawMotionStrip();
     drawAccelerationPlot();
-  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion, sheetReady]);
+  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion, sheetReady, interpretation]);
 
   const prepareCanvas = (canvas: HTMLCanvasElement, width: number, height: number) => {
     const ctx = canvas.getContext('2d');
@@ -325,46 +319,64 @@ export default function AccelerationExplorer() {
     const x2 = xPix(t2);
     const y2 = vPix(velocityOfT(t2));
 
-    ctx.save();
-    ctx.strokeStyle = red;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([7, 6]);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = red;
-    ctx.font = `600 14px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      `avg a = ${fixed(averageAcceleration)} m/s²`,
-      (x1 + x2) / 2,
-      (y1 + y2) / 2 + 30,
-    );
-    ctx.restore();
-
-    const slope = instantAcceleration;
     const xAtT0 = xPix(t0);
     const yAtT0 = vPix(velocityOfT(t0));
-    ctx.save();
-    ctx.strokeStyle = purple;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 6]);
-    ctx.beginPath();
-    ctx.moveTo(xPix(T_MIN), vPix(velocityOfT(t0) + slope * (T_MIN - t0)));
-    ctx.lineTo(xPix(T_MAX), vPix(velocityOfT(t0) + slope * (T_MAX - t0)));
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = purple;
-    ctx.font = `600 14px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`a(t) = ${fixed(slope)} m/s²`, xAtT0, Math.max(24, yAtT0 - 28));
-    ctx.restore();
+
+    if (showSlope) {
+      ctx.save();
+      ctx.strokeStyle = red;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = red;
+      ctx.font = `600 14px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        `avg a = ${fixed(averageAcceleration)} m/s²`,
+        (x1 + x2) / 2,
+        (y1 + y2) / 2 + 30,
+      );
+      ctx.restore();
+
+      const slope = instantAcceleration;
+      ctx.save();
+      ctx.strokeStyle = purple;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 6]);
+      ctx.beginPath();
+      ctx.moveTo(xPix(T_MIN), vPix(velocityOfT(t0) + slope * (T_MIN - t0)));
+      ctx.lineTo(xPix(T_MAX), vPix(velocityOfT(t0) + slope * (T_MAX - t0)));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = purple;
+      ctx.font = `600 14px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`a(t) = ${fixed(slope)} m/s²`, xAtT0, Math.max(24, yAtT0 - 28));
+      ctx.restore();
+    } else {
+      // The rise of the velocity curve across the interval - the same number the
+      // shaded area under the acceleration graph below is accumulating.
+      drawChangeBracket(ctx, {
+        xFrom: x1,
+        xTo: x2,
+        xArrow: Math.min(x2 + 24, size.w - PAD_R - 14),
+        yFrom: y1,
+        yTo: y2,
+        color: VELOCITY_GREEN,
+        label: `Δv = ${fixed(deltaV)} m/s`,
+        font: FONT_FAMILY,
+      });
+    }
 
     drawHandle(ctx, x1, y1, red);
     drawHandle(ctx, x2, y2, red);
-    drawHandle(ctx, xAtT0, yAtT0, purple);
+    if (showSlope) {
+      drawHandle(ctx, xAtT0, yAtT0, purple);
+    }
 
     // The animation's own marker, sliding along the curve as the hedgehog runs
     // below. Green because it reads a velocity, the same green as the curve.
@@ -500,105 +512,56 @@ export default function AccelerationExplorer() {
 
     const purple = getCssColor('--accent-purple', '#7e57c2');
     const red = getCssColor('--accent-red', '#ef4444');
-    const text = getCssColor('--text-primary', '#111827');
     const aPix = (a: number) =>
       height - PAD_B - ((a - A_MIN) / (A_MAX - A_MIN)) * (height - PAD_T - PAD_B);
 
     drawFrame(ctx, size.w, height, 'acceleration (m/s²)', [-2, -1, 0, 1, 2], aPix);
 
-    // Shade the signed area between the markers. Runs above and below the axis
-    // are filled separately so the negative contribution reads as negative.
-    const baseline = aPix(0);
-
-    const fillRun = (ta: number, tb: number, sign: number) => {
-      if (tb - ta < 1e-6) {
-        return;
-      }
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(xPix(ta), baseline);
-      for (let i = 0; i <= 64; i += 1) {
-        const t = ta + ((tb - ta) * i) / 64;
-        ctx.lineTo(xPix(t), aPix(accelerationOfT(t)));
-      }
-      ctx.lineTo(xPix(tb), baseline);
-      ctx.closePath();
-      ctx.fillStyle = withAlpha(purple, sign >= 0 ? 0.3 : 0.14);
-      ctx.fill();
-      if (sign < 0) {
-        ctx.strokeStyle = withAlpha(purple, 0.6);
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        ctx.stroke();
-      }
-      ctx.restore();
-
-      const midT = (ta + tb) / 2;
-      const midY = (baseline + aPix(accelerationOfT(midT))) / 2;
-      if (Math.abs(xPix(tb) - xPix(ta)) > 26) {
-        ctx.save();
-        ctx.fillStyle = purple;
-        ctx.font = `700 18px ${FONT_FAMILY}`;
-        ctx.textAlign = 'center';
-        ctx.fillText(sign >= 0 ? '+' : '−', xPix(midT), midY + 6);
-        ctx.restore();
-      }
-    };
-
-    const steps = 240;
-    let runStart = t1;
-    let runSign = Math.sign(accelerationOfT(t1)) || 1;
-    for (let i = 1; i <= steps; i += 1) {
-      const t = t1 + ((t2 - t1) * i) / steps;
-      const sign = Math.sign(accelerationOfT(t)) || runSign;
-      if (sign !== runSign) {
-        fillRun(runStart, t, runSign);
-        runStart = t;
-        runSign = sign;
-      }
+    if (!showSlope) {
+      // Tinted with the colour of what the area gives you - a velocity - rather
+      // than the colour of the acceleration curve it sits under.
+      fillSignedArea(ctx, {
+        from: t1,
+        to: t2,
+        valueOfT: accelerationOfT,
+        xPix,
+        yPix: aPix,
+        color: VELOCITY_GREEN,
+        font: FONT_FAMILY,
+      });
     }
-    fillRun(runStart, t2, runSign);
 
     drawCurve(ctx, accelerationOfT, aPix, purple);
 
-    // Boundary rules so the shaded band lines up with the secant endpoints above.
-    ctx.save();
-    ctx.strokeStyle = red;
-    ctx.lineWidth = 1.4;
-    ctx.setLineDash([5, 5]);
-    [t1, t2].forEach((t) => {
+    if (!showSlope) {
+      // Boundary rules so the shaded band lines up with the markers above.
+      ctx.save();
+      ctx.strokeStyle = red;
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 5]);
+      [t1, t2].forEach((t) => {
+        ctx.beginPath();
+        ctx.moveTo(xPix(t), PAD_T);
+        ctx.lineTo(xPix(t), height - PAD_B);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
+    if (showSlope) {
+      const markerX = xPix(t0);
+      const markerY = aPix(accelerationOfT(t0));
+      ctx.strokeStyle = purple;
+      ctx.lineWidth = 1.4;
       ctx.beginPath();
-      ctx.moveTo(xPix(t), PAD_T);
-      ctx.lineTo(xPix(t), height - PAD_B);
+      ctx.moveTo(markerX, PAD_T);
+      ctx.lineTo(markerX, height - PAD_B);
       ctx.stroke();
-    });
-    ctx.restore();
-
-    ctx.save();
-    ctx.fillStyle = text;
-    ctx.font = `600 14px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(
-      `shaded area = Δv = ${fixed(deltaV)} m/s`,
-      (PAD_L + size.w - PAD_R) / 2,
-      PAD_T + 14,
-    );
-    ctx.restore();
-
-    const markerX = xPix(t0);
-    const markerY = aPix(accelerationOfT(t0));
-    ctx.strokeStyle = purple;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    // Start below the area caption so the rule does not strike through it.
-    ctx.moveTo(markerX, PAD_T + 26);
-    ctx.lineTo(markerX, height - PAD_B);
-    ctx.stroke();
-    ctx.fillStyle = purple;
-    ctx.beginPath();
-    ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
-    ctx.fill();
+      ctx.fillStyle = purple;
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
   };
 
   const getCanvasPoint = (
@@ -625,7 +588,9 @@ export default function AccelerationExplorer() {
     const candidates = [
       { key: 't1' as const, x: xPix(t1), y: vPix(velocityOfT(t1)) },
       { key: 't2' as const, x: xPix(t2), y: vPix(velocityOfT(t2)) },
-      { key: 't0' as const, x: xPix(t0), y: vPix(velocityOfT(t0)) },
+      ...(showSlope
+        ? [{ key: 't0' as const, x: xPix(t0), y: vPix(velocityOfT(t0)) }]
+        : []),
     ];
 
     const nearest = candidates
@@ -686,7 +651,7 @@ export default function AccelerationExplorer() {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [size, t1, t2, t0]);
+  }, [size, t1, t2, t0, showSlope]);
 
   useEffect(() => {
     const canvas = accelerationCanvasRef.current;
@@ -695,6 +660,9 @@ export default function AccelerationExplorer() {
     }
 
     const onDown = (event: MouseEvent | TouchEvent) => {
+      if (!showSlope) {
+        return;
+      }
       accelerationDraggingRef.current = true;
       setT0(canvasXToTime(getCanvasPoint(event, canvas, size.w, accelerationPlotHeight).x));
     };
@@ -726,26 +694,43 @@ export default function AccelerationExplorer() {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [size, accelerationPlotHeight]);
+  }, [size, accelerationPlotHeight, showSlope]);
 
   return (
     <div
       ref={wrapperRef}
       className="flex h-full min-h-[38rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
     >
-      <div className="flex flex-col gap-1 text-sm text-[var(--text-muted)]">
-        <p>
-          Between <Value color="var(--accent-red)">{t1.toFixed(2)} s</Value> and{' '}
-          <Value color="var(--accent-red)">{t2.toFixed(2)} s</Value>, the secant slope reads{' '}
-          <Value color="var(--accent-red)">{fixed(averageAcceleration)} m/s&sup2;</Value> and the
-          shaded area reads{' '}
-          <Value color="var(--accent-purple)">&Delta;v = {fixed(deltaV)} m/s</Value>.
-        </p>
-        <p>
-          At <Value color="var(--accent-purple)">{t0.toFixed(2)} s</Value> the tangent slope reads{' '}
-          <Value color="var(--accent-purple)">a = {fixed(instantAcceleration)} m/s&sup2;</Value>.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <InterpretationToggle
+          value={interpretation}
+          onChange={setInterpretation}
+          label="Read the graphs as slopes or as areas"
+        />
       </div>
+
+      {showSlope ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <MetricPanel
+            label="Average acceleration"
+            value={`${fixed(averageAcceleration)} m/s²`}
+            accent="var(--accent-red)"
+          />
+          <MetricPanel
+            label="Instantaneous acceleration"
+            value={`${fixed(instantAcceleration)} m/s²`}
+            accent="var(--accent-purple)"
+          />
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          <MetricPanel
+            label="Change in velocity"
+            value={`${fixed(deltaV)} m/s`}
+            accent={VELOCITY_GREEN}
+          />
+        </div>
+      )}
 
       <canvas
         ref={velocityCanvasRef}
@@ -780,13 +765,5 @@ export default function AccelerationExplorer() {
         aria-label="Acceleration versus time plot with the signed area between the markers shaded to show the change in velocity"
       />
     </div>
-  );
-}
-
-function Value({ color, children }: { color: string; children: ReactNode }) {
-  return (
-    <span className="font-semibold tabular-nums" style={{ color }}>
-      {children}
-    </span>
   );
 }

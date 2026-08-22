@@ -12,6 +12,13 @@ import {
 import { hedgehogGait } from '../../lib/kinematics/hedgehogGait';
 import { drawHedgehogFrame } from './HedgehogSprite';
 import { HEDGEHOG_CELL_H, HEDGEHOG_SHEET_SRC } from './hedgehogSheet';
+import {
+  InterpretationToggle,
+  MetricPanel,
+  type Interpretation,
+} from './ExplorerControls';
+import { drawChangeBracket, fillSignedArea } from './plotShading';
+import { areaUnderVelocity } from '../../lib/kinematics/sampleMotion';
 import { fixed } from '../../utils/format';
 
 type Size = {
@@ -68,6 +75,7 @@ export default function VelocityExplorer() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [dragVersion, setDragVersion] = useState(0);
   const [sheetReady, setSheetReady] = useState(false);
+  const [interpretation, setInterpretation] = useState<Interpretation>('slope');
   const [size, setSize] = useState<Size>({ w: 860, h: 520 });
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -92,6 +100,8 @@ export default function VelocityExplorer() {
     [t1, t2],
   );
   const instantVelocity = useMemo(() => velocityOfT(t0), [t0]);
+  const displacement = useMemo(() => areaUnderVelocity(t1, t2), [t1, t2]);
+  const showSlope = interpretation === 'slope';
   const velocityPlotHeight = Math.max(220, Math.floor(size.h * 0.5));
 
   useEffect(() => {
@@ -159,7 +169,7 @@ export default function VelocityExplorer() {
   useEffect(() => {
     drawPositionPlot();
     drawVelocityPlot(t0);
-  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion, sheetReady]);
+  }, [t1, t2, t0, tMotion, isPlaying, size, dragVersion, sheetReady, interpretation]);
 
   const drawPositionPlot = () => {
     const canvas = canvasRef.current;
@@ -256,44 +266,64 @@ export default function VelocityExplorer() {
     const y1 = yPix(positionOfT(t1));
     const x2 = xPix(t2);
     const y2 = yPix(positionOfT(t2));
-    ctx.save();
-    ctx.strokeStyle = red;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([7, 6]);
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = red;
-    ctx.font = `600 14px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`avg v = ${fixed(averageVelocity)} m/s`, (x1 + x2) / 2, (y1 + y2) / 2 + 30);
-    ctx.restore();
+    if (showSlope) {
+      ctx.save();
+      ctx.strokeStyle = red;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = red;
+      ctx.font = `600 14px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`avg v = ${fixed(averageVelocity)} m/s`, (x1 + x2) / 2, (y1 + y2) / 2 + 30);
+      ctx.restore();
+    }
 
-    const slope = instantVelocity;
     const xAtT0 = xPix(t0);
     const yAtT0 = yPix(positionOfT(t0));
-    const yLeft = yPix(positionOfT(t0) + slope * (T_MIN - t0));
-    const yRight = yPix(positionOfT(t0) + slope * (T_MAX - t0));
-    ctx.save();
-    ctx.strokeStyle = green;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 6]);
-    ctx.beginPath();
-    ctx.moveTo(xPix(T_MIN), yLeft);
-    ctx.lineTo(xPix(T_MAX), yRight);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#166534';
-    ctx.font = `600 14px ${FONT_FAMILY}`;
-    ctx.textAlign = 'center';
-    ctx.fillText(`v(t) = ${fixed(instantVelocity)} m/s`, xAtT0, Math.max(24, yAtT0 - 28));
-    ctx.restore();
+
+    if (showSlope) {
+      const slope = instantVelocity;
+      const yLeft = yPix(positionOfT(t0) + slope * (T_MIN - t0));
+      const yRight = yPix(positionOfT(t0) + slope * (T_MAX - t0));
+      ctx.save();
+      ctx.strokeStyle = green;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([10, 6]);
+      ctx.beginPath();
+      ctx.moveTo(xPix(T_MIN), yLeft);
+      ctx.lineTo(xPix(T_MAX), yRight);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#166534';
+      ctx.font = `600 14px ${FONT_FAMILY}`;
+      ctx.textAlign = 'center';
+      ctx.fillText(`v(t) = ${fixed(instantVelocity)} m/s`, xAtT0, Math.max(24, yAtT0 - 28));
+      ctx.restore();
+    } else {
+      // The rise of the position curve across the interval: the same number the
+      // shaded area under the velocity graph below is accumulating.
+      drawChangeBracket(ctx, {
+        xFrom: x1,
+        xTo: x2,
+        xArrow: Math.min(x2 + 24, size.w - PAD_R - 14),
+        yFrom: y1,
+        yTo: y2,
+        color: blue,
+        label: `Δx = ${fixed(displacement)} m`,
+        font: FONT_FAMILY,
+      });
+    }
 
     drawHandle(ctx, x1, y1, red);
     drawHandle(ctx, x2, y2, red);
-    drawHandle(ctx, xAtT0, yAtT0, green);
+    if (showSlope) {
+      drawHandle(ctx, xAtT0, yAtT0, green);
+    }
 
     if (draggingRef.current && draggingRef.current !== 'play') {
       const activeTime = draggingRef.current === 't1' ? t1 : draggingRef.current === 't2' ? t2 : t0;
@@ -454,6 +484,33 @@ export default function VelocityExplorer() {
       ctx.fillText(v.toFixed(1), left - 8, yMap(v) + 4);
     });
 
+    if (!showSlope) {
+      // Tinted with the colour of what the area gives you - a position - rather
+      // than the colour of the velocity curve it sits under.
+      const blue = getCssColor('--accent-blue', '#3b82f6');
+      fillSignedArea(ctx, {
+        from: t1,
+        to: t2,
+        valueOfT: velocityOfT,
+        xPix: xMap,
+        yPix: yMap,
+        color: blue,
+        font: FONT_FAMILY,
+      });
+
+      ctx.save();
+      ctx.strokeStyle = getCssColor('--accent-red', '#ef4444');
+      ctx.lineWidth = 1.4;
+      ctx.setLineDash([5, 5]);
+      [t1, t2].forEach((t) => {
+        ctx.beginPath();
+        ctx.moveTo(xMap(t), top);
+        ctx.lineTo(xMap(t), height - bottom);
+        ctx.stroke();
+      });
+      ctx.restore();
+    }
+
     ctx.strokeStyle = green;
     ctx.lineWidth = 2.4;
     ctx.beginPath();
@@ -466,23 +523,25 @@ export default function VelocityExplorer() {
     }
     ctx.stroke();
 
-    const time = clampT(markerTime);
-    const markerX = xMap(time);
-    const markerY = yMap(velocityOfT(time));
-    ctx.strokeStyle = '#166534';
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(markerX, top);
-    ctx.lineTo(markerX, height - bottom);
-    ctx.stroke();
-    ctx.fillStyle = green;
-    ctx.beginPath();
-    ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = '#166534';
-    ctx.beginPath();
-    ctx.arc(markerX, markerY, 10, 0, Math.PI * 2);
-    ctx.stroke();
+    if (showSlope) {
+      const time = clampT(markerTime);
+      const markerX = xMap(time);
+      const markerY = yMap(velocityOfT(time));
+      ctx.strokeStyle = '#166534';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(markerX, top);
+      ctx.lineTo(markerX, height - bottom);
+      ctx.stroke();
+      ctx.fillStyle = green;
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#166534';
+      ctx.beginPath();
+      ctx.arc(markerX, markerY, 10, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   };
 
   const drawHandle = (ctx: CanvasRenderingContext2D, x: number, y: number, color: string) => {
@@ -523,7 +582,9 @@ export default function VelocityExplorer() {
     const candidates = [
       { key: 't1' as const, x: xPix(t1), y: yPix(positionOfT(t1)) },
       { key: 't2' as const, x: xPix(t2), y: yPix(positionOfT(t2)) },
-      { key: 't0' as const, x: xPix(t0), y: yPix(positionOfT(t0)) },
+      ...(showSlope
+        ? [{ key: 't0' as const, x: xPix(t0), y: yPix(positionOfT(t0)) }]
+        : []),
     ];
 
     const nearest = candidates
@@ -598,7 +659,7 @@ export default function VelocityExplorer() {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [size, t1, t2, t0]);
+  }, [size, t1, t2, t0, showSlope]);
 
   useEffect(() => {
     const canvas = velocityCanvasRef.current;
@@ -607,6 +668,9 @@ export default function VelocityExplorer() {
     }
 
     const onDown = (event: MouseEvent | TouchEvent) => {
+      if (!showSlope) {
+        return;
+      }
       velocityDraggingRef.current = true;
       setT0(velocityCanvasXToTime(getCanvasPoint(event, canvas, size.w, velocityPlotHeight).x));
     };
@@ -638,17 +702,43 @@ export default function VelocityExplorer() {
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onUp);
     };
-  }, [size, velocityPlotHeight]);
+  }, [size, velocityPlotHeight, showSlope]);
 
   return (
     <div
       ref={wrapperRef}
       className="flex h-full min-h-[42rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
     >
-      <div className="grid gap-3 md:grid-cols-2">
-        <Readout label="Average velocity" value={`${fixed(averageVelocity)} m/s`} accent="var(--accent-red)" />
-        <Readout label="Instantaneous velocity" value={`${fixed(instantVelocity)} m/s`} accent="#16a34a" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <InterpretationToggle
+          value={interpretation}
+          onChange={setInterpretation}
+          label="Read the graphs as slopes or as areas"
+        />
       </div>
+
+      {showSlope ? (
+        <div className="grid gap-3 md:grid-cols-2">
+          <MetricPanel
+            label="Average velocity"
+            value={`${fixed(averageVelocity)} m/s`}
+            accent="var(--accent-red)"
+          />
+          <MetricPanel
+            label="Instantaneous velocity"
+            value={`${fixed(instantVelocity)} m/s`}
+            accent="#16a34a"
+          />
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          <MetricPanel
+            label="Change in position"
+            value={`${fixed(displacement)} m`}
+            accent="var(--accent-blue)"
+          />
+        </div>
+      )}
 
       <canvas
         ref={canvasRef}
@@ -662,17 +752,6 @@ export default function VelocityExplorer() {
         style={{ touchAction: 'none' }}
         aria-label="Velocity versus time plot with draggable marker"
       />
-    </div>
-  );
-}
-
-function Readout({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <div className="text-xs font-semibold uppercase text-[var(--text-muted)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold" style={{ color: accent }}>
-        {value}
-      </div>
     </div>
   );
 }

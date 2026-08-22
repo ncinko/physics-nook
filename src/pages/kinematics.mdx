@@ -107,47 +107,24 @@ Drag the red markers to read an average acceleration off the secant, and drag th
   <AccelerationExplorer client:only="react" />
 </SimulationBlock>
 
-## Areas Under the Graphs
+## Slope vs. Area
 
-Slopes run one way along the chain: position to velocity to acceleration. Areas run back the other way.
+Reading the slopes of these plots takes you from position to velocity to acceleration. To go the other direction (acceleration to velocity to position), there is a similar graphical connection.
 
-Mark off a strip of the velocity graph narrow enough that the velocity barely changes across it. Over that strip the motion is effectively constant-velocity, so the displacement is $v\,\Delta t$ - which is exactly the area of the strip, height times width. Add up every strip between $t_1$ and $t_2$ and you have the whole displacement:
+Mark off a strip of the velocity graph narrow enough that the velocity barely changes across it. Over that strip the motion is effectively constant-velocity, so the displacement is $\Delta x = v\,\Delta t$.  This is simply the area of the strip, height times width. Add up every strip between $t_1$ and $t_2$ and you have the whole displacement:
 
 $$
 \Delta x = \text{area under } v(t) \text{ from } t_1 \text{ to } t_2.
 $$
 
-The identical argument one level up reads the change in velocity off the acceleration graph:
+A similar argument reads the change in velocity off the acceleration graph:
 
 $$
 \Delta v = \text{area under } a(t) \text{ from } t_1 \text{ to } t_2.
 $$
 
-That is what the shaded band in the explorer above is measuring. Drag the red markers and watch $\Delta v$ follow the shaded region, while the secant slope on the velocity graph reports the average acceleration over the very same interval.
+Note these areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, a trip out and back can cover a lot of ink while producing zero displacement. This is exactly the difference between **displacement** (change in position) and distance traveled: displacement adds the signed areas, distance traveled adds their absolute values.
 
-These areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, area below the axis means the object moved left, and a trip out and back can cover a lot of ink while producing zero displacement. That is exactly the difference between displacement and distance travelled: displacement adds the signed areas, distance adds their absolute values.
-
-<DerivationPanel title="Why does area give displacement when the velocity keeps changing?">
-  Chop the interval into $N$ equal slices of width $\Delta t$. Across one slice the velocity does change, but if the slice is narrow enough that change is small, so treating the velocity as constant at some value $v_k$ inside the slice costs very little:
-
-  $$
-  \Delta x_k \approx v_k \, \Delta t.
-  $$
-
-  That is the area of a rectangle of height $v_k$ and width $\Delta t$. Summing over all the slices,
-
-  $$
-  \Delta x \approx \sum_{k=1}^{N} v_k \, \Delta t,
-  $$
-
-  which is the total area of a staircase of rectangles drawn under the curve. As $N$ grows the staircase hugs the curve more closely and the error shrinks toward nothing. In the limit the sum becomes an integral,
-
-  $$
-  \Delta x = \int_{t_1}^{t_2} v(t)\, dt,
-  $$
-
-  and the area under the curve is exact. This is the same limiting move that turned average velocity into instantaneous velocity, run in reverse.
-</DerivationPanel>
 
 
 

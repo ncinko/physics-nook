@@ -121,9 +121,15 @@ export function drawChangeBracket(
   ctx.strokeStyle = withAlpha(color, 0.75);
   ctx.lineWidth = 1.2;
   ctx.setLineDash([5, 5]);
-  [yFrom, yTo].forEach((y) => {
+  // Each rule runs rightward from its own marker to the arrow, rather than both
+  // starting at the earlier one: the later point then needs only a short stub,
+  // and neither line doubles back across the interval it is measuring.
+  ([
+    [xFrom, yFrom],
+    [xTo, yTo],
+  ] as const).forEach(([x, y]) => {
     ctx.beginPath();
-    ctx.moveTo(Math.min(xFrom, xTo), y);
+    ctx.moveTo(x, y);
     ctx.lineTo(xArrow, y);
     ctx.stroke();
   });

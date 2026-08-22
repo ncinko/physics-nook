@@ -41,7 +41,9 @@ import {
   HEDGEHOG_SHEET_ROWS,
   HEDGEHOG_SHEET_SRC,
   HEDGEHOG_SHEET_W,
+  HEDGEHOG_GUTTER,
   HEDGEHOG_STAND_FRAME,
+  cellOrigin,
   type HedgehogFrameName,
 } from '../../src/components/kinematics/hedgehogSheet.ts';
 import {
@@ -300,20 +302,57 @@ assert.equal(sheetBytes.subarray(1, 4).toString('ascii'), 'PNG', 'sprite sheet s
 // PNG IHDR puts width and height at byte 16 and 20, big-endian.
 assert.equal(sheetBytes.readUInt32BE(16), HEDGEHOG_SHEET_W, 'sheet width should match the metadata');
 assert.equal(sheetBytes.readUInt32BE(20), HEDGEHOG_SHEET_H, 'sheet height should match the metadata');
-assert.equal(HEDGEHOG_SHEET_W, HEDGEHOG_CELL_W * HEDGEHOG_SHEET_COLS);
-assert.equal(HEDGEHOG_SHEET_H, HEDGEHOG_CELL_H * HEDGEHOG_SHEET_ROWS);
+// The gutter is what stops one cell's feet bleeding into the cell above it, so
+// the sheet has to be big enough to actually contain it.
+assert.ok(HEDGEHOG_GUTTER >= 1);
+assert.equal(
+  HEDGEHOG_SHEET_W,
+  HEDGEHOG_GUTTER + HEDGEHOG_SHEET_COLS * (HEDGEHOG_CELL_W + HEDGEHOG_GUTTER),
+);
+assert.equal(
+  HEDGEHOG_SHEET_H,
+  HEDGEHOG_GUTTER + HEDGEHOG_SHEET_ROWS * (HEDGEHOG_CELL_H + HEDGEHOG_GUTTER),
+);
 
 const cellNames = Object.keys(HEDGEHOG_CELLS) as HedgehogFrameName[];
 assert.equal(cellNames.length, 11, 'four walking, four running, three braking');
 
 const occupied = new Set<string>();
 cellNames.forEach((name) => {
-  const { col, row } = HEDGEHOG_CELLS[name];
-  assert.ok(col >= 0 && col < HEDGEHOG_SHEET_COLS, `${name} column is off the sheet`);
-  assert.ok(row >= 0 && row < HEDGEHOG_SHEET_ROWS, `${name} row is off the sheet`);
-  const key = `${col},${row}`;
+  const cell = HEDGEHOG_CELLS[name];
+  assert.ok(cell.col >= 0 && cell.col < HEDGEHOG_SHEET_COLS, `${name} column is off the sheet`);
+  assert.ok(cell.row >= 0 && cell.row < HEDGEHOG_SHEET_ROWS, `${name} row is off the sheet`);
+  const key = `${cell.col},${cell.row}`;
   assert.ok(!occupied.has(key), `two frames share cell ${key}`);
   occupied.add(key);
+
+  // Every cell, gutter included, has to sit inside the image.
+  const origin = cellOrigin(cell);
+  assert.ok(origin.x >= HEDGEHOG_GUTTER && origin.y >= HEDGEHOG_GUTTER);
+  assert.ok(
+    origin.x + HEDGEHOG_CELL_W + HEDGEHOG_GUTTER <= HEDGEHOG_SHEET_W,
+    `${name} runs past the right edge`,
+  );
+  assert.ok(
+    origin.y + HEDGEHOG_CELL_H + HEDGEHOG_GUTTER <= HEDGEHOG_SHEET_H,
+    `${name} runs past the bottom edge`,
+  );
+});
+
+// No two cells may touch: a gutter of at least one pixel has to separate every
+// pair, or a sprite's feet end up sampled into its neighbour.
+cellNames.forEach((a) => {
+  cellNames.forEach((b) => {
+    if (a === b) return;
+    const oa = cellOrigin(HEDGEHOG_CELLS[a]);
+    const ob = cellOrigin(HEDGEHOG_CELLS[b]);
+    const gapX = Math.max(oa.x - (ob.x + HEDGEHOG_CELL_W), ob.x - (oa.x + HEDGEHOG_CELL_W));
+    const gapY = Math.max(oa.y - (ob.y + HEDGEHOG_CELL_H), ob.y - (oa.y + HEDGEHOG_CELL_H));
+    assert.ok(
+      gapX >= HEDGEHOG_GUTTER || gapY >= HEDGEHOG_GUTTER,
+      `${a} and ${b} are not separated by a gutter`,
+    );
+  });
 });
 
 // The gait module names its frames independently of the sheet; they must agree.

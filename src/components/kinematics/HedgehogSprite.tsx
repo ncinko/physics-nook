@@ -7,6 +7,7 @@ import {
   HEDGEHOG_SHEET_H,
   HEDGEHOG_SHEET_SRC,
   HEDGEHOG_SHEET_W,
+  cellOrigin,
   type HedgehogFrameName,
 } from './hedgehogSheet';
 
@@ -32,7 +33,7 @@ export function HedgehogSprite({
   scale?: number;
 }) {
   const clipId = useId();
-  const { col, row } = HEDGEHOG_CELLS[frame];
+  const origin = cellOrigin(HEDGEHOG_CELLS[frame]);
   const w = HEDGEHOG_CELL_W * scale;
   const h = HEDGEHOG_CELL_H * scale;
 
@@ -46,8 +47,8 @@ export function HedgehogSprite({
       <g clipPath={`url(#${clipId})`}>
         <image
           href={HEDGEHOG_SHEET_SRC}
-          x={-w / 2 - col * w}
-          y={-h - row * h}
+          x={-w / 2 - origin.x * scale}
+          y={-h - origin.y * scale}
           width={HEDGEHOG_SHEET_W * scale}
           height={HEDGEHOG_SHEET_H * scale}
           preserveAspectRatio="none"
@@ -79,7 +80,7 @@ export function drawHedgehogFrame(
     rotate = 0,
   }: { x: number; y: number; facing?: 1 | -1; rotate?: number },
 ) {
-  const { col, row } = HEDGEHOG_CELLS[frame];
+  const origin = cellOrigin(HEDGEHOG_CELLS[frame]);
   ctx.save();
   ctx.translate(x, y);
   if (rotate) {
@@ -91,8 +92,8 @@ export function drawHedgehogFrame(
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(
     sheet,
-    col * HEDGEHOG_CELL_W,
-    row * HEDGEHOG_CELL_H,
+    origin.x,
+    origin.y,
     HEDGEHOG_CELL_W,
     HEDGEHOG_CELL_H,
     -HEDGEHOG_CELL_W / 2,

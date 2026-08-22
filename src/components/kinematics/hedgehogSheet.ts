@@ -8,9 +8,15 @@
  * the remaining height differences are the leg extension and body bob, which is
  * the animation itself.
  *
- * One gait per sheet row, frames left to right. The walking row is only three
- * quarters full at four frames of a four-column grid; the braking row uses
- * three of its four cells.
+ * One gait per sheet row, frames left to right; the braking row uses three of
+ * its four cells.
+ *
+ * Every cell is surrounded by a transparent gutter. Each sprite is bottom-
+ * aligned, so its feet sit on the cell's last row; packed edge to edge, those
+ * feet would be the immediate neighbour of the next cell's first row, and any
+ * renderer that samples half a texel past the edge - a fractional device-pixel
+ * ratio is enough - drags them into the sprite above. The gutter gives that
+ * sampling something transparent to land on.
  */
 
 export const HEDGEHOG_SHEET_SRC = '/sprites/hedgehog.png';
@@ -20,8 +26,14 @@ export const HEDGEHOG_CELL_H = 46;
 export const HEDGEHOG_SHEET_COLS = 4;
 export const HEDGEHOG_SHEET_ROWS = 3;
 
-export const HEDGEHOG_SHEET_W = HEDGEHOG_CELL_W * HEDGEHOG_SHEET_COLS;
-export const HEDGEHOG_SHEET_H = HEDGEHOG_CELL_H * HEDGEHOG_SHEET_ROWS;
+/** Transparent margin around every cell, in sprite pixels. */
+export const HEDGEHOG_GUTTER = 2;
+
+const STRIDE_X = HEDGEHOG_CELL_W + HEDGEHOG_GUTTER;
+const STRIDE_Y = HEDGEHOG_CELL_H + HEDGEHOG_GUTTER;
+
+export const HEDGEHOG_SHEET_W = HEDGEHOG_GUTTER + HEDGEHOG_SHEET_COLS * STRIDE_X;
+export const HEDGEHOG_SHEET_H = HEDGEHOG_GUTTER + HEDGEHOG_SHEET_ROWS * STRIDE_Y;
 
 export type HedgehogFrameName =
   | 'walk1'
@@ -57,3 +69,9 @@ export const HEDGEHOG_CELLS: Record<HedgehogFrameName, HedgehogCell> = {
 
 /** The pose to hold when the hedgehog is stopped: all four feet planted. */
 export const HEDGEHOG_STAND_FRAME: HedgehogFrameName = 'walk1';
+
+/** Top-left corner of a cell's artwork within the sheet, in sprite pixels. */
+export const cellOrigin = ({ col, row }: HedgehogCell) => ({
+  x: HEDGEHOG_GUTTER + col * STRIDE_X,
+  y: HEDGEHOG_GUTTER + row * STRIDE_Y,
+});

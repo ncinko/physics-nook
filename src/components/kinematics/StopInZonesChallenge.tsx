@@ -28,6 +28,9 @@ import {
   type StopZoneState,
 } from '../../lib/kinematics/stopZones';
 import { generateLeaderboardName } from '../../lib/shared/leaderboardNames';
+import { IDLE_SPEED, hedgehogGait } from '../../lib/kinematics/hedgehogGait';
+import { drawHedgehogFrame } from './HedgehogSprite';
+import { HEDGEHOG_CELL_H, HEDGEHOG_SHEET_SRC } from './hedgehogSheet';
 
 type ApiStatus = 'checking' | 'online' | 'offline';
 
@@ -41,6 +44,10 @@ interface ScoreEntry {
 
 interface Runtime {
   motion: MotionState;
+  /** Ground covered, for the hedgehog's stride phase. Never decreases. */
+  distance: number;
+  /** Last direction it was clearly moving, held while it stands still. */
+  facing: 1 | -1;
   paused: boolean;
   pauseStartedAt: number | null;
   aMax: number;
@@ -56,6 +63,8 @@ interface Runtime {
 
 interface Snapshot {
   motion: MotionState;
+  distance: number;
+  facing: 1 | -1;
   paused: boolean;
   aMax: number;
   wrapWorld: boolean;
@@ -88,6 +97,8 @@ const createRuntime = (): Runtime => {
 
   return {
     motion: { ...INITIAL_MOTION },
+    distance: 0,
+    facing: 1,
     paused: false,
     pauseStartedAt: null,
     aMax: STOP_ZONE_DEFAULTS.aMax,
@@ -107,6 +118,8 @@ const makeSnapshot = (runtime: Runtime): Snapshot => {
 
   return {
     motion: { ...runtime.motion },
+    distance: runtime.distance,
+    facing: runtime.facing,
     paused: runtime.paused,
     aMax: runtime.aMax,
     wrapWorld: runtime.wrapWorld,
@@ -160,6 +173,8 @@ export default function StopInZonesChallenge() {
   const [localScores, setLocalScores] = useState<ScoreEntry[]>([]);
   const [nameModalOpen, setNameModalOpen] = useState(false);
   const [playerName, setPlayerName] = useState('');
+  const [sheetReady, setSheetReady] = useState(false);
+  const sheetRef = useRef<HTMLImageElement | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
@@ -257,6 +272,8 @@ export default function StopInZonesChallenge() {
 
     const now = nowSeconds();
     runtime.motion = { ...INITIAL_MOTION };
+    runtime.distance = 0;
+    runtime.facing = 1;
     runtime.paused = false;
     runtime.pauseStartedAt = null;
     runtime.gameOn = gameOn;
@@ -449,6 +466,14 @@ export default function StopInZonesChallenge() {
     runtime.motion.v += runtime.motion.a * dt;
     runtime.motion.x += runtime.motion.v * dt;
 
+    // Distance drives the stride, so it accumulates whichever way the cart is
+    // going; facing is only updated while it is clearly moving, so the hedgehog
+    // keeps looking the way it last ran when it comes to rest in a zone.
+    runtime.distance += Math.abs(runtime.motion.v) * dt;
+    if (Math.abs(runtime.motion.v) > IDLE_SPEED) {
+      runtime.facing = runtime.motion.v > 0 ? 1 : -1;
+    }
+
     if (runtime.wrapWorld) {
       runtime.motion.x = wrapPosition(runtime.motion.x, STOP_ZONE_DEFAULTS.worldHalfWidthM);
     }
@@ -507,17 +532,29 @@ export default function StopInZonesChallenge() {
   });
 
   useEffect(() => {
-    drawStage(canvasRef.current, snapshot);
-  }, [snapshot]);
+    const image = new Image();
+    image.src = HEDGEHOG_SHEET_SRC;
+    image.onload = () => {
+      sheetRef.current = image;
+      setSheetReady(true);
+    };
+    return () => {
+      image.onload = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    drawStage(canvasRef.current, snapshot, sheetRef.current);
+  }, [snapshot, sheetReady]);
 
   useEffect(() => {
     const handleResize = () => {
-      drawStage(canvasRef.current, snapshot);
+      drawStage(canvasRef.current, snapshot, sheetRef.current);
     };
 
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [snapshot]);
+  }, [snapshot, sheetReady]);
 
   const leaderboardScores = useMemo(
     () => selectBestScoresByUniqueName(apiStatus === 'online' ? cloudScores : localScores),
@@ -960,7 +997,11 @@ function pickHistoryValue(label: string, point: HistoryPoint) {
   return 0;
 }
 
-function drawStage(canvas: HTMLCanvasElement | null, snapshot: Snapshot) {
+function drawStage(
+  canvas: HTMLCanvasElement | null,
+  snapshot: Snapshot,
+  sheet: HTMLImageElement | null,
+) {
   if (!canvas) {
     return;
   }
@@ -985,7 +1026,6 @@ function drawStage(canvas: HTMLCanvasElement | null, snapshot: Snapshot) {
   const positionColor = '#0ea5a0';
   const velocityColor = '#7c3aed';
   const accelerationColor = '#d97706';
-  const cartColor = '#475569';
   const midY = Math.round(height * 0.62);
   const pxPerMeter = Math.max(48, Math.min(92, width / 12));
   let originX = Math.round(width / 2);
@@ -1025,38 +1065,49 @@ function drawStage(canvas: HTMLCanvasElement | null, snapshot: Snapshot) {
   }
 
   const cartX = originX + snapshot.motion.x * pxPerMeter;
-  const cartY = midY - 20;
-  const cartW = 46;
-  const cartH = 26;
 
   ctx.fillStyle = 'rgba(0,0,0,0.09)';
   ctx.beginPath();
-  ctx.ellipse(cartX, midY + 9, cartW * 0.56, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(cartX, midY + 3, 24, 5, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = cartColor;
-  ctx.strokeStyle = grid;
-  ctx.lineWidth = 1.5;
-  roundedRect(ctx, cartX - cartW / 2, cartY - cartH / 2, cartW, cartH, 6);
-  ctx.fill();
-  ctx.stroke();
+  // The hedgehog stands on the metre line rather than floating above it, so it
+  // is a good deal taller than the puck it replaced; the vectors are stacked
+  // above its back rather than at fixed offsets from a puck's centre.
+  if (sheet) {
+    const pose = hedgehogGait({
+      distance: snapshot.distance,
+      velocity: snapshot.motion.v,
+      acceleration: snapshot.motion.a,
+      previousFacing: snapshot.facing,
+    });
+    drawHedgehogFrame(ctx, sheet, pose.frame, {
+      x: cartX,
+      y: midY,
+      facing: pose.facing,
+    });
+  }
+
+  const spriteTop = midY - HEDGEHOG_CELL_H;
+  const velocityY = spriteTop - 14;
+  const accelerationY = spriteTop - 40;
 
   const positionY = midY + 52;
   drawArrow(ctx, originX, positionY, originX + snapshot.motion.x * pxPerMeter, positionY, positionColor);
   drawArrow(
     ctx,
     cartX,
-    cartY - cartH * 0.95,
+    velocityY,
     cartX + Math.max(-300, Math.min(300, snapshot.motion.v * 18)),
-    cartY - cartH * 0.95,
+    velocityY,
     velocityColor,
   );
   drawArrow(
     ctx,
     cartX,
-    cartY - cartH * 1.75,
+    accelerationY,
     cartX + Math.max(-150, Math.min(150, snapshot.motion.a * 16)),
-    cartY - cartH * 1.75,
+    accelerationY,
     accelerationColor,
   );
 
@@ -1064,8 +1115,8 @@ function drawStage(canvas: HTMLCanvasElement | null, snapshot: Snapshot) {
   ctx.font = `600 12px system-ui, -apple-system, Segoe UI, sans-serif`;
   ctx.textAlign = 'left';
   ctx.fillText('position', Math.min(width - 70, Math.max(12, originX - 32)), positionY - 8);
-  ctx.fillText('velocity', Math.min(width - 70, Math.max(12, cartX - 28)), cartY - cartH * 0.95 - 9);
-  ctx.fillText('acceleration', Math.min(width - 94, Math.max(12, cartX - 42)), cartY - cartH * 1.75 - 9);
+  ctx.fillText('velocity', Math.min(width - 70, Math.max(12, cartX - 28)), velocityY - 9);
+  ctx.fillText('acceleration', Math.min(width - 94, Math.max(12, cartX - 42)), accelerationY - 9);
 
   if (snapshot.gameOn) {
     const inside = isInsideStopZone(

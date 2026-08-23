@@ -5,7 +5,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
-import { Pause, Play, RotateCcw } from 'lucide-react';
 import NewtSprite, { NEWT_MOUTH_OFFSET, NEWT_RADIUS } from './NewtSprite';
 import {
   add,
@@ -118,26 +117,6 @@ const ForcePanel = ({ title, prompt, children, controls }: ForcePanelProps) => (
       {children}
     </div>
   </section>
-);
-
-const ControlButton = ({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: ReactNode;
-}) => (
-  <button
-    type="button"
-    aria-label={label}
-    title={label}
-    onClick={onClick}
-    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] shadow-sm transition hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)]"
-  >
-    {children}
-  </button>
 );
 
 const RangeControl = ({ label, value, min, max, step, unit = '', onChange }: RangeControlProps) => (
@@ -522,19 +501,6 @@ export function ForceFreeNewt() {
   const lastTimeRef = useRef<number | null>(null);
   const [snapshot, setSnapshot] = useState(bodyRef.current);
   const [vectors, setVectors] = useState<TimedVector[]>([]);
-  const [paused, setPaused] = useState(false);
-
-  const reset = () => {
-    bodyRef.current = {
-      position: { x: 380, y: 178 },
-      velocity: { x: 92, y: -58 },
-      angle: -8,
-      angularVelocity: 34,
-    };
-    vectorsRef.current = [];
-    setSnapshot(bodyRef.current);
-    setVectors([]);
-  };
 
   useEffect(() => {
     let frame = 0;
@@ -544,36 +510,34 @@ export function ForceFreeNewt() {
       const dt = Math.min((time - last) / 1000, 0.033);
       lastTimeRef.current = time;
 
-      if (!paused) {
-        const advanced = integrateBody(bodyRef.current, { x: 0, y: 0 }, 1, dt);
-        const bounced = resolveWallBounce(advanced, NEWT_RADIUS, STAGE_BOUNDS, 0.88);
-        bodyRef.current = {
-          ...bounced.state,
-          angularVelocity: (advanced.angularVelocity ?? 0) * 0.999,
-        };
+      const advanced = integrateBody(bodyRef.current, { x: 0, y: 0 }, 1, dt);
+      const bounced = resolveWallBounce(advanced, NEWT_RADIUS, STAGE_BOUNDS, 0.88);
+      bodyRef.current = {
+        ...bounced.state,
+        angularVelocity: (advanced.angularVelocity ?? 0) * 0.999,
+      };
 
-        if (bounced.impulses.length > 0) {
-          vectorsRef.current = [
-            ...vectorsRef.current,
-            ...bounced.impulses.map((impulse, index) => ({
-              id: `wall-${time}-${index}`,
-              origin: bodyRef.current.position,
-              vector: scale(impulse.impulse, 0.8),
-              color: FORCE_COLORS.contact,
-              label: 'wall force',
-              ttl: 0.48,
-              scale: 0.65,
-            })),
-          ];
-        }
-
-        vectorsRef.current = vectorsRef.current
-          .map((vector) => ({ ...vector, ttl: vector.ttl - dt }))
-          .filter((vector) => vector.ttl > 0);
-
-        setSnapshot(bodyRef.current);
-        setVectors(vectorsRef.current);
+      if (bounced.impulses.length > 0) {
+        vectorsRef.current = [
+          ...vectorsRef.current,
+          ...bounced.impulses.map((impulse, index) => ({
+            id: `wall-${time}-${index}`,
+            origin: bodyRef.current.position,
+            vector: scale(impulse.impulse, 0.8),
+            color: FORCE_COLORS.contact,
+            label: 'wall force',
+            ttl: 0.48,
+            scale: 0.65,
+          })),
+        ];
       }
+
+      vectorsRef.current = vectorsRef.current
+        .map((vector) => ({ ...vector, ttl: vector.ttl - dt }))
+        .filter((vector) => vector.ttl > 0);
+
+      setSnapshot(bodyRef.current);
+      setVectors(vectorsRef.current);
 
       frame = window.requestAnimationFrame(tick);
     };
@@ -581,7 +545,7 @@ export function ForceFreeNewt() {
     frame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(frame);
-  }, [paused]);
+  }, []);
 
   const knockNewt = (event: ReactPointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
@@ -620,16 +584,6 @@ export function ForceFreeNewt() {
     <ForcePanel
       title="Force-Free Newt"
       prompt="Tap anywhere to give Newt a short knock."
-      controls={
-        <>
-          <ControlButton label={paused ? 'Play' : 'Pause'} onClick={() => setPaused((value) => !value)}>
-            {paused ? <Play size={17} /> : <Pause size={17} />}
-          </ControlButton>
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
-        </>
-      }
     >
       <svg
         ref={svgRef}
@@ -673,16 +627,6 @@ export function SpringForceNewt() {
   const displacement = body.position.x - equilibrium.x;
   const newt = { x: body.position.x, y: equilibrium.y };
   const force = hookeForce({ x: displacement, y: 0 }, stiffness);
-
-  const reset = () => {
-    bodyRef.current = {
-      position: { x: 475, y: equilibrium.y },
-      velocity: { x: 0, y: 0 },
-      angle: 0,
-      angularVelocity: 0,
-    };
-    setBody(bodyRef.current);
-  };
 
   useEffect(() => {
     let frame = 0;
@@ -757,9 +701,6 @@ export function SpringForceNewt() {
             unit=" k"
             onChange={setStiffness}
           />
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
         </>
       }
     >
@@ -851,16 +792,6 @@ export function NormalForceNewt() {
   const normal = netForce(normalContactForces(body.position, { x: 0, y: 0 }, NORMAL_SURFACES, stiffness * 0.12));
   const newt = body.position;
 
-  const reset = () => {
-    bodyRef.current = {
-      position: { x: 410, y: NORMAL_SURFACES.bottom - NEWT_RADIUS },
-      velocity: { x: 0, y: 0 },
-      angle: 0,
-      angularVelocity: 0,
-    };
-    setBody(bodyRef.current);
-  };
-
   useEffect(() => {
     let frame = 0;
 
@@ -929,9 +860,6 @@ export function NormalForceNewt() {
         <>
           <RangeControl label="mass" value={mass} min={1} max={4} step={0.1} unit=" kg" onChange={setMass} />
           <RangeControl label="surface k" value={stiffness} min={55} max={150} step={5} onChange={setStiffness} />
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
         </>
       }
     >
@@ -1009,16 +937,6 @@ export function TongueTensionNewt() {
   const tongueJoin = add(mouth, scale(tongueDirection, 20));
   const tongueMouthAngle =
     (Math.atan2(anchor.y - mouth.y, anchor.x - mouth.x) * 180) / Math.PI - (body.angle ?? 0);
-
-  const reset = () => {
-    bodyRef.current = {
-      position: TENSION_START,
-      velocity: { x: 0, y: 0 },
-      angle: 0,
-      angularVelocity: 0,
-    };
-    setBody(bodyRef.current);
-  };
 
   useEffect(() => {
     let frame = 0;
@@ -1098,9 +1016,6 @@ export function TongueTensionNewt() {
       controls={
         <>
           <RangeControl label="tongue k" value={stiffness} min={0.35} max={1.25} step={0.05} onChange={setStiffness} />
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
         </>
       }
     >
@@ -1208,20 +1123,7 @@ export function GravityForceNewt() {
   const lastTimeRef = useRef<number | null>(null);
   const [snapshot, setSnapshot] = useState(bodyRef.current);
   const [vectors, setVectors] = useState<TimedVector[]>([]);
-  const [paused, setPaused] = useState(false);
   const [g, setG] = useState(9.8);
-
-  const reset = () => {
-    bodyRef.current = {
-      position: { x: 190, y: 120 },
-      velocity: { x: 118, y: -24 },
-      angle: 6,
-      angularVelocity: 30,
-    };
-    vectorsRef.current = [];
-    setSnapshot(bodyRef.current);
-    setVectors([]);
-  };
 
   useEffect(() => {
     let frame = 0;
@@ -1231,60 +1133,58 @@ export function GravityForceNewt() {
       const dt = Math.min((time - last) / 1000, 0.033);
       lastTimeRef.current = time;
 
-      if (!paused) {
-        if (!dragRef.current.active) {
-          const force = gravityForce(1, g * 30);
-          const advanced = integrateBody(bodyRef.current, force, 1, dt);
-          const bounced = resolveWallBounce(advanced, NEWT_RADIUS, STAGE_BOUNDS, 0.48);
-          const bottomContact = bounced.impulses.some((impulse) => impulse.normal.y < 0);
-          const restingOnGround = bottomContact && Math.abs(bounced.state.velocity.y) < 18;
-          const nextVelocity = {
-            x: bounced.state.velocity.x * (restingOnGround ? 0.94 : 0.995),
-            y: restingOnGround && Math.abs(bounced.state.velocity.y) < 10 ? 0 : bounced.state.velocity.y,
-          };
-          let nextAngle = bounced.state.angle ?? 0;
-          let nextAngularVelocity = (bounced.state.angularVelocity ?? 0) * (restingOnGround ? 0.78 : 0.995);
+      if (!dragRef.current.active) {
+        const force = gravityForce(1, g * 30);
+        const advanced = integrateBody(bodyRef.current, force, 1, dt);
+        const bounced = resolveWallBounce(advanced, NEWT_RADIUS, STAGE_BOUNDS, 0.48);
+        const bottomContact = bounced.impulses.some((impulse) => impulse.normal.y < 0);
+        const restingOnGround = bottomContact && Math.abs(bounced.state.velocity.y) < 18;
+        const nextVelocity = {
+          x: bounced.state.velocity.x * (restingOnGround ? 0.94 : 0.995),
+          y: restingOnGround && Math.abs(bounced.state.velocity.y) < 10 ? 0 : bounced.state.velocity.y,
+        };
+        let nextAngle = bounced.state.angle ?? 0;
+        let nextAngularVelocity = (bounced.state.angularVelocity ?? 0) * (restingOnGround ? 0.78 : 0.995);
 
-          if (restingOnGround) {
-            nextAngle *= 0.88;
-            if (Math.abs(nextAngularVelocity) < 2) {
-              nextAngularVelocity = 0;
-            }
-            if (Math.abs(nextAngle) < 0.8 && nextAngularVelocity === 0) {
-              nextAngle = 0;
-            }
+        if (restingOnGround) {
+          nextAngle *= 0.88;
+          if (Math.abs(nextAngularVelocity) < 2) {
+            nextAngularVelocity = 0;
           }
-
-          bodyRef.current = {
-            ...bounced.state,
-            velocity: nextVelocity,
-            angle: nextAngle,
-            angularVelocity: nextAngularVelocity,
-          };
-
-          if (bounced.impulses.length > 0) {
-            const visibleImpulses = bounced.impulses.filter((impulse) => magnitude(impulse.impulse) > 22);
-            vectorsRef.current = [
-              ...vectorsRef.current,
-              ...visibleImpulses.map((impulse, index) => ({
-                id: `gravity-wall-${time}-${index}`,
-                origin: bodyRef.current.position,
-                vector: scale(impulse.impulse, 0.8),
-                color: FORCE_COLORS.contact,
-                label: 'wall force',
-                ttl: 0.42,
-                scale: 0.65,
-              })),
-            ].slice(-5);
+          if (Math.abs(nextAngle) < 0.8 && nextAngularVelocity === 0) {
+            nextAngle = 0;
           }
-
-          vectorsRef.current = vectorsRef.current
-            .map((vector) => ({ ...vector, ttl: vector.ttl - dt }))
-            .filter((vector) => vector.ttl > 0);
-
-          setSnapshot(bodyRef.current);
-          setVectors(vectorsRef.current);
         }
+
+        bodyRef.current = {
+          ...bounced.state,
+          velocity: nextVelocity,
+          angle: nextAngle,
+          angularVelocity: nextAngularVelocity,
+        };
+
+        if (bounced.impulses.length > 0) {
+          const visibleImpulses = bounced.impulses.filter((impulse) => magnitude(impulse.impulse) > 22);
+          vectorsRef.current = [
+            ...vectorsRef.current,
+            ...visibleImpulses.map((impulse, index) => ({
+              id: `gravity-wall-${time}-${index}`,
+              origin: bodyRef.current.position,
+              vector: scale(impulse.impulse, 0.8),
+              color: FORCE_COLORS.contact,
+              label: 'wall force',
+              ttl: 0.42,
+              scale: 0.65,
+            })),
+          ].slice(-5);
+        }
+
+        vectorsRef.current = vectorsRef.current
+          .map((vector) => ({ ...vector, ttl: vector.ttl - dt }))
+          .filter((vector) => vector.ttl > 0);
+
+        setSnapshot(bodyRef.current);
+        setVectors(vectorsRef.current);
       }
 
       frame = window.requestAnimationFrame(tick);
@@ -1293,7 +1193,7 @@ export function GravityForceNewt() {
     frame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(frame);
-  }, [g, paused]);
+  }, [g]);
 
   const updateFromPointer = (event: ReactPointerEvent<SVGSVGElement>, trackVelocity: boolean) => {
     const svg = svgRef.current;
@@ -1330,12 +1230,6 @@ export function GravityForceNewt() {
       controls={
         <>
           <RangeControl label="g" value={g} min={1.6} max={16} step={0.2} unit=" m/s2" onChange={setG} />
-          <ControlButton label={paused ? 'Play' : 'Pause'} onClick={() => setPaused((value) => !value)}>
-            {paused ? <Play size={17} /> : <Pause size={17} />}
-          </ControlButton>
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
         </>
       }
     >
@@ -1400,7 +1294,6 @@ export function FrictionForceNewt() {
   const bodyRef = useRef({ x: 380, vx: 0 });
   const lastTimeRef = useRef<number | null>(null);
   const [body, setBody] = useState(bodyRef.current);
-  const [paused, setPaused] = useState(false);
   const [applied, setApplied] = useState(9);
   const [roughness, setRoughness] = useState(0.45);
   const mass = 2;
@@ -1419,11 +1312,6 @@ export function FrictionForceNewt() {
   const total = netForce([appliedForce, friction.force]);
   const newtY = 238;
 
-  const reset = () => {
-    bodyRef.current = { x: 380, vx: 0 };
-    setBody(bodyRef.current);
-  };
-
   useEffect(() => {
     let frame = 0;
 
@@ -1432,37 +1320,35 @@ export function FrictionForceNewt() {
       const dt = Math.min((time - last) / 1000, 0.033);
       lastTimeRef.current = time;
 
-      if (!paused) {
-        const currentFriction = frictionForce({
-          normalMagnitude,
-          velocity: { x: bodyRef.current.vx, y: 0 },
-          appliedForce: { x: applied, y: 0 },
-          muStatic: roughness + 0.12,
-          muKinetic: roughness,
-          restSpeedThreshold: 2,
-        });
-        const horizontalForce = applied + currentFriction.force.x;
-        let vx = bodyRef.current.vx;
-        let x = bodyRef.current.x;
+      const currentFriction = frictionForce({
+        normalMagnitude,
+        velocity: { x: bodyRef.current.vx, y: 0 },
+        appliedForce: { x: applied, y: 0 },
+        muStatic: roughness + 0.12,
+        muKinetic: roughness,
+        restSpeedThreshold: 2,
+      });
+      const horizontalForce = applied + currentFriction.force.x;
+      let vx = bodyRef.current.vx;
+      let x = bodyRef.current.x;
 
-        if (currentFriction.mode === 'static') {
+      if (currentFriction.mode === 'static') {
+        vx = 0;
+      } else {
+        vx += (horizontalForce / mass) * 42 * dt;
+        if (Math.abs(vx) < 0.15 && Math.abs(applied) < 0.2) {
           vx = 0;
-        } else {
-          vx += (horizontalForce / mass) * 42 * dt;
-          if (Math.abs(vx) < 0.15 && Math.abs(applied) < 0.2) {
-            vx = 0;
-          }
-          x += vx * dt;
         }
-
-        if (x < 95 || x > 665) {
-          x = clamp(x, 95, 665);
-          vx *= -0.36;
-        }
-
-        bodyRef.current = { x, vx };
-        setBody(bodyRef.current);
+        x += vx * dt;
       }
+
+      if (x < 95 || x > 665) {
+        x = clamp(x, 95, 665);
+        vx *= -0.36;
+      }
+
+      bodyRef.current = { x, vx };
+      setBody(bodyRef.current);
 
       frame = window.requestAnimationFrame(tick);
     };
@@ -1470,7 +1356,7 @@ export function FrictionForceNewt() {
     frame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(frame);
-  }, [applied, normalMagnitude, paused, roughness]);
+  }, [applied, normalMagnitude, roughness]);
 
   return (
     <ForcePanel
@@ -1480,12 +1366,6 @@ export function FrictionForceNewt() {
         <>
           <RangeControl label="push" value={applied} min={-18} max={18} step={1} unit=" N" onChange={setApplied} />
           <RangeControl label="roughness" value={roughness} min={0.08} max={0.8} step={0.02} onChange={setRoughness} />
-          <ControlButton label={paused ? 'Play' : 'Pause'} onClick={() => setPaused((value) => !value)}>
-            {paused ? <Play size={17} /> : <Pause size={17} />}
-          </ControlButton>
-          <ControlButton label="Reset" onClick={reset}>
-            <RotateCcw size={17} />
-          </ControlButton>
         </>
       }
     >

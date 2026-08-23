@@ -8,8 +8,20 @@ interface NewtSpriteProps {
   children?: ReactNode;
 }
 
+// Newt is drawn from the same pixel-art frog the site uses as its favicon,
+// cropped to the artwork's bounding box (275 x 248) so the placement maths
+// below can work straight from fractions of the sprite.
+const FROG_SRC = '/sprites/frog.png';
+const FROG_HEIGHT = 76;
+const FROG_WIDTH = (FROG_HEIGHT * 275) / 248;
+const FROG_X = -FROG_WIDTH / 2;
+const FROG_Y = -FROG_HEIGHT / 2;
+
+// Collision radius: a circle inscribed in the sprite, ignoring the splayed legs.
 export const NEWT_RADIUS = 30;
-export const NEWT_MOUTH_OFFSET = { x: 0, y: 6 };
+// The mouth line -- the wide dark stroke below the two nostril dots, at 39% of
+// the way down the artwork -- is where the tongue anchors in the tension demo.
+export const NEWT_MOUTH_OFFSET = { x: 0, y: FROG_Y + FROG_HEIGHT * 0.387 };
 
 export default function NewtSprite({
   x,
@@ -20,39 +32,14 @@ export default function NewtSprite({
 }: NewtSpriteProps) {
   return (
     <g transform={`translate(${x} ${y}) rotate(${angle}) scale(${scale})`}>
-      <path
-        d="M -24 20 C -38 21 -43 30 -32 34 C -20 38 -9 31 -13 23"
-        fill="#22c55e"
-        stroke="#15803d"
-        strokeLinejoin="round"
-        strokeWidth="2.2"
+      <image
+        href={FROG_SRC}
+        x={FROG_X}
+        y={FROG_Y}
+        width={FROG_WIDTH}
+        height={FROG_HEIGHT}
+        preserveAspectRatio="xMidYMid meet"
       />
-      <path
-        d="M 24 20 C 38 21 43 30 32 34 C 20 38 9 31 13 23"
-        fill="#22c55e"
-        stroke="#15803d"
-        strokeLinejoin="round"
-        strokeWidth="2.2"
-      />
-      <ellipse cx="-25" cy="13" rx="8" ry="5" fill="#4ade80" stroke="#15803d" strokeWidth="2" />
-      <ellipse cx="25" cy="13" rx="8" ry="5" fill="#4ade80" stroke="#15803d" strokeWidth="2" />
-      <ellipse cx="0" cy="6" rx="31" ry="25" fill="#22c55e" stroke="#166534" strokeWidth="2.5" />
-      <ellipse cx="-16" cy="-16" rx="12" ry="13" fill="#86efac" stroke="#166534" strokeWidth="2.2" />
-      <ellipse cx="16" cy="-16" rx="12" ry="13" fill="#86efac" stroke="#166534" strokeWidth="2.2" />
-      <circle cx="-16" cy="-17" r="5.2" fill="#052e16" />
-      <circle cx="16" cy="-17" r="5.2" fill="#052e16" />
-      <circle cx="-17.8" cy="-19.2" r="1.6" fill="#f8fafc" />
-      <circle cx="14.2" cy="-19.2" r="1.6" fill="#f8fafc" />
-      <ellipse cx="0" cy="14" rx="20" ry="10" fill="#bbf7d0" opacity="0.82" />
-      <path
-        d="M -13 4 C -7 11 7 11 13 4"
-        fill="none"
-        stroke="#14532d"
-        strokeLinecap="round"
-        strokeWidth="2.4"
-      />
-      <circle cx="-10" cy="3" r="1.6" fill="#14532d" opacity="0.7" />
-      <circle cx="10" cy="3" r="1.6" fill="#14532d" opacity="0.7" />
       {children}
     </g>
   );

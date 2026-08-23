@@ -2,7 +2,7 @@ import type { ModuleMeta } from './types';
 
 export const measurementModule: ModuleMeta = {
   slug: 'measurement',
-  href: '/measurement/uncertainty',
+  href: '/measurement/si-units-scientific-notation',
   title: 'Measurement & Uncertainty',
   navLabel: 'Measurement',
   summary:

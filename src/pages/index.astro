@@ -1,33 +1,30 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import WavePoolSection from '../components/waves/WavePoolSection';
-import { featuredModule, getModuleBySlug } from '../data/modules';
+import { astronomyPath, getModuleBySlug, measurementPath, mechanicsPath } from '../data/modules';
 
-const oscillationsModule = getModuleBySlug('oscillations');
-const wavesModule = getModuleBySlug('waves');
-const quantumModule = getModuleBySlug('quantum');
+const measurementModule = getModuleBySlug('measurement');
+const astronomyModule = getModuleBySlug('astronomy');
+const kinematicsModule = getModuleBySlug('kinematics');
 
 const homeCards = [
   {
-    title: featuredModule.title,
-    href: featuredModule.href,
-    description: featuredModule.summary,
-    accent: featuredModule.accent,
+    title: measurementModule?.title ?? 'Measurement & Uncertainty',
+    href: measurementPath.href,
+    description: measurementPath.summary,
+    accent: measurementModule?.accent ?? '#b45309',
   },
   {
-    title: 'Waves & Oscillations',
-    href: oscillationsModule?.href ?? '/oscillations',
-    description:
-      'Periodic motion, springs, pendulums, resonance, and waves.',
-    accent: wavesModule?.accent ?? oscillationsModule?.accent ?? '#0f766e',
+    title: astronomyModule?.title ?? 'Astronomy',
+    href: astronomyPath.href,
+    description: astronomyPath.summary,
+    accent: astronomyModule?.accent ?? '#4f46e5',
   },
   {
-    title: quantumModule?.title ?? 'Quantum',
-    href: quantumModule?.href ?? '/quantum',
-    description:
-      quantumModule?.summary ??
-      'Move from key experiments into wavefunctions, superposition, and quantized states.',
-    accent: quantumModule?.accent ?? '#0891b2',
+    title: mechanicsPath.navLabel,
+    href: mechanicsPath.href,
+    description: mechanicsPath.summary,
+    accent: kinematicsModule?.accent ?? '#0f766e',
   },
 ];
 ---

@@ -85,6 +85,25 @@ Graphically, **average velocity is the slope of a secant line** on a position ve
   An object with $v = -4\,\text{m/s}$ and an object with $v = +4\,\text{m/s}$ have the same speed, but they are moving in opposite directions.
 </DerivationPanel>
 
+
+## Slope vs. Area
+
+Reading the slopes of this plot takes you from position to velocity. To go from velocity to position, there is a similar graphical connection.
+
+Mark off a strip of the velocity graph narrow enough that the velocity barely changes across it. Over that strip the motion is effectively constant-velocity, so the displacement is $\Delta x = v\,\Delta t$.  This is simply the area of the strip, height times width. Add up every strip between $t_1$ and $t_2$ and you have the whole displacement:
+
+$$
+\Delta x = \text{area under } v(t) \text{ from } t_1 \text{ to } t_2.
+$$
+
+Note these areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, a trip out and back can result in a lot of shaded area with zero displacement. This illustrates the difference between **displacement** (change in position) and distance traveled: displacement adds the signed areas, distance traveled adds their absolute values.
+
+<InteractiveAnchor id="area-strips" />
+
+<AreaStrips client:visible />
+
+
+
 ## Acceleration
 
 Average acceleration is the rate at which velocity changes between two moments in time:
@@ -94,19 +113,9 @@ $$
 = \frac{v_2 - v_1}{t_2 - t_1}.
 $$
 
-This can be a tricky concept to grasp fully, but the good news is that you already have incredible intuition for what it *feels like* to experience acceleration.
+Note that the relationship between acceleration and velocity is analogous to the relationship between velocity and position.  Velocity is the rate of change of position, and acceleration is the rate of change of velocity.  This makes acceleration a rate of change of a rate of change. 
 
-Note that the relationship between acceleration and velocity is analogous to the relationship between velocity and position.  Velocity is the rate of change of position, and acceleration is the rate of change of velocity, which makes acceleration a rate of change of a rate of change. 
-
-
-
-Once again, we often plot velocity against time and the graphical interpretation repeats: acceleration is the slope of a velocity versus time plot in the same way velocity is the slope of a position versus time plot.
-
-<DerivationPanel title="How can negative acceleration speed something up?">
-  Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.
-</DerivationPanel>
-
-Drag the red markers to read an average acceleration off the secant, and drag the purple marker to read the instantaneous acceleration off the tangent. The shaded band on the lower graph is the subject of the next section.
+Again, we often plot velocity against time.  The graphical interpretations repeat: acceleration is the slope of a velocity versus time plot, and changes in velocity are indicated by the area under an acceleration versus time curve.
 
 <InteractiveAnchor id="acceleration-explorer" />
 
@@ -117,31 +126,10 @@ Drag the red markers to read an average acceleration off the secant, and drag th
   <AccelerationExplorer client:only="react" />
 </SimulationBlock>
 
-## Slope vs. Area
 
-Reading the slopes of these plots takes you from position to velocity to acceleration. To go the other direction (acceleration to velocity to position), there is a similar graphical connection.
-
-Mark off a strip of the velocity graph narrow enough that the velocity barely changes across it. Over that strip the motion is effectively constant-velocity, so the displacement is $\Delta x = v\,\Delta t$.  This is simply the area of the strip, height times width. Add up every strip between $t_1$ and $t_2$ and you have the whole displacement:
-
-$$
-\Delta x = \text{area under } v(t) \text{ from } t_1 \text{ to } t_2.
-$$
-
-A similar argument reads the change in velocity off the acceleration graph:
-
-$$
-\Delta v = \text{area under } a(t) \text{ from } t_1 \text{ to } t_2.
-$$
-
-Note these areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, a trip out and back can cover a lot of ink while producing zero displacement. This is exactly the difference between **displacement** (change in position) and distance traveled: displacement adds the signed areas, distance traveled adds their absolute values.
-
-Take that sum yourself on the hedgehog's velocity graph. Each strip stands at the velocity of its own left edge, so a single wide strip badly misjudges a velocity that keeps changing across it; narrow the strips and the running total closes on the exact displacement. Uncheck the box and the strips below the axis stop subtracting, which turns the same sum into distance traveled.
-
-<InteractiveAnchor id="area-strips" />
-
-<AreaStrips client:visible />
-
-
+<DerivationPanel title="How can negative acceleration speed something up?">
+  Negative acceleration means the velocity is changing in the negative direction. If an object is already moving left with $v < 0$, then negative acceleration makes the velocity more negative and the object speeds up. If an object is moving right with $v > 0$, the same negative acceleration makes the object slow down until the velocity reaches zero.
+</DerivationPanel>
 
 
 <InteractiveAnchor id="zone-challenge" />

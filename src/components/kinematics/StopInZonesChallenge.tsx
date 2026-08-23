@@ -28,9 +28,13 @@ import {
   type StopZoneState,
 } from '../../lib/kinematics/stopZones';
 import { generateLeaderboardName } from '../../lib/shared/leaderboardNames';
-import { IDLE_SPEED, hedgehogGait } from '../../lib/kinematics/hedgehogGait';
+import { IDLE_SPEED, hedgehogGait, rollAngle } from '../../lib/kinematics/hedgehogGait';
 import { drawHedgehogFrame } from './HedgehogSprite';
-import { HEDGEHOG_CELL_H, HEDGEHOG_SHEET_SRC } from './hedgehogSheet';
+import {
+  HEDGEHOG_CELL_H,
+  HEDGEHOG_ROLL_RADIUS,
+  HEDGEHOG_SHEET_SRC,
+} from './hedgehogSheet';
 
 type ApiStatus = 'checking' | 'online' | 'offline';
 
@@ -1074,6 +1078,7 @@ function drawStage(
   // The hedgehog stands on the metre line rather than floating above it, so it
   // is a good deal taller than the puck it replaced; the vectors are stacked
   // above its back rather than at fixed offsets from a puck's centre.
+  let rolling = false;
   if (sheet) {
     const pose = hedgehogGait({
       distance: snapshot.distance,
@@ -1081,14 +1086,29 @@ function drawStage(
       acceleration: snapshot.motion.a,
       previousFacing: snapshot.facing,
     });
-    drawHedgehogFrame(ctx, sheet, pose.frame, {
-      x: cartX,
-      y: midY,
-      facing: pose.facing,
-    });
+    rolling = pose.gait === 'roll';
+
+    if (rolling) {
+      // Rolling without slipping, at the size it is actually drawn: one ball
+      // radius of travel turns it through one radian. Signed position drives it
+      // rather than the gait's facing, so rolling back unwinds the spin instead
+      // of mirroring a ball that has no left or right.
+      drawHedgehogFrame(ctx, sheet, pose.frame, {
+        x: cartX,
+        y: midY,
+        rotate: rollAngle(snapshot.motion.x, HEDGEHOG_ROLL_RADIUS / pxPerMeter),
+        pivotY: HEDGEHOG_ROLL_RADIUS,
+      });
+    } else {
+      drawHedgehogFrame(ctx, sheet, pose.frame, {
+        x: cartX,
+        y: midY,
+        facing: pose.facing,
+      });
+    }
   }
 
-  const spriteTop = midY - HEDGEHOG_CELL_H;
+  const spriteTop = midY - (rolling ? HEDGEHOG_ROLL_RADIUS * 2 : HEDGEHOG_CELL_H);
   const velocityY = spriteTop - 14;
   const accelerationY = spriteTop - 40;
 

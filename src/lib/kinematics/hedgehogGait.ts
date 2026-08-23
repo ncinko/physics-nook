@@ -21,7 +21,8 @@ export type HedgehogGaitFrame =
   | 'run4'
   | 'brake1'
   | 'brake2'
-  | 'brake3';
+  | 'brake3'
+  | 'roll';
 
 export const WALK_CYCLE: readonly HedgehogGaitFrame[] = ['walk1', 'walk2', 'walk3', 'walk4'];
 export const RUN_CYCLE: readonly HedgehogGaitFrame[] = ['run1', 'run2', 'run3', 'run4'];
@@ -39,6 +40,14 @@ export const BRAKE_FRAME: HedgehogGaitFrame = 'brake2';
 
 /** Held while stopped: the walking pose with all four feet planted. */
 export const STAND_FRAME: HedgehogGaitFrame = 'walk1';
+
+/**
+ * Past a flat sprint the legs stop being any use and the hedgehog curls up and
+ * rolls. Only the stop-in-zones challenge ever gets here - the lesson's sample
+ * motion tops out well below it - but that game reaches double figures easily.
+ */
+export const ROLL_FRAME: HedgehogGaitFrame = 'roll';
+export const ROLL_SPEED = 10;
 
 /** Below this speed the hedgehog is treated as standing still. */
 export const IDLE_SPEED = 0.12;
@@ -74,7 +83,7 @@ export interface GaitPose {
   /** True when the acceleration points against the motion. */
   slowing: boolean;
   /** Which gait the pose came from, for callers that want to label it. */
-  gait: 'stand' | 'walk' | 'run' | 'brake';
+  gait: 'stand' | 'walk' | 'run' | 'brake' | 'roll';
 }
 
 export function hedgehogGait({
@@ -97,6 +106,10 @@ export function hedgehogGait({
     return { frame: BRAKE_FRAME, facing, slowing, gait: 'brake' };
   }
 
+  if (speed >= ROLL_SPEED) {
+    return { frame: ROLL_FRAME, facing, slowing, gait: 'roll' };
+  }
+
   if (speed >= RUN_SPEED) {
     return { frame: RUN_CYCLE[strideIndex(distance, RUN_STRIDE)], facing, slowing, gait: 'run' };
   }
@@ -109,3 +122,13 @@ export function strideIndex(distance: number, stride: number) {
   const phase = Math.floor((distance / stride) * 4) % 4;
   return phase < 0 ? phase + 4 : phase;
 }
+
+/**
+ * How far the ball has turned, in radians, for rolling without slipping.
+ *
+ * Driven by signed displacement rather than by distance travelled: roll forward
+ * and back over the same ground and the ball must come back to the orientation
+ * it started in, which a monotonic path length could never do.
+ */
+export const rollAngle = (displacement: number, radiusMetres: number) =>
+  displacement / radiusMetres;

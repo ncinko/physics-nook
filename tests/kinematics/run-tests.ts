@@ -42,6 +42,7 @@ import {
   HEDGEHOG_SHEET_SRC,
   HEDGEHOG_SHEET_W,
   HEDGEHOG_GUTTER,
+  HEDGEHOG_ROLL_RADIUS,
   HEDGEHOG_STAND_FRAME,
   cellOrigin,
   type HedgehogFrameName,
@@ -52,8 +53,11 @@ import {
   IDLE_SPEED,
   RUN_CYCLE,
   RUN_SPEED,
+  ROLL_FRAME,
+  ROLL_SPEED,
   RUN_STRIDE,
   STAND_FRAME,
+  rollAngle,
   WALK_CYCLE,
   WALK_STRIDE,
   hedgehogGait,
@@ -315,7 +319,7 @@ assert.equal(
 );
 
 const cellNames = Object.keys(HEDGEHOG_CELLS) as HedgehogFrameName[];
-assert.equal(cellNames.length, 11, 'four walking, four running, three braking');
+assert.equal(cellNames.length, 12, 'four walking, four running, three braking, one curled');
 
 const occupied = new Set<string>();
 cellNames.forEach((name) => {
@@ -356,7 +360,7 @@ cellNames.forEach((a) => {
 });
 
 // The gait module names its frames independently of the sheet; they must agree.
-[...WALK_CYCLE, ...RUN_CYCLE, BRAKE_FRAME, STAND_FRAME].forEach((name) => {
+[...WALK_CYCLE, ...RUN_CYCLE, BRAKE_FRAME, STAND_FRAME, ROLL_FRAME].forEach((name) => {
   assert.ok(name in HEDGEHOG_CELLS, `gait frame ${name} has no cell on the sheet`);
 });
 assert.equal(STAND_FRAME, HEDGEHOG_STAND_FRAME);
@@ -424,6 +428,29 @@ assert.equal(brakingLeft.facing, -1);
 
 assert.ok(IDLE_SPEED < BRACE_SPEED);
 assert.ok(BRACE_SPEED < RUN_SPEED);
+assert.ok(RUN_SPEED < ROLL_SPEED);
+
+// Past a flat sprint the legs give up and the hedgehog curls into a ball. Only
+// the stop-in-zones challenge gets this fast; the lesson's motion never does.
+const sprinting = hedgehogGait({ distance: 3, velocity: ROLL_SPEED - 0.1, acceleration: 0 });
+assert.equal(sprinting.gait, 'run');
+
+const rolling = hedgehogGait({ distance: 3, velocity: ROLL_SPEED + 2, acceleration: 0 });
+assert.equal(rolling.gait, 'roll');
+assert.equal(rolling.frame, ROLL_FRAME);
+assert.equal(hedgehogGait({ distance: 3, velocity: -(ROLL_SPEED + 2), acceleration: 0 }).gait, 'roll');
+// Braking still wins when it is nearly stopped, whatever it was doing before.
+assert.equal(hedgehogGait({ distance: 3, velocity: 0.4, acceleration: -3 }).gait, 'brake');
+assert.ok(velocityOfT(SAMPLE_T_MAX) < ROLL_SPEED, 'the lesson motion never rolls');
+
+// Rolling without slipping: one radius of travel is one radian of turn, and
+// rolling back over the same ground unwinds the spin exactly.
+assert.ok(HEDGEHOG_ROLL_RADIUS > 0);
+near(rollAngle(0, 0.4), 0);
+near(rollAngle(0.4, 0.4), 1);
+near(rollAngle(2 * Math.PI * 0.4, 0.4), Math.PI * 2);
+near(rollAngle(-1.2, 0.4), -3);
+near(rollAngle(1.2, 0.4) + rollAngle(-1.2, 0.4), 0, 1e-12);
 
 // Path length is distance, not displacement: monotonic, and larger than the net
 // displacement across the stretch where the sample motion doubles back.

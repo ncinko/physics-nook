@@ -63,11 +63,15 @@ export function HedgehogSprite({
  * Blits one frame into a 2D canvas context, anchored at its feet like the SVG
  * component above, for the canvas-based explorers.
  *
- * `rotate` turns the whole character about that anchor. The position-versus-time
- * graph carries its motion on a vertical rail, so the hedgehog there is given a
- * quarter turn and climbs the rail instead of walking along a floor; flipping
- * still reverses which way it faces, because the flip happens in the sprite's
- * own frame after the rotation.
+ * `rotate` turns the whole character. By default it turns about the feet anchor,
+ * which is what the position-versus-time graph's vertical rail wants: the
+ * hedgehog is given a quarter turn there and climbs the rail instead of walking
+ * along a floor. `pivotY` moves the centre of rotation up from the feet, which
+ * is what the curled ball needs - it has to spin about its own middle rather
+ * than swing around its contact point.
+ *
+ * Flipping still reverses which way it faces, because the flip happens in the
+ * sprite's own frame after the rotation.
  */
 export function drawHedgehogFrame(
   ctx: CanvasRenderingContext2D,
@@ -78,13 +82,16 @@ export function drawHedgehogFrame(
     y,
     facing = 1,
     rotate = 0,
-  }: { x: number; y: number; facing?: 1 | -1; rotate?: number },
+    pivotY = 0,
+  }: { x: number; y: number; facing?: 1 | -1; rotate?: number; pivotY?: number },
 ) {
   const origin = cellOrigin(HEDGEHOG_CELLS[frame]);
   ctx.save();
   ctx.translate(x, y);
   if (rotate) {
+    ctx.translate(0, -pivotY);
     ctx.rotate(rotate);
+    ctx.translate(0, pivotY);
   }
   if (facing < 0) {
     ctx.scale(-1, 1);

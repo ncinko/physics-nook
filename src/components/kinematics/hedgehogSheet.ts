@@ -8,8 +8,9 @@
  * the remaining height differences are the leg extension and body bob, which is
  * the animation itself.
  *
- * One gait per sheet row, frames left to right; the braking row uses three of
- * its four cells.
+ * One gait per sheet row, frames left to right. The braking row's fourth cell
+ * carries the curled-up ball, which has no counterpart in the source art and is
+ * generated from the sheet's own colours.
  *
  * Every cell is surrounded by a transparent gutter. Each sprite is bottom-
  * aligned, so its feet sit on the cell's last row; packed edge to edge, those
@@ -46,7 +47,8 @@ export type HedgehogFrameName =
   | 'run4'
   | 'brake1'
   | 'brake2'
-  | 'brake3';
+  | 'brake3'
+  | 'roll';
 
 export interface HedgehogCell {
   col: number;
@@ -65,7 +67,15 @@ export const HEDGEHOG_CELLS: Record<HedgehogFrameName, HedgehogCell> = {
   brake1: { col: 0, row: 2 },
   brake2: { col: 1, row: 2 },
   brake3: { col: 2, row: 2 },
+  roll: { col: 3, row: 2 },
 };
+
+/**
+ * Radius of the curled ball in sprite pixels, measured to the spike tips. The
+ * ball is drawn touching the bottom of its cell, so this is both the distance
+ * from the feet anchor up to its centre and the radius it rolls on.
+ */
+export const HEDGEHOG_ROLL_RADIUS = 19;
 
 /** The pose to hold when the hedgehog is stopped: all four feet planted. */
 export const HEDGEHOG_STAND_FRAME: HedgehogFrameName = 'walk1';

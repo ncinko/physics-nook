@@ -3,7 +3,6 @@ import {
   ArrowRight,
   ChevronDown,
   Cloud,
-  Gauge,
   Pause,
   Play,
   RotateCcw,
@@ -734,17 +733,24 @@ export default function StopInZonesChallenge() {
         </div>
 
         <div className="flex min-w-[16rem] items-center gap-3">
-          <Gauge size={18} className="text-[var(--accent-blue)]" aria-hidden="true" />
           <label className="flex flex-1 items-center gap-3 text-sm font-semibold">
-            <span>{snapshot.aMax.toFixed(1)} m/s^2</span>
+            {/* Fixed width and tabular figures so the slider does not shift when
+                the reading crosses from one digit to two. */}
+            <span className="min-w-[5.25rem] whitespace-nowrap tabular-nums">
+              {snapshot.aMax.toFixed(1)} m/s^2
+            </span>
             <input
               type="range"
               min="0"
               max="10"
               step="0.1"
               value={snapshot.aMax}
+              aria-label="Maximum acceleration"
               onChange={(event) => setAMax(Number(event.target.value))}
-              className="w-full accent-[var(--accent-blue)]"
+              // Inline, because global.css sets a blue accent on every range
+              // input with higher specificity than a utility class.
+              style={{ accentColor: styleColor(QUANTITY_COLORS.acceleration) }}
+              className="min-w-0 flex-1"
             />
           </label>
         </div>

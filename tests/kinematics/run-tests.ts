@@ -29,6 +29,7 @@ import {
   positionOfT,
   velocityOfT,
 } from '../../src/lib/kinematics/sampleMotion.ts';
+import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
 import { readFileSync } from 'node:fs';
 import { fixed } from '../../src/utils/format.ts';
 import { TAU, pointerToTime, timeToAngle, wrapTime } from '../../src/lib/kinematics/stopwatch.ts';
@@ -513,5 +514,39 @@ near(wrapTime(0, 10), 0);
 near(wrapTime(9.9, 10), 9.9, 1e-9);
 // Wrapping lands on a matching velocity, which is what makes the seam invisible.
 near(velocityOfT(wrapTime(-0.0001, 10)), velocityOfT(0), 1e-3);
+
+
+// Area strips. Whatever the strip count, a constant velocity is reproduced
+// exactly - the special case the whole strip picture is built on.
+const constantStrips = stripsUnder(() => 2.4, 0, 10, 7);
+near(constantStrips.total, 24, 1e-12);
+near(constantStrips.width, 10 / 7);
+assert.equal(constantStrips.strips.length, 7);
+near(constantStrips.strips[6].to, 10, 1e-12);
+
+// Counts below one or between integers fall back to whole strips.
+assert.equal(stripsUnder(velocityOfT, 0, 10, 0).strips.length, 1);
+assert.equal(stripsUnder(velocityOfT, 0, 10, 3.7).strips.length, 3);
+
+// A strip sitting under the leftward stretch of the run subtracts.
+assert.equal(stripsUnder(velocityOfT, 4, 5, 1).strips[0].area < 0, true);
+assert.equal(stripsUnder(velocityOfT, 4, 5, 1, { signed: false }).strips[0].area > 0, true);
+
+// Narrower strips close on the exact displacement, which is what the interactive
+// in the lesson asks the reader to watch happen.
+const coarseStrips = stripsUnder(velocityOfT, SAMPLE_T_MIN, SAMPLE_T_MAX, 5);
+const fineStrips = stripsUnder(velocityOfT, SAMPLE_T_MIN, SAMPLE_T_MAX, 400);
+const exactDisplacement = areaUnderVelocity(SAMPLE_T_MIN, SAMPLE_T_MAX);
+assert.equal(
+  Math.abs(fineStrips.total - exactDisplacement) < Math.abs(coarseStrips.total - exactDisplacement),
+  true,
+);
+near(fineStrips.total, exactDisplacement, 0.05);
+
+// Dropping the signs turns the same strips into distance travelled, which is
+// larger because the motion doubles back.
+const distanceStrips = stripsUnder(velocityOfT, SAMPLE_T_MIN, SAMPLE_T_MAX, 400, { signed: false });
+near(distanceStrips.total, SAMPLE_PATH_LENGTH, 0.05);
+assert.equal(distanceStrips.total > fineStrips.total, true);
 
 console.log('Kinematics helper tests passed.');

@@ -12,8 +12,10 @@ import WorkedExampleCard from '../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../components/modules/ModuleHero.astro';
 import VelocityExplorer from '../components/kinematics/VelocityExplorer';
 import AccelerationExplorer from '../components/kinematics/AccelerationExplorer';
+import AreaStrips from '../components/kinematics/AreaStrips';
 import MotionOpener from '../components/kinematics/MotionOpener';
 import StopInZonesChallenge from '../components/kinematics/StopInZonesChallenge';
+import MathHint from '../components/textbook/MathHint.astro';
 import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../components/interactive/QuestionSequence.jsx';
 import { mechanicsPath } from '../data/modules';
@@ -45,9 +47,18 @@ Once you choose a spatial and temporal coordinate system, like the gridlines and
 Average velocity is the rate at which position changes between two moments in time:
 
 $$
-\overline{v} = \frac{\Delta x}{\Delta t}
+\htmlClass{math-hint math-hint-vbar}{\overline{v}}
+= \frac{\htmlClass{math-hint math-hint-delta-x}{\Delta x}}{\htmlClass{math-hint math-hint-delta-x}{\Delta t}}
 = \frac{x_2 - x_1}{t_2 - t_1}.
 $$
+
+<MathHint id="vbar" label="The overbar means average">
+  A bar over a symbol indicates an average quantity, rather than an instantaneous value. So $\overline{v}$ is the average velocity over a particular interval of time.
+</MathHint>
+
+<MathHint id="delta-x" label="Delta means change in">
+  The Greek capital delta, $\Delta$, indicates the change in a quantity, or *final minus initial*: $\Delta x = x_2 - x_1$ and $\Delta t = t_2 - t_1$. $\Delta x$ is also referred to as **displacement**.
+</MathHint>
 
 Note the first sign distinction that arises from this definition: the numerator can be positive or negative.  For horizontal motion, the convention is usually that $x$ increases in the rightward direction.  It follows that moving to the right corresponds to *positive* values of velocity, while moving to the left is *negative* velocity.
 
@@ -124,6 +135,12 @@ $$
 
 Note these areas are **signed**. A strip below the horizontal axis has negative height, so it subtracts rather than adds. On a velocity graph, a trip out and back can cover a lot of ink while producing zero displacement. This is exactly the difference between **displacement** (change in position) and distance traveled: displacement adds the signed areas, distance traveled adds their absolute values.
 
+Take that sum yourself on the hedgehog's velocity graph. Each strip stands at the velocity of its own left edge, so a single wide strip badly misjudges a velocity that keeps changing across it; narrow the strips and the running total closes on the exact displacement. Uncheck the box and the strips below the axis stop subtracting, which turns the same sum into distance traveled.
+
+<InteractiveAnchor id="area-strips" />
+
+<AreaStrips client:visible />
+
 
 
 
@@ -138,7 +155,7 @@ Note these areas are **signed**. A strip below the horizontal axis has negative 
 
 ## Kinematic Equations
 
-The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, so the final time is just $t$. The displacement is $\Delta x = x_f - x_i$. Click an equation to reveal where it comes from.
+The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, and call the final time $t_f = t$. The **displacement** is $\Delta x = x_f - x_i$. Click an equation to reveal where it comes from.
 
 <div class="kinematic-equation-tabs not-prose my-6 rounded-[1.35rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-5 py-5 shadow-sm">
   <input id="kinematic-eq-velocity" name="kinematic-equation" type="radio" />

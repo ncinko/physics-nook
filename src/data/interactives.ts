@@ -206,6 +206,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'graphs', 'acceleration', 'area'],
   },
   {
+    id: 'area-strips',
+    title: 'Area Strips',
+    description:
+      'Cut a velocity graph into constant-velocity strips and watch the sum of their signed areas close on the displacement.',
+    href: '/kinematics#area-strips',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['kinematics', 'graphs', 'area', 'displacement'],
+  },
+  {
     id: 'zone-challenge',
     title: 'Zone Challenge',
     description: 'Use acceleration controls to stop inside target zones.',

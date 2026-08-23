@@ -1,0 +1,161 @@
+---
+interface Props {
+  /**
+   * Matches the `math-hint-<id>` class applied to part of an equation with
+   * `\htmlClass{math-hint math-hint-<id>}{...}`.
+   */
+  id: string;
+  /** Short heading shown at the top of the popup. */
+  label?: string;
+}
+
+const { id, label } = Astro.props;
+---
+
+{/*
+  The explanation lives here as visually hidden prose so screen readers still
+  reach it (KaTeX's visual output is aria-hidden). The script lifts this markup
+  into a floating popup shown when the marked part of the equation is hovered.
+*/}
+<span class="math-hint-source sr-only" data-math-hint={id}>
+  {label && <strong>{label}. </strong>}<slot />
+</span>
+
+<style is:global>
+  .katex .math-hint {
+    cursor: help;
+    border-radius: 0.2em;
+    transition: background-color 150ms ease;
+  }
+
+  .katex .math-hint:hover,
+  .katex .math-hint[data-math-hint-open='true'] {
+    background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+  }
+
+  .math-hint-tooltip {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 60;
+    max-width: min(24rem, calc(100vw - 2rem));
+    padding: 0.7rem 0.9rem;
+    border: 1px solid var(--grid-line);
+    border-radius: 0.85rem;
+    background: color-mix(in srgb, var(--bg-primary) 92%, var(--surface-elevated));
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.6;
+    text-align: left;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.18);
+    pointer-events: none;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms;
+  }
+
+  .math-hint-tooltip[data-open='true'] {
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+  }
+
+  .math-hint-tooltip p {
+    margin: 0;
+  }
+
+  .math-hint-tooltip p + p {
+    margin-top: 0.5rem;
+  }
+
+  .math-hint-tooltip .katex {
+    font-size: 1em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .math-hint-tooltip {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  const sources = document.querySelectorAll<HTMLElement>('[data-math-hint]');
+
+  if (sources.length > 0) {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'math-hint-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    tooltip.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(tooltip);
+
+    let openTarget: HTMLElement | null = null;
+
+    const hide = () => {
+      if (!openTarget) return;
+      openTarget.removeAttribute('data-math-hint-open');
+      openTarget = null;
+      tooltip.removeAttribute('data-open');
+    };
+
+    const place = (target: HTMLElement) => {
+      const anchor = target.getBoundingClientRect();
+      const box = tooltip.getBoundingClientRect();
+      const margin = 8;
+      const gap = 10;
+
+      const left = Math.min(
+        Math.max(margin, anchor.left + anchor.width / 2 - box.width / 2),
+        Math.max(margin, window.innerWidth - box.width - margin),
+      );
+      const above = anchor.top - box.height - gap;
+      const top = above < margin ? anchor.bottom + gap : above;
+
+      tooltip.style.left = `${Math.round(left)}px`;
+      tooltip.style.top = `${Math.round(top)}px`;
+    };
+
+    const show = (target: HTMLElement, content: HTMLElement) => {
+      if (openTarget === target) return;
+      hide();
+      tooltip.replaceChildren(...content.cloneNode(true).childNodes);
+      tooltip.style.left = '0px';
+      tooltip.style.top = '0px';
+      place(target);
+      tooltip.setAttribute('data-open', 'true');
+      target.setAttribute('data-math-hint-open', 'true');
+      openTarget = target;
+    };
+
+    for (const source of sources) {
+      const id = source.dataset.mathHint;
+      if (!id) continue;
+
+      const targets = document.querySelectorAll<HTMLElement>(`.katex .math-hint-${CSS.escape(id)}`);
+
+      for (const target of targets) {
+        target.addEventListener('pointerenter', (event) => {
+          if (event.pointerType === 'touch') return;
+          show(target, source);
+        });
+        target.addEventListener('pointerleave', (event) => {
+          if (event.pointerType === 'touch') return;
+          hide();
+        });
+        target.addEventListener('click', (event) => {
+          event.stopPropagation();
+          if (openTarget === target) hide();
+          else show(target, source);
+        });
+      }
+    }
+
+    document.addEventListener('click', hide);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') hide();
+    });
+    window.addEventListener('scroll', hide, { passive: true });
+    window.addEventListener('resize', hide, { passive: true });
+  }
+</script>

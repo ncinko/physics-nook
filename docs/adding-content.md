@@ -42,6 +42,11 @@ Match the voice already established in pages like `src/pages/astronomy/orbits.md
 - In KaTeX, wrap units in `\text{}` (e.g. `\left(\frac{T}{\text{yr}}\right)^2`), and
   prefer a `$$` display block for the equation being introduced or used, with the
   narrative sentence around it in prose rather than inside the math.
+- To explain notation the first time it appears without adding a visible paragraph,
+  tag that part of the equation with `\htmlClass{math-hint math-hint-<id>}{...}` and add a
+  matching `<MathHint id="<id>" label="...">` block right after the `$$` display. The
+  explanation shows in a hover/tap popup and stays in the DOM for screen readers; the
+  rendered equation is unchanged. Reuse one id for every symbol sharing an explanation.
 - Worked examples (`WorkedExampleCard`) use `#### Problem`, `#### Use`, `#### Solve`,
   `#### Check` as sub-headings, in that order; `Check` is one sentence sanity-checking
   the magnitude, direction, or a limiting case of the result.

@@ -23,7 +23,17 @@ export default defineConfig({
     react(),
     mdx({
       remarkPlugins: [remarkMath],
-      rehypePlugins: [rehypeKatex],
+      rehypePlugins: [
+        [
+          rehypeKatex,
+          {
+            // Allows `\htmlClass` so parts of an equation can be tagged for
+            // hover explanations (see src/components/textbook/MathHint.astro).
+            trust: (/** @type {{ command: string }} */ context) => context.command === '\\htmlClass',
+            strict: (/** @type {string} */ errorCode) => (errorCode === 'htmlExtension' ? 'ignore' : 'warn'),
+          },
+        ],
+      ],
     }),
   ],
 

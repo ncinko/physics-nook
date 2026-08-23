@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   ArrowRight,
+  ChevronDown,
   Cloud,
   Gauge,
   Pause,
@@ -11,7 +12,16 @@ import {
   Trophy,
   WifiOff,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react';
 import {
   STOP_ZONE_DEFAULTS,
   advanceDwell,
@@ -148,6 +158,48 @@ const getCssColor = (name: string, fallback: string) => {
 const buttonClass =
   'inline-flex items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] disabled:cursor-not-allowed disabled:opacity-50';
 
+/**
+ * One colour per quantity, matching the graph explorers earlier in the lesson:
+ * position blue, velocity green, acceleration purple. Blue and purple come from
+ * the theme tokens so they follow light, dark, and pastel; velocity keeps the
+ * same fixed green the explorers use, which is legible against all three.
+ */
+interface QuantityColor {
+  token?: string;
+  fallback: string;
+}
+
+const QUANTITY_COLORS = {
+  position: { token: '--accent-blue', fallback: '#3b82f6' },
+  velocity: { fallback: '#16a34a' },
+  acceleration: { token: '--accent-purple', fallback: '#7e57c2' },
+} satisfies Record<'position' | 'velocity' | 'acceleration', QuantityColor>;
+
+/** For SVG and CSS, where the browser resolves the token itself. */
+const styleColor = ({ token, fallback }: QuantityColor) =>
+  token ? `var(${token}, ${fallback})` : fallback;
+
+/** For canvas, which needs a concrete colour at draw time. */
+const canvasColor = ({ token, fallback }: QuantityColor) =>
+  token ? getCssColor(token, fallback) : fallback;
+
+// The velocity and acceleration labels ride along above the hedgehog, and text
+// sliding across the screen at speed is unpleasant to track, so they fade out
+// between these speeds. The arrows stay: they read fine in motion because their
+// meaning is in their length and direction, not in glyphs to be focused on.
+const LABEL_FADE_START_MPS = 2;
+const LABEL_FADE_END_MPS = 4;
+
+const ridingLabelAlpha = (speed: number) => {
+  if (speed <= LABEL_FADE_START_MPS) {
+    return 1;
+  }
+  if (speed >= LABEL_FADE_END_MPS) {
+    return 0;
+  }
+  return (LABEL_FADE_END_MPS - speed) / (LABEL_FADE_END_MPS - LABEL_FADE_START_MPS);
+};
+
 const formatScoreDate = (createdAt: number) => {
   if (!Number.isFinite(createdAt) || createdAt <= 0) {
     return '--';
@@ -183,6 +235,11 @@ export default function StopInZonesChallenge() {
   const [isPosting, setIsPosting] = useState(false);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [fullscreenActive, setFullscreenActive] = useState(false);
+  // The board is a sideshow to the run itself, so it folds away - and it is the
+  // tallest thing in the inline layout, where collapsing it brings the track and
+  // the graphs back together on one screen.
+  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  const leaderboardPanelId = useId();
 
   const syncSnapshot = useCallback(() => {
     const runtime = runtimeRef.current;
@@ -742,21 +799,37 @@ export default function StopInZonesChallenge() {
           </div>
 
           <div className="grid gap-3">
-            <MiniPlot historyRef={historyRef} tick={traceTick} label="x(t) [m]" color="#0ea5a0" yMin={snapshot.gameOn ? -6 : null} yMax={snapshot.gameOn ? 6 : null} />
-            <MiniPlot historyRef={historyRef} tick={traceTick} label="v(t) [m/s]" color="#7c3aed" />
-            <MiniPlot historyRef={historyRef} tick={traceTick} label="a(t) [m/s^2]" color="#d97706" yMin={-snapshot.aMax - 1} yMax={snapshot.aMax + 1} />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="x(t) [m]" color={styleColor(QUANTITY_COLORS.position)} yMin={snapshot.gameOn ? -6 : null} yMax={snapshot.gameOn ? 6 : null} />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="v(t) [m/s]" color={styleColor(QUANTITY_COLORS.velocity)} />
+            <MiniPlot historyRef={historyRef} tick={traceTick} label="a(t) [m/s^2]" color={styleColor(QUANTITY_COLORS.acceleration)} yMin={-snapshot.aMax - 1} yMax={snapshot.aMax + 1} />
           </div>
         </div>
 
         <aside className="flex min-w-0 flex-col gap-4">
           <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="m-0 text-base font-semibold">{leaderboardLabel}</h3>
+            <div className={`flex items-center justify-between gap-3 ${leaderboardOpen ? 'mb-3' : ''}`}>
+              <h3 className="m-0 text-base font-semibold">
+                <button
+                  type="button"
+                  aria-expanded={leaderboardOpen}
+                  aria-controls={leaderboardPanelId}
+                  onClick={() => setLeaderboardOpen((open) => !open)}
+                  className="inline-flex items-center gap-1.5 text-base font-semibold text-[var(--text-primary)] transition-colors hover:text-[var(--accent-blue)]"
+                >
+                  <ChevronDown
+                    size={16}
+                    aria-hidden="true"
+                    className={`transition-transform ${leaderboardOpen ? '' : '-rotate-90'}`}
+                  />
+                  {leaderboardLabel}
+                </button>
+              </h3>
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)]">
                 {apiStatus === 'online' ? <Cloud size={15} /> : <WifiOff size={15} />}
                 {apiStatus}
               </span>
             </div>
+            <div id={leaderboardPanelId} hidden={!leaderboardOpen}>
             {leaderboardScores.length > 0 ? (
                 <div>
                   <div className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_5.25rem] gap-2 border-b border-[var(--grid-line)] pb-2 text-xs font-semibold uppercase text-[var(--text-muted)]">
@@ -783,6 +856,7 @@ export default function StopInZonesChallenge() {
               <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
             )}
             {isPosting && <p className="mt-3 mb-0 text-sm text-[var(--text-muted)]">Posting score...</p>}
+            </div>
           </div>
         </aside>
       </div>
@@ -1027,9 +1101,9 @@ function drawStage(
   const grid = getCssColor('--grid-line', '#d1d5db');
   const text = getCssColor('--text-primary', '#111827');
   const muted = getCssColor('--text-muted', '#4b5563');
-  const positionColor = '#0ea5a0';
-  const velocityColor = '#7c3aed';
-  const accelerationColor = '#d97706';
+  const positionColor = canvasColor(QUANTITY_COLORS.position);
+  const velocityColor = canvasColor(QUANTITY_COLORS.velocity);
+  const accelerationColor = canvasColor(QUANTITY_COLORS.acceleration);
   const midY = Math.round(height * 0.62);
   const pxPerMeter = Math.max(48, Math.min(92, width / 12));
   let originX = Math.round(width / 2);
@@ -1135,8 +1209,15 @@ function drawStage(
   ctx.font = `600 12px system-ui, -apple-system, Segoe UI, sans-serif`;
   ctx.textAlign = 'left';
   ctx.fillText('position', Math.min(width - 70, Math.max(12, originX - 32)), positionY - 8);
-  ctx.fillText('velocity', Math.min(width - 70, Math.max(12, cartX - 28)), velocityY - 9);
-  ctx.fillText('acceleration', Math.min(width - 94, Math.max(12, cartX - 42)), accelerationY - 9);
+
+  const labelAlpha = ridingLabelAlpha(Math.abs(snapshot.motion.v));
+  if (labelAlpha > 0) {
+    ctx.save();
+    ctx.globalAlpha = labelAlpha;
+    ctx.fillText('velocity', Math.min(width - 70, Math.max(12, cartX - 28)), velocityY - 9);
+    ctx.fillText('acceleration', Math.min(width - 94, Math.max(12, cartX - 42)), accelerationY - 9);
+    ctx.restore();
+  }
 
   if (snapshot.gameOn) {
     const inside = isInsideStopZone(
@@ -1187,17 +1268,22 @@ function drawArrow(
   const ux = dx / length;
   const uy = dy / length;
   const size = 6;
+  // The shaft stops at the base of the head rather than at the tip, so no line
+  // shows through the triangle. A very short arrow is all head.
+  const head = Math.min(10, length);
+  const baseX = x2 - ux * head;
+  const baseY = y2 - uy * head;
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
+  ctx.lineTo(baseX, baseY);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x2, y2);
-  ctx.lineTo(x2 - ux * 10 - uy * size, y2 - uy * 10 + ux * size);
-  ctx.lineTo(x2 - ux * 10 + uy * size, y2 - uy * 10 - ux * size);
+  ctx.lineTo(baseX - uy * size, baseY + ux * size);
+  ctx.lineTo(baseX + uy * size, baseY - ux * size);
   ctx.closePath();
   ctx.fill();
 }

@@ -234,10 +234,10 @@ export default function StopInZonesChallenge() {
   const [isPosting, setIsPosting] = useState(false);
   const [shellSize, setShellSize] = useState({ width: 0, height: 0 });
   const [fullscreenActive, setFullscreenActive] = useState(false);
-  // The board is a sideshow to the run itself, so it folds away - and it is the
-  // tallest thing in the inline layout, where collapsing it brings the track and
-  // the graphs back together on one screen.
-  const [leaderboardOpen, setLeaderboardOpen] = useState(true);
+  // The board is a sideshow to the run itself, and the tallest thing in the
+  // inline layout, so it starts folded away and the track, the readouts, and the
+  // graphs stay together on one screen.
+  const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const leaderboardPanelId = useId();
 
   const syncSnapshot = useCallback(() => {
@@ -377,12 +377,18 @@ export default function StopInZonesChallenge() {
     syncSnapshot();
   }, [syncSnapshot]);
 
+  // The stage owns the keyboard, so anything that pulls focus into a control
+  // hands it straight back when it is done with it.
+  const focusShell = useCallback(() => {
+    shellRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const setGameMode = useCallback((gameOn: boolean) => {
     restart(gameOn);
     if (gameOn) {
-      window.requestAnimationFrame(() => shellRef.current?.focus({ preventScroll: true }));
+      window.requestAnimationFrame(focusShell);
     }
-  }, [restart]);
+  }, [focusShell, restart]);
 
   const setWrapWorld = useCallback((wrapWorld: boolean) => {
     const runtime = runtimeRef.current;
@@ -747,6 +753,11 @@ export default function StopInZonesChallenge() {
               value={snapshot.aMax}
               aria-label="Maximum acceleration"
               onChange={(event) => setAMax(Number(event.target.value))}
+              // Letting go of the slider returns the keyboard to the stage, so a
+              // player can drag the acceleration up and drive straight away
+              // (and the arrow keys move the hedgehog, not the slider). Pointer
+              // release only: a keyboard user still needs the arrows here.
+              onPointerUp={focusShell}
               // Inline, because global.css sets a blue accent on every range
               // input with higher specificity than a utility class.
               style={{ accentColor: styleColor(QUANTITY_COLORS.acceleration) }}

@@ -170,11 +170,23 @@ export function VideoStage({
     return toPixel(frame, { x: 140 * pixelScale * frame.metersPerPixel, y: 0 });
   }, [frame, mode, pixelScale]);
 
+  // The ruler is only drawn while setting a scale, and the axis arrows only
+  // while tilting axes, so that a student marking points sees the video and
+  // their own points and nothing else.
+  const showRuler = mode === 'calibrate';
+  const showAxes = mode === 'axis' || mode === 'origin';
+
   const hitTestHandle = (pixel: PixelPoint): DragKind | null => {
     const threshold = HANDLE_HIT_CSS_PX * pixelScale;
+    // Only handles that are currently drawn can be grabbed — an invisible drag
+    // target is worse than none.
     const candidates: Array<{ handle: 'scaleFrom' | 'scaleTo' | 'origin'; at: PixelPoint }> = [
-      { handle: 'scaleFrom', at: calibration.scaleFrom },
-      { handle: 'scaleTo', at: calibration.scaleTo },
+      ...(showRuler
+        ? ([
+            { handle: 'scaleFrom', at: calibration.scaleFrom },
+            { handle: 'scaleTo', at: calibration.scaleTo },
+          ] as const)
+        : []),
       { handle: 'origin', at: calibration.origin },
     ];
     let bestHandle: 'scaleFrom' | 'scaleTo' | 'origin' | null = null;
@@ -460,7 +472,8 @@ export function VideoStage({
                   );
                 })}
 
-                {/* Scale line. */}
+                {/* The ruler, drawn only while its mode is selected. */}
+                {showRuler && (
                 <g>
                   <line
                     x1={calibration.scaleFrom.px}
@@ -484,6 +497,7 @@ export function VideoStage({
                     />
                   ))}
                 </g>
+                )}
 
                 {/* Origin and axis directions. */}
                 <g stroke="var(--text-primary)" vectorEffect="non-scaling-stroke">
@@ -505,7 +519,7 @@ export function VideoStage({
                     opacity={0.5}
                     vectorEffect="non-scaling-stroke"
                   />
-                  {axisEnd && (
+                  {showAxes && axisEnd && (
                     <line
                       x1={calibration.origin.px}
                       y1={calibration.origin.py}
@@ -516,7 +530,7 @@ export function VideoStage({
                       vectorEffect="non-scaling-stroke"
                     />
                   )}
-                  {axisUpEnd && (
+                  {showAxes && axisUpEnd && (
                     <line
                       x1={calibration.origin.px}
                       y1={calibration.origin.py}

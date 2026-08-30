@@ -75,6 +75,7 @@ import {
   frameIndexForTime,
   kinematicsFromQuadratic,
   niceTicks,
+  sampleValue,
   serializeTracks,
   timeForFrameIndex,
   toPhysical,
@@ -663,9 +664,9 @@ const videoPoints = (
     pixel: toPixel(frame, motion(time)),
   }));
 
-// Three-point stencils are exact for a quadratic, so a synthetic
-// x(t) = 1 + 2t + 3t^2 must come back with velocity 2 + 6t and acceleration 6
-// at every interior sample.
+// The three-point stencil is exact for a quadratic, so a synthetic
+// x(t) = 1 + 2t + 3t^2 must come back with velocity 2 + 6t at every interior
+// sample.
 {
   const frame = requireFrame(videoCalibration());
   const times = Array.from({ length: 21 }, (_, i) => i / 30);
@@ -676,22 +677,19 @@ const videoPoints = (
   for (let i = 1; i < samples.length - 1; i += 1) {
     near(samples[i].x, motion(times[i]).x, 1e-9);
     near(samples[i].vx as number, 2 + 6 * times[i], 1e-9);
-    near(samples[i].ax as number, 6, 1e-8);
     near(samples[i].vy as number, 0, 1e-9);
   }
 
   // Endpoints carry no derivative at all, rather than a noisy one-sided guess.
   assert.equal(samples[0].vx, null);
-  assert.equal(samples[0].ax, null);
   assert.equal(samples[0].sigmaVx, null);
   assert.equal(samples[samples.length - 1].vx, null);
-  assert.equal(samples[samples.length - 1].ax, null);
+  assert.equal(samples[samples.length - 1].sigmaVx, null);
 
   // Uncertainty propagation through the uniform-spacing stencils.
   const sigma = 2 * 0.005;
   const h = 1 / 30;
   near(samples[1].sigmaVx as number, (sigma * Math.SQRT2) / (2 * h), 1e-12);
-  near(samples[1].sigmaAx as number, (sigma * Math.sqrt(6)) / (h * h), 1e-9);
   near(samples[1].sigmaX, sigma, 1e-15);
   near(samples[1].sigmaY, sigma, 1e-15);
 
@@ -699,6 +697,22 @@ const videoPoints = (
   // baked in when the point was marked.
   assert.equal(samples[7].frame, 7);
   assert.equal(deriveSeries(videoPoints(frame, times, motion), frame, 2, 60)[7].frame, 14);
+}
+
+// Acceleration is deliberately not derived point by point: the second
+// difference of hand-clicked positions is mostly click noise, and a column of it
+// invites students to read that noise instead of fitting the positions.
+{
+  const frame = requireFrame(videoCalibration());
+  const samples = deriveSeries(
+    videoPoints(frame, [0, 1 / 30, 2 / 30], (t) => ({ x: t * t, y: 0 })),
+    frame,
+    2,
+    30,
+  );
+  assert.equal('ax' in samples[1], false, 'no per-point acceleration is exposed');
+  assert.equal('ay' in samples[1], false);
+  assert.equal(sampleValue(samples[1], 'x') !== null, true);
 }
 
 // Isotropy: the position uncertainty is the same on both axes at any tilt.
@@ -723,7 +737,6 @@ for (const axisAngleDeg of [0, 17, -80, 135]) {
   const samples = deriveSeries(videoPoints(frame, [0, 0.1, 0.4], motion), frame, 2, 30);
   const naive = (motion(0.4).x - motion(0).x) / 0.4;
   near(samples[1].vx as number, 2 + 6 * 0.1, 1e-9);
-  near(samples[1].ax as number, 6, 1e-9);
   near(naive, 2 + 6 * 0.2, 1e-12);
   assert.ok(
     Math.abs((samples[1].vx as number) - naive) > 0.1,

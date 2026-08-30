@@ -25,7 +25,7 @@ import {
 } from '../../lib/kinematics/videoAnalysis';
 import { useVideoFrames } from './videoAnalysis/useVideoFrames';
 import { VideoStage, type StageMode } from './videoAnalysis/VideoStage';
-import { CalibrationControls } from './videoAnalysis/CalibrationControls';
+import { ModeControls } from './videoAnalysis/ModeControls';
 import { TrackTable } from './videoAnalysis/TrackTable';
 import { AnalysisPlot, type PlotPoint, type PlotSeries } from './videoAnalysis/AnalysisPlot';
 import { FitPanel } from './videoAnalysis/FitPanel';
@@ -33,9 +33,17 @@ import { trackColor, trackShape } from './videoAnalysis/trackColors';
 
 /**
  * Measure real motion from a phone video: mark the moving object frame by
- * frame, set a distance scale and a frame rate, and read position, velocity,
- * and acceleration back out — with a fit that turns a dropped ball into a
- * measurement of g.
+ * frame, set a distance scale and a frame rate, and read position and velocity
+ * back out — with a fit that turns a dropped ball into a measurement of g.
+ *
+ * Acceleration is reached only through that fit. There is deliberately no
+ * point-by-point acceleration column: the second difference of hand-clicked
+ * positions is mostly click noise, and offering it invites students to read
+ * that noise instead of fitting the whole data set.
+ *
+ * The controls are organised around the stage mode — whichever of Mark, Scale,
+ * Origin, or Axis is selected decides both what a click on the video does and
+ * which settings are on screen.
  *
  * The video never leaves the browser: the site is a static build with no
  * server, and the file is read through an object URL straight off disk.
@@ -50,21 +58,9 @@ const EMPTY_CALIBRATION: Calibration = {
   positionUncertaintyPx: 3,
 };
 
-const ALL_COLUMNS: ColumnKey[] = [
-  'frame',
-  'time',
-  'x',
-  'y',
-  'vx',
-  'vy',
-  'ax',
-  'ay',
-  'speed',
-  'px',
-  'py',
-];
+const ALL_COLUMNS: ColumnKey[] = ['frame', 'time', 'x', 'y', 'vx', 'vy', 'speed', 'px', 'py'];
 const DEFAULT_COLUMNS: ColumnKey[] = ['frame', 'time', 'x', 'y'];
-const PLOTTABLE: QuantityKey[] = ['x', 'y', 'vx', 'vy', 'ax', 'ay', 'speed'];
+const PLOTTABLE: QuantityKey[] = ['x', 'y', 'vx', 'vy', 'speed'];
 const LARGE_FILE_BYTES = 300 * 1024 * 1024;
 
 const axisTitle = (quantity: QuantityKey) =>
@@ -458,14 +454,11 @@ export function VideoAnalysisLab() {
           }}
           className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-theme-grid p-10 text-center"
         >
-          <h3 className="m-0 text-lg font-semibold">Open a video to analyse</h3>
-          <p className="m-0 max-w-md text-sm leading-6 text-[var(--text-muted)]">
-            Drop a clip here, or choose a file. Phone video works well — a couple of seconds of a
-            ball, a cart, or a falling object, with something of known length in the shot.
-          </p>
+          <h3 className="m-0 text-lg font-semibold">Drop or select video</h3>
+
           <label className="cursor-pointer">
             {fileInput}
-            <span className="btn">Choose a video</span>
+            <span className="btn">Select file</span>
           </label>
           {video.errorMessage && (
             <p className="m-0 max-w-md text-sm leading-6 text-[var(--accent-red)]">
@@ -473,7 +466,7 @@ export function VideoAnalysisLab() {
             </p>
           )}
           <p className="m-0 text-xs text-[var(--text-muted)]">
-            Your video is analysed in your browser and never uploaded.
+            Your video is analyzed in your browser locally.
           </p>
         </div>
       ) : (
@@ -500,7 +493,7 @@ export function VideoAnalysisLab() {
             <p className="m-0 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2 text-sm leading-6 text-[var(--text-muted)]">
               This browser can&rsquo;t report exact frame times, so set the frame rate below to match
               your camera. Timings will be off by a constant fraction of a frame, which shifts only
-              the intercept of a fit — velocities and accelerations are unaffected.
+              the intercept of a fit.
             </p>
           )}
 
@@ -568,84 +561,38 @@ export function VideoAnalysisLab() {
                 <Button variant="secondary" type="button" onClick={() => void undoLastPoint()}>
                   Undo point
                 </Button>
-                <Toggle label="Follow last point" checked={followEnabled} onChange={setFollowEnabled} />
               </ControlBar>
 
-              <ControlBar align="start">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <span className="font-medium">Frame rate</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step="any"
-                    inputMode="decimal"
-                    value={video.fps}
-                    onChange={(event) => video.setFps(Number(event.target.value))}
-                    className="w-24 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-right font-mono tabular-nums text-[var(--text-primary)]"
-                  />
-                  <span className="text-[var(--text-muted)]">fps</span>
-                </label>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => void video.detectFrameRate()}
-                >
-                  Detect frame rate
-                </Button>
-                <span className="text-xs text-[var(--text-muted)]">
-                  {video.frameRateEstimate
-                    ? `measured ${video.frameRateEstimate.measuredFps.toFixed(2)} fps from ${video.frameRateEstimate.sampleCount} frames${
-                        video.frameRateEstimate.snapped ? ', snapped to a standard rate' : ''
-                      }`
-                    : 'not measured yet'}
-                </span>
-              </ControlBar>
-
-              <CalibrationControls
-                calibration={calibration}
-                onChange={setCalibration}
-                metersPerPixel={frame ? frame.metersPerPixel : null}
+              <ModeControls
                 mode={mode}
                 onModeChange={setMode}
+                calibration={calibration}
+                onCalibrationChange={setCalibration}
+                metersPerPixel={frame ? frame.metersPerPixel : null}
+                fps={video.fps}
+                onFpsChange={video.setFps}
+                frameRateEstimate={video.frameRateEstimate}
+                onDetectFrameRate={() => void video.detectFrameRate()}
+                followEnabled={followEnabled}
+                onFollowChange={setFollowEnabled}
+                tracks={tracks}
+                activeTrackId={activeTrackId}
+                onActiveTrackChange={setActiveTrackId}
+                onRenameActiveTrack={(label) =>
+                  setTracks((previous) =>
+                    previous.map((track) =>
+                      track.id === activeTrackId ? { ...track, label } : track,
+                    ),
+                  )
+                }
+                onAddTrack={addTrack}
+                onRemoveTrack={removeActiveTrack}
               />
 
               <ControlBar align="start">
-                <Select
-                  label="Tracking"
-                  value={String(activeTrackId)}
-                  onChange={(value) => setActiveTrackId(Number(value))}
-                  options={tracks.map((track) => ({
-                    value: String(track.id),
-                    label: track.label,
-                  }))}
-                />
-                <input
-                  type="text"
-                  aria-label="Rename the tracked object"
-                  value={activeTrack?.label ?? ''}
-                  onChange={(event) =>
-                    setTracks((previous) =>
-                      previous.map((track) =>
-                        track.id === activeTrackId ? { ...track, label: event.target.value } : track,
-                      ),
-                    )
-                  }
-                  className="w-36 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-[var(--text-primary)]"
-                />
-                <Button variant="secondary" type="button" onClick={addTrack}>
-                  Add object
-                </Button>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={removeActiveTrack}
-                  disabled={tracks.length <= 1}
-                >
-                  Remove object
-                </Button>
                 <label className="cursor-pointer">
                   {fileInput}
-                  <span className="btn btn-secondary">New video</span>
+                  <span className="btn btn-secondary">Open a different video</span>
                 </label>
               </ControlBar>
             </div>

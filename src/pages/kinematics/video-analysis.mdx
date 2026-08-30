@@ -1,7 +1,7 @@
 ---
 layout: ../../layouts/TextbookLayout.astro
 title: Video Analysis
-description: Measure real motion from a phone video — mark the object frame by frame, set a scale, and fit position, velocity, and acceleration data you can paste into a spreadsheet.
+description: Measure real motion from a phone video — mark the object frame by frame, set a scale, and fit the position and time data you can paste into a spreadsheet.
 canonicalPath: /kinematics/video-analysis
 ---
 
@@ -26,19 +26,16 @@ A video is a sequence of still frames taken at a known rate, so the frame number
 <SimulationBlock
   width="full"
   title="Video Analysis Lab"
-  description="Open a clip, set the scale, then click the moving object frame by frame. Nothing is uploaded — the video is read straight from your device."
+  description="Open a clip, set the scale, then click the moving object frame by frame."
 >
   <VideoAnalysisLab client:only="react" />
 </SimulationBlock>
 
-## Filming something worth measuring
-
 A good clip is short and boring.
 
-- **Hold the camera still.** A tripod, a stack of books, or very steady hands. If the camera moves, the background moves, and the object's measured position inherits that motion.
+- **Hold the camera still.** Use a tripod, a stack of books, or very steady hands. If the camera moves, the background moves, and the object's measured position inherits that motion.
 - **Film square-on.** Point the camera perpendicular to the plane of the motion. A ball thrown toward or away from the lens changes apparent size, and its measured position picks up an error that is difficult to remove.
-- **Put a ruler in the shot.** Something of known length, in the same plane as the motion.  This allows us to convert pixels to meters.
-- **Prefer a plain background.** You have to see the object clearly enough to click the *same part of it* each frame.
+- **Put a ruler in the shot.** Place something of known length, in the same plane as the motion.  This allows us to convert pixels to meters.
 
 ## Analysis Steps
 
@@ -48,7 +45,8 @@ A good clip is short and boring.
 4. **Frame rate.** The analysis tool attempts to select the correct conversion between frame number and elapsed time.  If your camera says otherwise, type the real value.
 5. **Mark.** Click the object; the video advances by a selected number of frames and waits for the next click. Pick a feature you can find every time.  This could be the center of a ball or the front edge of a cart.
 
-Velocity values are **not** measured directly. The two components are computed from your marked positions by comparing each point to its neighbours, which is why the first and last points have no velocity listed: there is no neighbour on one side.
+Velocity values are not measured directly. The two components are computed from your marked positions by comparing each point to its neighbours, which is why the first and last points have no velocity listed: there is no neighbor on one side.
 
+Acceleration values are not computed, as small errors in position would be amplified greatly.  Instead, I suggest performing a linear fit to the velocity vs. time graph or a quadratic fit to the position vs. time graph.
 
 **Copy for spreadsheet** puts the table on the clipboard tab-separated, which pastes into Google Sheets or Excel as proper columns. **Download CSV** saves the same table as a file. Either way you can take the data somewhere else and do your own fitting.

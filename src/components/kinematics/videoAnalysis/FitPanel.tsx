@@ -51,8 +51,7 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
   if (model === 'none' || !result) {
     return (
       <p className="m-0 text-sm text-[var(--text-muted)]">
-        Choose a model to fit the plotted data. A quadratic on position against time reads out the
-        acceleration directly.
+        Choose a model to fit the plotted data. A linear fit on velocity versus time is useful for estimating acceleration.
       </p>
     );
   }
@@ -81,6 +80,10 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
 
   if (model === 'linear') {
     const { slope, intercept } = kinematicsFromLinear(fit);
+    // A line through a velocity-time graph has an acceleration for a slope —
+    // the other honest route to `a`, alongside a parabola through positions.
+    const readsAsAcceleration =
+      xQuantity === 'time' && (yQuantity === 'vx' || yQuantity === 'vy');
     return (
       <div className="flex flex-col gap-2">
         <Readout>
@@ -96,8 +99,15 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
               unit={unitFor(yQuantity)}
             />
           </Readout.Group>
+          {readsAsAcceleration && (
+            <Readout.Group label="Read as motion">
+              <Readout.Value label="a = slope" value={showMeasurement(slope)} unit="m/s²" />
+              <Readout.Value label="v₀" value={showMeasurement(intercept)} unit="m/s" />
+            </Readout.Group>
+          )}
           <Readout.Group label="Goodness of fit">{goodness}</Readout.Group>
         </Readout>
+        {readsAsAcceleration && <GravityVerdict acceleration={slope} />}
         <FitNotes fit={fit} />
       </div>
     );
@@ -105,8 +115,6 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
 
   const motion = kinematicsFromQuadratic(fit);
   const readsAsMotion = xQuantity === 'time' && (yQuantity === 'x' || yQuantity === 'y');
-  const sigmaFromGravity = discrepancy(motion.acceleration, GRAVITY);
-  const agrees = agreesWithin(motion.acceleration, GRAVITY);
 
   return (
     <div className="flex flex-col gap-2">
@@ -148,20 +156,32 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
         <Readout.Group label="Goodness of fit">{goodness}</Readout.Group>
       </Readout>
 
-      {readsAsMotion && motion.acceleration.uncertainty > 0 && (
-        <p
-          className="m-0 text-sm font-medium"
-          style={{ color: agrees ? 'var(--accent-green)' : 'var(--accent-red)' }}
-        >
-          {agrees
-            ? `Agrees with free fall (−9.81 m/s²) — ${fixed(sigmaFromGravity, 1)} of its own uncertainty away.`
-            : `Differs from free fall (−9.81 m/s²) by ${
-                Number.isFinite(sigmaFromGravity) ? fixed(sigmaFromGravity, 1) : '∞'
-              }× its own uncertainty.`}
-        </p>
-      )}
+      {readsAsMotion && <GravityVerdict acceleration={motion.acceleration} />}
       <FitNotes fit={fit} />
     </div>
+  );
+}
+
+/**
+ * Whether a measured acceleration is consistent with free fall, stated in units
+ * of the measurement's own uncertainty. This is the payoff of dropping
+ * something in front of a camera, so it gets its own line and its own colour.
+ */
+function GravityVerdict({ acceleration }: { acceleration: Measurement }) {
+  if (!(acceleration.uncertainty > 0) || !Number.isFinite(acceleration.value)) return null;
+  const sigma = discrepancy(acceleration, GRAVITY);
+  const agrees = agreesWithin(acceleration, GRAVITY);
+  return (
+    <p
+      className="m-0 text-sm font-medium"
+      style={{ color: agrees ? 'var(--accent-green)' : 'var(--accent-red)' }}
+    >
+      {agrees
+        ? `Agrees with free fall (−9.81 m/s²) — ${fixed(sigma, 1)} of its own uncertainty away.`
+        : `Differs from free fall (−9.81 m/s²) by ${
+            Number.isFinite(sigma) ? fixed(sigma, 1) : '∞'
+          }× its own uncertainty.`}
+    </p>
   );
 }
 

@@ -4,12 +4,18 @@
  *
  * The organising idea is that a marked point stores **only** its location in
  * intrinsic video pixels and the presentation time of the frame it was marked
- * on. Every physical quantity — position, velocity, acceleration, and their
- * uncertainties — is derived from those raw pixels plus the current
- * calibration. That is what lets a student drag the scale line, move the
- * origin, tilt the axes, or correct the frame rate *after* marking fifty points
- * and see the whole data set re-derive correctly, instead of having to start
- * over.
+ * on. Every physical quantity — position, velocity, and their uncertainties —
+ * is derived from those raw pixels plus the current calibration. That is what
+ * lets a student drag the scale line, move the origin, tilt the axes, or
+ * correct the frame rate *after* marking fifty points and see the whole data
+ * set re-derive correctly, instead of having to start over.
+ *
+ * Note what is deliberately **not** here: a point-by-point acceleration. The
+ * second derivative of hand-clicked positions is dominated by click noise, and
+ * handing students a column of it invites them to read a number that is mostly
+ * noise. Acceleration comes from fitting a parabola to the positions instead,
+ * where every point contributes and the fit reports its own uncertainty — see
+ * `kinematicsFromQuadratic`.
  *
  * DOM-free and deterministic so it can be unit tested in `tests/kinematics`.
  */
@@ -84,19 +90,15 @@ export interface DerivedSample {
   y: number;
   vx: number | null;
   vy: number | null;
-  ax: number | null;
-  ay: number | null;
   speed: number | null;
   sigmaX: number;
   sigmaY: number;
   sigmaVx: number | null;
   sigmaVy: number | null;
-  sigmaAx: number | null;
-  sigmaAy: number | null;
   sigmaSpeed: number | null;
 }
 
-export type QuantityKey = 'time' | 'x' | 'y' | 'vx' | 'vy' | 'ax' | 'ay' | 'speed';
+export type QuantityKey = 'time' | 'x' | 'y' | 'vx' | 'vy' | 'speed';
 export type ColumnKey = QuantityKey | 'frame' | 'px' | 'py';
 
 export interface FrameRateEstimate {
@@ -194,12 +196,6 @@ const firstDerivativeStencil = (h1: number, h2: number): [number, number, number
   h1 / (h2 * (h1 + h2)),
 ];
 
-const secondDerivativeStencil = (h1: number, h2: number): [number, number, number] => [
-  2 / (h1 * (h1 + h2)),
-  -2 / (h1 * h2),
-  2 / (h2 * (h1 + h2)),
-];
-
 const applyStencil = (
   stencil: readonly [number, number, number],
   before: number,
@@ -213,16 +209,16 @@ const stencilSigma = (stencil: readonly [number, number, number], sigma: number)
 /**
  * Turn marked points into the full derived data set.
  *
- * Endpoints carry no velocity or acceleration. One-sided difference formulas
- * exist, but they amplify click noise badly and students reliably over-read the
- * spurious first and last values that result; a blank is more honest. Velocity
- * and acceleration therefore share the index range 1..n-2, which also keeps the
- * table and the export rectangular.
+ * Endpoints carry no velocity. One-sided difference formulas exist, but they
+ * amplify click noise badly and students reliably over-read the spurious first
+ * and last values that result; a blank is more honest. Velocity therefore
+ * covers the index range 1..n-2, which also keeps the table and the export
+ * rectangular.
  *
  * Note that neighbouring velocities share input points and so are correlated.
  * The error bars are right for reading, but a weighted fit *to the velocity
- * series* has correlated residuals — which is why the tool defaults to fitting
- * a quadratic to position rather than a line to velocity.
+ * series* has correlated residuals — which is another reason acceleration
+ * belongs to a quadratic fit on the positions.
  */
 export const deriveSeries = (
   points: readonly TrackedPoint[],
@@ -249,15 +245,11 @@ export const deriveSeries = (
       y: position.y,
       vx: null,
       vy: null,
-      ax: null,
-      ay: null,
       speed: null,
       sigmaX: sigma,
       sigmaY: sigma,
       sigmaVx: null,
       sigmaVy: null,
-      sigmaAx: null,
-      sigmaAy: null,
       sigmaSpeed: null,
     };
 
@@ -268,7 +260,6 @@ export const deriveSeries = (
     if (!(h1 > 0) || !(h2 > 0)) return base;
 
     const first = firstDerivativeStencil(h1, h2);
-    const second = secondDerivativeStencil(h1, h2);
     const previous = positions[i - 1];
     const next = positions[i + 1];
 
@@ -281,13 +272,9 @@ export const deriveSeries = (
       ...base,
       vx,
       vy,
-      ax: applyStencil(second, previous.x, position.x, next.x),
-      ay: applyStencil(second, previous.y, position.y, next.y),
       speed,
       sigmaVx: sigmaV,
       sigmaVy: sigmaV,
-      sigmaAx: stencilSigma(second, sigma),
-      sigmaAy: stencilSigma(second, sigma),
       // d|v| propagated from the components; at a turning point the direction
       // is undefined, so fall back to the component uncertainty.
       sigmaSpeed: speed > 0 ? (Math.hypot(vx * sigmaV, vy * sigmaV) / speed) : sigmaV,
@@ -458,8 +445,6 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   y: 'y (m)',
   vx: 'vx (m/s)',
   vy: 'vy (m/s)',
-  ax: 'ax (m/s^2)',
-  ay: 'ay (m/s^2)',
   speed: 'speed (m/s)',
   px: 'px (px)',
   py: 'py (px)',
@@ -474,8 +459,6 @@ export const QUANTITY_LABELS: Record<QuantityKey, string> = {
   y: 'y',
   vx: 'vx',
   vy: 'vy',
-  ax: 'ax',
-  ay: 'ay',
   speed: '|v|',
 };
 
@@ -485,8 +468,6 @@ export const QUANTITY_UNITS: Record<QuantityKey, string> = {
   y: 'm',
   vx: 'm/s',
   vy: 'm/s',
-  ax: 'm/s²',
-  ay: 'm/s²',
   speed: 'm/s',
 };
 
@@ -504,10 +485,6 @@ export const sampleValue = (sample: DerivedSample, column: ColumnKey): number | 
       return sample.vx;
     case 'vy':
       return sample.vy;
-    case 'ax':
-      return sample.ax;
-    case 'ay':
-      return sample.ay;
     case 'speed':
       return sample.speed;
     case 'px':
@@ -533,10 +510,6 @@ export const sampleSigma = (sample: DerivedSample, quantity: QuantityKey): numbe
       return sample.sigmaVx;
     case 'vy':
       return sample.sigmaVy;
-    case 'ax':
-      return sample.sigmaAx;
-    case 'ay':
-      return sample.sigmaAy;
     case 'speed':
       return sample.sigmaSpeed;
   }

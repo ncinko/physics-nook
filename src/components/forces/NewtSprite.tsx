@@ -19,6 +19,9 @@ const FROG_Y = -FROG_HEIGHT / 2;
 
 // Collision radius: a circle inscribed in the sprite, ignoring the splayed legs.
 export const NEWT_RADIUS = 30;
+// Distance from Newt's centre down to the soles of his feet, so a scene can put
+// a surface exactly where he stands on it.
+export const NEWT_FEET_OFFSET = FROG_HEIGHT / 2;
 // The mouth line -- the wide dark stroke below the two nostril dots, at 39% of
 // the way down the artwork -- is where the tongue anchors in the tension demo.
 export const NEWT_MOUTH_OFFSET = { x: 0, y: FROG_Y + FROG_HEIGHT * 0.387 };

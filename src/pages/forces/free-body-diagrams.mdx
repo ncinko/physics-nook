@@ -1,0 +1,304 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Free-Body Diagrams
+description: Isolate one object, draw every force acting on it, and turn the picture into equations with Newton's three laws.
+canonicalPath: /forces/free-body-diagrams
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import MathHint from '../../components/textbook/MathHint.astro';
+import FreeBodyDiagramBuilder from '../../components/forces/FreeBodyDiagramBuilder';
+import InclineFreeBody from '../../components/forces/InclineFreeBody';
+import { FrictionForceNewt } from '../../components/forces/ForcesNewtInteractives';
+import { mechanicsPath } from '../../data/modules';
+import { forcesModule } from '../../data/modules/forces';
+
+{/* This lesson is unlisted: it is intentionally left out of `mechanicsPath` so
+it stays off the module hero, the Resources index, the lesson pager, and site
+search, and is reachable only by typing the URL. Splice it back into a local
+copy of the path so the hero on this page still shows where it sits. */}
+export const freeBodyPage = forcesModule.pages.find((page) => page.id === 'forces-free-body-diagrams');
+
+export const unlistedMechanicsPath = {
+  ...mechanicsPath,
+  pages: mechanicsPath.pages.flatMap((page) =>
+    page.id === 'forces-core' && freeBodyPage ? [page, freeBodyPage] : [page],
+  ),
+};
+
+<ModuleHero module={unlistedMechanicsPath} currentPath="/forces/free-body-diagrams" />
+
+<div id="page-content"></div>
+
+# Free-Body Diagrams
+
+The [Forces](/forces) page introduced the cast: weight, spring forces, the normal force, and tension. Recognizing them is not the same as being able to use them. This page is the method — isolate one object, draw every force acting on it, and read the equations straight off the picture. Friction joins the cast here, once there is a diagram to put it on.
+
+Almost every mechanics problem you will meet is the same three steps in a trench coat. Pick the object. Draw its forces. Apply Newton's second law along each axis.
+
+## Newton's Three Laws
+
+**Newton's first law** says an object's velocity does not change unless a force acts on it. This is the [force-free motion](/forces#force-free-newt) idea from the previous page: no net force means no acceleration, whether the object is sitting still or already moving. Nothing needs to push a moving object to keep it moving.
+
+**Newton's second law** says the net force sets the acceleration:
+
+$$
+\sum \htmlClass{math-hint math-hint-net}{\vec{F}} = m\vec{a}.
+$$
+
+<MathHint id="net" label="Net force">The vector sum of every force acting on the object — not any single force, and not the largest one.</MathHint>
+
+The sum runs over every force acting on the object, and it is a *vector* sum. The first law is really the special case $\sum \vec{F} = 0$.
+
+**Newton's third law** says forces come in pairs: if A pushes on B, then B pushes back on A with equal magnitude and opposite direction.
+
+$$
+\vec{F}_{\text{A on B}} = -\vec{F}_{\text{B on A}}.
+$$
+
+The two forces in a third-law pair always act on **different objects**. That single fact is what keeps the pair from cancelling, and it is the most common place a first free-body diagram goes wrong.
+
+## One Object At A Time
+
+A **free-body diagram** shows one chosen object — the **system** — with every force acting on it drawn as an arrow, and nothing else in the picture. Three rules do most of the work:
+
+- **Only forces on the system.** A force the system exerts on something else belongs on *that* thing's diagram.
+- **Only forces acting now.** The shove that started an object moving is not on the diagram once your hand is gone.
+- **Only forces.** Velocity is not a force. Acceleration is not a force. The quantity $m\vec{a}$ is not a force — it is what the forces add up to.
+
+Try each of these on Newt. Choose the forces you think belong, look at the diagram you just described, then check it.
+
+<InteractiveAnchor id="free-body-builder" />
+
+<FreeBodyDiagramBuilder client:visible />
+
+The resting case is worth dwelling on. Newt pushes down on the table and the table pushes up on Newt, and those two forces are a third-law pair — equal, opposite, and *never on the same diagram*. What balances Newt's weight is the normal force, which is a different force with a different partner. If third-law pairs did cancel on one diagram, nothing could ever accelerate.
+
+## Friction
+
+The sliding scenario above leaned on friction without pinning it down. It is the one everyday contact force the previous page left out, because it is awkward to discuss before you can draw a diagram: **friction** acts *along* a surface rather than perpendicular to it, and its size depends on how hard the surfaces are pressed together — which is to say, on the normal force.
+
+It comes in two regimes. While the surfaces are not sliding, **static friction** takes whatever value it needs to prevent sliding, up to a ceiling:
+
+$$
+f_s \le \mu_s N.
+$$
+
+Push past that ceiling and the surfaces slip. **Kinetic friction** then takes a roughly fixed value opposing the sliding:
+
+$$
+f_k = \mu_k N.
+$$
+
+The **coefficients of friction** $\mu_s$ and $\mu_k$ describe the pair of surfaces in contact, not either surface alone. Usually $\mu_k$ is a little smaller than $\mu_s$, which is why a stuck drawer lurches once it finally breaks free.
+
+On level ground the vertical forces balance, so the horizontal axis carries the whole story.
+
+<InteractiveAnchor id="friction-net-force-newt" />
+
+<FrictionForceNewt client:visible />
+
+Hold a gentle push and nothing moves: static friction takes exactly the value that cancels it. In the sum underneath, the four arrows close into a loop with nothing left over. Static friction is not a fixed number — it is whatever it needs to be, up to its limit, which is why Newt holds still across a whole range of pushes rather than at one magic value.
+
+Raise the push past that limit and the loop breaks open. The gap between where the chain starts and where it ends *is* the net force; there is no separate arrow that appears out of nowhere, just the leftover of four arrows laid end to end. Let go and the push disappears, leaving friction as the only unbalanced force, which is what brings Newt back to rest.
+
+## Tilted Axes
+
+Once the diagram is drawn, Newton's second law splits into one equation per axis:
+
+$$
+\sum F_x = ma_x,
+\qquad
+\sum F_y = ma_y.
+$$
+
+You get to choose those axes, and choosing well is most of the work. On a ramp, the acceleration points along the slope, so tilt the axes to match: one along the surface, one perpendicular to it. Then the normal force lies entirely on one axis, friction lies entirely on the other, and only the weight has to be broken into components:
+
+$$
+F_{g,\parallel} = mg\sin\theta,
+\qquad
+F_{g,\perp} = mg\cos\theta.
+$$
+
+<InteractiveAnchor id="incline-free-body" />
+
+<InclineFreeBody client:visible />
+
+Perpendicular to the surface, Newt does not accelerate, so those forces balance:
+
+$$
+N = mg\cos\theta.
+$$
+
+This is the payoff from the previous page's warning that $N$ is not always $mg$. On a ramp the surface only has to support the perpendicular part of the weight, so the steeper the ramp, the smaller the normal force — and, since friction is capped at $\mu_s N$, the less friction the surface can supply.
+
+Along the surface, the second law gives
+
+$$
+mg\sin\theta - f = ma.
+$$
+
+<DerivationPanel title="Why sliding starts at the angle where tanθ equals μs" accent="blue">
+  Static friction can supply anything up to $f_{\text{max}} = \mu_s N$. Newt stays put as long as the down-slope pull does not exceed that ceiling:
+
+  $$
+  mg\sin\theta \le \mu_s N = \mu_s mg\cos\theta.
+  $$
+
+  The mass and $g$ appear on both sides, so both cancel:
+
+  $$
+  \sin\theta \le \mu_s\cos\theta
+  \quad\Longrightarrow\quad
+  \tan\theta \le \mu_s.
+  $$
+
+  Sliding begins at $\theta = \arctan\mu_s$, the **slip angle**. Notice what is missing: the mass. A heavy frog and a light frog slip at exactly the same angle, because a heavier frog presses harder and gets proportionally more friction in return. Tilting a board until an object slides is a genuine way to measure $\mu_s$.
+</DerivationPanel>
+
+<ProblemSolvingSection intro="Each of these is the same three steps: choose the system, draw its forces, then write the second law along each axis.">
+  <WorkedExampleCard title="Apparent Weight in an Elevator" accent="blue">
+    #### Problem
+
+    A $60\ \text{kg}$ passenger stands on a scale in an elevator accelerating upward at $2.0\ \text{m/s}^2$. What does the scale read? Use $g = 9.8\ \text{m/s}^2$.
+
+    #### Use
+
+    The system is the passenger. Two forces act on them: the weight $mg$ down and the normal force $N$ from the scale up. Taking up as positive,
+
+    $$
+    \sum F_y = N - mg = ma_y.
+    $$
+
+    #### Solve
+
+    Solving for the normal force,
+
+    $$
+    N = m(g + a_y) = (60)(9.8 + 2.0) = 708\ \text{N}.
+    $$
+
+    The scale reads the normal force it supplies, so it reads $708\ \text{N}$.
+
+    #### Check
+
+    Larger than the $588\ \text{N}$ weight, as it must be: the net force has to point up to accelerate the passenger up.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Will the Crate Slide?" accent="red">
+    #### Problem
+
+    A crate sits on a ramp inclined at $25^\circ$, with $\mu_s = 0.60$ and $\mu_k = 0.45$. Does it slide, and if so, what is its acceleration?
+
+    #### Use
+
+    Tilt the axes to the slope. Perpendicular, the crate does not accelerate, so $N = mg\cos\theta$. Sliding starts when
+
+    $$
+    \tan\theta > \mu_s.
+    $$
+
+    #### Solve
+
+    Compare the two numbers:
+
+    $$
+    \tan 25^\circ = 0.47 < 0.60 = \mu_s.
+    $$
+
+    The crate does not slide. Static friction supplies exactly $mg\sin 25^\circ$ up the slope, the net force is zero, and $a = 0$. The value of $\mu_k$ never enters.
+
+    #### Check
+
+    The slip angle is $\arctan 0.60 = 31^\circ$, and $25^\circ$ is below it — consistent with the crate holding.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Two Blocks and One Rope" accent="blue">
+    #### Problem
+
+    A $3.0\ \text{kg}$ block on a frictionless table is connected by a light rope over a pulley to a $2.0\ \text{kg}$ block hanging off the edge. Find the acceleration and the rope tension.
+
+    #### Use
+
+    Draw *two* diagrams. The table block feels tension $T$ forward; the hanging block feels its weight $m_2g$ down and tension $T$ up. The rope links them, so both share one acceleration magnitude $a$:
+
+    $$
+    T = m_1a,
+    \qquad
+    m_2g - T = m_2a.
+    $$
+
+    #### Solve
+
+    Adding the two equations eliminates $T$:
+
+    $$
+    m_2g = (m_1 + m_2)a
+    \quad\Longrightarrow\quad
+    a = \frac{(2.0)(9.8)}{5.0} = 3.9\ \text{m/s}^2.
+    $$
+
+    Then $T = m_1a = (3.0)(3.9) = 11.8\ \text{N}$.
+
+    #### Check
+
+    The tension is less than the hanging block's $19.6\ \text{N}$ weight, which it must be — otherwise that block could not accelerate downward.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Free-Body Diagrams Checkpoint"
+  questions={[
+    {
+      id: 'fbd-sliding-forward',
+      question: 'A book slides to the right across a rough table after you let go. Which forces belong on its free-body diagram?',
+      options: [
+        { id: 'A', text: 'Weight, normal force, and friction pointing left.', isCorrect: true, explanation: 'Right. Gravity and the table still act, and friction opposes the sliding. Nothing pushes the book forward once your hand is gone.' },
+        { id: 'B', text: 'Weight, normal force, friction, and a forward force of motion.', isCorrect: false, explanation: 'Motion needs no force to continue. The first law says the book coasts on its own, and the only horizontal force is friction.' },
+        { id: 'C', text: 'Only friction, since the vertical forces cancel.', isCorrect: false, explanation: 'Balanced forces still belong on the diagram. Leaving them out hides why the normal force — and therefore the friction — has the size it does.' }
+      ]
+    },
+    {
+      id: 'fbd-third-law-pair',
+      question: 'A mug rests on a table. Why is the normal force on the mug not the third-law partner of its weight?',
+      options: [
+        { id: 'A', text: 'Because they have different magnitudes.', isCorrect: false, explanation: 'They happen to be equal here, but that is a consequence of zero acceleration, not of the third law. Tilt the table and the equality breaks.' },
+        { id: 'B', text: 'Because both act on the mug, and partners act on different objects.', isCorrect: true, explanation: 'Exactly. The weight is paired with the pull of the mug on Earth; the normal force is paired with the push of the mug on the table.' },
+        { id: 'C', text: 'Because the normal force is a contact force and gravity is not.', isCorrect: false, explanation: 'True but irrelevant. Third-law pairs are always the same kind of interaction; what identifies them is which objects they act on.' }
+      ]
+    },
+    {
+      id: 'fbd-incline-normal',
+      question: 'A block sits on a ramp at angle $\\theta$. How does the normal force compare with $mg$?',
+      options: [
+        { id: 'A', text: 'It equals $mg$, since the block is not accelerating.', isCorrect: false, explanation: 'The block is not accelerating perpendicular to the ramp, so $N$ balances only the perpendicular part of the weight, not all of it.' },
+        { id: 'B', text: 'It equals $mg\\sin\\theta$.', isCorrect: false, explanation: 'That is the component along the slope, the one that tries to slide the block. The perpendicular component uses cosine.' },
+        { id: 'C', text: 'It equals $mg\\cos\\theta$, so it shrinks as the ramp steepens.', isCorrect: true, explanation: 'Right. The surface only supports the perpendicular part of the weight, which is also why the friction ceiling $\\mu_s N$ drops on a steeper ramp.' }
+      ]
+    },
+    {
+      id: 'fbd-slip-angle',
+      question: 'Two crates, one twice as heavy as the other, sit on the same ramp. The ramp is slowly tilted. Which slides first?',
+      options: [
+        { id: 'A', text: 'The heavier one, because gravity pulls it harder.', isCorrect: false, explanation: 'Gravity does pull harder, but the crate also presses harder, so the friction available grows by the same factor.' },
+        { id: 'B', text: 'The lighter one, because there is less friction holding it.', isCorrect: false, explanation: 'There is less friction, but there is also less weight to hold. The two effects scale together.' },
+        { id: 'C', text: 'Neither — they slip at the same angle.', isCorrect: true, explanation: 'Correct. Mass cancels out of $\\tan\\theta \\le \\mu_s$, so the slip angle depends only on the surfaces.' }
+      ]
+    },
+    {
+      id: 'fbd-ma-not-a-force',
+      question: 'Why does $m\\vec{a}$ never appear as an arrow on a free-body diagram?',
+      options: [
+        { id: 'A', text: 'Because it is the result the forces produce, not one of the forces.', isCorrect: true, explanation: 'Exactly. It lives on the right-hand side of $\\sum \\vec{F} = m\\vec{a}$. Drawing it as an arrow would count the same physics twice.' },
+        { id: 'B', text: 'Because it points in the same direction as the net force anyway.', isCorrect: false, explanation: 'It does point that way, but that is why drawing it is redundant, not why it is wrong to call it a force.' },
+        { id: 'C', text: 'Because it is only nonzero when the object accelerates.', isCorrect: false, explanation: 'Applied forces also come and go. What disqualifies $m\\vec{a}$ is that nothing exerts it.' }
+      ]
+    }
+  ]}
+/>

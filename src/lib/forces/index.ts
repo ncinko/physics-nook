@@ -23,6 +23,17 @@ export {
   type Vector2,
 } from '../math/vectors.ts';
 
+export { solveIncline, type InclineInput, type InclineSolution } from './incline.ts';
+
+export {
+  evaluateFreeBodySelection,
+  freeBodyScenarios,
+  type ForceKind,
+  type FreeBodyCandidate,
+  type FreeBodyEvaluation,
+  type FreeBodyScenario,
+} from './freeBody.ts';
+
 export interface BodyState {
   position: Vector2;
   velocity: Vector2;

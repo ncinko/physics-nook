@@ -38,6 +38,11 @@ import {
   randomCarrot,
   stepBunny,
 } from '../../src/lib/math/bunnyField.ts';
+import {
+  fitPolynomial,
+  predictPolynomial,
+  type FitPoint,
+} from '../../src/lib/math/leastSquares.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -195,3 +200,203 @@ for (let i = 0; i < cellCount() - 1; i += 1) {
 }
 
 console.log('Bunny field tests passed.');
+
+// --- Weighted polynomial least squares -------------------------------------
+
+const linePoints = (
+  count: number,
+  first: number,
+  step: number,
+  intercept: number,
+  slope: number,
+  sigma?: number,
+): FitPoint[] =>
+  Array.from({ length: count }, (_, i) => {
+    const x = first + i * step;
+    return { x, y: intercept + slope * x, sigma };
+  });
+
+const expectFit = (result: ReturnType<typeof fitPolynomial>) => {
+  assert.equal(result.ok, true, 'expected the fit to succeed');
+  if (!result.ok) throw new Error('unreachable');
+  return result.fit;
+};
+
+// An exact line is recovered exactly, explains all the variance, and leaves no
+// residual behind.
+const exactLine = expectFit(fitPolynomial(linePoints(6, 0, 1, 3, -2), 1));
+near(exactLine.coefficients[0], 3);
+near(exactLine.coefficients[1], -2);
+near(exactLine.rSquared, 1, 1e-12);
+exactLine.residuals.forEach((residual) => near(residual, 0, 1e-12));
+assert.equal(exactLine.degreesOfFreedom, 4);
+assert.equal(exactLine.weighted, false);
+
+// The same line moved out to x ~ 1000. Recovering the intercept means undoing a
+// cancellation of about 2000, which is exactly what fitting in centered
+// coordinates protects. An uncentered normal-equation solve loses this.
+const farLine = expectFit(fitPolynomial(linePoints(6, 1000, 1, 3, -2), 1));
+near(farLine.coefficients[0], 3, 1e-9);
+near(farLine.coefficients[1], -2, 1e-9);
+
+// An exact parabola, near the origin and then pushed out to x ~ 100.
+const quadraticAt = (first: number, sigma?: number): FitPoint[] =>
+  Array.from({ length: 6 }, (_, i) => {
+    const x = first + i;
+    return { x, y: 1 + 2 * x + 3 * x * x, sigma };
+  });
+const exactQuadratic = expectFit(fitPolynomial(quadraticAt(0), 2));
+near(exactQuadratic.coefficients[0], 1);
+near(exactQuadratic.coefficients[1], 2);
+near(exactQuadratic.coefficients[2], 3);
+const farQuadratic = expectFit(fitPolynomial(quadraticAt(100), 2));
+near(farQuadratic.coefficients[0], 1, 1e-6);
+near(farQuadratic.coefficients[1], 2, 1e-6);
+near(farQuadratic.coefficients[2], 3, 1e-9);
+
+// Doubling every error bar doubles every parameter uncertainty, and leaves the
+// best-fit coefficients untouched.
+const tightFit = expectFit(fitPolynomial(linePoints(8, 0, 0.5, 1, 4, 0.02), 1));
+const looseFit = expectFit(fitPolynomial(linePoints(8, 0, 0.5, 1, 4, 0.04), 1));
+tightFit.uncertainties.forEach((value, k) => {
+  near(looseFit.uncertainties[k] / value, 2, 1e-12);
+});
+near(looseFit.coefficients[1], tightFit.coefficients[1], 1e-12);
+assert.equal(tightFit.weighted, true);
+
+// Closed form for the slope uncertainty of an evenly spaced line fit:
+// sigma * sqrt(12 / (h^2 * n * (n^2 - 1))).
+{
+  const n = 7;
+  const h = 0.5;
+  const sigma = 0.02;
+  const fit = expectFit(fitPolynomial(linePoints(n, 0, h, 1, 4, sigma), 1));
+  near(fit.uncertainties[1], sigma * Math.sqrt(12 / (h * h * n * (n * n - 1))), 1e-9);
+}
+
+// Closed form for the intercept uncertainty, sigma * sqrt(1/n + xbar^2 / Sxx),
+// measured far from the origin. This is the assertion that fails if the
+// covariance is not carried back through the centering transform: it would
+// otherwise report sqrt(1/n) = 0.316 instead of ~11.5.
+{
+  const n = 10;
+  const sigma = 1;
+  const fit = expectFit(fitPolynomial(linePoints(n, 100, 1, 0, 2, sigma), 1));
+  const mean = 104.5;
+  const sumSquares = (n * (n * n - 1)) / 12;
+  near(fit.uncertainties[0], sigma * Math.sqrt(1 / n + (mean * mean) / sumSquares), 1e-9);
+  assert.ok(fit.uncertainties[0] > 10, 'intercept far from the data is poorly constrained');
+}
+
+// The scatter-based uncertainties describe the data's own wobble, so they do
+// not move when the claimed error bars are rescaled.
+{
+  const wobble = [0.03, -0.05, 0.02, 0.04, -0.06, 0.01, -0.02, 0.05];
+  const scattered = (sigma: number): FitPoint[] =>
+    wobble.map((offset, i) => ({ x: i, y: 1 + 4 * i + offset, sigma }));
+  const claimedTight = expectFit(fitPolynomial(scattered(0.01), 1));
+  const claimedLoose = expectFit(fitPolynomial(scattered(1), 1));
+  claimedTight.scatterUncertainties.forEach((value, k) => {
+    near(claimedLoose.scatterUncertainties[k], value, 1e-12);
+  });
+  // The claimed bars were far too tight, so chi-square per degree of freedom is
+  // large — the honesty check works.
+  assert.ok(claimedTight.reducedChiSquare > 1, 'over-tight error bars inflate chi-square');
+  assert.ok(claimedLoose.reducedChiSquare < 1, 'over-loose error bars deflate chi-square');
+  assert.ok(claimedTight.rSquared > 0 && claimedTight.rSquared <= 1);
+}
+
+// An exactly determined fit is still a fit. With no degrees of freedom there is
+// nothing to estimate the scatter from, so those figures are NaN rather than a
+// misleading zero.
+{
+  const fit = expectFit(
+    fitPolynomial(
+      [
+        { x: 0, y: 1, sigma: 0.1 },
+        { x: 1, y: 6, sigma: 0.1 },
+        { x: 2, y: 17, sigma: 0.1 },
+      ],
+      2,
+    ),
+  );
+  assert.equal(fit.degreesOfFreedom, 0);
+  assert.ok(Number.isNaN(fit.reducedChiSquare));
+  assert.ok(fit.scatterUncertainties.every((value) => Number.isNaN(value)));
+  assert.ok(fit.uncertainties.every((value) => Number.isFinite(value)));
+}
+
+// Degenerate and under-determined inputs are reported, never guessed at.
+assert.deepEqual(
+  fitPolynomial(
+    [
+      { x: 5, y: 1 },
+      { x: 5, y: 2 },
+      { x: 5, y: 3 },
+    ],
+    1,
+  ),
+  { ok: false, reason: 'degenerate' },
+);
+assert.deepEqual(
+  fitPolynomial(
+    [
+      { x: 0, y: 1 },
+      { x: 0, y: 2 },
+      { x: 1, y: 3 },
+      { x: 1, y: 4 },
+    ],
+    2,
+  ),
+  { ok: false, reason: 'degenerate' },
+);
+assert.deepEqual(fitPolynomial([{ x: 0, y: 1 }], 1), { ok: false, reason: 'too-few-points' });
+
+// Weights actually bite: a wild outlier with a huge error bar stops dragging
+// the line around.
+{
+  const raw: FitPoint[] = [
+    { x: 0, y: 0 },
+    { x: 1, y: 1 },
+    { x: 2, y: 2 },
+    { x: 2, y: 10 },
+  ];
+  const unweighted = expectFit(fitPolynomial(raw, 1));
+  const sigmas = [1, 1, 1, 100];
+  const weighted = expectFit(fitPolynomial(raw.map((p, i) => ({ ...p, sigma: sigmas[i] })), 1));
+  assert.ok(unweighted.coefficients[1] > 3, 'the outlier drags an unweighted line upward');
+  near(weighted.coefficients[1], 1, 0.01);
+  assert.ok(weighted.coefficients[1] < unweighted.coefficients[1]);
+}
+
+// A flat data set has no variance to explain; the fit lands on it, so R-squared
+// is 1 rather than NaN.
+{
+  const flat = expectFit(
+    fitPolynomial(
+      [
+        { x: 0, y: 7 },
+        { x: 1, y: 7 },
+        { x: 2, y: 7 },
+      ],
+      1,
+    ),
+  );
+  near(flat.rSquared, 1, 1e-12);
+  near(flat.coefficients[1], 0, 1e-12);
+}
+
+// Residuals are defined against the returned coefficients, so the residual
+// strip can never drift away from the drawn fit curve.
+{
+  const noisy: FitPoint[] = [0, 1, 2, 3, 4, 5].map((x) => ({
+    x,
+    y: 2 + 3 * x - 0.5 * x * x + (x % 2 === 0 ? 0.1 : -0.1),
+  }));
+  const fit = expectFit(fitPolynomial(noisy, 2));
+  noisy.forEach((point, i) => {
+    assert.equal(fit.residuals[i], point.y - predictPolynomial(fit.coefficients, point.x));
+  });
+}
+
+console.log('Least squares tests passed.');

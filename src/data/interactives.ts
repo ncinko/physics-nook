@@ -187,6 +187,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'motion', 'position'],
   },
   {
+    id: 'video-analysis-lab',
+    title: 'Video Analysis Lab',
+    description:
+      'Extract position and time data from your own video, then plot and fit it to measure velocity and acceleration.',
+    href: '/kinematics/video-analysis#video-analysis-lab',
+    module: 'Mechanics',
+    kind: 'standalone',
+    tags: ['kinematics', 'video analysis', 'data', 'lab', 'measurement'],
+  },
+  {
     id: 'velocity-explorer',
     title: 'Velocity Explorer',
     description: 'Connect position, velocity, and acceleration with graph-driven one-dimensional motion.',

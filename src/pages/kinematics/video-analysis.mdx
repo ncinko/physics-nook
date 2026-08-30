@@ -1,0 +1,54 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Video Analysis
+description: Measure real motion from a phone video — mark the object frame by frame, set a scale, and fit position, velocity, and acceleration data you can paste into a spreadsheet.
+canonicalPath: /kinematics/video-analysis
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import VideoAnalysisLab from '../../components/kinematics/VideoAnalysisLab';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/kinematics/video-analysis" />
+
+<div id="page-content"></div>
+
+# Video Analysis
+
+Every kinematics graph so far has come from an equation or simulation. To begin applying these concepts IRL, you can record a video and perform a simple analysis of motion.
+
+A video is a sequence of still frames taken at a known rate, so the frame number *is* a clock. Mark the same object on frame 0, frame 3, frame 6, and you have positions at known times.   The resulting table of $[x, t]$ values is exactly what we need to give a precise physical description.
+
+<InteractiveAnchor id="video-analysis-lab" />
+
+<SimulationBlock
+  width="full"
+  title="Video Analysis Lab"
+  description="Open a clip, set the scale, then click the moving object frame by frame. Nothing is uploaded — the video is read straight from your device."
+>
+  <VideoAnalysisLab client:only="react" />
+</SimulationBlock>
+
+## Filming something worth measuring
+
+A good clip is short and boring.
+
+- **Hold the camera still.** A tripod, a stack of books, or very steady hands. If the camera moves, the background moves, and the object's measured position inherits that motion.
+- **Film square-on.** Point the camera perpendicular to the plane of the motion. A ball thrown toward or away from the lens changes apparent size, and its measured position picks up an error that is difficult to remove.
+- **Put a ruler in the shot.** Something of known length, in the same plane as the motion.  This allows us to convert pixels to meters.
+- **Prefer a plain background.** You have to see the object clearly enough to click the *same part of it* each frame.
+
+## Analysis Steps
+
+1. **Scale.** Drag across your known length, then type that length in meters. Every position is derived from this conversion, so it is worth getting right.  You can always change it later and every point you have already marked will rescale.
+2. **Origin.** Click where $x = 0$, $y = 0$ should sit. Moving the origin shifts your positions and leaves the velocities alone, because a velocity is a *difference* of positions.
+3. **Axis tilt.** For a cart on a ramp, drag along the slope. The measured $x$ then runs along the incline and $y$ runs perpendicular to it, which is the coordinate choice that makes an inclined-plane problem easy.
+4. **Frame rate.** The analysis tool attempts to select the correct conversion between frame number and elapsed time.  If your camera says otherwise, type the real value.
+5. **Mark.** Click the object; the video advances by a selected number of frames and waits for the next click. Pick a feature you can find every time.  This could be the center of a ball or the front edge of a cart.
+
+Velocity values are **not** measured directly. The two components are computed from your marked positions by comparing each point to its neighbours, which is why the first and last points have no velocity listed: there is no neighbour on one side.
+
+
+**Copy for spreadsheet** puts the table on the clipboard tab-separated, which pastes into Google Sheets or Excel as proper columns. **Download CSV** saves the same table as a file. Either way you can take the data somewhere else and do your own fitting.

@@ -54,5 +54,20 @@ export const kinematicsModule: ModuleMeta = {
         image: '/social/physics-nook-card.svg',
       },
     },
+    {
+      id: 'kinematics-video-analysis',
+      href: '/kinematics/video-analysis',
+      title: 'Video Analysis',
+      shortTitle: 'Video Analysis',
+      description:
+        'Measure real motion from a phone video: mark the object frame by frame, set a scale, and fit the position data.',
+      seo: {
+        title: 'Video Analysis',
+        description:
+          'Measure real motion from a phone video. Mark the moving object frame by frame, set a distance scale and frame rate, plot position and velocity, and fit a quadratic to find the acceleration.',
+        canonicalPath: '/kinematics/video-analysis',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
   ],
 };

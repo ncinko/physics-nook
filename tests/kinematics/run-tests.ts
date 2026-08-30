@@ -68,6 +68,24 @@ import {
   selectBestGoalRushScoresByUniqueName,
   validateGoalRushScoreSubmission,
 } from '../../src/lib/kinematics/goalRush.ts';
+import {
+  deriveSeries,
+  estimateFrameRate,
+  frameFromCalibration,
+  frameIndexForTime,
+  kinematicsFromQuadratic,
+  niceTicks,
+  serializeTracks,
+  timeForFrameIndex,
+  toPhysical,
+  toPixel,
+  upsertPoint,
+  type Calibration,
+  type CoordinateFrame,
+  type TrackedPoint,
+} from '../../src/lib/kinematics/videoAnalysis.ts';
+import { fitPolynomial } from '../../src/lib/math/leastSquares.ts';
+import { formatMeasurement } from '../../src/lib/measurement/uncertainty.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -550,3 +568,353 @@ near(distanceStrips.total, SAMPLE_PATH_LENGTH, 0.05);
 assert.equal(distanceStrips.total > fineStrips.total, true);
 
 console.log('Kinematics helper tests passed.');
+
+// --- Video analysis ---------------------------------------------------------
+
+const videoCalibration = (overrides: Partial<Calibration> = {}): Calibration => ({
+  // A 300 px ruler declared to be 1.5 m long: 0.005 m per pixel.
+  scaleFrom: { px: 100, py: 400 },
+  scaleTo: { px: 400, py: 400 },
+  scaleLengthMeters: 1.5,
+  origin: { px: 100, py: 400 },
+  axisAngleDeg: 0,
+  positionUncertaintyPx: 2,
+  ...overrides,
+});
+
+const requireFrame = (calibration: Calibration): CoordinateFrame => {
+  const frame = frameFromCalibration(calibration);
+  if (!frame) throw new Error('calibration should produce a coordinate frame');
+  return frame;
+};
+
+near(requireFrame(videoCalibration()).metersPerPixel, 0.005);
+// A ruler with no length, or no declared length, is not a calibration.
+assert.equal(
+  frameFromCalibration(videoCalibration({ scaleTo: { px: 100, py: 400 } })),
+  null,
+);
+assert.equal(frameFromCalibration(videoCalibration({ scaleLengthMeters: 0 })), null);
+
+// Video y grows downward and physics y grows upward, so a point higher up the
+// frame is at positive y.
+{
+  const frame = requireFrame(videoCalibration());
+  const above = toPhysical(frame, { px: 100, py: 300 });
+  near(above.x, 0);
+  near(above.y, 0.5);
+  const atOrigin = toPhysical(frame, { px: 100, py: 400 });
+  near(atOrigin.x, 0);
+  near(atOrigin.y, 0);
+}
+
+// The pixel transform round-trips at every axis angle, and it is an isometry —
+// distances do not depend on how the axes are tilted, which is what justifies
+// drawing one isotropic error bar per point.
+for (const axisAngleDeg of [0, 30, -45, 90, 180]) {
+  const frame = requireFrame(videoCalibration({ axisAngleDeg }));
+  const samples = [
+    { px: 100, py: 400 },
+    { px: 250, py: 120 },
+    { px: 620, py: 455 },
+  ];
+  samples.forEach((pixel) => {
+    const round = toPixel(frame, toPhysical(frame, pixel));
+    near(round.px, pixel.px);
+    near(round.py, pixel.py);
+  });
+  const first = toPhysical(frame, samples[1]);
+  const second = toPhysical(frame, samples[2]);
+  near(
+    Math.hypot(first.x - second.x, first.y - second.y),
+    Math.hypot(samples[1].px - samples[2].px, samples[1].py - samples[2].py) * 0.005,
+  );
+}
+
+// Tilting the axes by 90 degrees points physical +x straight up the screen.
+{
+  const frame = requireFrame(videoCalibration({ axisAngleDeg: 90 }));
+  const above = toPhysical(frame, { px: 100, py: 300 });
+  near(above.x, 0.5);
+  near(above.y, 0);
+}
+
+// A point lying along a 30-degree incline has no perpendicular offset once the
+// axes are tilted to match the incline.
+{
+  const frame = requireFrame(videoCalibration({ axisAngleDeg: 30 }));
+  const alongSlope = toPhysical(frame, {
+    px: 100 + 200 * Math.cos(Math.PI / 6),
+    py: 400 - 200 * Math.sin(Math.PI / 6),
+  });
+  near(alongSlope.x, 200 * 0.005);
+  near(alongSlope.y, 0, 1e-12);
+}
+
+const videoPoints = (
+  frame: CoordinateFrame,
+  times: readonly number[],
+  motion: (t: number) => { x: number; y: number },
+): TrackedPoint[] =>
+  times.map((time, i) => ({
+    id: i,
+    time,
+    exactTime: true,
+    pixel: toPixel(frame, motion(time)),
+  }));
+
+// Three-point stencils are exact for a quadratic, so a synthetic
+// x(t) = 1 + 2t + 3t^2 must come back with velocity 2 + 6t and acceleration 6
+// at every interior sample.
+{
+  const frame = requireFrame(videoCalibration());
+  const times = Array.from({ length: 21 }, (_, i) => i / 30);
+  const motion = (t: number) => ({ x: 1 + 2 * t + 3 * t * t, y: 0 });
+  const samples = deriveSeries(videoPoints(frame, times, motion), frame, 2, 30);
+
+  assert.equal(samples.length, 21);
+  for (let i = 1; i < samples.length - 1; i += 1) {
+    near(samples[i].x, motion(times[i]).x, 1e-9);
+    near(samples[i].vx as number, 2 + 6 * times[i], 1e-9);
+    near(samples[i].ax as number, 6, 1e-8);
+    near(samples[i].vy as number, 0, 1e-9);
+  }
+
+  // Endpoints carry no derivative at all, rather than a noisy one-sided guess.
+  assert.equal(samples[0].vx, null);
+  assert.equal(samples[0].ax, null);
+  assert.equal(samples[0].sigmaVx, null);
+  assert.equal(samples[samples.length - 1].vx, null);
+  assert.equal(samples[samples.length - 1].ax, null);
+
+  // Uncertainty propagation through the uniform-spacing stencils.
+  const sigma = 2 * 0.005;
+  const h = 1 / 30;
+  near(samples[1].sigmaVx as number, (sigma * Math.SQRT2) / (2 * h), 1e-12);
+  near(samples[1].sigmaAx as number, (sigma * Math.sqrt(6)) / (h * h), 1e-9);
+  near(samples[1].sigmaX, sigma, 1e-15);
+  near(samples[1].sigmaY, sigma, 1e-15);
+
+  // Frame indices are derived, so they follow the frame rate rather than being
+  // baked in when the point was marked.
+  assert.equal(samples[7].frame, 7);
+  assert.equal(deriveSeries(videoPoints(frame, times, motion), frame, 2, 60)[7].frame, 14);
+}
+
+// Isotropy: the position uncertainty is the same on both axes at any tilt.
+for (const axisAngleDeg of [0, 17, -80, 135]) {
+  const frame = requireFrame(videoCalibration({ axisAngleDeg }));
+  const samples = deriveSeries(
+    videoPoints(frame, [0, 1 / 30, 2 / 30], (t) => ({ x: t, y: 2 * t })),
+    frame,
+    3,
+    30,
+  );
+  near(samples[1].sigmaX, 3 * 0.005, 1e-15);
+  near(samples[1].sigmaY, 3 * 0.005, 1e-15);
+}
+
+// Unevenly spaced samples are the normal case — a skipped frame, a seek that
+// lands early. The naive centred difference would report the derivative at the
+// midpoint of the outer pair (t = 0.2) instead of at the sample (t = 0.1).
+{
+  const frame = requireFrame(videoCalibration());
+  const motion = (t: number) => ({ x: 1 + 2 * t + 3 * t * t, y: 0 });
+  const samples = deriveSeries(videoPoints(frame, [0, 0.1, 0.4], motion), frame, 2, 30);
+  const naive = (motion(0.4).x - motion(0).x) / 0.4;
+  near(samples[1].vx as number, 2 + 6 * 0.1, 1e-9);
+  near(samples[1].ax as number, 6, 1e-9);
+  near(naive, 2 + 6 * 0.2, 1e-12);
+  assert.ok(
+    Math.abs((samples[1].vx as number) - naive) > 0.1,
+    'the non-uniform stencil must not collapse to the naive centred difference',
+  );
+}
+
+// Frame rate estimation from measured presentation times.
+{
+  const evenly = (fps: number, count = 10) =>
+    Array.from({ length: count }, (_, i) => i / fps);
+
+  const thirty = estimateFrameRate(evenly(30));
+  assert.equal(thirty?.fps, 30);
+  assert.equal(thirty?.snapped, true);
+  assert.equal(thirty?.sampleCount, 9);
+
+  // 59.94 and 60 are 0.1% apart and not separable from a short sample; the
+  // documented tie rule prefers the integer rate.
+  const broadcast = estimateFrameRate(evenly(59.94));
+  assert.equal(broadcast?.snapped, true);
+  assert.equal(broadcast?.fps, 60);
+  near(broadcast?.measuredFps as number, 59.94, 1e-9);
+
+  // One dropped frame doubles a single gap; the median shrugs it off.
+  const dropped = estimateFrameRate([0, 1 / 30, 2 / 30, 4 / 30, 5 / 30, 6 / 30]);
+  assert.equal(dropped?.fps, 30);
+
+  assert.equal(estimateFrameRate([]), null);
+  assert.equal(estimateFrameRate([0.5]), null);
+  // Duplicate and out-of-order timestamps are filtered rather than trusted.
+  assert.equal(estimateFrameRate([1 / 30, 0, 0, 1 / 30])?.fps, 30);
+
+  // A rate that is not standard is reported honestly instead of forced onto the
+  // nearest familiar number.
+  const odd = estimateFrameRate(evenly(17.3));
+  assert.equal(odd?.snapped, false);
+  near(odd?.fps as number, 17.3, 1e-9);
+}
+
+assert.equal(frameIndexForTime(0.0333, 30), 1);
+assert.equal(frameIndexForTime(0, 30), 0);
+near(timeForFrameIndex(1, 30), 1 / 30);
+
+// The round trip the frame stepper stands on: a frame's own start time must
+// always map back to that frame. Handing this function a mid-frame seek target
+// instead rounds up, which makes every step advance two frames.
+for (const fps of [24, 25, 29.97, 30, 59.94, 60, 120]) {
+  for (let k = 0; k < 400; k += 7) {
+    assert.equal(
+      frameIndexForTime(timeForFrameIndex(k, fps), fps),
+      k,
+      `frame ${k} at ${fps} fps should round-trip`,
+    );
+  }
+  // Documenting the trap rather than tolerating it: the midpoint does not.
+  assert.equal(frameIndexForTime((3 + 0.5) / fps, fps), 4);
+}
+
+// Marking a frame twice replaces the earlier point instead of stacking a
+// duplicate, and the list stays sorted by time.
+{
+  const first: TrackedPoint = { id: 1, time: 0, exactTime: true, pixel: { px: 10, py: 10 } };
+  const second: TrackedPoint = { id: 2, time: 2 / 30, exactTime: true, pixel: { px: 20, py: 20 } };
+  const remark: TrackedPoint = { id: 3, time: 2 / 30, exactTime: true, pixel: { px: 99, py: 99 } };
+  const middle: TrackedPoint = { id: 4, time: 1 / 30, exactTime: true, pixel: { px: 15, py: 15 } };
+
+  let points = upsertPoint(upsertPoint([], first, 30), second, 30);
+  assert.equal(points.length, 2);
+  points = upsertPoint(points, remark, 30);
+  assert.equal(points.length, 2);
+  assert.equal(points[1].pixel.px, 99);
+  points = upsertPoint(points, middle, 30);
+  assert.deepEqual(
+    points.map((point) => point.id),
+    [1, 4, 3],
+  );
+}
+
+// Serialisation.
+{
+  const frame = requireFrame(videoCalibration());
+  const ball = deriveSeries(
+    videoPoints(frame, [0, 1 / 30, 2 / 30, 3 / 30], (t) => ({ x: t, y: 1 - 4.9 * t * t })),
+    frame,
+    2,
+    30,
+  );
+
+  const tsv = serializeTracks([{ label: 'Ball', samples: ball }], {
+    delimiter: '\t',
+    columns: ['frame', 'time', 'x', 'y', 'vx'],
+    layout: 'wide',
+  });
+  const lines = tsv.split('\n');
+  assert.equal(lines.length, 5, 'header plus one row per point');
+  assert.equal(tsv.endsWith('\n'), false, 'no trailing newline to paste as a blank row');
+  // A single track needs no label prefix on its columns.
+  assert.deepEqual(lines[0].split('\t'), ['frame', 't (s)', 'x (m)', 'y (m)', 'vx (m/s)']);
+  assert.equal(lines[1].split('\t')[0], '0');
+  // The endpoint velocity is blank, not a zero that would read as a measurement.
+  assert.equal(lines[1].split('\t')[4], '');
+  assert.equal(lines[4].split('\t')[4], '');
+  assert.ok(lines[2].split('\t')[4].length > 0, 'interior rows do carry a velocity');
+
+  // Two tracks marked on overlapping but different frames align on the shared
+  // frame column, with blanks where a track has no point.
+  const cart = deriveSeries(
+    videoPoints(frame, [2 / 30, 3 / 30, 4 / 30], (t) => ({ x: 2 * t, y: 0 })),
+    frame,
+    2,
+    30,
+  );
+  const wide = serializeTracks(
+    [
+      { label: 'Ball', samples: ball },
+      { label: 'Cart', samples: cart },
+    ],
+    { delimiter: '\t', columns: ['frame', 'time', 'x'], layout: 'wide' },
+  );
+  const wideLines = wide.split('\n');
+  assert.equal(wideLines.length, 6, 'five distinct frames plus the header');
+  assert.deepEqual(wideLines[0].split('\t'), [
+    'frame',
+    'Ball: t (s)',
+    'Ball: x (m)',
+    'Cart: t (s)',
+    'Cart: x (m)',
+  ]);
+  // Frame 0 has a ball reading and no cart reading; frame 4 is the other way up.
+  assert.equal(wideLines[1].split('\t')[3], '');
+  assert.equal(wideLines[5].split('\t')[1], '');
+  assert.ok(wideLines[5].split('\t')[3].length > 0);
+
+  // Student-typed labels are data, and they end up in the output. CSV quotes
+  // them properly; TSV, which has no quoting mechanism, neutralises separators.
+  const awkward = [{ label: 'Ball, "red"\ttwo', samples: ball.slice(0, 2) }];
+  const csv = serializeTracks(awkward, {
+    delimiter: ',',
+    columns: ['time', 'x'],
+    layout: 'long',
+  });
+  assert.equal(csv.split('\n')[1].startsWith('"Ball, ""red""\ttwo",'), true);
+  const tabbed = serializeTracks(awkward, {
+    delimiter: '\t',
+    columns: ['time', 'x'],
+    layout: 'long',
+  });
+  assert.equal(tabbed.split('\n')[1].split('\t')[0], 'Ball, "red" two');
+  assert.deepEqual(tabbed.split('\n')[0].split('\t'), ['track', 't (s)', 'x (m)']);
+}
+
+// Reading a quadratic position fit as physics: the acceleration is twice the
+// leading coefficient, and so is its uncertainty.
+{
+  const times = Array.from({ length: 12 }, (_, i) => i / 30);
+  const drop = times.map((t) => ({ x: t, y: 1.2 + 0.4 * t - 4.9 * t * t, sigma: 0.01 }));
+  const result = fitPolynomial(drop, 2);
+  assert.equal(result.ok, true);
+  if (!result.ok) throw new Error('unreachable');
+  const motion = kinematicsFromQuadratic(result.fit);
+  near(motion.acceleration.value, -9.8, 1e-6);
+  near(motion.initialVelocity.value, 0.4, 1e-6);
+  near(motion.initialPosition.value, 1.2, 1e-6);
+  near(motion.acceleration.uncertainty, 2 * result.fit.uncertainties[2], 1e-15);
+  assert.ok(motion.acceleration.uncertainty > 0);
+  assert.equal(typeof formatMeasurement(motion.acceleration), 'string');
+}
+
+// Axis ticks land on a 1 / 2 / 5 ladder inside the requested range, and a
+// degenerate range still produces an axis instead of dividing by zero.
+{
+  const mantissaOf = (step: number) => step / 10 ** Math.floor(Math.log10(step));
+  for (const [min, max] of [
+    [0, 1],
+    [-0.35, 0.35],
+    [0, 9800],
+    [1.4, 1.9],
+  ]) {
+    const ticks = niceTicks(min, max);
+    assert.ok(ticks.length >= 3 && ticks.length <= 12, `tick count for ${min}..${max}`);
+    ticks.forEach((tick) => assert.ok(tick >= min - 1e-9 && tick <= max + 1e-9));
+    const mantissa = mantissaOf(ticks[1] - ticks[0]);
+    assert.ok(
+      [1, 2, 5].some((allowed) => Math.abs(mantissa - allowed) < 1e-6),
+      `step mantissa ${mantissa} should be 1, 2, or 5`,
+    );
+  }
+  assert.ok(niceTicks(4, 4).length > 0);
+  assert.ok(niceTicks(0, 0).length > 0);
+  assert.deepEqual(niceTicks(Number.NaN, 1), []);
+}
+
+console.log('Video analysis tests passed.');

@@ -30,6 +30,10 @@ interface ModeControlsProps {
   onDetectFrameRate: () => void;
   followEnabled: boolean;
   onFollowChange: (value: boolean) => void;
+  stepSize: number;
+  onStepSizeChange: (value: number) => void;
+  onUndoPoint: () => void;
+  canUndo: boolean;
   tracks: Track[];
   activeTrackId: number;
   onActiveTrackChange: (id: number) => void;
@@ -76,6 +80,10 @@ export function ModeControls({
   onDetectFrameRate,
   followEnabled,
   onFollowChange,
+  stepSize,
+  onStepSizeChange,
+  onUndoPoint,
+  canUndo,
   tracks,
   activeTrackId,
   onActiveTrackChange,
@@ -137,6 +145,20 @@ export function ModeControls({
                 disabled={tracks.length <= 1}
               >
                 Remove object
+              </Button>
+            </ControlBar>
+            <ControlBar align="start">
+              <Slider
+                label="Advance by"
+                unit="frames"
+                min={1}
+                max={10}
+                step={1}
+                value={stepSize}
+                onChange={onStepSizeChange}
+              />
+              <Button variant="secondary" type="button" onClick={onUndoPoint} disabled={!canUndo}>
+                Undo point
               </Button>
             </ControlBar>
             <ControlBar align="start">

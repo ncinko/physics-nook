@@ -6,19 +6,16 @@ import {
   kinematicsFromQuadratic,
   type QuantityKey,
 } from '../../../lib/kinematics/videoAnalysis';
-import {
-  agreesWithin,
-  discrepancy,
-  formatMeasurement,
-  type Measurement,
-} from '../../../lib/measurement/uncertainty';
+import { formatMeasurement, type Measurement } from '../../../lib/measurement/uncertainty';
 import type { FitResult } from '../../../lib/math/leastSquares';
 
 /**
- * Reads a fit back as physics rather than as three anonymous coefficients. The
- * payoff line is the acceleration: for a quadratic position fit it is twice the
- * leading coefficient, and comparing it to -9.81 m/s^2 with the fit's own
- * uncertainty is the whole point of dropping a ball in front of a camera.
+ * Reads a fit back as physics rather than as anonymous coefficients: a line
+ * through a velocity-time graph has an acceleration for a slope, and a parabola
+ * through a position-time graph has half of one for its leading coefficient.
+ *
+ * What the reading is *compared* to is left to the student. Naming an expected
+ * answer here would turn a measurement into a box to tick.
  */
 
 interface FitPanelProps {
@@ -28,8 +25,6 @@ interface FitPanelProps {
   yQuantity: QuantityKey;
   seriesLabel: string;
 }
-
-const GRAVITY = -9.81;
 
 /**
  * `formatMeasurement` rounds the uncertainty to one significant figure and then
@@ -69,7 +64,6 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
   const { fit } = result;
   const goodness = (
     <>
-      <Readout.Value label="R²" value={fixed(fit.rSquared, 4)} />
       <Readout.Value
         label="χ² per d.o.f."
         value={Number.isFinite(fit.reducedChiSquare) ? fixed(fit.reducedChiSquare, 2) : '—'}
@@ -107,7 +101,6 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
           )}
           <Readout.Group label="Goodness of fit">{goodness}</Readout.Group>
         </Readout>
-        {readsAsAcceleration && <GravityVerdict acceleration={slope} />}
         <FitNotes fit={fit} />
       </div>
     );
@@ -156,32 +149,8 @@ export function FitPanel({ result, model, xQuantity, yQuantity, seriesLabel }: F
         <Readout.Group label="Goodness of fit">{goodness}</Readout.Group>
       </Readout>
 
-      {readsAsMotion && <GravityVerdict acceleration={motion.acceleration} />}
       <FitNotes fit={fit} />
     </div>
-  );
-}
-
-/**
- * Whether a measured acceleration is consistent with free fall, stated in units
- * of the measurement's own uncertainty. This is the payoff of dropping
- * something in front of a camera, so it gets its own line and its own colour.
- */
-function GravityVerdict({ acceleration }: { acceleration: Measurement }) {
-  if (!(acceleration.uncertainty > 0) || !Number.isFinite(acceleration.value)) return null;
-  const sigma = discrepancy(acceleration, GRAVITY);
-  const agrees = agreesWithin(acceleration, GRAVITY);
-  return (
-    <p
-      className="m-0 text-sm font-medium"
-      style={{ color: agrees ? 'var(--accent-green)' : 'var(--accent-red)' }}
-    >
-      {agrees
-        ? `Agrees with free fall (−9.81 m/s²) — ${fixed(sigma, 1)} of its own uncertainty away.`
-        : `Differs from free fall (−9.81 m/s²) by ${
-            Number.isFinite(sigma) ? fixed(sigma, 1) : '∞'
-          }× its own uncertainty.`}
-    </p>
   );
 }
 

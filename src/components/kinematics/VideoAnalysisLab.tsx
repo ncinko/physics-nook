@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { Button, ControlBar, Select, Slider, Toggle } from '../shared/InlineControls';
+import { Button, ControlBar, Select, Toggle } from '../shared/InlineControls';
 import { Readout } from '../shared/Readout';
 import { fixed } from '../../utils/format';
 import { fitPolynomial, predictPolynomial, type FitPoint } from '../../lib/math/leastSquares';
@@ -34,7 +34,7 @@ import { trackColor, trackShape } from './videoAnalysis/trackColors';
 /**
  * Measure real motion from a phone video: mark the moving object frame by
  * frame, set a distance scale and a frame rate, and read position and velocity
- * back out — with a fit that turns a dropped ball into a measurement of g.
+ * back out — with linear and quadratic fits over the result.
  *
  * Acceleration is reached only through that fit. There is deliberately no
  * point-by-point acceleration column: the second difference of hand-clicked
@@ -95,6 +95,7 @@ export function VideoAnalysisLab() {
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [manualCopyText, setManualCopyText] = useState<string | null>(null);
   const [confirmClear, setConfirmClear] = useState<'track' | 'all' | null>(null);
+  const [tableOpen, setTableOpen] = useState(true);
 
   const nextIdRef = useRef(1);
   const noticeTimerRef = useRef<number | null>(null);
@@ -549,18 +550,6 @@ export function VideoAnalysisLab() {
                 >
                   ▶▶
                 </Button>
-                <Slider
-                  label="Advance by"
-                  unit="frames"
-                  min={1}
-                  max={10}
-                  step={1}
-                  value={stepSize}
-                  onChange={setStepSize}
-                />
-                <Button variant="secondary" type="button" onClick={() => void undoLastPoint()}>
-                  Undo point
-                </Button>
               </ControlBar>
 
               <ModeControls
@@ -575,6 +564,10 @@ export function VideoAnalysisLab() {
                 onDetectFrameRate={() => void video.detectFrameRate()}
                 followEnabled={followEnabled}
                 onFollowChange={setFollowEnabled}
+                stepSize={stepSize}
+                onStepSizeChange={setStepSize}
+                onUndoPoint={() => void undoLastPoint()}
+                canUndo={(activeTrack?.points.length ?? 0) > 0}
                 tracks={tracks}
                 activeTrackId={activeTrackId}
                 onActiveTrackChange={setActiveTrackId}
@@ -708,10 +701,24 @@ export function VideoAnalysisLab() {
             </div>
           </div>
 
+          {/* The table is the tallest thing on the page and the least often
+              needed while marking, so it folds away — in fullscreen especially,
+              an open table pushes the mode controls out of reach. */}
           <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="m-0 text-base font-semibold">
-                {activeTrack?.label ?? 'Data'}
+                <button
+                  type="button"
+                  onClick={() => setTableOpen((open) => !open)}
+                  aria-expanded={tableOpen}
+                  aria-controls="video-analysis-data"
+                  className="inline-flex items-center gap-2 rounded text-base font-semibold text-[var(--text-primary)] hover:text-[var(--accent-blue)]"
+                >
+                  <span aria-hidden="true" className="text-xs">
+                    {tableOpen ? '▾' : '▸'}
+                  </span>
+                  {activeTrack?.label ?? 'Data'}
+                </button>
                 <span className="ml-2 text-sm font-normal text-[var(--text-muted)]">
                   {activeEntry?.samples.length ?? 0} points
                   {tracks.length > 1 ? ' (the export includes every object)' : ''}
@@ -722,36 +729,39 @@ export function VideoAnalysisLab() {
               )}
             </div>
 
-            <TrackTable
-              label={activeTrack?.label ?? 'Data'}
-              color={trackColor(activeTrack?.colorIndex ?? 0)}
-              samples={activeEntry?.samples ?? []}
-              columns={columns}
-              highlightedPointIndex={highlightedIndex >= 0 ? highlightedIndex : null}
-              onSelectRow={(index) => void selectRow(index)}
-              onDeleteRow={deleteRow}
-            />
+            <div id="video-analysis-data" hidden={!tableOpen} className="flex flex-col gap-2">
+              <TrackTable
+                label={activeTrack?.label ?? 'Data'}
+                color={trackColor(activeTrack?.colorIndex ?? 0)}
+                samples={activeEntry?.samples ?? []}
+                columns={columns}
+                highlightedPointIndex={highlightedIndex >= 0 ? highlightedIndex : null}
+                onSelectRow={(index) => void selectRow(index)}
+                onDeleteRow={deleteRow}
+              />
 
-            <ControlBar align="start">
-              <span className="text-sm font-medium">Columns</span>
-              {ALL_COLUMNS.map((column) => (
-                <Toggle
-                  key={column}
-                  label={columnLabel(column)}
-                  checked={columns.includes(column)}
-                  onChange={(checked) =>
-                    setColumns((previous) =>
-                      checked
-                        ? ALL_COLUMNS.filter(
-                            (entry) => previous.includes(entry) || entry === column,
-                          )
-                        : previous.filter((entry) => entry !== column),
-                    )
-                  }
-                />
-              ))}
-            </ControlBar>
+              <ControlBar align="start">
+                <span className="text-sm font-medium">Columns</span>
+                {ALL_COLUMNS.map((column) => (
+                  <Toggle
+                    key={column}
+                    label={columnLabel(column)}
+                    checked={columns.includes(column)}
+                    onChange={(checked) =>
+                      setColumns((previous) =>
+                        checked
+                          ? ALL_COLUMNS.filter(
+                              (entry) => previous.includes(entry) || entry === column,
+                            )
+                          : previous.filter((entry) => entry !== column),
+                      )
+                    }
+                  />
+                ))}
+              </ControlBar>
+            </div>
 
+            {/* Export stays reachable whether or not the table is folded away. */}
             <ControlBar align="start">
               <Select
                 label="Layout"

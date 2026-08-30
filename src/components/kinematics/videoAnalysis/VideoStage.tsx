@@ -384,7 +384,9 @@ export function VideoStage({
     setPan({ x: 0, y: 0 });
   };
 
-  const markerRadius = 6 * pixelScale;
+  // Small marks: the point of one is to say where you clicked, and a fat ring
+  // hides the very pixels you need to see to place the next one.
+  const markerRadius = 3 * pixelScale;
   const originCross = 16 * pixelScale;
   const axisLength = 90 * pixelScale;
   const axisEnd = frame
@@ -441,12 +443,15 @@ export function VideoStage({
                 onPointerCancel={handlePointerUp}
               >
                 {/* Marked points, oldest track first so the active one sits on top. */}
+                {/* Marks never take the pointer: a slow-moving object leaves its
+                    marks stacked on top of where the next one goes, and having
+                    them swallow the click would make that spot unclickable. */}
                 {tracks.map((track) => {
                   const active = track.id === activeTrackId;
                   const color = trackColor(track.colorIndex);
                   const shape = trackShape(track.colorIndex);
                   return (
-                    <g key={track.id} opacity={active ? 1 : 0.45}>
+                    <g key={track.id} opacity={active ? 1 : 0.4} pointerEvents="none">
                       {track.points.length > 1 && (
                         <polyline
                           points={track.points.map((point) => `${point.pixel.px},${point.pixel.py}`).join(' ')}
@@ -455,19 +460,25 @@ export function VideoStage({
                           strokeWidth={1.5}
                           strokeDasharray="5 4"
                           vectorEffect="non-scaling-stroke"
-                          opacity={0.7}
+                          opacity={0.45}
                         />
                       )}
-                      {track.points.map((point) => (
-                        <path
-                          key={point.id}
-                          d={markerPath(shape, point.pixel.px, point.pixel.py, markerRadius)}
-                          fill={point.id === highlightedPointId ? color : 'none'}
-                          stroke={color}
-                          strokeWidth={point.id === highlightedPointId ? 3 : 2}
-                          vectorEffect="non-scaling-stroke"
-                        />
-                      ))}
+                      {track.points.map((point) => {
+                        const current = point.id === highlightedPointId;
+                        // Points already placed fade back, so they do not
+                        // obscure the object on the frames that follow.
+                        return (
+                          <path
+                            key={point.id}
+                            d={markerPath(shape, point.pixel.px, point.pixel.py, markerRadius)}
+                            fill={current ? color : 'none'}
+                            stroke={color}
+                            strokeWidth={current ? 2 : 1.5}
+                            vectorEffect="non-scaling-stroke"
+                            opacity={active && !current ? 0.5 : 1}
+                          />
+                        );
+                      })}
                     </g>
                   );
                 })}

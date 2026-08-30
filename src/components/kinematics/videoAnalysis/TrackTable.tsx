@@ -49,7 +49,9 @@ export function TrackTable({
   }
 
   return (
-    <div className="max-h-72 overflow-auto rounded-lg border border-theme-grid">
+    // Capped against the viewport as well as an absolute height: in fullscreen
+    // on a short screen a fixed cap still eats the controls below it.
+    <div className="max-h-[min(18rem,32vh)] overflow-auto rounded-lg border border-theme-grid">
       <table className="w-full min-w-[30rem] border-collapse text-sm">
         <caption className="sr-only">
           Measured positions and derived velocities for {label}. Selecting a row moves the video to

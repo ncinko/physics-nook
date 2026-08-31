@@ -6,6 +6,7 @@ import {
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from 'react';
 import { Button } from '../../shared/InlineControls';
 import { markerPath, trackColor, trackShape } from './trackColors';
@@ -47,7 +48,10 @@ interface VideoStageProps {
   /** Recentre on this point after an auto-advance, when zoomed in. */
   followTarget: PixelPoint | null;
   followEnabled: boolean;
-  seeking: boolean;
+  /** Idle accepts marks; seeking and playing both show a frame nobody chose. */
+  activity: 'idle' | 'seeking' | 'playing';
+  /** Playback controls, rendered directly under the clip. */
+  transport?: ReactNode;
   onMark: (pixel: PixelPoint) => void;
   onStep: (delta: number) => void;
   stepSize: number;
@@ -98,7 +102,8 @@ export function VideoStage({
   highlightedPointId,
   followTarget,
   followEnabled,
-  seeking,
+  activity,
+  transport,
   onMark,
   onStep,
   stepSize,
@@ -111,6 +116,13 @@ export function VideoStage({
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distance: number; zoom: number } | null>(null);
   const spaceRef = useRef(false);
+  // Snapshot taken before a handle drag, so a stray tap can be undone.
+  const calibrationBeforeDragRef = useRef<Calibration | null>(null);
+  // Successive edits within one tick must compose. Spreading the `calibration`
+  // prop twice before React re-renders would silently drop the first change,
+  // which is exactly what a fast press-and-drag does.
+  const calibrationRef = useRef(calibration);
+  calibrationRef.current = calibration;
 
   const [box, setBox] = useState({ width: 0, height: 0 });
   const [zoom, setZoom] = useState(1);
@@ -165,6 +177,22 @@ export function VideoStage({
   const insideFrame = (pixel: PixelPoint) =>
     pixel.px >= 0 && pixel.px <= videoWidth && pixel.py >= 0 && pixel.py <= videoHeight;
 
+  /**
+   * Calibration edits are clamped to the frame. A press that starts on the clip
+   * and drifts past its edge should pin the ruler to the border, not park it
+   * hundreds of pixels outside the picture where nothing can reach it again.
+   */
+  const clampToFrame = (pixel: PixelPoint): PixelPoint => ({
+    px: clamp(pixel.px, 0, videoWidth),
+    py: clamp(pixel.py, 0, videoHeight),
+  });
+
+  const applyCalibration = (patch: Partial<Calibration>) => {
+    const next = { ...calibrationRef.current, ...patch };
+    calibrationRef.current = next;
+    onCalibrationChange(next);
+  };
+
   const axisHandle = useMemo<PixelPoint | null>(() => {
     if (!frame || mode !== 'axis') return null;
     return toPixel(frame, { x: 140 * pixelScale * frame.metersPerPixel, y: 0 });
@@ -205,7 +233,7 @@ export function VideoStage({
     const degrees = (Math.atan2(-(pixel.py - anchor.py), pixel.px - anchor.px) * 180) / Math.PI;
     const snapped = snap ? Math.round(degrees / 5) * 5 : degrees;
     setAxisPreview({ from: anchor, to: pixel });
-    onCalibrationChange({ ...calibration, axisAngleDeg: Number(snapped.toFixed(2)) });
+    applyCalibration({ axisAngleDeg: Number(snapped.toFixed(2)) });
   };
 
   const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -235,17 +263,21 @@ export function VideoStage({
     // not require leaving mark mode.
     const handle = hitTestHandle(pixel);
     if (handle) {
+      calibrationBeforeDragRef.current = calibration;
       dragRef.current = handle;
       return;
     }
 
     if (mode === 'calibrate') {
-      onCalibrationChange({ ...calibration, scaleFrom: pixel, scaleTo: pixel });
+      // The ruler only becomes real on release; see handlePointerUp.
+      calibrationBeforeDragRef.current = calibration;
+      const start = clampToFrame(pixel);
+      applyCalibration({ scaleFrom: start, scaleTo: start });
       dragRef.current = { kind: 'handle', handle: 'scaleTo' };
       return;
     }
     if (mode === 'origin') {
-      onCalibrationChange({ ...calibration, origin: pixel });
+      applyCalibration({ origin: clampToFrame(pixel) });
       return;
     }
     if (mode === 'axis') {
@@ -286,7 +318,7 @@ export function VideoStage({
       applyAxisDrag(drag.anchor, pixel, event.shiftKey);
       return;
     }
-    onCalibrationChange({ ...calibration, [drag.handle]: pixel });
+    applyCalibration({ [drag.handle]: clampToFrame(pixel) });
   };
 
   const handlePointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -294,17 +326,32 @@ export function VideoStage({
     if (pointersRef.current.size < 2) pinchRef.current = null;
     const drag = dragRef.current;
     const downAt = downAtRef.current;
+    const before = calibrationBeforeDragRef.current;
     dragRef.current = null;
     downAtRef.current = null;
+    calibrationBeforeDragRef.current = null;
     setAxisPreview(null);
     releasePointer(event.currentTarget, event.pointerId);
 
+    const moved = downAt
+      ? Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y)
+      : Infinity;
+
+    // A tap in Scale mode would otherwise leave a zero-length ruler behind,
+    // which silently throws away the calibration and every measurement with it.
+    // Nothing shorter than a real drag is allowed to replace it.
+    if (drag?.kind === 'handle' && before && moved <= CLICK_SLOP_CSS_PX) {
+      calibrationRef.current = before;
+      onCalibrationChange(before);
+      return;
+    }
+
     if (drag || !downAt || mode !== 'mark') return;
     // A click, not a drag that happened to start in mark mode.
-    if (Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y) > CLICK_SLOP_CSS_PX) return;
-    // Marking a frame you cannot see is wrong, so clicks mid-seek are dropped
-    // rather than queued.
-    if (seeking) return;
+    if (moved > CLICK_SLOP_CSS_PX) return;
+    // Marking a frame you cannot see is wrong, so clicks are dropped rather
+    // than queued whenever the frame on screen is not one the student settled on.
+    if (activity !== 'idle') return;
     const pixel = toVideoPixel(event.clientX, event.clientY);
     if (pixel && insideFrame(pixel)) onMark(pixel);
   };
@@ -587,13 +634,15 @@ export function VideoStage({
             </div>
           </div>
 
-          {seeking && (
+          {activity === 'seeking' && (
             <div className="pointer-events-none absolute right-3 top-3 rounded-md bg-[var(--surface-elevated)] px-2 py-1 text-xs font-medium text-[var(--text-muted)] shadow-sm">
               seeking…
             </div>
           )}
         </div>
       </div>
+
+      {transport}
 
       <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-[var(--text-muted)]">
         <Button

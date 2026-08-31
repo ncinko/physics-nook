@@ -25,6 +25,7 @@ import {
 } from '../../lib/kinematics/videoAnalysis';
 import { useVideoFrames } from './videoAnalysis/useVideoFrames';
 import { VideoStage, type StageMode } from './videoAnalysis/VideoStage';
+import { TransportBar } from './videoAnalysis/TransportBar';
 import { ModeControls } from './videoAnalysis/ModeControls';
 import { TrackTable } from './videoAnalysis/TrackTable';
 import { AnalysisPlot, type PlotPoint, type PlotSeries } from './videoAnalysis/AnalysisPlot';
@@ -514,43 +515,24 @@ export function VideoAnalysisLab() {
                 highlightedPointId={highlightedPointId}
                 followTarget={lastMarked}
                 followEnabled={followEnabled}
-                seeking={video.seeking}
+                activity={video.seeking ? 'seeking' : video.isPlaying ? 'playing' : 'idle'}
+                transport={
+                  <TransportBar
+                    isPlaying={video.isPlaying}
+                    onTogglePlay={video.togglePlay}
+                    onStepFrame={(delta) => void video.stepFrames(delta)}
+                    currentFrame={video.currentFrame}
+                    frameCount={video.frameCount}
+                    onSeekToFrame={(index) => void video.seekToFrame(index)}
+                    time={video.playheadTime}
+                    duration={video.duration}
+                    disabled={video.status !== 'ready'}
+                  />
+                }
                 onMark={(pixel) => void handleMark(pixel)}
                 onStep={(delta) => void video.stepFrames(delta)}
                 stepSize={stepSize}
               />
-
-              <ControlBar align="start">
-                <Button variant="secondary" type="button" onClick={() => void video.seekToFrame(0)}>
-                  ⏮
-                </Button>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => void video.stepFrames(-stepSize)}
-                >
-                  ◀◀
-                </Button>
-                <Button variant="secondary" type="button" onClick={() => void video.stepFrames(-1)}>
-                  ◀
-                </Button>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => void video.stepFrames(1)}
-                  disabled={video.atEnd}
-                >
-                  ▶
-                </Button>
-                <Button
-                  variant="secondary"
-                  type="button"
-                  onClick={() => void video.stepFrames(stepSize)}
-                  disabled={video.atEnd}
-                >
-                  ▶▶
-                </Button>
-              </ControlBar>
 
               <ModeControls
                 mode={mode}

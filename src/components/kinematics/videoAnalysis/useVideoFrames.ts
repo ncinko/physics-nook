@@ -65,6 +65,10 @@ export interface VideoFramesApi {
   frameCount: number;
   atEnd: boolean;
   seeking: boolean;
+  isPlaying: boolean;
+  /** Best-known playhead position: live while playing, settled while paused. */
+  playheadTime: number;
+  togglePlay: () => void;
   loadFile: (file: File) => void;
   reset: () => void;
   stepFrames: (delta: number) => Promise<SettledFrame | null>;
@@ -103,6 +107,9 @@ export const useVideoFrames = (): VideoFramesApi => {
   const fpsRef = useRef(DEFAULT_FPS);
   const durationRef = useRef(0);
   const awaitingDurationRef = useRef(false);
+  // The frame-rate probe plays the clip itself; without this the transport
+  // would flash into its playing state for a second on every load.
+  const probingRef = useRef(false);
 
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<VideoStatus>('empty');
@@ -116,6 +123,8 @@ export const useVideoFrames = (): VideoFramesApi => {
   const [current, setCurrent] = useState<SettledFrame | null>(null);
   const [seeking, setSeeking] = useState(false);
   const [atEnd, setAtEnd] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackTime, setPlaybackTime] = useState(0);
 
   const setFps = useCallback((next: number) => {
     if (!Number.isFinite(next) || next <= 0) return;
@@ -271,6 +280,38 @@ export const useVideoFrames = (): VideoFramesApi => {
   );
 
   /**
+   * Pausing settles onto a real frame rather than leaving the playhead wherever
+   * the decoder stopped, so a click straight after pausing marks the frame the
+   * student is actually looking at.
+   */
+  const pause = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.pause();
+    await seekToFrame(frameIndexForTime(video.currentTime, fpsRef.current));
+  }, [seekToFrame]);
+
+  const play = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || busyRef.current || durationRef.current <= 0) return;
+    cancelPending();
+    // Pressing play at the end of the clip should replay it, not do nothing.
+    if (video.currentTime >= durationRef.current - 1e-3) {
+      video.currentTime = 0;
+    }
+    try {
+      await video.play();
+    } catch {
+      // An autoplay policy refused; the button simply does nothing.
+    }
+  }, [cancelPending]);
+
+  const togglePlay = useCallback(() => {
+    if (videoRef.current?.paused === false) void pause();
+    else void play();
+  }, [pause, play]);
+
+  /**
    * Measure the frame rate by playing briefly and watching which frames the
    * browser presents. Probing by seeking would be circular — you cannot step
    * one frame until you already know how long a frame is.
@@ -285,12 +326,14 @@ export const useVideoFrames = (): VideoFramesApi => {
     const rvfc = video as RvfcVideo;
     if (typeof rvfc.requestVideoFrameCallback !== 'function') {
       setSupportsFrameCallback(false);
+      probingRef.current = false;
       setStatus('ready');
       await seekToFrame(0);
       return;
     }
 
     setStatus('probing');
+    probingRef.current = true;
     cancelPending();
     video.currentTime = 0;
     video.muted = true;
@@ -332,6 +375,7 @@ export const useVideoFrames = (): VideoFramesApi => {
     });
 
     video.pause();
+    probingRef.current = false;
     if (!mountedRef.current) return;
 
     const estimate = estimateFrameRate(times);
@@ -343,6 +387,22 @@ export const useVideoFrames = (): VideoFramesApi => {
     setStatus('ready');
     await seekToFrame(0);
   }, [cancelPending, seekToFrame, setFps]);
+
+  const handlePlay = useCallback(() => {
+    if (probingRef.current) return;
+    setIsPlaying(true);
+  }, []);
+
+  const handlePause = useCallback(() => {
+    if (probingRef.current) return;
+    setIsPlaying(false);
+  }, []);
+
+  const handleTimeUpdate = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || probingRef.current) return;
+    setPlaybackTime(video.currentTime);
+  }, []);
 
   const handleMediaError = useCallback(() => {
     const video = videoRef.current;
@@ -387,6 +447,10 @@ export const useVideoFrames = (): VideoFramesApi => {
         previous.removeEventListener('loadedmetadata', handleMetadata);
         previous.removeEventListener('durationchange', handleMetadata);
         previous.removeEventListener('error', handleMediaError);
+        previous.removeEventListener('play', handlePlay);
+        previous.removeEventListener('pause', handlePause);
+        previous.removeEventListener('ended', handlePause);
+        previous.removeEventListener('timeupdate', handleTimeUpdate);
         previous.pause();
         // Dropping the source releases the decoder rather than leaving it
         // holding a few hundred megabytes of clip.
@@ -399,9 +463,13 @@ export const useVideoFrames = (): VideoFramesApi => {
         element.addEventListener('loadedmetadata', handleMetadata);
         element.addEventListener('durationchange', handleMetadata);
         element.addEventListener('error', handleMediaError);
+        element.addEventListener('play', handlePlay);
+        element.addEventListener('pause', handlePause);
+        element.addEventListener('ended', handlePause);
+        element.addEventListener('timeupdate', handleTimeUpdate);
       }
     },
-    [cancelPending, handleMediaError, handleMetadata],
+    [cancelPending, handleMediaError, handleMetadata, handlePause, handlePlay, handleTimeUpdate],
   );
 
   const loadFile = useCallback(
@@ -425,6 +493,8 @@ export const useVideoFrames = (): VideoFramesApi => {
       setAtEnd(false);
       setDuration(0);
       setSize({ width: 0, height: 0 });
+      setIsPlaying(false);
+      setPlaybackTime(0);
       setStatus('loading');
 
       if (metadataTimerRef.current !== null) window.clearTimeout(metadataTimerRef.current);
@@ -454,6 +524,8 @@ export const useVideoFrames = (): VideoFramesApi => {
     setAtEnd(false);
     setDuration(0);
     setSize({ width: 0, height: 0 });
+    setIsPlaying(false);
+    setPlaybackTime(0);
     setFrameRateEstimate(null);
   }, [cancelPending]);
 
@@ -486,6 +558,9 @@ export const useVideoFrames = (): VideoFramesApi => {
     frameCount,
     atEnd,
     seeking,
+    isPlaying,
+    playheadTime: isPlaying ? playbackTime : (current?.time ?? 0),
+    togglePlay,
     loadFile,
     reset,
     stepFrames,

@@ -31,6 +31,7 @@ import { TrackTable } from './videoAnalysis/TrackTable';
 import { AnalysisPlot, type PlotPoint, type PlotSeries } from './videoAnalysis/AnalysisPlot';
 import { FitPanel } from './videoAnalysis/FitPanel';
 import { trackColor, trackShape } from './videoAnalysis/trackColors';
+import './videoAnalysis/videoAnalysisLab.css';
 
 /**
  * Measure real motion from a phone video: mark the moving object frame by
@@ -440,7 +441,7 @@ export function VideoAnalysisLab() {
   return (
     <div
       onKeyDown={handleRootKeyDown}
-      className="flex h-full min-h-[46rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
+      className="video-analysis-root flex h-full min-h-[46rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
     >
       <p aria-live="polite" className="sr-only">
         {announcement}
@@ -499,8 +500,8 @@ export function VideoAnalysisLab() {
             </p>
           )}
 
-          <div className="grid min-h-0 gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <div className="flex min-w-0 flex-col gap-3">
+          <div className="video-analysis-grid">
+            <div className="video-analysis-col-video flex min-w-0 flex-col gap-3">
               <VideoStage
                 attachVideo={video.attachVideo}
                 objectUrl={video.objectUrl}
@@ -572,7 +573,7 @@ export function VideoAnalysisLab() {
               </ControlBar>
             </div>
 
-            <div className="flex min-w-0 flex-col gap-3">
+            <div className="video-analysis-col-graph flex min-w-0 flex-col gap-3">
               <div className="rounded-lg border border-theme-grid bg-[var(--surface-elevated)] p-2">
                 <AnalysisPlot
                   series={plotSeries}
@@ -681,12 +682,12 @@ export function VideoAnalysisLab() {
                 }
               />
             </div>
-          </div>
 
-          {/* The table is the tallest thing on the page and the least often
-              needed while marking, so it folds away — in fullscreen especially,
-              an open table pushes the mode controls out of reach. */}
-          <div className="flex min-w-0 flex-col gap-2">
+            {/* The table is the tallest thing on the page and the least often
+                needed while marking, so it folds away. Its placement is set in
+                videoAnalysisLab.css: full width normally, tucked under the
+                graph in fullscreen where vertical room is the scarce thing. */}
+            <div className="video-analysis-col-data flex min-w-0 flex-col gap-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="m-0 text-base font-semibold">
                 <button
@@ -798,8 +799,9 @@ export function VideoAnalysisLab() {
                   onFocus={(event) => event.target.select()}
                   className="w-full rounded-md border border-theme-grid bg-[var(--surface-elevated)] p-2 font-mono text-xs text-[var(--text-primary)]"
                 />
-              </div>
-            )}
+                </div>
+              )}
+            </div>
           </div>
         </>
       )}

@@ -1,0 +1,62 @@
+/*
+ * Layout for the video analysis lab.
+ *
+ * The three panels — video, graph, data — are one grid rather than a grid with
+ * a block underneath it, because fullscreen needs to place them differently and
+ * CSS grid can do that without moving anything in the DOM.
+ *
+ * Normally the page scrolls, so the data table can have the full width beneath
+ * both columns. In fullscreen nothing scrolls off to somewhere safe: a
+ * full-width table under the columns pushes the mode controls off the bottom of
+ * the screen. There the table moves into the right-hand column under the graph,
+ * and the video column stretches down beside it.
+ *
+ * Companion stylesheet for VideoAnalysisLab.tsx — the same arrangement the 3D
+ * islands use for layout too specific to express in utility classes.
+ */
+
+.video-analysis-grid {
+  display: grid;
+  gap: 1rem;
+  min-height: 0;
+}
+
+@media (min-width: 1024px) {
+  .video-analysis-grid {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+
+  .video-analysis-col-video {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .video-analysis-col-graph {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .video-analysis-col-data {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .simulation-shell:fullscreen .video-analysis-col-video,
+  .simulation-shell.is-fallback-fullscreen .video-analysis-col-video {
+    grid-row: 1 / span 2;
+  }
+
+  .simulation-shell:fullscreen .video-analysis-col-data,
+  .simulation-shell.is-fallback-fullscreen .video-analysis-col-data {
+    grid-column: 2;
+    grid-row: 2;
+    min-width: 0;
+  }
+
+  /* Fullscreen sets the height, so the tall floor that keeps the embedded
+     version from collapsing would only force the whole tool to scroll. */
+  .simulation-shell:fullscreen .video-analysis-root,
+  .simulation-shell.is-fallback-fullscreen .video-analysis-root {
+    min-height: 0;
+  }
+}

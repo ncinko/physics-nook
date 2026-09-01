@@ -100,7 +100,12 @@ export function ModeControls({
         <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
           Click to
         </span>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="What clicking the video does">
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-label="What clicking the video does"
+          data-tour="mode-row"
+        >
           {MODES.map((entry) => (
             <Button
               key={entry.value}
@@ -108,6 +113,7 @@ export function ModeControls({
               variant={entry.value === mode ? 'primary' : 'secondary'}
               aria-pressed={entry.value === mode}
               className="px-4 py-2 text-base"
+              data-tour={`mode-${entry.value}`}
               onClick={() => onModeChange(entry.value)}
             >
               {entry.label}
@@ -148,11 +154,16 @@ export function ModeControls({
               </Button>
             </ControlBar>
             <ControlBar align="start">
+              {/* Up to two thirds of a second at 30 fps. A slow subject — a
+                  train easing out of a station, a cart on a shallow ramp —
+                  moves less than a click's worth of pixels in a few frames, so
+                  a tight cap here forces marks so close together that the
+                  spacing is mostly click noise. */}
               <Slider
                 label="Advance by"
                 unit="frames"
                 min={1}
-                max={10}
+                max={20}
                 step={1}
                 value={stepSize}
                 onChange={onStepSizeChange}
@@ -201,7 +212,7 @@ export function ModeControls({
                 Distance
               </span>
               <ControlBar align="start">
-                <label className="inline-flex items-center gap-2 text-sm">
+                <label className="inline-flex items-center gap-2 text-sm" data-tour="ruler-length">
                   <span className="font-medium">Ruler length</span>
                   <input
                     type="number"
@@ -238,24 +249,26 @@ export function ModeControls({
               <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
                 Time
               </span>
-              <ControlBar align="start">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <span className="font-medium">Frame rate</span>
-                  <input
-                    type="number"
-                    min={1}
-                    step="any"
-                    inputMode="decimal"
-                    value={fps}
-                    onChange={(event) => onFpsChange(Number(event.target.value))}
-                    className={numberFieldClass}
-                  />
-                  <span className="text-[var(--text-muted)]">fps</span>
-                </label>
-                <Button variant="secondary" type="button" onClick={onDetectFrameRate}>
-                  Detect frame rate
-                </Button>
-              </ControlBar>
+              <div data-tour="frame-rate">
+                <ControlBar align="start">
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <span className="font-medium">Frame rate</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step="any"
+                      inputMode="decimal"
+                      value={fps}
+                      onChange={(event) => onFpsChange(Number(event.target.value))}
+                      className={numberFieldClass}
+                    />
+                    <span className="text-[var(--text-muted)]">fps</span>
+                  </label>
+                  <Button variant="secondary" type="button" onClick={onDetectFrameRate}>
+                    Detect frame rate
+                  </Button>
+                </ControlBar>
+              </div>
               <p className="m-0 text-xs leading-5 text-[var(--text-muted)]">
                 {frameRateEstimate
                   ? `Measured ${frameRateEstimate.measuredFps.toFixed(2)} fps from ${frameRateEstimate.sampleCount} frames${

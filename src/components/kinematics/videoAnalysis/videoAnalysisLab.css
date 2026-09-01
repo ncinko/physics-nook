@@ -60,3 +60,69 @@
     min-height: 0;
   }
 }
+
+/*
+ * Guided tour overlay.
+ *
+ * The overlay is absolutely positioned inside the lab root rather than fixed to
+ * the viewport, because the simulation block's section carries a translate and
+ * a transformed ancestor captures fixed positioning anyway. See TutorialCoach.tsx.
+ *
+ * The dim is one spread box-shadow on the highlight box, which is why the
+ * highlighted control stays lit while everything around it goes dark without a
+ * single element sitting on top of it to swallow clicks.
+ */
+
+.video-tutorial-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
+
+  /* Dimming is a fixed dark wash rather than a theme surface: on the light and
+     pastel themes `--bg-primary` is near white, and a white scrim brightens the
+     surroundings instead of pushing them back. */
+  --tour-dim: rgb(15 23 42 / 0.45);
+}
+
+[data-theme='dark'] .video-tutorial-overlay {
+  --tour-dim: rgb(0 0 0 / 0.55);
+}
+
+.video-tutorial-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--tour-dim);
+}
+
+.video-tutorial-spotlight {
+  position: absolute;
+  border-radius: 0.75rem;
+  border: 2px solid var(--accent-blue);
+  box-shadow: 0 0 0 9999px var(--tour-dim);
+  transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease;
+}
+
+.video-tutorial-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.9rem 1rem;
+  border-radius: 0.85rem;
+  border: 1px solid var(--grid-line);
+  background: var(--bg-primary);
+  box-shadow: 0 12px 28px rgb(0 0 0 / 0.22);
+  pointer-events: auto;
+  transition: left 0.2s ease, top 0.2s ease;
+}
+
+/* Motion here is decoration; the tour works identically without it. */
+@media (prefers-reduced-motion: reduce) {
+  .video-tutorial-spotlight,
+  .video-tutorial-card {
+    transition: none;
+  }
+}

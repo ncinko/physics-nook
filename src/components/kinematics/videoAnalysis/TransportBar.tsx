@@ -58,7 +58,10 @@ export function TransportBar({
   const position = Math.min(scrub ?? currentFrame, lastFrame);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2">
+    <div
+      data-tour="transport"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2"
+    >
       <div className="flex items-center gap-1.5">
         <Button
           variant="secondary"

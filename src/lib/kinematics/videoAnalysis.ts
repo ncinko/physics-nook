@@ -35,6 +35,13 @@ export interface PixelPoint {
   py: number;
 }
 
+/**
+ * What a click on the video does right now. Lives here rather than beside the
+ * stage component so the guided tour can talk about modes without importing
+ * anything that touches the DOM.
+ */
+export type StageMode = 'mark' | 'calibrate' | 'origin' | 'axis';
+
 export interface Calibration {
   /** One end of the ruler the student drew over a known length. */
   scaleFrom: PixelPoint;

@@ -23,6 +23,14 @@ import {
   type Track,
   type TrackedPoint,
 } from '../../lib/kinematics/videoAnalysis';
+import {
+  TUTORIAL_FPS,
+  TUTORIAL_VIDEO_NAME,
+  TUTORIAL_VIDEO_SRC,
+  clampTutorialIndex,
+  type TutorialProgress,
+  type TutorialStep,
+} from '../../lib/kinematics/videoTutorial';
 import { useVideoFrames } from './videoAnalysis/useVideoFrames';
 import { VideoStage, type StageMode } from './videoAnalysis/VideoStage';
 import { TransportBar } from './videoAnalysis/TransportBar';
@@ -30,6 +38,7 @@ import { ModeControls } from './videoAnalysis/ModeControls';
 import { TrackTable } from './videoAnalysis/TrackTable';
 import { AnalysisPlot, type PlotPoint, type PlotSeries } from './videoAnalysis/AnalysisPlot';
 import { FitPanel } from './videoAnalysis/FitPanel';
+import { TutorialCoach } from './videoAnalysis/TutorialCoach';
 import { trackColor, trackShape } from './videoAnalysis/trackColors';
 import './videoAnalysis/videoAnalysisLab.css';
 
@@ -99,9 +108,22 @@ export function VideoAnalysisLab() {
   const [confirmClear, setConfirmClear] = useState<'track' | 'all' | null>(null);
   const [tableOpen, setTableOpen] = useState(true);
 
+  // The guided tour: `null` when it is not running, otherwise the step index.
+  const [tutorialIndex, setTutorialIndex] = useState<number | null>(null);
+  const [tutorialLoading, setTutorialLoading] = useState(false);
+  const [tutorialError, setTutorialError] = useState<string | null>(null);
+  /**
+   * The calibration the lab placed by itself when the clip's size arrived.
+   * Kept so the tour can tell a ruler the student has actually dragged from the
+   * one that was sitting there when they arrived, without the stage having to
+   * report anything back.
+   */
+  const [autoCalibration, setAutoCalibration] = useState<Calibration | null>(null);
+
   const nextIdRef = useRef(1);
   const noticeTimerRef = useRef<number | null>(null);
   const calibratedForRef = useRef<string | null>(null);
+  const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(
     () => () => {
@@ -120,14 +142,16 @@ export function VideoAnalysisLab() {
     const key = `${objectUrl}-${width}x${height}`;
     if (calibratedForRef.current === key) return;
     calibratedForRef.current = key;
-    setCalibration({
+    const placed: Calibration = {
       scaleFrom: { px: width * 0.3, py: height * 0.85 },
       scaleTo: { px: width * 0.7, py: height * 0.85 },
       scaleLengthMeters: 1,
       origin: { px: width * 0.12, py: height * 0.88 },
       axisAngleDeg: 0,
       positionUncertaintyPx: 3,
-    });
+    };
+    setCalibration(placed);
+    setAutoCalibration(placed);
   }, [objectUrl, videoHeight, videoWidth]);
 
   const frame = useMemo(() => frameFromCalibration(calibration), [calibration]);
@@ -156,6 +180,7 @@ export function VideoAnalysisLab() {
       setHighlightedPointId(null);
       setLastMarked(null);
       setMode('calibrate');
+      setAutoCalibration(null);
       calibratedForRef.current = null;
       setSizeWarning(
         file.size > LARGE_FILE_BYTES
@@ -163,6 +188,52 @@ export function VideoAnalysisLab() {
           : null,
       );
       video.loadFile(file);
+    },
+    [video],
+  );
+
+  /** Opening any video by hand ends the tour: it was about a different clip. */
+  const openFile = useCallback(
+    (file: File) => {
+      setTutorialIndex(null);
+      setTutorialError(null);
+      handleFile(file);
+    },
+    [handleFile],
+  );
+
+  /**
+   * Fetch the bundled sample clip and hand it to the same code path a
+   * hand-picked file takes. The lab reads video through an object URL off a
+   * `File`, so wrapping the response in one keeps the tour on exactly the
+   * machinery a student's own clip will use — no second, untested route.
+   */
+  const startTutorial = useCallback(async () => {
+    setTutorialLoading(true);
+    setTutorialError(null);
+    try {
+      const response = await fetch(TUTORIAL_VIDEO_SRC);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      handleFile(new File([blob], TUTORIAL_VIDEO_NAME, { type: 'video/mp4' }));
+      // The clip is a known 30.000 fps cut, so the tour can promise round
+      // numbers rather than wait on the probe and hope.
+      video.setFps(TUTORIAL_FPS);
+      setTutorialIndex(0);
+    } catch {
+      setTutorialError(
+        'Could not load the sample clip. Check your connection, or pick a video of your own and follow the written steps below.',
+      );
+    } finally {
+      setTutorialLoading(false);
+    }
+  }, [handleFile, video]);
+
+  const applyTutorialStep = useCallback(
+    (step: TutorialStep) => {
+      if (step.setMode) setMode(step.setMode);
+      if (step.setStepFrames !== undefined) setStepSize(step.setStepFrames);
+      if (step.seekToFrame !== undefined) void video.seekToFrame(step.seekToFrame);
     },
     [video],
   );
@@ -425,6 +496,36 @@ export function VideoAnalysisLab() {
 
   const showStage = video.status !== 'empty' && video.status !== 'error';
 
+  // Whether the ruler and the origin have been moved is derived rather than
+  // tracked: comparing against the calibration the lab placed for itself says
+  // the same thing as a flag would, without a second copy of the truth that
+  // could disagree with the first.
+  const scaleMoved =
+    autoCalibration !== null &&
+    (calibration.scaleFrom.px !== autoCalibration.scaleFrom.px ||
+      calibration.scaleFrom.py !== autoCalibration.scaleFrom.py ||
+      calibration.scaleTo.px !== autoCalibration.scaleTo.px ||
+      calibration.scaleTo.py !== autoCalibration.scaleTo.py);
+  const originMoved =
+    autoCalibration !== null &&
+    (calibration.origin.px !== autoCalibration.origin.px ||
+      calibration.origin.py !== autoCalibration.origin.py);
+
+  const tutorialProgress: TutorialProgress = {
+    mode,
+    scaleMoved,
+    scaleLengthMeters: calibration.scaleLengthMeters,
+    originMoved,
+    pointCount: activeTrack?.points.length ?? 0,
+    plotY: ySelection,
+    fitModel,
+    fitQuantity,
+  };
+
+  // The tour only appears once the clip is genuinely playable; its first step
+  // talks about a picture that has to be on screen to make sense.
+  const tutorialRunning = tutorialIndex !== null && video.status === 'ready';
+
   const fileInput = (
     <input
       type="file"
@@ -432,7 +533,7 @@ export function VideoAnalysisLab() {
       className="sr-only"
       onChange={(event: ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (file) handleFile(file);
+        if (file) openFile(file);
         event.target.value = '';
       }}
     />
@@ -440,12 +541,24 @@ export function VideoAnalysisLab() {
 
   return (
     <div
+      ref={rootRef}
       onKeyDown={handleRootKeyDown}
-      className="video-analysis-root flex h-full min-h-[46rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
+      className="video-analysis-root relative flex h-full min-h-[46rem] w-full flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]"
     >
       <p aria-live="polite" className="sr-only">
         {announcement}
       </p>
+
+      {tutorialRunning && (
+        <TutorialCoach
+          rootRef={rootRef}
+          index={clampTutorialIndex(tutorialIndex ?? 0)}
+          progress={tutorialProgress}
+          onIndexChange={(next) => setTutorialIndex(clampTutorialIndex(next))}
+          onEnterStep={applyTutorialStep}
+          onExit={() => setTutorialIndex(null)}
+        />
+      )}
 
       {!showStage ? (
         <div
@@ -453,19 +566,35 @@ export function VideoAnalysisLab() {
           onDrop={(event: DragEvent<HTMLDivElement>) => {
             event.preventDefault();
             const file = event.dataTransfer.files?.[0];
-            if (file) handleFile(file);
+            if (file) openFile(file);
           }}
           className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border-2 border-dashed border-theme-grid p-10 text-center"
         >
           <h3 className="m-0 text-lg font-semibold">Drop or select video</h3>
 
-          <label className="cursor-pointer">
-            {fileInput}
-            <span className="btn">Select file</span>
-          </label>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <label className="cursor-pointer">
+              {fileInput}
+              <span className="btn">Select file</span>
+            </label>
+            <Button
+              variant="secondary"
+              type="button"
+              onClick={() => void startTutorial()}
+              disabled={tutorialLoading}
+            >
+              {tutorialLoading ? 'Loading sample clip…' : 'Walk me through it'}
+            </Button>
+          </div>
+
           {video.errorMessage && (
             <p className="m-0 max-w-md text-sm leading-6 text-[var(--accent-red)]">
               {video.errorMessage}
+            </p>
+          )}
+          {tutorialError && (
+            <p className="m-0 max-w-md text-sm leading-6 text-[var(--accent-red)]">
+              {tutorialError}
             </p>
           )}
           <p className="m-0 text-xs text-[var(--text-muted)]">
@@ -570,6 +699,16 @@ export function VideoAnalysisLab() {
                   {fileInput}
                   <span className="btn btn-secondary">Open a different video</span>
                 </label>
+                {tutorialIndex === null && (
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => void startTutorial()}
+                    disabled={tutorialLoading}
+                  >
+                    {tutorialLoading ? 'Loading sample clip…' : 'Guided tutorial'}
+                  </Button>
+                )}
               </ControlBar>
             </div>
 
@@ -596,36 +735,38 @@ export function VideoAnalysisLab() {
                 />
               </div>
 
-              <ControlBar align="start">
-                <Select
-                  label="Horizontal"
-                  value={plotX}
-                  onChange={(value) => {
-                    setPlotX(value as 'time' | 'x' | 'y');
-                    setFitRange(null);
-                  }}
-                  options={[
-                    { value: 'time', label: 'time' },
-                    { value: 'x', label: 'x' },
-                    { value: 'y', label: 'y' },
-                  ]}
-                />
-                <span className="text-sm font-medium">Vertical</span>
-                {PLOTTABLE.map((quantity) => (
-                  <Toggle
-                    key={quantity}
-                    label={QUANTITY_LABELS[quantity]}
-                    checked={ySelection.includes(quantity)}
-                    onChange={(checked) =>
-                      setYSelection((previous) =>
-                        checked
-                          ? [...previous, quantity]
-                          : previous.filter((entry) => entry !== quantity),
-                      )
-                    }
+              <div data-tour="plot-axes">
+                <ControlBar align="start">
+                  <Select
+                    label="Horizontal"
+                    value={plotX}
+                    onChange={(value) => {
+                      setPlotX(value as 'time' | 'x' | 'y');
+                      setFitRange(null);
+                    }}
+                    options={[
+                      { value: 'time', label: 'time' },
+                      { value: 'x', label: 'x' },
+                      { value: 'y', label: 'y' },
+                    ]}
                   />
-                ))}
-              </ControlBar>
+                  <span className="text-sm font-medium">Vertical</span>
+                  {PLOTTABLE.map((quantity) => (
+                    <Toggle
+                      key={quantity}
+                      label={QUANTITY_LABELS[quantity]}
+                      checked={ySelection.includes(quantity)}
+                      onChange={(checked) =>
+                        setYSelection((previous) =>
+                          checked
+                            ? [...previous, quantity]
+                            : previous.filter((entry) => entry !== quantity),
+                        )
+                      }
+                    />
+                  ))}
+                </ControlBar>
+              </div>
               {ySelection.length > 1 && (
                 <p className="m-0 text-xs text-[var(--text-muted)]">
                   Several quantities share one vertical scale here. Showing one at a time keeps the
@@ -633,54 +774,58 @@ export function VideoAnalysisLab() {
                 </p>
               )}
 
-              <ControlBar align="start">
-                <Select
-                  label="Fit"
-                  value={fitModel}
-                  onChange={(value) => setFitModel(value as 'none' | 'linear' | 'quadratic')}
-                  options={[
-                    { value: 'none', label: 'no fit' },
-                    { value: 'linear', label: 'linear' },
-                    { value: 'quadratic', label: 'quadratic' },
-                  ]}
-                />
-                <Select
-                  label="to"
-                  value={fitQuantity}
-                  onChange={(value) => setFitQuantity(value as QuantityKey)}
-                  options={PLOTTABLE.map((quantity) => ({
-                    value: quantity,
-                    label: QUANTITY_LABELS[quantity],
-                  }))}
-                />
-                {tracks.length > 1 && (
+              <div data-tour="fit-controls">
+                <ControlBar align="start">
                   <Select
-                    label="of"
-                    value={String(fitTrackId)}
-                    onChange={(value) => setFitTrackId(Number(value))}
-                    options={tracks.map((track) => ({
-                      value: String(track.id),
-                      label: track.label,
+                    label="Fit"
+                    value={fitModel}
+                    onChange={(value) => setFitModel(value as 'none' | 'linear' | 'quadratic')}
+                    options={[
+                      { value: 'none', label: 'no fit' },
+                      { value: 'linear', label: 'linear' },
+                      { value: 'quadratic', label: 'quadratic' },
+                    ]}
+                  />
+                  <Select
+                    label="to"
+                    value={fitQuantity}
+                    onChange={(value) => setFitQuantity(value as QuantityKey)}
+                    options={PLOTTABLE.map((quantity) => ({
+                      value: quantity,
+                      label: QUANTITY_LABELS[quantity],
                     }))}
                   />
-                )}
-                <Toggle label="Residuals" checked={showResiduals} onChange={setShowResiduals} />
-                {fitRange && (
-                  <Button variant="secondary" type="button" onClick={() => setFitRange(null)}>
-                    Fit all points
-                  </Button>
-                )}
-              </ControlBar>
+                  {tracks.length > 1 && (
+                    <Select
+                      label="of"
+                      value={String(fitTrackId)}
+                      onChange={(value) => setFitTrackId(Number(value))}
+                      options={tracks.map((track) => ({
+                        value: String(track.id),
+                        label: track.label,
+                      }))}
+                    />
+                  )}
+                  <Toggle label="Residuals" checked={showResiduals} onChange={setShowResiduals} />
+                  {fitRange && (
+                    <Button variant="secondary" type="button" onClick={() => setFitRange(null)}>
+                      Fit all points
+                    </Button>
+                  )}
+                </ControlBar>
+              </div>
 
-              <FitPanel
-                result={fitResult}
-                model={fitModel}
-                xQuantity={plotX}
-                yQuantity={fitQuantity}
-                seriesLabel={
-                  tracks.find((track) => track.id === fitTrackId)?.label ?? 'the data'
-                }
-              />
+              <div data-tour="fit-panel">
+                <FitPanel
+                  result={fitResult}
+                  model={fitModel}
+                  xQuantity={plotX}
+                  yQuantity={fitQuantity}
+                  seriesLabel={
+                    tracks.find((track) => track.id === fitTrackId)?.label ?? 'the data'
+                  }
+                />
+              </div>
             </div>
 
             {/* The table is the tallest thing on the page and the least often
@@ -745,47 +890,49 @@ export function VideoAnalysisLab() {
             </div>
 
             {/* Export stays reachable whether or not the table is folded away. */}
-            <ControlBar align="start">
-              <Select
-                label="Layout"
-                value={layout}
-                onChange={(value) => setLayout(value as ExportLayout)}
-                options={[
-                  { value: 'wide', label: 'one column group per object' },
-                  { value: 'long', label: 'one row per point' },
-                ]}
-              />
-              <Button type="button" onClick={() => void copyTsv()}>
-                Copy for spreadsheet
-              </Button>
-              <Button variant="secondary" type="button" onClick={downloadCsv}>
-                Download CSV
-              </Button>
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => setConfirmClear(confirmClear === 'track' ? null : 'track')}
-              >
-                {confirmClear === 'track' ? 'Tap again to clear' : 'Clear this object'}
-              </Button>
-              {confirmClear === 'track' && (
-                <Button type="button" onClick={() => clearPoints('track')}>
-                  Yes, clear
+            <div data-tour="export">
+              <ControlBar align="start">
+                <Select
+                  label="Layout"
+                  value={layout}
+                  onChange={(value) => setLayout(value as ExportLayout)}
+                  options={[
+                    { value: 'wide', label: 'one column group per object' },
+                    { value: 'long', label: 'one row per point' },
+                  ]}
+                />
+                <Button type="button" onClick={() => void copyTsv()}>
+                  Copy for spreadsheet
                 </Button>
-              )}
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => setConfirmClear(confirmClear === 'all' ? null : 'all')}
-              >
-                {confirmClear === 'all' ? 'Tap again to clear' : 'Clear all'}
-              </Button>
-              {confirmClear === 'all' && (
-                <Button type="button" onClick={() => clearPoints('all')}>
-                  Yes, clear everything
+                <Button variant="secondary" type="button" onClick={downloadCsv}>
+                  Download CSV
                 </Button>
-              )}
-            </ControlBar>
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setConfirmClear(confirmClear === 'track' ? null : 'track')}
+                >
+                  {confirmClear === 'track' ? 'Tap again to clear' : 'Clear this object'}
+                </Button>
+                {confirmClear === 'track' && (
+                  <Button type="button" onClick={() => clearPoints('track')}>
+                    Yes, clear
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() => setConfirmClear(confirmClear === 'all' ? null : 'all')}
+                >
+                  {confirmClear === 'all' ? 'Tap again to clear' : 'Clear all'}
+                </Button>
+                {confirmClear === 'all' && (
+                  <Button type="button" onClick={() => clearPoints('all')}>
+                    Yes, clear everything
+                  </Button>
+                )}
+              </ControlBar>
+            </div>
 
             {manualCopyText && (
               <div className="flex flex-col gap-1">

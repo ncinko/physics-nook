@@ -15,6 +15,7 @@ import {
   type Calibration,
   type CoordinateFrame,
   type PixelPoint,
+  type StageMode,
   type Track,
 } from '../../../lib/kinematics/videoAnalysis';
 
@@ -31,7 +32,7 @@ import {
  * can never corrupt stored data.
  */
 
-export type StageMode = 'mark' | 'calibrate' | 'origin' | 'axis';
+export type { StageMode };
 
 interface VideoStageProps {
   attachVideo: (element: HTMLVideoElement | null) => void;
@@ -451,6 +452,7 @@ export function VideoStage({
       <div ref={wrapRef} className="w-full">
         <div
           ref={stageRef}
+          data-tour="stage"
           tabIndex={0}
           onKeyDown={handleKeyDown}
           onKeyUp={(event) => {

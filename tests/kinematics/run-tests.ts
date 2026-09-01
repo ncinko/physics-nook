@@ -30,6 +30,16 @@ import {
   velocityOfT,
 } from '../../src/lib/kinematics/sampleMotion.ts';
 import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
+import {
+  TUTORIAL_FRAME_COUNT,
+  TUTORIAL_SCALE_FRAME,
+  TUTORIAL_STEPS,
+  TUTORIAL_STEP_FRAMES,
+  TUTORIAL_TARGET_POINTS,
+  clampTutorialIndex,
+  isLastTutorialStep,
+  type TutorialProgress,
+} from '../../src/lib/kinematics/videoTutorial.ts';
 import { readFileSync } from 'node:fs';
 import { fixed } from '../../src/utils/format.ts';
 import { TAU, pointerToTime, timeToAngle, wrapTime } from '../../src/lib/kinematics/stopwatch.ts';
@@ -928,6 +938,145 @@ for (const fps of [24, 25, 29.97, 30, 59.94, 60, 120]) {
   assert.ok(niceTicks(4, 4).length > 0);
   assert.ok(niceTicks(0, 0).length > 0);
   assert.deepEqual(niceTicks(Number.NaN, 1), []);
+}
+
+// --- Guided tutorial script ---------------------------------------------
+
+// The state the lab is in the moment the sample clip finishes loading.
+const freshTutorialProgress = (): TutorialProgress => ({
+  mode: 'calibrate',
+  scaleMoved: false,
+  scaleLengthMeters: 1,
+  originMoved: false,
+  pointCount: 0,
+  plotY: ['y'],
+  fitModel: 'none',
+  fitQuantity: 'y',
+});
+
+// The script only holds together if no step is already satisfied when the tour
+// starts. A step whose condition is true on arrival auto-advances past itself,
+// and the student sees a card flash by rather than an instruction — so this is
+// the invariant worth guarding, not the prose.
+{
+  const fresh = freshTutorialProgress();
+  TUTORIAL_STEPS.forEach((step) => {
+    assert.equal(
+      step.isComplete?.(fresh) ?? false,
+      false,
+      `step "${step.id}" is already complete before the student does anything`,
+    );
+  });
+}
+
+// Every step is a usable card: unique id, a title, and something to read.
+{
+  const ids = TUTORIAL_STEPS.map((step) => step.id);
+  assert.equal(new Set(ids).size, ids.length, 'tutorial step ids must be unique');
+  TUTORIAL_STEPS.forEach((step) => {
+    assert.ok(step.title.length > 0, `step "${step.id}" needs a title`);
+    assert.ok(step.body.length > 0, `step "${step.id}" needs body copy`);
+    step.body.forEach((paragraph) => assert.ok(paragraph.trim().length > 0));
+  });
+}
+
+// Seeks stay inside the clip, so a step can never park the tour on a frame that
+// does not exist.
+{
+  TUTORIAL_STEPS.forEach((step) => {
+    if (step.seekToFrame === undefined) return;
+    assert.ok(
+      step.seekToFrame >= 0 && step.seekToFrame < TUTORIAL_FRAME_COUNT,
+      `step "${step.id}" seeks outside the clip`,
+    );
+  });
+  assert.ok(TUTORIAL_SCALE_FRAME >= 0 && TUTORIAL_SCALE_FRAME < TUTORIAL_FRAME_COUNT);
+}
+
+// Each waiting step does finish once the student has done the thing it asks
+// for, so the tour cannot dead-end on a condition nothing can satisfy.
+{
+  const done: TutorialProgress = {
+    mode: 'mark',
+    scaleMoved: true,
+    scaleLengthMeters: 2,
+    originMoved: true,
+    pointCount: TUTORIAL_TARGET_POINTS,
+    plotY: ['x'],
+    fitModel: 'quadratic',
+    fitQuantity: 'x',
+  };
+  const satisfiable = TUTORIAL_STEPS.filter((step) => step.isComplete);
+  assert.ok(satisfiable.length >= 5, 'the tour should be mostly do-it-yourself');
+  satisfiable.forEach((step) => {
+    // `mode` is the one field a single end state cannot hold for every step at
+    // once, so those are checked against their own mode.
+    const progress =
+      step.id === 'origin-mode' ? { ...done, mode: 'origin' as const } : done;
+    assert.equal(step.isComplete!(progress), true, `step "${step.id}" can never complete`);
+  });
+}
+
+// Order matters more than any individual step: marking before there is a scale
+// or an origin produces a table of numbers that all have to be thrown away.
+{
+  const indexOf = (id: string) => TUTORIAL_STEPS.findIndex((step) => step.id === id);
+  const marking = indexOf('mark-points');
+  assert.ok(indexOf('scale-drag') < marking, 'the scale must be set before marking');
+  assert.ok(indexOf('scale-length') < marking, 'the ruler length must be set before marking');
+  assert.ok(indexOf('origin-click') < marking, 'the origin must be placed before marking');
+  assert.ok(indexOf('frame-rate') < marking, 'the frame rate must be settled before marking');
+  assert.ok(indexOf('fit') > marking, 'there is nothing to fit before marking');
+
+  const markStep = TUTORIAL_STEPS[marking];
+  assert.equal(markStep.setMode, 'mark');
+  assert.equal(markStep.setStepFrames, TUTORIAL_STEP_FRAMES);
+  // Skipping ahead with Next must still leave the lab in the state the step
+  // describes, which is why the mode is applied on entry rather than assumed.
+  assert.equal(TUTORIAL_STEPS[indexOf('scale-drag')].setMode, 'calibrate');
+  assert.equal(TUTORIAL_STEPS[indexOf('origin-click')].setMode, 'origin');
+}
+
+// The live counter under the marking step reads as progress, not as a target.
+{
+  const markStep = TUTORIAL_STEPS.find((step) => step.id === 'mark-points')!;
+  const status = markStep.status!({ ...freshTutorialProgress(), pointCount: 3 });
+  assert.ok(status !== null && status.includes('3') && status.includes(String(TUTORIAL_TARGET_POINTS)));
+}
+
+// Index arithmetic survives the coach advancing from a timer around an exit.
+{
+  assert.equal(clampTutorialIndex(-4), 0);
+  assert.equal(clampTutorialIndex(0), 0);
+  assert.equal(clampTutorialIndex(TUTORIAL_STEPS.length + 10), TUTORIAL_STEPS.length - 1);
+  assert.equal(isLastTutorialStep(TUTORIAL_STEPS.length - 1), true);
+  assert.equal(isLastTutorialStep(0), false);
+}
+
+// Every control a step points at is really marked in the components. A renamed
+// or dropped `data-tour` leaves the tour dimming the screen around nothing.
+{
+  const sources = [
+    'src/components/kinematics/VideoAnalysisLab.tsx',
+    'src/components/kinematics/videoAnalysis/ModeControls.tsx',
+    'src/components/kinematics/videoAnalysis/TransportBar.tsx',
+    'src/components/kinematics/videoAnalysis/VideoStage.tsx',
+  ]
+    .map((path) => readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8'))
+    .join(' ');
+
+  const anchors = new Set(
+    TUTORIAL_STEPS.map((step) => step.anchor).filter((anchor): anchor is string => anchor !== null),
+  );
+  assert.ok(anchors.size > 0);
+  anchors.forEach((anchor) => {
+    // The mode buttons build their attribute from the mode name, so they are
+    // matched against the template rather than a literal.
+    const found = anchor.startsWith('mode-') && anchor !== 'mode-row'
+      ? sources.includes('data-tour={`mode-${entry.value}`}')
+      : sources.includes(`data-tour="${anchor}"`);
+    assert.ok(found, `no data-tour="${anchor}" in the lab components`);
+  });
 }
 
 console.log('Video analysis tests passed.');

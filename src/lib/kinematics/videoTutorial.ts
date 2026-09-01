@@ -186,7 +186,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'origin-click',
     title: '',
     body: [
-      'It really does not matter where you put the origin; moving the origin shifts every position by the same amount and leaves every velocity alone, because a velocity is a difference in position.',
+      'It really does not matter where you put the origin; moving the origin shifts every position by the same amount, but velocity and acceleration values are unaffected.',
     ],
     anchor: 'stage',
     setMode: 'origin',

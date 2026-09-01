@@ -121,7 +121,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'welcome',
     title: '',
     body: [
-      'This is a a locomotive filmed from the platform.',
+      'This is a locomotive filmed from the platform.',
       'It starts nearly at rest and is still speeding up when the clip ends.  Assuming the acceleration is constant, we should be able to measure it.',
     ],
     anchor: null,

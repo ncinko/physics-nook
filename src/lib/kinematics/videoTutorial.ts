@@ -100,6 +100,7 @@ export interface TutorialProgress {
 
 export interface TutorialStep {
   id: string;
+  /** Optional heading; empty means the body carries the step on its own. */
   title: string;
   /** One paragraph per entry. */
   body: string[];

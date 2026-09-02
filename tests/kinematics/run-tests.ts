@@ -31,6 +31,15 @@ import {
 } from '../../src/lib/kinematics/sampleMotion.ts';
 import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
 import {
+  buildCaptionLines,
+  fitSummaryGroups,
+  fitSummaryLines,
+  fitSummaryNote,
+  fitSummaryProblem,
+  type FitSummaryInput,
+  type PlotExportMeta,
+} from '../../src/lib/kinematics/fitSummary.ts';
+import {
   TUTORIAL_FRAME_COUNT,
   TUTORIAL_SCALE_FRAME,
   TUTORIAL_STEPS,
@@ -974,7 +983,9 @@ const freshTutorialProgress = (): TutorialProgress => ({
   const ids = TUTORIAL_STEPS.map((step) => step.id);
   assert.equal(new Set(ids).size, ids.length, 'tutorial step ids must be unique');
   TUTORIAL_STEPS.forEach((step) => {
-    assert.ok(step.title.length > 0, `step "${step.id}" needs a title`);
+    // A title is optional — most steps let the body speak for itself — but a
+    // title made only of whitespace would render an empty heading.
+    assert.equal(step.title, step.title.trim(), `step "${step.id}" has a padded title`);
     assert.ok(step.body.length > 0, `step "${step.id}" needs body copy`);
     step.body.forEach((paragraph) => assert.ok(paragraph.trim().length > 0));
   });
@@ -1077,6 +1088,146 @@ const freshTutorialProgress = (): TutorialProgress => ({
       : sources.includes(`data-tour="${anchor}"`);
     assert.ok(found, `no data-tour="${anchor}" in the lab components`);
   });
+}
+
+// --- Fit summary and saved-plot caption ---------------------------------
+
+// Constant acceleration, sampled exactly, so the coefficients are known: this
+// is x = 1 + 2t + 3t², giving a = 2 x 3 = 6.
+const summaryFit = () =>
+  fitPolynomial(
+    [0, 1, 2, 3, 4, 5].map((x) => ({ x, y: 1 + 2 * x + 3 * x * x, sigma: 0.01 })),
+    2,
+  );
+
+const summaryInput = (overrides: Partial<FitSummaryInput> = {}): FitSummaryInput => ({
+  result: summaryFit(),
+  model: 'quadratic',
+  xQuantity: 'time',
+  yQuantity: 'x',
+  seriesLabel: 'Object A',
+  ...overrides,
+});
+
+// A quadratic against time reads back as motion, and the acceleration shown is
+// twice the leading coefficient — the same doubling the panel promises.
+{
+  const groups = fitSummaryGroups(summaryInput());
+  const labels = groups.map((group) => group.label);
+  assert.ok(labels.some((label) => label.includes('Object A')));
+  assert.ok(labels.includes('Read as motion'));
+  assert.ok(labels.includes('Goodness of fit'));
+
+  const motion = groups.find((group) => group.label === 'Read as motion')!;
+  const acceleration = motion.values.find((value) => value.label === 'a = 2A')!;
+  assert.equal(acceleration.unit, 'm/s²');
+  assert.ok(acceleration.value.startsWith('6'), `expected a near 6, got ${acceleration.value}`);
+  assert.equal(fitSummaryProblem(summaryInput()), null);
+}
+
+// Plotting something that is not a position against time still fits, but must
+// not be dressed up as kinematics.
+{
+  const groups = fitSummaryGroups(summaryInput({ yQuantity: 'speed' }));
+  assert.ok(!groups.some((group) => group.label === 'Read as motion'));
+}
+
+// A line through velocity against time is the other honest route to `a`.
+{
+  const linear = fitPolynomial(
+    [0, 1, 2, 3].map((x) => ({ x, y: 4 + 1.5 * x, sigma: 0.01 })),
+    1,
+  );
+  const groups = fitSummaryGroups(
+    summaryInput({ result: linear, model: 'linear', yQuantity: 'vx' }),
+  );
+  const motion = groups.find((group) => group.label === 'Read as motion')!;
+  assert.ok(motion.values.some((value) => value.label === 'a = slope' && value.unit === 'm/s²'));
+}
+
+// Nothing selected is not an error, and a failed fit is reported as one.
+{
+  assert.ok(fitSummaryProblem(summaryInput({ model: 'none', result: null }))?.length);
+  assert.deepEqual(fitSummaryGroups(summaryInput({ model: 'none', result: null })), []);
+  const tooFew = fitPolynomial([{ x: 0, y: 0 }], 2);
+  const problem = fitSummaryProblem(summaryInput({ result: tooFew }));
+  assert.ok(problem !== null && problem.includes('at least 3'));
+  assert.equal(fitSummaryNote(tooFew), null);
+}
+
+// One line per group, each naming its values — the form the caption uses.
+{
+  const lines = fitSummaryLines(fitSummaryGroups(summaryInput()));
+  assert.equal(lines.length, 3);
+  assert.ok(lines[0].includes('A (t² term) ='));
+  assert.ok(lines.some((line) => line.includes('a = 2A =') && line.includes('m/s²')));
+}
+
+const exportMeta = (overrides: Partial<PlotExportMeta> = {}): PlotExportMeta => ({
+  clipName: 'caltrain-tutorial.mp4',
+  xLabel: 'time (s)',
+  yLabel: 'x (m)',
+  seriesLabels: ['x'],
+  pointCount: 10,
+  fps: 30,
+  metersPerPixel: 0.00966,
+  fitRange: null,
+  fitRangeIsSubset: false,
+  ...overrides,
+});
+
+// A saved plot has to stand on its own in a lab report, so its caption carries
+// the scale and the frame rate: without those the axes cannot be checked.
+{
+  const lines = buildCaptionLines(exportMeta(), summaryInput());
+  const joined = lines.join(' | ');
+  assert.ok(lines[0].includes('x (m) against time (s)'));
+  assert.ok(joined.includes('10 points'));
+  assert.ok(joined.includes('30.00 fps'));
+  assert.ok(joined.includes('m/px'));
+  // The caption repeats exactly what the panel says, rather than recomputing it.
+  fitSummaryLines(fitSummaryGroups(summaryInput())).forEach((line) => {
+    assert.ok(lines.includes(line), `caption is missing the panel line: ${line}`);
+  });
+
+  // The goodness-of-fit number belongs in a figure someone pastes into a report.
+  // The paragraph coaching them about weighting does not — that stays on screen,
+  // next to the controls it is talking about.
+  assert.ok(joined.includes('χ² per d.o.f.'), 'caption should keep the chi-square value');
+  const note = fitSummaryNote(summaryFit())!;
+  assert.ok(note.includes('uncertainty slider'));
+  lines.forEach((line) => {
+    assert.ok(
+      !note.includes(line),
+      `caption should not carry the fit note, but has: ${line}`,
+    );
+  });
+}
+
+// Singular/plural, an unset scale, and no fit all have to read properly.
+{
+  const lines = buildCaptionLines(
+    exportMeta({ pointCount: 1, metersPerPixel: null }),
+    summaryInput({ model: 'none', result: null }),
+  );
+  const joined = lines.join(' | ');
+  assert.ok(joined.includes('1 point') && !joined.includes('1 points'));
+  assert.ok(!joined.includes('m/px'));
+  assert.ok(joined.includes('No fit applied.'));
+}
+
+// A narrowed fit range is stated, because it changes what the numbers mean.
+{
+  const withRange = buildCaptionLines(
+    exportMeta({ fitRange: { min: 0, max: 3 }, fitRangeIsSubset: true }),
+    summaryInput(),
+  );
+  assert.ok(withRange.some((line) => line.startsWith('Fitted over time (s) from')));
+  const wholeRange = buildCaptionLines(
+    exportMeta({ fitRange: { min: 0, max: 5 } }),
+    summaryInput(),
+  );
+  assert.ok(!wholeRange.some((line) => line.startsWith('Fitted over')));
 }
 
 console.log('Video analysis tests passed.');

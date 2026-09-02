@@ -246,12 +246,16 @@ export function TutorialCoach({
           </button>
         </div>
 
-        {/* `normal-case` and the tracking reset undo the site-wide prose rule for
-            h4, which is uppercase with wide letter-spacing — right for a
-            section heading in a lesson, wrong for a sentence in a callout. */}
-        <h4 className="m-0 text-base font-semibold normal-case tracking-normal text-[var(--text-primary)]">
-          {step.title}
-        </h4>
+        {/* Steps may carry no title at all, in which case the body speaks for
+            itself and an empty heading would only add a gap. `normal-case` and
+            the tracking reset undo the site-wide prose rule for h4, which is
+            uppercase with wide letter-spacing — right for a section heading in
+            a lesson, wrong for a sentence in a callout. */}
+        {step.title.trim() !== '' && (
+          <h4 className="m-0 text-base font-semibold normal-case tracking-normal text-[var(--text-primary)]">
+            {step.title}
+          </h4>
+        )}
 
         {step.body.map((paragraph) => (
           <p key={paragraph} className="m-0 text-sm leading-6 text-[var(--text-primary)]">

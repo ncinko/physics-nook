@@ -39,6 +39,8 @@ import { TrackTable } from './videoAnalysis/TrackTable';
 import { AnalysisPlot, type PlotPoint, type PlotSeries } from './videoAnalysis/AnalysisPlot';
 import { FitPanel } from './videoAnalysis/FitPanel';
 import { TutorialCoach } from './videoAnalysis/TutorialCoach';
+import { savePlotImage, type PlotExportMeta } from './videoAnalysis/exportPlot';
+import type { FitSummaryInput } from '../../lib/kinematics/fitSummary';
 import { trackColor, trackShape } from './videoAnalysis/trackColors';
 import './videoAnalysis/videoAnalysisLab.css';
 
@@ -124,6 +126,7 @@ export function VideoAnalysisLab() {
   const noticeTimerRef = useRef<number | null>(null);
   const calibratedForRef = useRef<string | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const plotSvgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(
     () => () => {
@@ -410,6 +413,24 @@ export function VideoAnalysisLab() {
     return rangedPoints.map((point, i) => ({ x: point.x, y: fitResult.fit.residuals[i] ?? 0 }));
   }, [fitResult, rangedPoints, showResiduals]);
 
+  // Built once and shared: the fit panel on screen and the caption printed
+  // under the saved image must describe the same fit.
+  const fitSummaryInput: FitSummaryInput = {
+    result: fitResult,
+    model: fitModel,
+    xQuantity: plotX,
+    yQuantity: fitQuantity,
+    seriesLabel: tracks.find((track) => track.id === fitTrackId)?.label ?? 'the data',
+  };
+
+  /** `caltrain-tutorial.mp4` becomes `caltrain-tutorial-plot.png`. */
+  const plotFileName = `${
+    (video.fileName ?? 'video-analysis')
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9._-]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'video-analysis'
+  }-plot.png`;
+
   const exportSeries = derived.map((entry) => ({
     label: entry.track.label,
     samples: entry.samples,
@@ -476,6 +497,30 @@ export function VideoAnalysisLab() {
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
     flashNotice('Saved video-analysis.csv');
+  };
+
+  const savePlot = async () => {
+    const svg = plotSvgRef.current;
+    if (!svg) return;
+    const meta: PlotExportMeta = {
+      clipName: video.fileName,
+      xLabel: axisTitle(plotX),
+      yLabel: ySelection.map((quantity) => axisTitle(quantity)).join(', '),
+      seriesLabels: plotSeries.map((entry) => entry.label),
+      pointCount: totalPoints,
+      fps: video.fps,
+      metersPerPixel: frame ? frame.metersPerPixel : null,
+      fitRange: effectiveRange,
+      // A range only counts as a subset once the student has dragged one; the
+      // default range is just the span of the data.
+      fitRangeIsSubset: fitRange !== null,
+    };
+    try {
+      const name = await savePlotImage(svg, meta, fitSummaryInput, plotFileName);
+      flashNotice(`Saved ${name}`);
+    } catch {
+      flashNotice('This browser would not render the plot to an image.');
+    }
   };
 
   const clearPoints = (scope: 'track' | 'all') => {
@@ -715,6 +760,7 @@ export function VideoAnalysisLab() {
             <div className="video-analysis-col-graph flex min-w-0 flex-col gap-3">
               <div className="rounded-lg border border-theme-grid bg-[var(--surface-elevated)] p-2">
                 <AnalysisPlot
+                  exportRef={plotSvgRef}
                   series={plotSeries}
                   xLabel={axisTitle(plotX)}
                   yLabel={
@@ -812,19 +858,19 @@ export function VideoAnalysisLab() {
                       Fit all points
                     </Button>
                   )}
+                  <Button
+                    variant="secondary"
+                    type="button"
+                    onClick={() => void savePlot()}
+                    disabled={totalPoints === 0}
+                  >
+                    Save plot
+                  </Button>
                 </ControlBar>
               </div>
 
               <div data-tour="fit-panel">
-                <FitPanel
-                  result={fitResult}
-                  model={fitModel}
-                  xQuantity={plotX}
-                  yQuantity={fitQuantity}
-                  seriesLabel={
-                    tracks.find((track) => track.id === fitTrackId)?.label ?? 'the data'
-                  }
-                />
+                <FitPanel {...fitSummaryInput} />
               </div>
             </div>
 

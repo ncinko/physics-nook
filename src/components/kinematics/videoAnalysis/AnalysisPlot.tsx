@@ -39,6 +39,8 @@ interface AnalysisPlotProps {
   onFitRangeChange: (min: number, max: number) => void;
   residuals: Array<{ x: number; y: number }> | null;
   summary: string;
+  /** Lets the lab reach the rendered SVG in order to save it as an image. */
+  exportRef?: { current: SVGSVGElement | null };
 }
 
 const VIEW_WIDTH = 720;
@@ -67,8 +69,14 @@ export function AnalysisPlot({
   onFitRangeChange,
   residuals,
   summary,
+  exportRef,
 }: AnalysisPlotProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // One node, two holders: the drag maths needs it, and so does the exporter.
+  const attachSvg = (node: SVGSVGElement | null) => {
+    svgRef.current = node;
+    if (exportRef) exportRef.current = node;
+  };
   const draggingRef = useRef<'min' | 'max' | null>(null);
 
   const showResiduals = residuals !== null && residuals.length > 0;
@@ -180,7 +188,7 @@ export function AnalysisPlot({
 
   return (
     <svg
-      ref={svgRef}
+      ref={attachSvg}
       viewBox={`0 0 ${VIEW_WIDTH} ${viewHeight}`}
       role="img"
       aria-label={summary}

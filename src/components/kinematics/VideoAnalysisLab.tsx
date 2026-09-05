@@ -71,8 +71,20 @@ const EMPTY_CALIBRATION: Calibration = {
   positionUncertaintyPx: 3,
 };
 
-const ALL_COLUMNS: ColumnKey[] = ['frame', 'time', 'x', 'y', 'vx', 'vy', 'speed', 'px', 'py'];
-const DEFAULT_COLUMNS: ColumnKey[] = ['frame', 'time', 'x', 'y'];
+/** The physical quantities, each its own checkbox. */
+const QUANTITY_COLUMNS: ColumnKey[] = ['time', 'x', 'y', 'vx', 'vy', 'speed'];
+/**
+ * What the student actually clicked and which frame they clicked it on, before
+ * any calibration was applied. One checkbox rather than three, and appended
+ * after the physics rather than interleaved with it: this is the audit trail
+ * you keep so a scale or an origin can be re-derived later, not a column
+ * anybody reads across.
+ */
+// Frame last of the three: the wide export has to lift it out as a single
+// shared column, and putting it at the end of the group is the one ordering
+// that reads the same in the table and in both export layouts.
+const RAW_COLUMNS: ColumnKey[] = ['px', 'py', 'frame'];
+const DEFAULT_COLUMNS: ColumnKey[] = ['time', 'x', 'y'];
 const PLOTTABLE: QuantityKey[] = ['x', 'y', 'vx', 'vy', 'speed'];
 const LARGE_FILE_BYTES = 300 * 1024 * 1024;
 
@@ -88,8 +100,14 @@ export function VideoAnalysisLab() {
   ]);
   const [activeTrackId, setActiveTrackId] = useState(1);
   const [mode, setMode] = useState<StageMode>('calibrate');
-  const [stepSize, setStepSize] = useState(1);
-  const [followEnabled, setFollowEnabled] = useState(true);
+  // Ten frames is a third of a second at 30 fps: far enough apart that the
+  // object has actually moved further than anyone can click, which is what
+  // makes the spacing between marks measurement rather than hand tremor.
+  const [stepSize, setStepSize] = useState(10);
+  // Off by default. Recentring the picture under the cursor after every mark is
+  // disorienting on a trackpad, where students have no separate mental model
+  // for "the view moved" versus "I panned" — they read it as the tool jumping.
+  const [followEnabled, setFollowEnabled] = useState(false);
   const [highlightedPointId, setHighlightedPointId] = useState<number | null>(null);
   const [lastMarked, setLastMarked] = useState<PixelPoint | null>(null);
   const [announcement, setAnnouncement] = useState('');
@@ -104,6 +122,7 @@ export function VideoAnalysisLab() {
   const [showResiduals, setShowResiduals] = useState(false);
 
   const [columns, setColumns] = useState<ColumnKey[]>(DEFAULT_COLUMNS);
+  const [showRaw, setShowRaw] = useState(false);
   const [layout, setLayout] = useState<ExportLayout>('wide');
   const [copyNotice, setCopyNotice] = useState<string | null>(null);
   const [manualCopyText, setManualCopyText] = useState<string | null>(null);
@@ -431,6 +450,8 @@ export function VideoAnalysisLab() {
       .replace(/^-+|-+$/g, '') || 'video-analysis'
   }-plot.png`;
 
+  const exportColumns = showRaw ? [...columns, ...RAW_COLUMNS] : columns;
+
   const exportSeries = derived.map((entry) => ({
     label: entry.track.label,
     samples: entry.samples,
@@ -484,7 +505,7 @@ export function VideoAnalysisLab() {
   };
 
   const downloadCsv = () => {
-    const csv = serializeTracks(exportSeries, { delimiter: ',', columns, layout });
+    const csv = serializeTracks(exportSeries, { delimiter: ',', columns: exportColumns, layout });
     if (!csv) return;
     // The BOM is for Excel, which otherwise mangles non-ASCII track labels.
     const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8' });
@@ -908,7 +929,7 @@ export function VideoAnalysisLab() {
                 label={activeTrack?.label ?? 'Data'}
                 color={trackColor(activeTrack?.colorIndex ?? 0)}
                 samples={activeEntry?.samples ?? []}
-                columns={columns}
+                columns={exportColumns}
                 highlightedPointIndex={highlightedIndex >= 0 ? highlightedIndex : null}
                 onSelectRow={(index) => void selectRow(index)}
                 onDeleteRow={deleteRow}
@@ -916,7 +937,7 @@ export function VideoAnalysisLab() {
 
               <ControlBar align="start">
                 <span className="text-sm font-medium">Columns</span>
-                {ALL_COLUMNS.map((column) => (
+                {QUANTITY_COLUMNS.map((column) => (
                   <Toggle
                     key={column}
                     label={columnLabel(column)}
@@ -924,7 +945,7 @@ export function VideoAnalysisLab() {
                     onChange={(checked) =>
                       setColumns((previous) =>
                         checked
-                          ? ALL_COLUMNS.filter(
+                          ? QUANTITY_COLUMNS.filter(
                               (entry) => previous.includes(entry) || entry === column,
                             )
                           : previous.filter((entry) => entry !== column),
@@ -932,7 +953,13 @@ export function VideoAnalysisLab() {
                     }
                   />
                 ))}
+                <Toggle label="raw" checked={showRaw} onChange={setShowRaw} />
               </ControlBar>
+              <p className="m-0 text-xs leading-5 text-[var(--text-muted)]">
+                <span className="font-medium">raw</span> adds the frame number and the pixel
+                position of each click on the end — what was measured, before the scale and
+                origin turned it into metres.
+              </p>
             </div>
 
             {/* Export stays reachable whether or not the table is folded away. */}

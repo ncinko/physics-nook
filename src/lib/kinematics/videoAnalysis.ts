@@ -178,6 +178,39 @@ export const toPixel = (frame: CoordinateFrame, position: PhysicalPoint): PixelP
  * `frameIndexForTime(timeForFrameIndex(k, fps), fps) === k` is the invariant
  * callers rely on.
  */
+/**
+ * What to do when a video element reports its metadata.
+ *
+ * `loadedmetadata` and `durationchange` both carry this news, and the second
+ * can arrive at any time: some containers — QuickTime `.mov` especially —
+ * hand the browser an estimated duration up front and revise it later, once
+ * decoding reaches part of the file it had not parsed. A seek deep into a short
+ * clip is exactly what provokes that.
+ *
+ * So the news has to be split by whether it is the first word or a correction.
+ * The first word initialises the clip and measures its frame rate; a correction
+ * only updates the duration. Re-measuring the frame rate on a correction would
+ * mean the tool starts *playing the clip* under a student who was mid-way
+ * through marking points, because measuring a frame rate means watching frames
+ * go past.
+ */
+export type MetadataAction =
+  /** No usable duration yet: provoke one by seeking past the end. */
+  | 'await-duration'
+  /** First real duration: adopt it, then measure the frame rate. */
+  | 'initialise'
+  /** A revised duration for a clip already in use: adopt it and nothing else. */
+  | 'update'
+  /** Nonsense arriving after the clip is already running. Drop it. */
+  | 'ignore';
+
+export const metadataAction = (duration: number, initialised: boolean): MetadataAction => {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    return initialised ? 'ignore' : 'await-duration';
+  }
+  return initialised ? 'update' : 'initialise';
+};
+
 export const frameIndexForTime = (time: number, fps: number): number => {
   if (!Number.isFinite(time) || !Number.isFinite(fps) || fps <= 0) return 0;
   return Math.max(0, Math.round(time * fps));
@@ -573,7 +606,18 @@ export const serializeTracks = (
     return [header, ...rows].join('\n');
   }
 
-  const includeSharedFrame = columns.includes('frame');
+  // The frame index is what aligns several objects onto one row, so it stays a
+  // single shared column instead of repeating per track. It does keep the place
+  // the caller asked for, though: leading when it is the first column requested,
+  // trailing otherwise, so a caller grouping it with the other raw columns at
+  // the end gets it at the end.
+  const frameIndex = columns.indexOf('frame');
+  const includeSharedFrame = frameIndex !== -1;
+  const frameLeads = frameIndex === 0;
+  const sharedFrame = (cell: string) =>
+    includeSharedFrame ? ([cell] as const) : ([] as const);
+  const withSharedFrame = (cell: string, rest: readonly string[]) =>
+    frameLeads ? [...sharedFrame(cell), ...rest] : [...rest, ...sharedFrame(cell)];
   const perTrackColumns = columns.filter((column) => column !== 'frame');
   const single = series.length === 1;
 
@@ -596,27 +640,27 @@ export const serializeTracks = (
     (a, b) => a - b,
   );
 
-  const header = [
-    ...(includeSharedFrame ? ['frame'] : []),
-    ...series.flatMap((track) =>
+  const header = withSharedFrame(
+    'frame',
+    series.flatMap((track) =>
       perTrackColumns.map((column) =>
         single ? columnLabel(column) : `${track.label}: ${columnLabel(column)}`,
       ),
     ),
-  ]
+  )
     .map(escape)
     .join(delimiter);
 
   const rows = frames.map((index) =>
-    [
-      ...(includeSharedFrame ? [String(index)] : []),
-      ...slotsByTrack.flatMap((slots) => {
+    withSharedFrame(
+      String(index),
+      slotsByTrack.flatMap((slots) => {
         const sample = slots.get(index);
         return perTrackColumns.map((column) =>
           sample ? formatCell(sampleValue(sample, column), column, decimals) : '',
         );
       }),
-    ].join(delimiter),
+    ).join(delimiter),
   );
 
   return [header, ...rows].join('\n');

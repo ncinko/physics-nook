@@ -30,6 +30,7 @@ import {
   velocityOfT,
 } from '../../src/lib/kinematics/sampleMotion.ts';
 import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
+import { metadataAction } from '../../src/lib/kinematics/videoAnalysis.ts';
 import {
   buildCaptionLines,
   fitSummaryGroups,
@@ -890,6 +891,71 @@ for (const fps of [24, 25, 29.97, 30, 59.94, 60, 120]) {
   assert.equal(wideLines[5].split('\t')[1], '');
   assert.ok(wideLines[5].split('\t')[3].length > 0);
 
+  // The "raw" checkbox appends frame, px and py after the physics, and the
+  // export has to honour that rather than hoisting frame to the front. It stays
+  // one shared column — it is what aligns several objects onto a row — but it
+  // sits where the caller put it.
+  {
+    const NEWLINE = String.fromCharCode(10);
+    const TAB = String.fromCharCode(9);
+    const trailing = serializeTracks([{ label: 'Ball', samples: ball }], {
+      delimiter: ',',
+      columns: ['time', 'x', 'y', 'px', 'py', 'frame'],
+      layout: 'wide',
+    });
+    assert.deepEqual(trailing.split(NEWLINE)[0].split(','), [
+      't (s)',
+      'x (m)',
+      'y (m)',
+      'px (px)',
+      'py (px)',
+      'frame',
+    ]);
+    // The frame number is still the real index, just in the last column now.
+    assert.equal(trailing.split(NEWLINE)[1].split(',').at(-1), '0');
+    assert.equal(trailing.split(NEWLINE)[2].split(',').at(-1), '1');
+
+    // Two objects still align on that one trailing column.
+    const pair = serializeTracks(
+      [
+        { label: 'Ball', samples: ball },
+        { label: 'Cart', samples: cart },
+      ],
+      { delimiter: '	', columns: ['time', 'x', 'frame'], layout: 'wide' },
+    );
+    assert.deepEqual(pair.split(NEWLINE)[0].split(TAB), [
+      'Ball: t (s)',
+      'Ball: x (m)',
+      'Cart: t (s)',
+      'Cart: x (m)',
+      'frame',
+    ]);
+    assert.equal(pair.split(NEWLINE).length, 6, 'five distinct frames plus the header');
+
+    // Leading frame is unchanged: it leads only when asked for first.
+    const leading = serializeTracks([{ label: 'Ball', samples: ball }], {
+      delimiter: ',',
+      columns: ['frame', 'time', 'x'],
+      layout: 'wide',
+    });
+    assert.deepEqual(leading.split(NEWLINE)[0].split(','), ['frame', 't (s)', 'x (m)']);
+
+    // The long layout has no shared column at all, so order is simply kept.
+    const long = serializeTracks([{ label: 'Ball', samples: ball }], {
+      delimiter: ',',
+      columns: ['time', 'x', 'px', 'py', 'frame'],
+      layout: 'long',
+    });
+    assert.deepEqual(long.split(NEWLINE)[0].split(','), [
+      'track',
+      't (s)',
+      'x (m)',
+      'px (px)',
+      'py (px)',
+      'frame',
+    ]);
+  }
+
   // Student-typed labels are data, and they end up in the output. CSV quotes
   // them properly; TSV, which has no quoting mechanism, neutralises separators.
   const awkward = [{ label: 'Ball, "red"\ttwo', samples: ball.slice(0, 2) }];
@@ -1228,6 +1294,43 @@ const exportMeta = (overrides: Partial<PlotExportMeta> = {}): PlotExportMeta => 
     summaryInput(),
   );
   assert.ok(!wholeRange.some((line) => line.startsWith('Fitted over')));
+}
+
+// --- Video metadata arriving twice ---------------------------------------
+
+// Regression: a student marking a short .mov had the clip start playing under
+// them on about the tenth click. `loadedmetadata` and `durationchange` share a
+// handler, and QuickTime containers commonly revise their duration once
+// decoding reaches a part of the file the browser had not parsed — which a seek
+// deep into a short clip is exactly what provokes. The handler ended by
+// measuring the frame rate, and measuring a frame rate means playing the clip.
+{
+  // First word about a usable clip: adopt it and measure the frame rate.
+  assert.equal(metadataAction(4.5, false), 'initialise');
+
+  // The same news again, now that the clip is in use, must never re-probe.
+  assert.equal(metadataAction(4.5, true), 'update');
+  assert.equal(metadataAction(4.4, true), 'update');
+
+  // No usable duration yet: provoke one by seeking past the end.
+  assert.equal(metadataAction(Number.POSITIVE_INFINITY, false), 'await-duration');
+  assert.equal(metadataAction(Number.NaN, false), 'await-duration');
+  assert.equal(metadataAction(0, false), 'await-duration');
+
+  // The same nonsense once the clip is running would seek a student to 1e9.
+  assert.equal(metadataAction(Number.POSITIVE_INFINITY, true), 'ignore');
+  assert.equal(metadataAction(Number.NaN, true), 'ignore');
+  assert.equal(metadataAction(0, true), 'ignore');
+
+  // Only the very first report may trigger a probe, however many arrive.
+  const durations = [Number.POSITIVE_INFINITY, 4.5, 4.5, 4.51, Number.NaN, 4.51];
+  let initialised = false;
+  const probes = durations.filter((duration) => {
+    const action = metadataAction(duration, initialised);
+    if (action === 'initialise') initialised = true;
+    return action === 'initialise';
+  });
+  assert.equal(probes.length, 1, 'the frame rate must be probed exactly once per clip');
 }
 
 console.log('Video analysis tests passed.');

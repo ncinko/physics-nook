@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   estimateFrameRate,
   frameIndexForTime,
+  metadataAction,
   type FrameRateEstimate,
 } from '../../../lib/kinematics/videoAnalysis';
 
@@ -101,12 +102,21 @@ export const useVideoFrames = (): VideoFramesApi => {
   const settleTimerRef = useRef<number | null>(null);
   const metadataTimerRef = useRef<number | null>(null);
 
+  // Deliberately separate from `frameHandleRef`: that one belongs to `settle`,
+  // and `cancelPending` clears it on every seek. A shared handle would have the
+  // two cancelling each other whenever a student scrubs mid-playback.
+  const playbackTickRef = useRef<number | null>(null);
+
   const busyRef = useRef(false);
   const settledRef = useRef<SettledFrame | null>(null);
   const lastPresentedRef = useRef(-1);
   const fpsRef = useRef(DEFAULT_FPS);
   const durationRef = useRef(0);
   const awaitingDurationRef = useRef(false);
+  // True once this source has a real duration and has been probed. Guards the
+  // frame-rate probe against a `durationchange` that arrives mid-session — see
+  // `metadataAction`.
+  const initialisedRef = useRef(false);
   // The frame-rate probe plays the clip itself; without this the transport
   // would flash into its playing state for a second on every load.
   const probingRef = useRef(false);
@@ -323,6 +333,9 @@ export const useVideoFrames = (): VideoFramesApi => {
   const detectFrameRate = useCallback(async () => {
     const video = videoRef.current;
     if (!video) return;
+    // Two probes at once would fight over the frame-callback handle and leave
+    // the clip playing when the loser cancels the winner's `stop`.
+    if (probingRef.current) return;
     const rvfc = video as RvfcVideo;
     if (typeof rvfc.requestVideoFrameCallback !== 'function') {
       setSupportsFrameCallback(false);
@@ -404,6 +417,53 @@ export const useVideoFrames = (): VideoFramesApi => {
     setPlaybackTime(video.currentTime);
   }, []);
 
+  /**
+   * Follow the playhead while the clip is playing, so the scrubber and the
+   * frame counter move with it.
+   *
+   * `timeupdate` alone is not enough: browsers fire it about four times a
+   * second, which reads as a slider twitching rather than sliding. The frame
+   * callback fires once per presented frame and reports that frame's own
+   * `mediaTime`, so the readout tracks what is actually on screen. It stays as
+   * the coarse backstop for browsers without either callback, and for a hidden
+   * tab, where both stop firing.
+   */
+  useEffect(() => {
+    if (!isPlaying) return;
+    const video = videoRef.current as RvfcVideo | null;
+    if (!video) return;
+
+    const useFrameCallback = typeof video.requestVideoFrameCallback === 'function';
+    let cancelled = false;
+
+    const schedule = () => {
+      if (cancelled) return;
+      if (useFrameCallback) {
+        playbackTickRef.current = video.requestVideoFrameCallback!((_now, metadata) => {
+          if (cancelled || !mountedRef.current) return;
+          setPlaybackTime(metadata.mediaTime);
+          schedule();
+        });
+      } else {
+        playbackTickRef.current = window.requestAnimationFrame(() => {
+          if (cancelled || !mountedRef.current) return;
+          setPlaybackTime(video.currentTime);
+          schedule();
+        });
+      }
+    };
+    schedule();
+
+    return () => {
+      cancelled = true;
+      const handle = playbackTickRef.current;
+      playbackTickRef.current = null;
+      if (handle === null) return;
+      if (useFrameCallback) video.cancelVideoFrameCallback?.(handle);
+      else window.cancelAnimationFrame(handle);
+    };
+  }, [isPlaying]);
+
   const handleMediaError = useCallback(() => {
     const video = videoRef.current;
     if (metadataTimerRef.current !== null) window.clearTimeout(metadataTimerRef.current);
@@ -419,12 +479,16 @@ export const useVideoFrames = (): VideoFramesApi => {
   const handleMetadata = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+
+    const action = metadataAction(video.duration, initialisedRef.current);
+    if (action === 'ignore') return;
+    if (action === 'await-duration') {
       // Some containers report an infinite duration until you seek past the end.
       awaitingDurationRef.current = true;
       video.currentTime = 1e9;
       return;
     }
+
     if (metadataTimerRef.current !== null) window.clearTimeout(metadataTimerRef.current);
     metadataTimerRef.current = null;
     awaitingDurationRef.current = false;
@@ -434,6 +498,12 @@ export const useVideoFrames = (): VideoFramesApi => {
     setSupportsFrameCallback(
       typeof (video as RvfcVideo).requestVideoFrameCallback === 'function',
     );
+
+    // A revised duration is worth adopting — the frame count depends on it —
+    // but nothing beyond that. Probing again would restart playback under a
+    // student who is part-way through marking a clip.
+    if (action === 'update') return;
+    initialisedRef.current = true;
     void detectFrameRate();
   }, [detectFrameRate]);
 
@@ -484,6 +554,7 @@ export const useVideoFrames = (): VideoFramesApi => {
       lastPresentedRef.current = -1;
       durationRef.current = 0;
       awaitingDurationRef.current = false;
+      initialisedRef.current = false;
 
       setObjectUrl(url);
       setFileName(file.name);
@@ -516,6 +587,8 @@ export const useVideoFrames = (): VideoFramesApi => {
     settledRef.current = null;
     lastPresentedRef.current = -1;
     durationRef.current = 0;
+    awaitingDurationRef.current = false;
+    initialisedRef.current = false;
     setObjectUrl(null);
     setFileName(null);
     setStatus('empty');
@@ -554,7 +627,9 @@ export const useVideoFrames = (): VideoFramesApi => {
     frameRateEstimate,
     supportsFrameCallback,
     current,
-    currentFrame: current ? frameIndexForTime(current.time, fps) : 0,
+    // While playing this has to track the playhead rather than the last frame
+    // the student settled on, or the scrubber sits still through the whole clip.
+    currentFrame: frameIndexForTime(isPlaying ? playbackTime : (current?.time ?? 0), fps),
     frameCount,
     atEnd,
     seeking,

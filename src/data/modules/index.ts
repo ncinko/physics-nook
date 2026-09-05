@@ -79,7 +79,12 @@ export const mechanicsPath = {
   cardEyebrow: 'Mechanics',
   navVisibility: 'menu',
   pages: [
-    ...kinematicsModule.pages,
+    // pages[0..2] are the published Kinematics lessons. Motion Match (pages[3])
+    // is deliberately unlisted for the same reason as Free-Body Diagrams below:
+    // it stays reachable by typing /kinematics/motion-game, but leaving it out
+    // here keeps it off the module hero, the Resources index, the lesson pager,
+    // and site search.
+    ...kinematicsModule.pages.slice(0, 3),
     // pages[0] is the published Forces lesson. The Free-Body Diagrams lesson
     // (pages[1]) is deliberately unlisted: it stays reachable by typing
     // /forces/free-body-diagrams, but leaving it out here keeps it off the

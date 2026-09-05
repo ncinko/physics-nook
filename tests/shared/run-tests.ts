@@ -8,6 +8,7 @@ import { validateScoreSubmission, STOP_ZONE_DEFAULTS } from '../../src/lib/kinem
 import { validateGoalRushScoreSubmission } from '../../src/lib/kinematics/goalRush.ts';
 import { validateCaerbannogScoreSubmission } from '../../src/lib/caerbannog/leaderboard.ts';
 import { validateChickenCountScoreSubmission } from '../../src/lib/measurement/chickenCount.ts';
+import { validateMotionGameScoreSubmission } from '../../src/lib/kinematics/motionGame.ts';
 
 // --- names that must never reach a shared board --------------------------
 // Each entry is a distinct evasion the normalizer has to undo.
@@ -169,6 +170,16 @@ const chicken = validateChickenCountScoreSubmission({
 assert.equal(chicken.ok, false, 'chicken count should reject a blocked name');
 assert.ok(nameRejected(chicken.errors));
 assert.equal(chicken.name, 'Player');
+
+const motionGame = validateMotionGameScoreSubmission({
+  name: 'n1gger',
+  score: 0,
+  retriesUsed: 0,
+  attempts: [],
+});
+assert.equal(motionGame.ok, false, 'motion game should reject a blocked name');
+assert.ok(nameRejected(motionGame.errors));
+assert.equal(motionGame.name, 'Player');
 
 // The endpoints bind `validation.name`, so even if the `ok` check were ever
 // bypassed the value reaching D1 is the masked one, never the raw payload.

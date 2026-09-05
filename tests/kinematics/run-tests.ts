@@ -1347,9 +1347,9 @@ console.log('Video analysis tests passed.');
     MOTION_GRAPH_IDS,
     ROUND_SECONDS,
     SUBMISSION_PERIOD_SECONDS,
+    SCORING_GAP_SECONDS,
+    SCORING_ZERO_AT,
     TARGET_BAND,
-    TOLERANCES,
-    attemptFeedback,
     describeTarget,
     fromMotionSamples,
     generateMotionGraphs,
@@ -1357,7 +1357,6 @@ console.log('Video analysis tests passed.');
     motionGameTotal,
     normalizeMotionGameScoreRow,
     randomSeed,
-    sampleScore,
     scoreAttempt,
     selectBestMotionGameScoresByUniqueName,
     targetAt,
@@ -1501,15 +1500,6 @@ console.log('Video analysis tests passed.');
   assert.match(describeTarget(velocityGraph), /Velocity target:/);
   assert.match(describeTarget(linear), /Distance from the detector target:/);
 
-  // --- the scoring taper --------------------------------------------------
-  assert.equal(sampleScore(0, 0.06, 0.4), 1, 'dead on');
-  assert.equal(sampleScore(0.06, 0.06, 0.4), 1, 'the deadband edge still scores full');
-  assert.equal(sampleScore(0.4, 0.06, 0.4), 0);
-  assert.equal(sampleScore(5, 0.06, 0.4), 0);
-  assert.equal(sampleScore(Number.NaN, 0.06, 0.4), 0);
-  assert.ok(Math.abs(sampleScore(0.23, 0.06, 0.4) - 0.5) < 1e-9, 'midpoint scores a half');
-  assert.ok(sampleScore(0.1, 0.06, 0.4) > sampleScore(0.2, 0.06, 0.4), 'monotonically decreasing');
-
   // --- scoring whole attempts --------------------------------------------
   const traceFor = (graph, offset = 0, noise = 0) => {
     let state = 12345;
@@ -1528,64 +1518,158 @@ console.log('Video analysis tests passed.');
     });
   };
 
-  // A perfect walk scores 100 on every graph of every seed we try.
+  // --- scoring reflects how far off you actually were ---------------------
+  //
+  // There is no band inside which a run is simply "correct": the score is
+  // 100 x (1 - rms/zeroAt), so error always costs something. What is forgiven
+  // is the sensor, not the walk — brief dropouts and jitter, never a bias or a
+  // lag.
+
+  // Walking the target exactly is the only way to a perfect score. The velocity
+  // graphs land a point short because the measured velocity is a sliding fit
+  // and the target is not, which is honest rather than worth chasing.
   for (const seed of [0, 7, 99, 2024, 314159]) {
     generateMotionGraphs(seed).forEach((graph) => {
-      assert.equal(
-        scoreAttempt(graph, traceFor(graph)),
-        100,
-        `seed ${seed} / ${graph.id}: walking the target exactly must score 100`,
+      const perfect = scoreAttempt(graph, traceFor(graph));
+      assert.ok(
+        perfect >= 98 && perfect <= 100,
+        `seed ${seed} / ${graph.id}: an exact walk should be near-perfect, got ${perfect}`,
       );
     });
   }
 
+  // No free deadband: a few centimetres of steady bias costs real marks.
+  const offsetScores = [0, 0.02, 0.05, 0.1, 0.2, 0.3].map((offset) =>
+    scoreAttempt(linear, traceFor(linear, offset)),
+  );
+  assert.equal(offsetScores[0], 100);
+  assert.ok(offsetScores[1] < 100, `a 2 cm bias must cost something, got ${offsetScores[1]}`);
+  assert.ok(
+    offsetScores[2] <= 92,
+    `a 5 cm bias should be clearly short of perfect, got ${offsetScores[2]}`,
+  );
+  for (let index = 1; index < offsetScores.length; index += 1) {
+    assert.ok(
+      offsetScores[index] < offsetScores[index - 1],
+      `score must fall as bias grows: ${offsetScores.join(', ')}`,
+    );
+  }
+
+  // Being off by more than the whole tolerance scores nothing, and nothing
+  // ever scores above 100.
   generateMotionGraphs(2024).forEach((graph) => {
     if (graph.quantity !== 'position') return;
     assert.equal(scoreAttempt(graph, traceFor(graph, 1.5)), 0, `${graph.id}: 1.5 m off scores 0`);
   });
+  for (let seed = 0; seed < 40; seed += 1) {
+    generateMotionGraphs(seed).forEach((graph) => {
+      [0, 0.05, 0.3, 2].forEach((offset) => {
+        const score = scoreAttempt(graph, traceFor(graph, offset));
+        assert.ok(
+          score >= 0 && score <= 100,
+          `seed ${seed} / ${graph.id} @ ${offset}: score ${score} out of range`,
+        );
+      });
+    });
+  }
 
-  const nudged = scoreAttempt(linear, traceFor(linear, 0.15));
-  assert.ok(nudged > 0 && nudged < 100, `a 15 cm bias should be partial credit, got ${nudged}`);
+  // Lag is the error mode a real walker actually has, and it is penalised.
+  const lagged = (graph, lag) => {
+    const count = Math.floor(graph.durationSeconds / SUBMISSION_PERIOD_SECONDS) + 1;
+    return Array.from({ length: count }, (_, index) => {
+      const t = index * SUBMISSION_PERIOD_SECONDS;
+      return { t, distance: impliedPosition(graph, Math.max(0, t - lag)), quality: 'ok' };
+    });
+  };
   assert.ok(
-    scoreAttempt(linear, traceFor(linear, 0.1)) > scoreAttempt(linear, traceFor(linear, 0.2)),
-    'closer scores higher',
+    scoreAttempt(linear, lagged(linear, 0.2)) < 98,
+    'a fifth of a second behind the target should cost marks',
   );
-  assert.equal(
-    scoreAttempt(linear, traceFor(linear, 0, 0.004)),
-    100,
-    'millimetre sonar noise stays inside the deadband',
+  assert.ok(
+    scoreAttempt(linear, lagged(linear, 0.5)) < scoreAttempt(linear, lagged(linear, 0.2)),
+    'falling further behind costs more',
   );
 
-  assert.equal(
-    scoreAttempt(linear, traceFor(linear).slice(0, 10)),
-    Math.round((100 * 10) / GRID_POINTS),
+  // --- but the sensor is forgiven ----------------------------------------
+  const withGap = (graph, seconds, startIndex = 50) => {
+    const trace = traceFor(graph);
+    const count = Math.round(seconds / SUBMISSION_PERIOD_SECONDS);
+    for (let index = startIndex; index < startIndex + count && index < trace.length; index += 1) {
+      trace[index] = { ...trace[index], distance: 0, quality: 'dropout' };
+    }
+    return trace;
+  };
+
+  // A brief disconnect on an otherwise perfect walk must not cost anything.
+  [0.2, 0.3, 0.5].forEach((seconds) => {
+    assert.equal(
+      scoreAttempt(linear, withGap(linear, seconds)),
+      100,
+      `a ${seconds}s dropout must not be scored against the player`,
+    );
+  });
+
+  // Sustained loss of signal is a different thing: there is no measurement.
+  assert.ok(
+    scoreAttempt(linear, withGap(linear, 4)) < 70,
+    'four seconds of lost signal is genuinely missing data',
+  );
+  assert.ok(SCORING_GAP_SECONDS >= 0.5 && SCORING_GAP_SECONDS <= 2);
+
+  // Alternating dropouts are bridged rather than punished.
+  const speckled = traceFor(linear).map((sample, index) =>
+    index % 2 === 0 ? sample : { ...sample, distance: 0, quality: 'dropout' },
+  );
+  assert.ok(
+    scoreAttempt(linear, speckled) >= 98,
+    `speckled dropouts should be bridged, got ${scoreAttempt(linear, speckled)}`,
+  );
+
+  // Jitter around the target averages out; a bias of the same size does not.
+  assert.ok(
+    scoreAttempt(linear, traceFor(linear, 0, 0.1)) > scoreAttempt(linear, traceFor(linear, 0.05)),
+    'random wobble should cost less than a steady offset half its size',
+  );
+
+  // A short recording loses the marks it never earned.
+  assert.ok(
+    scoreAttempt(linear, traceFor(linear).slice(0, 10)) < 15,
     'scoring runs on the full grid, not on whatever was submitted',
   );
   assert.equal(scoreAttempt(linear, []), 0);
 
-  const halfDropped = traceFor(linear).map((sample, index) =>
-    index % 2 === 0 ? sample : { ...sample, quality: 'dropout' },
-  );
-  const droppedScore = scoreAttempt(linear, halfDropped);
+  // Doing nothing must not be worth much. This is the calibration that matters
+  // most on the velocity round: velocities are small numbers, so scoring them
+  // against a loose scale quietly handed most of the marks to anyone who simply
+  // stood on the mark and waited.
+  for (const seed of [0, 5, 41, 2024]) {
+    generateMotionGraphs(seed).forEach((graph) => {
+      const count = Math.floor(graph.durationSeconds / SUBMISSION_PERIOD_SECONDS) + 1;
+      const stillTrace = Array.from({ length: count }, (_, index) => ({
+        t: index * SUBMISSION_PERIOD_SECONDS,
+        distance: graph.startMeters,
+        quality: 'ok',
+      }));
+      const still = scoreAttempt(graph, stillTrace);
+      assert.ok(
+        still < 50,
+        `seed ${seed} / ${graph.id}: standing still scored ${still}, which is too generous`,
+      );
+      assert.ok(
+        still < scoreAttempt(graph, traceFor(graph)),
+        `seed ${seed} / ${graph.id}: standing still must not beat walking it`,
+      );
+    });
+  }
+
+  assert.ok(SCORING_ZERO_AT.position > 0 && SCORING_ZERO_AT.velocity > 0);
   assert.ok(
-    droppedScore > 40 && droppedScore < 60,
-    `half dropouts should roughly halve the score, got ${droppedScore}`,
+    SCORING_ZERO_AT.velocity < SCORING_ZERO_AT.position,
+    'velocity is scored on a tighter scale than position',
   );
 
   assert.equal(motionGameTotal([100, 100, 100]), MAX_TOTAL_SCORE);
   assert.equal(MAX_TOTAL_SCORE, 300);
-
-  // --- feedback -----------------------------------------------------------
-  assert.match(attemptFeedback(linear, traceFor(linear)), /Well centred/);
-  assert.match(attemptFeedback(linear, traceFor(linear, 0.5)), /too far from the detector/);
-  assert.match(attemptFeedback(linear, traceFor(linear, -0.5)), /too close to the detector/);
-  assert.match(
-    attemptFeedback(
-      linear,
-      traceFor(linear).map((sample) => ({ ...sample, quality: 'dropout' })),
-    ),
-    /lost you/,
-  );
 
   // --- submission validation ---------------------------------------------
   const RUN_SEED = 4242;
@@ -1614,7 +1698,7 @@ console.log('Video analysis tests passed.');
   assert.equal(good.score, good.graphScores.reduce((a, b) => a + b, 0));
   assert.equal(good.name, 'Ada');
   assert.equal(good.graphScores.length, 3);
-  assert.equal(good.score, 300, 'a clean walk of the generated targets is a perfect run');
+  assert.ok(good.score >= 295, `a clean walk should score near 300, got ${good.score}`);
 
   // The seed is the anti-cheat hinge: a run walked against one set of targets
   // must not validate against the set the server actually minted.
@@ -1742,7 +1826,6 @@ console.log('Video analysis tests passed.');
   assert.equal(blocked.ok, false);
   assert.equal(blocked.name, 'Player');
 
-  assert.ok(TOLERANCES.position.full < TOLERANCES.position.zero);
 
   // --- row normalisation and ranking -------------------------------------
   const row = normalizeMotionGameScoreRow({

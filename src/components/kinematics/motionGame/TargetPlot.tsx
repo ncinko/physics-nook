@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { niceTicks } from '../../../lib/kinematics/videoAnalysis';
 import {
-  TOLERANCES,
+  GUIDE_BAND,
   describeTarget,
   targetSeries,
   type TargetGraph,
@@ -64,7 +64,7 @@ export default function TargetPlot({ graph, trace, now, className = '' }: Target
     PLOT_B - ((value - graph.axisMin) / (graph.axisMax - graph.axisMin)) * (PLOT_B - PLOT_T);
 
   const target = useMemo(() => targetSeries(graph, 0.05), [graph]);
-  const tolerance = TOLERANCES[graph.quantity];
+  const guide = GUIDE_BAND[graph.quantity];
 
   const targetPath = useMemo(
     () =>
@@ -77,25 +77,26 @@ export default function TargetPlot({ graph, trace, now, className = '' }: Target
     [target, graph],
   );
 
-  // The full-credit band drawn as one closed shape: out along the top edge,
-  // back along the bottom.
+  // A guide band around the target, drawn as one closed shape: out along the
+  // top edge, back along the bottom. It helps someone walking see roughly where
+  // they should be; it is not a scoring threshold, so the legend does not put a
+  // number on it.
   const bandPath = useMemo(() => {
     const upper = target.map(
       (point, index) =>
-        `${index === 0 ? 'M' : 'L'}${xPix(point.t).toFixed(1)},${yPix(point.value + tolerance.full).toFixed(1)}`,
+        `${index === 0 ? 'M' : 'L'}${xPix(point.t).toFixed(1)},${yPix(point.value + guide).toFixed(1)}`,
     );
     const lower = [...target]
       .reverse()
-      .map((point) => `L${xPix(point.t).toFixed(1)},${yPix(point.value - tolerance.full).toFixed(1)}`);
+      .map((point) => `L${xPix(point.t).toFixed(1)},${yPix(point.value - guide).toFixed(1)}`);
     return `${upper.join(' ')} ${lower.join(' ')} Z`;
-  }, [target, tolerance.full, graph]);
+  }, [target, guide, graph]);
 
   const tracePaths = useMemo(() => toPaths(trace, xPix, yPix), [trace, graph]);
 
   const yTicks = useMemo(() => niceTicks(graph.axisMin, graph.axisMax, 6), [graph]);
   const xTicks = useMemo(() => niceTicks(0, graph.durationSeconds, 7), [graph]);
 
-  const unit = graph.quantity === 'position' ? 'm' : 'm/s';
   const axisLabel = graph.quantity === 'position' ? 'Distance from detector (m)' : 'Velocity (m/s)';
 
   return (
@@ -207,7 +208,7 @@ export default function TargetPlot({ graph, trace, now, className = '' }: Target
       <g transform={`translate(${PLOT_R - 190}, ${PLOT_T + 14})`}>
         <line x1={0} x2={22} y1={0} y2={0} stroke="var(--accent-green)" strokeWidth={2.5} />
         <text x={28} y={4} fontSize={11} fill="var(--text-muted)">
-          target ±{tolerance.full} {unit}
+          target
         </text>
         <line x1={0} x2={22} y1={16} y2={16} stroke="var(--accent-blue)" strokeWidth={2.5} />
         <text x={28} y={20} fontSize={11} fill="var(--text-muted)">

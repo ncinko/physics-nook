@@ -13,7 +13,6 @@ import {
   MOTION_GRAPH_COUNT,
   ROUND_SECONDS,
   SUBMISSION_PERIOD_SECONDS,
-  attemptFeedback,
   fromMotionSamples,
   generateMotionGraphs,
   motionGameTotal,
@@ -41,7 +40,6 @@ type Phase = 'setup' | 'ready' | 'countdown' | 'recording' | 'review' | 'finishe
 interface RoundResult {
   samples: MotionSample[];
   score: number;
-  feedback: string;
   retried: boolean;
 }
 
@@ -195,7 +193,6 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     recordingRef.current = false;
     const samples = bufferRef.current.slice();
     const score = scoreAttempt(graph, samples);
-    const feedback = attemptFeedback(graph, samples);
 
     setResults((previous) => {
       const next = [...previous];
@@ -204,7 +201,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       next[roundIndex] =
         existing && existing.score >= score
           ? { ...existing, retried: true }
-          : { samples, score, feedback, retried: existing !== null };
+          : { samples, score, retried: existing !== null };
       return next;
     });
 
@@ -467,9 +464,9 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
                   {phase === 'review' && results[roundIndex] && (
                     <>
-                      <p className="text-sm text-[var(--text-primary)]">
-                        <strong>{results[roundIndex]!.score} / 100.</strong>{' '}
-                        {results[roundIndex]!.feedback}
+                      <p className="text-4xl font-semibold tabular-nums text-[var(--text-primary)]">
+                        {results[roundIndex]!.score}
+                        <span className="text-xl text-[var(--text-muted)]"> / 100</span>
                       </p>
                       <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
                         {!results[roundIndex]!.retried && (

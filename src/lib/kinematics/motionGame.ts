@@ -17,6 +17,7 @@
 
 import {
   MAX_PLAUSIBLE_SPEED,
+  fillDropouts,
   resample,
   velocityAt,
   type MotionSample,
@@ -401,99 +402,135 @@ export const describeTarget = (graph: TargetGraph): string => {
 
 // --- scoring ---------------------------------------------------------------
 
-export const TOLERANCES = {
-  position: { full: 0.06, zero: 0.4 },
-  velocity: { full: 0.08, zero: 0.45 },
+/**
+ * RMS error at which a round scores nothing. Also the per-sample ceiling: one
+ * wild excursion counts as a complete miss at that instant and no worse, so a
+ * single bad moment cannot outweigh the rest of the walk the way an unbounded
+ * squared error would.
+ *
+ * The velocity figure is much tighter than the position one because velocities
+ * are small numbers: the targets never exceed 0.4 m/s, so scoring them against
+ * a half-metre-per-second scale handed most of the marks to anyone who simply
+ * stood still. Calibrated so that walking the target scores in the high
+ * nineties, a fifth of a second of lag costs about ten, and standing still
+ * through the whole round lands in the thirties — credit for the stationary
+ * stretches it genuinely matched, and nothing more.
+ */
+export const SCORING_ZERO_AT = {
+  position: 0.4,
+  velocity: 0.25,
 } as const;
 
 /**
- * Error to credit, with a flat-topped taper. Inside `full` the sample scores
- * 1.0 outright — 6 cm of position is inside ordinary walking sway, and without
- * that deadband a "perfect" run would be unreachable rather than merely hard.
- * Past `zero` it scores nothing.
+ * Width of the running mean applied before comparing. Half a second is long
+ * enough to absorb a stumble, a bridged dropout, or the sonar picking up a
+ * sleeve, and short enough to leave every real feature of the target intact —
+ * the quickest thing any generated curve asks for is a half-second change of
+ * pace.
  */
-export const sampleScore = (error: number, full: number, zero: number): number => {
-  if (!Number.isFinite(error)) return 0;
-  if (error <= full) return 1;
-  if (error >= zero) return 0;
-  return (zero - error) / (zero - full);
-};
+export const SCORING_SMOOTH_SECONDS = 0.5;
+
+/**
+ * Lost signal shorter than this is interpolated across before scoring, so a
+ * brief disconnect costs nothing. Beyond it there is genuinely no measurement,
+ * and those samples take the full per-sample penalty.
+ */
+export const SCORING_GAP_SECONDS = 1;
+
+/**
+ * Half-width of the faint band drawn around the target. Purely a visual aid for
+ * someone walking — it is not a scoring threshold, and nothing inside it is
+ * "free". The scoring below measures the actual distance from the line.
+ */
+export const GUIDE_BAND = {
+  position: 0.1,
+  velocity: 0.12,
+} as const;
 
 export const MAX_GRAPH_SCORE = 100;
 export const MAX_TOTAL_SCORE = MAX_GRAPH_SCORE * MOTION_GRAPH_COUNT;
 
 /**
- * Scores one attempt out of 100.
+ * Centred running mean, skipping holes. Returns null only where the whole
+ * window is empty.
+ */
+const runningMean = (
+  values: readonly (number | null)[],
+  windowSeconds: number,
+  periodSeconds: number,
+): (number | null)[] => {
+  const half = Math.max(1, Math.round(windowSeconds / (2 * periodSeconds)));
+
+  return values.map((_, index) => {
+    let sum = 0;
+    let count = 0;
+    for (let offset = index - half; offset <= index + half; offset += 1) {
+      const value = values[offset];
+      if (offset < 0 || offset >= values.length || value === null || !Number.isFinite(value)) {
+        continue;
+      }
+      sum += value;
+      count += 1;
+    }
+    return count > 0 ? sum / count : null;
+  });
+};
+
+/**
+ * Scores one attempt out of 100, from how far the walk actually was from the
+ * target.
  *
- * Scored on a fixed grid rather than over whatever samples arrived, which
- * matters for two reasons: it makes the client's displayed score and the
- * server's recomputed score identical by construction, and it means a short
- * recording loses the marks it never earned instead of averaging over the
- * three samples someone chose to submit.
+ * The score is `100 x (1 - rms / zeroAt)` over the whole round, so every
+ * centimetre of error costs marks — there is no band inside which a run is
+ * simply "correct". Matching a target closely is meant to be hard; 100 requires
+ * being right to within a couple of millimetres on average, which no one walks.
+ *
+ * Two deliberate softenings, both aimed at the sensor rather than the player.
+ * Gaps shorter than `SCORING_GAP_SECONDS` are interpolated across, and both
+ * traces then pass through the same running mean, so a momentary disconnect or
+ * a spurious echo is smoothed away instead of scored. The *target* is smoothed
+ * too, which is what keeps that fair: a corner is rounded off on both sides of
+ * the comparison, so the filter never asks for something it has just erased.
+ *
+ * Scored on a fixed grid rather than over whatever samples arrived. That makes
+ * the browser's displayed score and the server's recomputed score identical by
+ * construction, and it means a short recording loses the marks it never earned
+ * instead of averaging over the handful of samples someone chose to submit.
  */
 export const scoreAttempt = (graph: TargetGraph, samples: readonly MotionSample[]): number => {
   const grid = resample(samples, SUBMISSION_PERIOD_SECONDS, graph.durationSeconds);
-  const tolerance = TOLERANCES[graph.quantity];
+  const bridged = fillDropouts(grid, SCORING_GAP_SECONDS);
+  const zeroAt = SCORING_ZERO_AT[graph.quantity];
 
-  let total = 0;
+  const measured = bridged.map((sample) => {
+    if (sample.quality !== 'ok') return null;
+    return graph.quantity === 'position' ? sample.distance : velocityAt(bridged, sample.t);
+  });
+  const target = bridged.map((sample) => targetAt(graph, sample.t));
 
-  grid.forEach((sample) => {
-    if (sample.quality !== 'ok') return;
+  const smoothedMeasured = runningMean(measured, SCORING_SMOOTH_SECONDS, SUBMISSION_PERIOD_SECONDS);
+  const smoothedTarget = runningMean(target, SCORING_SMOOTH_SECONDS, SUBMISSION_PERIOD_SECONDS);
 
-    const measured =
-      graph.quantity === 'position' ? sample.distance : velocityAt(grid, sample.t);
+  if (smoothedMeasured.length === 0) return 0;
 
-    if (measured === null || !Number.isFinite(measured)) return;
+  let sumSquares = 0;
 
-    total += sampleScore(Math.abs(measured - targetAt(graph, sample.t)), tolerance.full, tolerance.zero);
+  smoothedMeasured.forEach((value, index) => {
+    const wanted = smoothedTarget[index];
+    const error =
+      value === null || !Number.isFinite(value) || wanted === null
+        ? zeroAt
+        : Math.min(Math.abs(value - wanted), zeroAt);
+    sumSquares += error * error;
   });
 
-  return Math.round((MAX_GRAPH_SCORE * total) / grid.length);
+  const rms = Math.sqrt(sumSquares / smoothedMeasured.length);
+
+  return Math.round(MAX_GRAPH_SCORE * Math.max(0, 1 - rms / zeroAt));
 };
 
 export const motionGameTotal = (graphScores: readonly number[]): number =>
   graphScores.reduce((sum, score) => sum + score, 0);
-
-/** A one-line read on what went wrong, shown between rounds. */
-export const attemptFeedback = (graph: TargetGraph, samples: readonly MotionSample[]): string => {
-  const grid = resample(samples, SUBMISSION_PERIOD_SECONDS, graph.durationSeconds);
-  const dropouts = grid.filter((sample) => sample.quality !== 'ok').length;
-
-  if (dropouts > grid.length / 3) {
-    return 'The detector lost you for much of that run — check nothing is between you and the sensor.';
-  }
-
-  let signedTotal = 0;
-  let counted = 0;
-
-  grid.forEach((sample) => {
-    if (sample.quality !== 'ok') return;
-    const measured = graph.quantity === 'position' ? sample.distance : velocityAt(grid, sample.t);
-    if (measured === null || !Number.isFinite(measured)) return;
-    signedTotal += measured - targetAt(graph, sample.t);
-    counted += 1;
-  });
-
-  if (counted === 0) return 'No usable data from that run.';
-
-  const bias = signedTotal / counted;
-  const unit = graph.quantity === 'position' ? 'm' : 'm/s';
-
-  if (Math.abs(bias) < TOLERANCES[graph.quantity].full) {
-    return 'Well centred on the target the whole way through.';
-  }
-
-  const direction =
-    graph.quantity === 'position'
-      ? bias > 0
-        ? 'too far from the detector'
-        : 'too close to the detector'
-      : bias > 0
-        ? 'moving away faster than the target'
-        : 'moving toward the detector faster than the target';
-
-  return `On average ${Math.abs(bias).toFixed(2)} ${unit} ${direction}.`;
-};
 
 // --- leaderboard -----------------------------------------------------------
 

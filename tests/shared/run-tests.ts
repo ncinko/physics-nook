@@ -171,12 +171,16 @@ assert.equal(chicken.ok, false, 'chicken count should reject a blocked name');
 assert.ok(nameRejected(chicken.errors));
 assert.equal(chicken.name, 'Player');
 
-const motionGame = validateMotionGameScoreSubmission({
-  name: 'n1gger',
-  score: 0,
-  retriesUsed: 0,
-  attempts: [],
-});
+const motionGame = validateMotionGameScoreSubmission(
+  {
+    name: 'n1gger',
+    score: 0,
+    retriesUsed: 0,
+    attempts: [],
+  },
+  // Any seed will do: the name gate runs before the targets matter.
+  1,
+);
 assert.equal(motionGame.ok, false, 'motion game should reject a blocked name');
 assert.ok(nameRejected(motionGame.errors));
 assert.equal(motionGame.name, 'Player');

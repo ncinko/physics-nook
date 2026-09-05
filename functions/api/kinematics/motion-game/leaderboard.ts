@@ -96,12 +96,36 @@ export const onRequestPost = async ({
   const body = payload as Record<string, unknown>;
   const runId = typeof body.runId === 'string' ? body.runId.trim() : '';
 
+  const db = configured.db as any;
+  const now = Date.now();
+  const ipHash = await hashClientAddress(request, configured.salt);
+
+  if (!runId) {
+    return jsonResponse({ ok: false, error: 'Invalid score payload.' }, { status: 400 });
+  }
+
+  // The seed comes from the run row, never from the submission. Scoring has to
+  // rebuild the exact graphs this player was shown; letting the payload name
+  // its own seed would let someone pick an easier set of targets after the
+  // fact. Read-only here — the run is not consumed unless the score is good.
+  const runRow = await db
+    .prepare('SELECT seed FROM kinematics_motion_game_runs WHERE id = ? AND ip_hash = ?')
+    .bind(runId, ipHash)
+    .first();
+
+  if (!runRow) {
+    return jsonResponse(
+      { ok: false, error: 'Motion game run is missing, expired, or already used.' },
+      { status: 409 },
+    );
+  }
+
   // Replays the recorded traces through the same scoring the browser ran, so
   // the number that lands in D1 is one this endpoint computed. The submitted
   // score is only ever compared against it.
-  const validation = validateMotionGameScoreSubmission(body);
+  const validation = validateMotionGameScoreSubmission(body, Number(runRow.seed ?? 0));
 
-  if (!runId || !validation.ok) {
+  if (!validation.ok) {
     return jsonResponse(
       {
         ok: false,
@@ -112,9 +136,6 @@ export const onRequestPost = async ({
     );
   }
 
-  const db = configured.db as any;
-  const now = Date.now();
-  const ipHash = await hashClientAddress(request, configured.salt);
   const recent = await db
     .prepare('SELECT COUNT(*) AS count FROM kinematics_motion_game_scores WHERE ip_hash = ? AND created_at > ?')
     .bind(ipHash, now - 60 * 60 * 1000)

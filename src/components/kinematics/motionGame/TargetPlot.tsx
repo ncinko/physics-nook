@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
 import { niceTicks } from '../../../lib/kinematics/videoAnalysis';
-import { TOLERANCES, targetSeries, type TargetGraph } from '../../../lib/kinematics/motionGame';
+import {
+  TOLERANCES,
+  describeTarget,
+  targetSeries,
+  type TargetGraph,
+} from '../../../lib/kinematics/motionGame';
 
 // SVG rather than canvas, for the reason already written down in
 // AnalysisPlot.tsx: the point counts are in the hundreds, the axis text needs
@@ -98,7 +103,7 @@ export default function TargetPlot({ graph, trace, now, className = '' }: Target
       viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       className={`w-full ${className}`.trim()}
       role="img"
-      aria-label={`${graph.label}. ${graph.hint}`}
+      aria-label={describeTarget(graph)}
     >
       <rect x={PLOT_L} y={PLOT_T} width={PLOT_R - PLOT_L} height={PLOT_B - PLOT_T} fill="var(--sim-bg)" />
 

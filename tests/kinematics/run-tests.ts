@@ -1335,24 +1335,28 @@ const exportMeta = (overrides: Partial<PlotExportMeta> = {}): PlotExportMeta => 
 
 console.log('Video analysis tests passed.');
 
-// --- Motion Match: targets, scoring, and submission validation -------------
+// --- Motion Match: generated targets, scoring, and submission validation ---
 {
   const {
     DROPOUT_DISTANCE,
     GRID_POINTS,
+    MAX_TARGET_SPEED,
     MAX_TOTAL_SCORE,
-
     MOTION_GAME_DEFAULTS,
-    MOTION_GRAPHS,
+    MOTION_GRAPH_COUNT,
+    MOTION_GRAPH_IDS,
     ROUND_SECONDS,
     SUBMISSION_PERIOD_SECONDS,
+    TARGET_BAND,
     TOLERANCES,
     attemptFeedback,
-    findGraph,
+    describeTarget,
     fromMotionSamples,
+    generateMotionGraphs,
     impliedPosition,
     motionGameTotal,
     normalizeMotionGameScoreRow,
+    randomSeed,
     sampleScore,
     scoreAttempt,
     selectBestMotionGameScoresByUniqueName,
@@ -1362,93 +1366,140 @@ console.log('Video analysis tests passed.');
     validateMotionGameScoreSubmission,
   } = await import('../../src/lib/kinematics/motionGame.ts');
 
-  // --- the targets have to be walkable in about two metres ---------------
+  // --- every generated target has to be walkable in about two metres ------
   //
-  // This is the constraint the whole game rests on. If a target strays below
-  // the detector dead zone or asks for a sprint, no amount of good scoring
-  // makes it matchable.
+  // The targets are random now, so this is the property that matters: not that
+  // one hand-tuned curve fits the room, but that no seed can produce one that
+  // does not. If the generator is ever loosened, this is the test that should
+  // stop it.
   const REACH_MIN = 0.5;
   const REACH_MAX = 2.5;
   const WALKABLE_SPEED = 0.45;
+  const SEEDS = 400;
 
-  MOTION_GRAPHS.forEach((graph) => {
-    assert.equal(graph.durationSeconds, ROUND_SECONDS, `${graph.id} runs the standard round`);
+  let widestSpan = 0;
+  let fastest = 0;
 
-    let minPosition = Infinity;
-    let maxPosition = -Infinity;
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const graphs = generateMotionGraphs(seed);
 
-    for (let t = 0; t <= graph.durationSeconds; t += 0.02) {
-      const position = impliedPosition(graph, t);
-      minPosition = Math.min(minPosition, position);
-      maxPosition = Math.max(maxPosition, position);
-
-      const after = Math.min(t + 0.05, graph.durationSeconds);
-      const before = Math.max(t - 0.05, 0);
-      const speed = Math.abs(
-        (impliedPosition(graph, after) - impliedPosition(graph, before)) / (after - before),
-      );
-      assert.ok(
-        speed <= WALKABLE_SPEED,
-        `${graph.id} demands ${speed.toFixed(2)} m/s at t=${t.toFixed(2)} - faster than a walk`,
-      );
-    }
-
-    assert.ok(minPosition >= REACH_MIN, `${graph.id} comes within ${minPosition.toFixed(2)} m`);
-    assert.ok(maxPosition <= REACH_MAX, `${graph.id} reaches out to ${maxPosition.toFixed(2)} m`);
-    assert.ok(
-      maxPosition - minPosition <= 2,
-      `${graph.id} spans ${(maxPosition - minPosition).toFixed(2)} m, over the two-metre budget`,
+    assert.equal(graphs.length, MOTION_GRAPH_COUNT, `seed ${seed}: wrong graph count`);
+    assert.deepEqual(
+      graphs.map((g) => g.id),
+      [...MOTION_GRAPH_IDS],
+      `seed ${seed}: graphs out of order`,
     );
-  });
+    assert.deepEqual(
+      graphs.map((g) => g.quantity),
+      ['position', 'position', 'velocity'],
+      `seed ${seed}: two position graphs then a velocity graph`,
+    );
 
-  // Two position graphs then a velocity graph, in that order.
-  assert.deepEqual(
-    MOTION_GRAPHS.map((graph) => graph.quantity),
-    ['position', 'position', 'velocity'],
-  );
+    graphs.forEach((graph) => {
+      const where = `seed ${seed} / ${graph.id}`;
+      assert.equal(graph.durationSeconds, ROUND_SECONDS, `${where}: wrong duration`);
+      assert.ok(graph.segments.length > 0, `${where}: no segments`);
 
-  // A hold segment must restate the running value, or targetAt jumps.
-  MOTION_GRAPHS.forEach((graph) => {
-    let previous = graph.startValue;
-    graph.segments.forEach((segment) => {
-      if (segment.ease === 'hold') {
+      // Segment times must march forward and finish exactly on the round.
+      let previousTime = 0;
+      graph.segments.forEach((segment) => {
         assert.ok(
-          Math.abs(segment.value - previous) < 1e-9,
-          `${graph.id} holds at ${segment.value} after ${previous}`,
+          segment.until > previousTime - 1e-9,
+          `${where}: segment times go backwards at ${segment.until}`,
+        );
+        previousTime = segment.until;
+      });
+      assert.ok(
+        Math.abs(graph.segments[graph.segments.length - 1].until - ROUND_SECONDS) < 1e-9,
+        `${where}: last segment ends at ${previousTime}, not ${ROUND_SECONDS}`,
+      );
+
+      // A hold must restate the running value, or targetAt steps.
+      let previousValue = graph.startValue;
+      graph.segments.forEach((segment) => {
+        if (segment.ease === 'hold') {
+          assert.ok(
+            Math.abs(segment.value - previousValue) < 1e-9,
+            `${where}: hold at ${segment.value} after ${previousValue}`,
+          );
+        }
+        previousValue = segment.value;
+      });
+
+      // targetAt is continuous.
+      for (let t = 0; t < ROUND_SECONDS; t += 0.02) {
+        const jump = Math.abs(targetAt(graph, t + 0.02) - targetAt(graph, t));
+        assert.ok(jump < 0.05, `${where}: targetAt jumps ${jump.toFixed(3)} at t=${t.toFixed(2)}`);
+      }
+
+      // The walk the target implies stays in the room, at a walking pace.
+      let minPosition = Infinity;
+      let maxPosition = -Infinity;
+
+      for (let t = 0; t <= ROUND_SECONDS; t += 0.05) {
+        const position = impliedPosition(graph, t);
+        minPosition = Math.min(minPosition, position);
+        maxPosition = Math.max(maxPosition, position);
+
+        const after = Math.min(t + 0.1, ROUND_SECONDS);
+        const before = Math.max(t - 0.1, 0);
+        const speed = Math.abs(
+          (impliedPosition(graph, after) - impliedPosition(graph, before)) / (after - before),
+        );
+        fastest = Math.max(fastest, speed);
+        assert.ok(
+          speed <= WALKABLE_SPEED,
+          `${where}: demands ${speed.toFixed(3)} m/s at t=${t.toFixed(2)}`,
         );
       }
-      previous = segment.value;
+
+      widestSpan = Math.max(widestSpan, maxPosition - minPosition);
+      assert.ok(minPosition >= REACH_MIN, `${where}: comes within ${minPosition.toFixed(2)} m`);
+      assert.ok(maxPosition <= REACH_MAX, `${where}: reaches ${maxPosition.toFixed(2)} m`);
+      assert.ok(
+        maxPosition - minPosition <= 2,
+        `${where}: spans ${(maxPosition - minPosition).toFixed(2)} m, over the two-metre budget`,
+      );
+
+      // And it has to actually ask for a walk, not a stand.
+      assert.ok(
+        maxPosition - minPosition >= 0.35,
+        `${where}: only spans ${(maxPosition - minPosition).toFixed(2)} m — nothing to walk`,
+      );
     });
-  });
+  }
 
-  // targetAt is continuous: no step bigger than the local slope allows.
-  MOTION_GRAPHS.forEach((graph) => {
-    for (let t = 0; t < graph.durationSeconds; t += 0.01) {
-      const jump = Math.abs(targetAt(graph, t + 0.01) - targetAt(graph, t));
-      assert.ok(jump < 0.05, `${graph.id} jumps ${jump.toFixed(3)} at t=${t.toFixed(2)}`);
-    }
-  });
+  assert.ok(widestSpan <= 2, `widest generated span was ${widestSpan.toFixed(2)} m`);
+  assert.ok(fastest <= MAX_TARGET_SPEED + 0.05, `fastest generated pace was ${fastest.toFixed(3)} m/s`);
+  assert.ok(TARGET_BAND.min >= 0.5 && TARGET_BAND.max <= 2.5);
 
-  // Endpoints and a hand-checked interior value on the linear graph.
-  const linear = findGraph('position-linear');
-  assert.ok(linear);
-  assert.equal(targetAt(linear, 0), 0.7);
-  assert.equal(targetAt(linear, 2), 0.7, 'still standing at 2 s');
-  assert.ok(Math.abs(targetAt(linear, 5) - 1.4) < 1e-9, 'halfway through the outbound ramp');
-  assert.ok(Math.abs(targetAt(linear, 7) - 2.1) < 1e-9);
-  assert.equal(targetAt(linear, 100), 0.9, 'past the end holds the final value');
-
-  // The velocity target integrates back to where it started.
-  const velocityGraph = findGraph('velocity-steps');
-  assert.ok(velocityGraph);
-  assert.ok(
-    Math.abs(impliedPosition(velocityGraph, ROUND_SECONDS) - velocityGraph.startMeters) < 0.02,
-    'the velocity round must end where it began',
+  // --- seeded, so the server can rebuild what the browser drew -----------
+  assert.deepEqual(
+    generateMotionGraphs(12345),
+    generateMotionGraphs(12345),
+    'the same seed must rebuild identical graphs',
   );
-  assert.ok(Math.abs(impliedPosition(velocityGraph, 6) - 2.0) < 0.02, 'turnaround near 2.0 m');
+  assert.notDeepEqual(
+    generateMotionGraphs(1),
+    generateMotionGraphs(2),
+    'different seeds should give different graphs',
+  );
 
+  // And they are genuinely varied, not three shapes on rotation.
+  const shapes = new Set(
+    Array.from({ length: 120 }, (_, seed) => JSON.stringify(generateMotionGraphs(seed))),
+  );
+  assert.ok(shapes.size >= 115, `only ${shapes.size} distinct target sets from 120 seeds`);
+
+  assert.ok(randomSeed(() => 0) >= 0);
+  assert.ok(randomSeed(() => 0.999999) <= 0xffffffff);
+
+  const [linear, curved, velocityGraph] = generateMotionGraphs(2024);
   assert.equal(targetSeries(linear).length, GRID_POINTS);
   assert.equal(GRID_POINTS, 141, '14 s at 10 Hz, inclusive of both ends');
+  assert.equal(targetAt(linear, 100), linear.segments[linear.segments.length - 1].value);
+  assert.match(describeTarget(velocityGraph), /Velocity target:/);
+  assert.match(describeTarget(linear), /Distance from the detector target:/);
 
   // --- the scoring taper --------------------------------------------------
   assert.equal(sampleScore(0, 0.06, 0.4), 1, 'dead on');
@@ -1461,10 +1512,10 @@ console.log('Video analysis tests passed.');
 
   // --- scoring whole attempts --------------------------------------------
   const traceFor = (graph, offset = 0, noise = 0) => {
-    let seed = 12345;
+    let state = 12345;
     const random = () => {
-      seed = (seed * 1103515245 + 12345) % 2147483648;
-      return seed / 2147483648 - 0.5;
+      state = (state * 1103515245 + 12345) % 2147483648;
+      return state / 2147483648 - 0.5;
     };
     const count = Math.floor(graph.durationSeconds / SUBMISSION_PERIOD_SECONDS) + 1;
     return Array.from({ length: count }, (_, index) => {
@@ -1477,39 +1528,34 @@ console.log('Video analysis tests passed.');
     });
   };
 
-  MOTION_GRAPHS.forEach((graph) => {
-    assert.equal(
-      scoreAttempt(graph, traceFor(graph)),
-      100,
-      `${graph.id}: walking the target exactly must score 100`,
-    );
-  });
+  // A perfect walk scores 100 on every graph of every seed we try.
+  for (const seed of [0, 7, 99, 2024, 314159]) {
+    generateMotionGraphs(seed).forEach((graph) => {
+      assert.equal(
+        scoreAttempt(graph, traceFor(graph)),
+        100,
+        `seed ${seed} / ${graph.id}: walking the target exactly must score 100`,
+      );
+    });
+  }
 
-  MOTION_GRAPHS.forEach((graph) => {
+  generateMotionGraphs(2024).forEach((graph) => {
     if (graph.quantity !== 'position') return;
-    assert.equal(
-      scoreAttempt(graph, traceFor(graph, 1.5)),
-      0,
-      `${graph.id}: standing 1.5 m off target must score 0`,
-    );
+    assert.equal(scoreAttempt(graph, traceFor(graph, 1.5)), 0, `${graph.id}: 1.5 m off scores 0`);
   });
 
-  // A small offset costs marks without wiping the score out.
   const nudged = scoreAttempt(linear, traceFor(linear, 0.15));
   assert.ok(nudged > 0 && nudged < 100, `a 15 cm bias should be partial credit, got ${nudged}`);
   assert.ok(
     scoreAttempt(linear, traceFor(linear, 0.1)) > scoreAttempt(linear, traceFor(linear, 0.2)),
     'closer scores higher',
   );
-
-  // Realistic sensor noise inside the deadband must not cost anything.
   assert.equal(
     scoreAttempt(linear, traceFor(linear, 0, 0.004)),
     100,
     'millimetre sonar noise stays inside the deadband',
   );
 
-  // A short recording loses the marks it never earned.
   assert.equal(
     scoreAttempt(linear, traceFor(linear).slice(0, 10)),
     Math.round((100 * 10) / GRID_POINTS),
@@ -1517,7 +1563,6 @@ console.log('Video analysis tests passed.');
   );
   assert.equal(scoreAttempt(linear, []), 0);
 
-  // Dropouts score zero rather than being skipped over.
   const halfDropped = traceFor(linear).map((sample, index) =>
     index % 2 === 0 ? sample : { ...sample, quality: 'dropout' },
   );
@@ -1543,64 +1588,84 @@ console.log('Video analysis tests passed.');
   );
 
   // --- submission validation ---------------------------------------------
+  const RUN_SEED = 4242;
+
   const quantise = (samples) =>
     samples.map((sample) => ({
       ...sample,
       distance: Math.round(sample.distance * 1000) / 1000,
     }));
 
-  const buildSubmission = (overrides = {}) => {
-    const attempts = MOTION_GRAPHS.map((graph) => ({
+  const buildSubmission = (overrides = {}, seed = RUN_SEED) => {
+    const graphs = generateMotionGraphs(seed);
+    const attempts = graphs.map((graph) => ({
       graph: graph.id,
       retried: false,
       samples: fromMotionSamples(quantise(traceFor(graph, 0, 0.004))),
     }));
     const score = motionGameTotal(
-      MOTION_GRAPHS.map((graph, index) =>
-        scoreAttempt(graph, toMotionSamples(attempts[index].samples)),
-      ),
+      graphs.map((graph, index) => scoreAttempt(graph, toMotionSamples(attempts[index].samples))),
     );
     return { name: 'Ada', score, retriesUsed: 0, attempts, ...overrides };
   };
 
-  const good = validateMotionGameScoreSubmission(buildSubmission());
+  const good = validateMotionGameScoreSubmission(buildSubmission(), RUN_SEED);
   assert.equal(good.ok, true, `a real-looking run must validate: ${good.errors.join('; ')}`);
   assert.equal(good.score, good.graphScores.reduce((a, b) => a + b, 0));
   assert.equal(good.name, 'Ada');
   assert.equal(good.graphScores.length, 3);
+  assert.equal(good.score, 300, 'a clean walk of the generated targets is a perfect run');
+
+  // The seed is the anti-cheat hinge: a run walked against one set of targets
+  // must not validate against the set the server actually minted.
+  for (const otherSeed of [1, 2, 3, 99, 12345]) {
+    const mismatched = validateMotionGameScoreSubmission(buildSubmission({}, otherSeed), RUN_SEED);
+    assert.equal(
+      mismatched.ok,
+      false,
+      `a run walked against seed ${otherSeed} must not pass as seed ${RUN_SEED}`,
+    );
+  }
 
   // The submitted score is compared, never trusted.
   assert.equal(
-    validateMotionGameScoreSubmission(buildSubmission({ score: good.score - 1 })).ok,
+    validateMotionGameScoreSubmission(buildSubmission({ score: good.score - 1 }), RUN_SEED).ok,
     false,
     'a mismatched score must be rejected',
   );
   assert.equal(
-    validateMotionGameScoreSubmission(buildSubmission({ score: 9999 })).ok,
+    validateMotionGameScoreSubmission(buildSubmission({ score: 9999 }), RUN_SEED).ok,
     false,
     'a score past the maximum is rejected',
   );
-  assert.equal(validateMotionGameScoreSubmission(buildSubmission({ score: 12.5 })).ok, false);
+  assert.equal(
+    validateMotionGameScoreSubmission(buildSubmission({ score: 12.5 }), RUN_SEED).ok,
+    false,
+  );
 
   // Structure.
-  assert.equal(validateMotionGameScoreSubmission(buildSubmission({ attempts: [] })).ok, false);
+  assert.equal(
+    validateMotionGameScoreSubmission(buildSubmission({ attempts: [] }), RUN_SEED).ok,
+    false,
+  );
   assert.equal(
     validateMotionGameScoreSubmission(
       buildSubmission({ attempts: buildSubmission().attempts.slice(0, 2) }),
+      RUN_SEED,
     ).ok,
     false,
   );
   {
     const swapped = buildSubmission();
     swapped.attempts = [swapped.attempts[1], swapped.attempts[0], swapped.attempts[2]];
-    const result = validateMotionGameScoreSubmission(swapped);
+    const result = validateMotionGameScoreSubmission(swapped, RUN_SEED);
     assert.equal(result.ok, false, 'attempts must be in graph order');
     assert.ok(result.errors.some((error) => /wrong graph/.test(error)));
   }
   {
     const short = buildSubmission();
     short.attempts[0].samples = short.attempts[0].samples.slice(0, 50);
-    const result = validateMotionGameScoreSubmission(short);
+    const result = validateMotionGameScoreSubmission(short, RUN_SEED);
     assert.equal(result.ok, false);
     assert.ok(result.errors.some((error) => /exactly 141 samples/.test(error)));
   }
@@ -1608,7 +1673,7 @@ console.log('Video analysis tests passed.');
     const offGrid = buildSubmission();
     offGrid.attempts[0].samples = offGrid.attempts[0].samples.map(([t, d]) => [t + 3, d]);
     assert.equal(
-      validateMotionGameScoreSubmission(offGrid).ok,
+      validateMotionGameScoreSubmission(offGrid, RUN_SEED).ok,
       false,
       'timestamps must sit on the grid',
     );
@@ -1617,7 +1682,7 @@ console.log('Video analysis tests passed.');
     const outOfRange = buildSubmission();
     outOfRange.attempts[0].samples[40] = [4.0, 12];
     assert.equal(
-      validateMotionGameScoreSubmission(outOfRange).ok,
+      validateMotionGameScoreSubmission(outOfRange, RUN_SEED).ok,
       false,
       '12 m is past the detector',
     );
@@ -1626,47 +1691,54 @@ console.log('Video analysis tests passed.');
     const teleport = buildSubmission();
     teleport.attempts[0].samples[40] = [4.0, 0.2];
     teleport.attempts[0].samples[41] = [4.1, 2.4];
-    const result = validateMotionGameScoreSubmission(teleport);
+    const result = validateMotionGameScoreSubmission(teleport, RUN_SEED);
     assert.equal(result.ok, false);
     assert.ok(result.errors.some((error) => /faster than a person can walk/.test(error)));
   }
   {
-    // A synthesised trace that respects the physical bounds DOES validate.
-    // Asserted rather than left implicit: the board is protected by the
-    // single-use run token and by recomputing the score, not by detecting
-    // fabrication. See the note in motionGame.ts about why the jitter check
-    // was dropped. If someone later adds a "looks fake" heuristic, this
-    // assertion is the one that should make them think twice.
+    // A synthesised trace that respects the physical bounds and the right seed
+    // DOES validate. Asserted rather than left implicit: the board is protected
+    // by the single-use run token, the server-minted seed, and recomputing the
+    // score — not by detecting fabrication. See the note in motionGame.ts about
+    // why the jitter check was dropped.
     const synthetic = buildSubmission();
-    synthetic.attempts = MOTION_GRAPHS.map((graph) => ({
+    synthetic.attempts = generateMotionGraphs(RUN_SEED).map((graph) => ({
       graph: graph.id,
       retried: false,
       samples: fromMotionSamples(traceFor(graph)),
     }));
     synthetic.score = motionGameTotal(
-      MOTION_GRAPHS.map((graph, index) =>
+      generateMotionGraphs(RUN_SEED).map((graph, index) =>
         scoreAttempt(graph, toMotionSamples(synthetic.attempts[index].samples)),
       ),
     );
-    assert.equal(validateMotionGameScoreSubmission(synthetic).ok, true);
+    assert.equal(validateMotionGameScoreSubmission(synthetic, RUN_SEED).ok, true);
   }
   {
-    // Mostly-dropout runs cannot be posted.
     const empty = buildSubmission();
     empty.attempts[0].samples = empty.attempts[0].samples.map(([t]) => [t, DROPOUT_DISTANCE]);
-    const result = validateMotionGameScoreSubmission(empty);
+    const result = validateMotionGameScoreSubmission(empty, RUN_SEED);
     assert.equal(result.ok, false);
     assert.ok(result.errors.some((error) => /too few usable readings/.test(error)));
   }
 
   // Retries.
-  assert.equal(validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: 3 })).ok, true);
-  assert.equal(validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: 4 })).ok, false);
-  assert.equal(validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: -1 })).ok, false);
+  assert.equal(
+    validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: 3 }), RUN_SEED).ok,
+    true,
+  );
+  assert.equal(
+    validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: 4 }), RUN_SEED).ok,
+    false,
+  );
+  assert.equal(
+    validateMotionGameScoreSubmission(buildSubmission({ retriesUsed: -1 }), RUN_SEED).ok,
+    false,
+  );
   assert.equal(MOTION_GAME_DEFAULTS.maxRetries, 3, 'one retry per graph');
 
   // Names are masked on the way in and rejected outright.
-  const blocked = validateMotionGameScoreSubmission(buildSubmission({ name: 'n1gger' }));
+  const blocked = validateMotionGameScoreSubmission(buildSubmission({ name: 'n1gger' }), RUN_SEED);
   assert.equal(blocked.ok, false);
   assert.equal(blocked.name, 'Player');
 

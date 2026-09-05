@@ -10,12 +10,14 @@ import {
 import {
   MAX_TOTAL_SCORE,
   MOTION_GAME_DEFAULTS,
-  MOTION_GRAPHS,
+  MOTION_GRAPH_COUNT,
   ROUND_SECONDS,
   SUBMISSION_PERIOD_SECONDS,
   attemptFeedback,
   fromMotionSamples,
+  generateMotionGraphs,
   motionGameTotal,
+  randomSeed,
   scoreAttempt,
   selectBestMotionGameScoresByUniqueName,
   type MotionGameLeaderboardScore,
@@ -53,8 +55,8 @@ const LOCAL_LIMIT = MOTION_GAME_DEFAULTS.leaderboardLimit;
  * The heading names the quantity and nothing else. Telling someone how to walk
  * the curve would be reading the graph for them, which is the one thing this
  * activity is asking them to do. The shape is on screen; that is the whole
- * exercise. (`graph.hint` survives in the plot's aria-label, where it is the
- * only description of the curve a screen-reader user gets.)
+ * exercise. (The plot's aria-label still carries a description of the curve's
+ * shape, which is the only account of it a screen-reader user gets.)
  */
 const quantityTitle = (quantity: 'position' | 'velocity') =>
   quantity === 'position' ? 'Position vs time' : 'Velocity vs time';
@@ -68,6 +70,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   const [phase, setPhase] = useState<Phase>('setup');
   const [roundIndex, setRoundIndex] = useState(0);
+  const [seed, setSeed] = useState(() => randomSeed());
   const [results, setResults] = useState<(RoundResult | null)[]>([null, null, null]);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [elapsed, setElapsed] = useState(0);
@@ -88,7 +91,11 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const submittedRef = useRef(false);
   const wallStartRef = useRef(0);
 
-  const graph = MOTION_GRAPHS[roundIndex];
+  // Targets are regenerated every run. In a cloud run the seed comes from the
+  // server alongside the run token, so the endpoint can rebuild the same three
+  // graphs when it scores the submission; practice runs just roll their own.
+  const graphs = useMemo(() => generateMotionGraphs(seed), [seed]);
+  const graph = graphs[roundIndex];
   const isPractice = device.sourceId === 'practice';
   const connected = device.status.kind === 'ready' || device.status.kind === 'streaming';
 
@@ -142,6 +149,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       if (!response.ok) throw new Error(`Motion game run request failed: ${response.status}`);
       const body = await response.json();
       runIdRef.current = typeof body.runId === 'string' ? body.runId : null;
+      if (Number.isFinite(Number(body.seed))) setSeed(Number(body.seed) >>> 0);
       setApiStatus(runIdRef.current ? 'online' : 'offline');
     } catch {
       runIdRef.current = null;
@@ -172,6 +180,16 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       }),
     [device],
   );
+
+  // Drop the practice walker onto the round's start mark whenever a round is
+  // waiting to begin. Doing it here rather than in each of beginGame/retry/next
+  // keeps it correct when the targets have just been regenerated: `graph` is
+  // derived from the new seed, which the callbacks cannot see yet.
+  const practiceSource = device.practice;
+  useEffect(() => {
+    if (phase !== 'ready') return;
+    practiceSource?.reset(graph.startMeters);
+  }, [phase, graph.startMeters, practiceSource]);
 
   const finishRound = useCallback(() => {
     recordingRef.current = false;
@@ -244,9 +262,12 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     setLiveTrace([]);
     setPhase('ready');
 
-    if (!isPractice) await createServerRun();
+    if (isPractice) {
+      setSeed(randomSeed());
+    } else {
+      await createServerRun();
+    }
     await device.startStream(DEFAULT_PERIOD_SECONDS);
-    device.practice?.reset(MOTION_GRAPHS[0].startMeters);
   }, [createServerRun, device, isPractice]);
 
   const startCountdown = useCallback(() => {
@@ -256,21 +277,18 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   }, []);
 
   const retryRound = useCallback(() => {
-    device.practice?.reset(graph.startMeters);
     setLiveTrace([]);
     setPhase('ready');
-  }, [device, graph.startMeters]);
+  }, []);
 
   const nextRound = useCallback(() => {
-    if (roundIndex >= MOTION_GRAPHS.length - 1) {
+    if (roundIndex >= MOTION_GRAPH_COUNT - 1) {
       void device.stopStream();
       setPhase('finished');
       return;
     }
-    const next = roundIndex + 1;
-    setRoundIndex(next);
+    setRoundIndex(roundIndex + 1);
     setLiveTrace([]);
-    device.practice?.reset(MOTION_GRAPHS[next].startMeters);
     setPhase('ready');
   }, [device, roundIndex]);
 
@@ -282,7 +300,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const canPostToCloud = !isPractice && device.sourceId !== null;
 
   const handleScoreSubmit = useCallback(async () => {
-    if (submittedRef.current || completed.length < MOTION_GRAPHS.length) return;
+    if (submittedRef.current || completed.length < MOTION_GRAPH_COUNT) return;
 
     if (isBlockedLeaderboardName(playerName)) {
       setNameError('That name cannot go on a shared board. Try another, or roll one.');
@@ -292,7 +310,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     submittedRef.current = true;
     setSubmitted(true);
 
-    const attempts = MOTION_GRAPHS.map((target, index) => ({
+    const attempts = graphs.map((target, index) => ({
       graph: target.id,
       retried: completed[index].retried,
       samples: fromMotionSamples(
@@ -388,7 +406,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       {phase !== 'setup' && phase !== 'finished' && (
         <div>
           <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">
-            Graph {roundIndex + 1} of {MOTION_GRAPHS.length}: {quantityTitle(graph.quantity)}
+            Graph {roundIndex + 1} of {MOTION_GRAPH_COUNT}: {quantityTitle(graph.quantity)}
           </h3>
 
           {/* The controls sit on the plot rather than under it. Whoever presses
@@ -460,7 +478,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
                           </Button>
                         )}
                         <Button className="px-6 py-2.5 text-base" onClick={nextRound}>
-                          {roundIndex >= MOTION_GRAPHS.length - 1 ? 'See the total' : 'Next graph'}
+                          {roundIndex >= MOTION_GRAPH_COUNT - 1 ? 'See the total' : 'Next graph'}
                         </Button>
                       </div>
                     </>
@@ -490,7 +508,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
             {totalScore} out of {MAX_TOTAL_SCORE}
           </h3>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {MOTION_GRAPHS.map(
+            {graphs.map(
               (target, index) =>
                 `Graph ${index + 1} (${target.quantity}) ${completed[index]?.score ?? 0}`,
             ).join(' · ')}

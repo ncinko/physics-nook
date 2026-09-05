@@ -22,6 +22,7 @@ import {
   type MotionSample,
 } from '../vernier/motionStream.ts';
 import { isBlockedLeaderboardName, sanitizeLeaderboardName } from './stopZones.ts';
+import { createRng, type Rng } from '../shared/rng.ts';
 
 export type MotionGraphId = 'position-linear' | 'position-curved' | 'velocity-steps';
 
@@ -51,7 +52,6 @@ export interface TargetGraph {
   axisMin: number;
   axisMax: number;
   segments: TargetSegment[];
-  hint: string;
 }
 
 export const ROUND_SECONDS = 14;
@@ -61,73 +61,38 @@ export const SUBMISSION_PERIOD_SECONDS = 0.1;
 
 export const GRID_POINTS = Math.floor(ROUND_SECONDS / SUBMISSION_PERIOD_SECONDS) + 1;
 
-export const MOTION_GRAPHS: readonly TargetGraph[] = [
-  {
-    id: 'position-linear',
-    label: 'Position vs time — straight lines',
-    quantity: 'position',
-    durationSeconds: ROUND_SECONDS,
-    startValue: 0.7,
-    startMeters: 0.7,
-    axisMin: 0,
-    axisMax: 2.6,
-    segments: [
-      { until: 3, value: 0.7, ease: 'hold' },
-      { until: 7, value: 2.1, ease: 'linear' },
-      { until: 9, value: 2.1, ease: 'hold' },
-      { until: 13, value: 0.9, ease: 'linear' },
-      { until: 14, value: 0.9, ease: 'hold' },
-    ],
-    hint: 'Stand still, walk back at a steady pace, stop, then return a little slower.',
-  },
-  {
-    id: 'position-curved',
-    label: 'Position vs time — a curve',
-    quantity: 'position',
-    durationSeconds: ROUND_SECONDS,
-    startValue: 0.7,
-    startMeters: 0.7,
-    axisMin: 0,
-    axisMax: 2.6,
-    segments: [
-      { until: 8, value: 2.3, ease: 'smooth' },
-      { until: 13, value: 0.8, ease: 'linear' },
-      { until: 14, value: 0.8, ease: 'hold' },
-    ],
-    hint: 'Ease away — slow, then quicker, then slow again — before a steady walk back.',
-  },
-  {
-    id: 'velocity-steps',
-    label: 'Velocity vs time',
-    quantity: 'velocity',
-    durationSeconds: ROUND_SECONDS,
-    startValue: 0,
-    startMeters: 0.6,
-    axisMin: -0.6,
-    axisMax: 0.6,
-    // Integrates to 0.60 m -> 2.00 m -> 0.60 m, so the whole round fits in
-    // 1.4 m of floor and ends where it began. The half-second ramps are not
-    // decoration: a step change in velocity is not something a person can walk.
-    segments: [
-      { until: 2, value: 0, ease: 'hold' },
-      { until: 2.5, value: 0.4, ease: 'linear' },
-      { until: 5.5, value: 0.4, ease: 'hold' },
-      { until: 6, value: 0, ease: 'linear' },
-      { until: 8, value: 0, ease: 'hold' },
-      { until: 8.5, value: -0.35, ease: 'linear' },
-      { until: 12, value: -0.35, ease: 'hold' },
-      { until: 12.5, value: 0, ease: 'linear' },
-      { until: 14, value: 0, ease: 'hold' },
-    ],
-    hint: 'Positive means walking away from the detector. Hold each speed steady.',
-  },
+/** Every round is two position graphs then a velocity graph, in that order. */
+export const MOTION_GRAPH_IDS: readonly MotionGraphId[] = [
+  'position-linear',
+  'position-curved',
+  'velocity-steps',
 ];
 
-export const findGraph = (id: MotionGraphId): TargetGraph | null =>
-  MOTION_GRAPHS.find((graph) => graph.id === id) ?? null;
+export const MOTION_GRAPH_COUNT = MOTION_GRAPH_IDS.length;
+
+/**
+ * The floor the targets are allowed to use. Not the detector's range — the
+ * detector reads 0.15 m to 6 m — but the part of it a person can actually walk
+ * in a classroom, with room to stop at either end.
+ */
+export const TARGET_BAND = { min: 0.6, max: 2.3 } as const;
+
+/** A comfortable walk. Above this a target stops being matchable. */
+export const MAX_TARGET_SPEED = 0.4;
+
+/** Slowest a leg of the walk may be, so a target never reads as "stand still". */
+const MIN_TARGET_SPEED = 0.2;
+
+/** Shortest meaningful walk, in metres. */
+const MIN_LEG_METRES = 0.4;
+
+/** Velocity cannot step; a person needs this long to change pace. */
+const RAMP_SECONDS = 0.5;
 
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(max, Math.max(min, value));
+
+const round2 = (value: number): number => Math.round(value * 100) / 100;
 
 const smoothstep = (s: number): number => s * s * (3 - 2 * s);
 
@@ -183,6 +148,257 @@ export const impliedPosition = (graph: TargetGraph, t: number): number => {
   return position;
 };
 
+// --- generation ------------------------------------------------------------
+//
+// Targets are generated per run rather than fixed, so the shapes cannot be
+// memorised and a second attempt is a fresh problem. The generator is seeded:
+// the server mints a seed alongside the run token, the browser builds the
+// graphs from it, and the scoring endpoint rebuilds the identical graphs from
+// the seed it stored. The curves themselves never travel over the wire and
+// never have to be trusted.
+//
+// Randomness is bounded, not free. Every leg is checked against the walking
+// band and the speed cap as it is chosen, and the velocity generator tracks the
+// position its curve implies so the walk cannot drift out of the room. The
+// property tests in tests/kinematics assert those invariants across hundreds of
+// seeds, which is the real guarantee — not the constants here.
+
+/**
+ * Picks a reachable end point for one leg of a walk.
+ *
+ * Returns null when neither direction has room, which the callers treat as
+ * "shorten this leg" rather than forcing an unwalkable jump.
+ */
+const pickLegTarget = (
+  rng: Rng,
+  from: number,
+  durationSeconds: number,
+  maxSpeed = MAX_TARGET_SPEED,
+): number | null => {
+  const reach = Math.min(maxSpeed * durationSeconds, TARGET_BAND.max - TARGET_BAND.min);
+
+  const awayLow = from + MIN_LEG_METRES;
+  const awayHigh = Math.min(TARGET_BAND.max, from + reach);
+  const backHigh = from - MIN_LEG_METRES;
+  const backLow = Math.max(TARGET_BAND.min, from - reach);
+
+  const canGoAway = awayHigh >= awayLow;
+  const canComeBack = backLow <= backHigh;
+
+  if (!canGoAway && !canComeBack) return null;
+
+  const goAway = canGoAway && canComeBack ? rng.next() < 0.5 : canGoAway;
+
+  return goAway ? rng.range(awayLow, awayHigh) : rng.range(backLow, backHigh);
+};
+
+/** Position vs time, built from constant-velocity legs separated by pauses. */
+const generateLinearPositionGraph = (rng: Rng): TargetGraph => {
+  const legs = rng.int(2, 3);
+  // Leg durations are tuned per count so the pauses that fill the rest of the
+  // round never get squeezed below about a second.
+  const legDuration = legs === 2 ? () => rng.range(3, 4.2) : () => rng.range(2.5, 3.2);
+  const legDurations = Array.from({ length: legs }, legDuration);
+  const pauseTotal = ROUND_SECONDS - legDurations.reduce((sum, value) => sum + value, 0);
+  const pauseWeights = Array.from({ length: legs + 1 }, () => rng.range(0.7, 1.3));
+  const weightTotal = pauseWeights.reduce((sum, value) => sum + value, 0);
+  const pauses = pauseWeights.map((weight) => (weight / weightTotal) * pauseTotal);
+
+  const start = round2(rng.range(TARGET_BAND.min, TARGET_BAND.min + 0.5));
+  const segments: TargetSegment[] = [];
+  let t = 0;
+  let x = start;
+
+  for (let index = 0; index < legs; index += 1) {
+    t += pauses[index];
+    segments.push({ until: round2(t), value: x, ease: 'hold' });
+
+    const duration = legDurations[index];
+    const next = pickLegTarget(rng, x, duration);
+    t += duration;
+    if (next !== null) x = round2(next);
+    segments.push({ until: round2(t), value: x, ease: next === null ? 'hold' : 'linear' });
+  }
+
+  // Whatever rounding left over belongs to the final pause, so the last segment
+  // lands exactly on the end of the round.
+  segments.push({ until: ROUND_SECONDS, value: x, ease: 'hold' });
+
+  return {
+    id: 'position-linear',
+    label: 'Position vs time',
+    quantity: 'position',
+    durationSeconds: ROUND_SECONDS,
+    startValue: start,
+    startMeters: start,
+    axisMin: 0,
+    axisMax: 2.6,
+    segments,
+  };
+};
+
+/** Position vs time with an eased leg, so the curve bends instead of kinking. */
+const generateCurvedPositionGraph = (rng: Rng): TargetGraph => {
+  const start = round2(rng.range(TARGET_BAND.min, TARGET_BAND.min + 0.35));
+  const outDuration = rng.range(6, 8);
+
+  // A smoothstep peaks at 1.5x its average speed, so the displacement it can
+  // cover in a given time is smaller than a straight leg's.
+  const outReach = Math.min((MAX_TARGET_SPEED * outDuration) / 1.5, TARGET_BAND.max - start);
+  const peak = round2(start + rng.range(Math.max(MIN_LEG_METRES, outReach * 0.75), outReach));
+
+  const returnDuration = ROUND_SECONDS - outDuration - rng.range(0.8, 1.6);
+  const easedReturn = rng.next() < 0.5;
+
+  // Decided before the distance, because it changes how far the return leg may
+  // travel: an eased leg peaks at 1.5x its average speed, so covering the same
+  // ground costs half again as much peak pace as a straight one.
+  const returnReach = Math.min(
+    (MAX_TARGET_SPEED * returnDuration) / (easedReturn ? 1.5 : 1),
+    peak - TARGET_BAND.min,
+  );
+  const end = round2(peak - rng.range(Math.max(MIN_LEG_METRES, returnReach * 0.6), returnReach));
+
+  return {
+    id: 'position-curved',
+    label: 'Position vs time',
+    quantity: 'position',
+    durationSeconds: ROUND_SECONDS,
+    startValue: start,
+    startMeters: start,
+    axisMin: 0,
+    axisMax: 2.6,
+    segments: [
+      { until: round2(outDuration), value: peak, ease: 'smooth' },
+      {
+        until: round2(outDuration + returnDuration),
+        value: end,
+        ease: easedReturn ? 'smooth' : 'linear',
+      },
+      { until: ROUND_SECONDS, value: end, ease: 'hold' },
+    ],
+  };
+};
+
+/**
+ * Velocity vs time: flat plateaus joined by short ramps.
+ *
+ * Generated by walking the position forward as each plateau is chosen, so the
+ * curve is checked against the room while it is being built rather than being
+ * generated and then rejected.
+ */
+const generateVelocityGraph = (rng: Rng): TargetGraph => {
+  const moves = rng.int(2, 3);
+  const start = round2(rng.range(TARGET_BAND.min, TARGET_BAND.min + 0.4));
+
+  // Tighter pauses when there are more moves, so the plateaus stay long enough
+  // to read as a held speed rather than a blip.
+  const gapRange: [number, number] = moves === 3 ? [1.2, 1.8] : [1.4, 2.2];
+  const gaps = Array.from({ length: moves }, () => rng.range(gapRange[0], gapRange[1]));
+  const finalGap = rng.range(1, 1.6);
+
+  // Each move spends two ramps, one up to speed and one back to rest. Budgeting
+  // for only one is what previously pushed the last segment past the round.
+  const plateauTotal =
+    ROUND_SECONDS -
+    gaps.reduce((sum, value) => sum + value, 0) -
+    finalGap -
+    moves * 2 * RAMP_SECONDS;
+  const plateauWeights = Array.from({ length: moves }, () => rng.range(0.8, 1.2));
+  const weightTotal = plateauWeights.reduce((sum, value) => sum + value, 0);
+
+  const segments: TargetSegment[] = [];
+  let t = 0;
+  let position = start;
+
+  for (let index = 0; index < moves; index += 1) {
+    t += gaps[index];
+    segments.push({ until: round2(t), value: 0, ease: 'hold' });
+
+    const plateau = (plateauWeights[index] / weightTotal) * plateauTotal;
+    // A plateau of length d flanked by two half-ramps displaces v*(d + ramp).
+    const span = plateau + RAMP_SECONDS;
+    const target = pickLegTarget(rng, position, span);
+
+    if (target === null) {
+      // No room either way: hold still through this slot rather than inventing
+      // a move that would leave the band.
+      t += RAMP_SECONDS + plateau + RAMP_SECONDS;
+      segments.push({ until: round2(t), value: 0, ease: 'hold' });
+      continue;
+    }
+
+    const speed = clamp(
+      (target - position) / span,
+      -MAX_TARGET_SPEED,
+      MAX_TARGET_SPEED,
+    );
+    const signed =
+      Math.abs(speed) < MIN_TARGET_SPEED ? Math.sign(speed) * MIN_TARGET_SPEED : speed;
+    // Re-derive the landing point from the speed actually used, so the position
+    // we carry forward is the one the curve really produces.
+    const landing = clamp(position + signed * span, TARGET_BAND.min, TARGET_BAND.max);
+    const applied = round2((landing - position) / span);
+
+    t += RAMP_SECONDS;
+    segments.push({ until: round2(t), value: applied, ease: 'linear' });
+    t += plateau;
+    segments.push({ until: round2(t), value: applied, ease: 'hold' });
+    t += RAMP_SECONDS;
+    segments.push({ until: round2(t), value: 0, ease: 'linear' });
+
+    position = position + applied * span;
+  }
+
+  segments.push({ until: ROUND_SECONDS, value: 0, ease: 'hold' });
+
+  return {
+    id: 'velocity-steps',
+    label: 'Velocity vs time',
+    quantity: 'velocity',
+    durationSeconds: ROUND_SECONDS,
+    startValue: 0,
+    startMeters: start,
+    axisMin: -0.6,
+    axisMax: 0.6,
+    segments,
+  };
+};
+
+/**
+ * The three targets for one run. Same seed, same graphs — that is the contract
+ * the browser and the scoring endpoint both rely on.
+ */
+export const generateMotionGraphs = (seed: number): TargetGraph[] => {
+  const rng = createRng(seed);
+  return [
+    generateLinearPositionGraph(rng),
+    generateCurvedPositionGraph(rng),
+    generateVelocityGraph(rng),
+  ];
+};
+
+export const randomSeed = (random: () => number = Math.random): number =>
+  Math.floor(random() * 0xffffffff) >>> 0;
+
+/**
+ * A sentence describing the shape of a target, for the plot's accessible name.
+ * It reports what the curve does, not how to walk it — the reading is the
+ * exercise.
+ */
+export const describeTarget = (graph: TargetGraph): string => {
+  const unit = graph.quantity === 'position' ? 'm' : 'm/s';
+  const noun = graph.quantity === 'position' ? 'Distance from the detector' : 'Velocity';
+  const points = [graph.startValue, ...graph.segments.map((segment) => segment.value)];
+
+  // Collapse runs of equal values so a hold does not read as two waypoints.
+  const waypoints = points.filter(
+    (value, index) => index === 0 || Math.abs(value - points[index - 1]) > 1e-9,
+  );
+
+  return `${noun} target: ${waypoints.map((value) => `${value.toFixed(2)} ${unit}`).join(', then ')}.`;
+};
+
 // --- scoring ---------------------------------------------------------------
 
 export const TOLERANCES = {
@@ -204,7 +420,7 @@ export const sampleScore = (error: number, full: number, zero: number): number =
 };
 
 export const MAX_GRAPH_SCORE = 100;
-export const MAX_TOTAL_SCORE = MAX_GRAPH_SCORE * MOTION_GRAPHS.length;
+export const MAX_TOTAL_SCORE = MAX_GRAPH_SCORE * MOTION_GRAPH_COUNT;
 
 /**
  * Scores one attempt out of 100.
@@ -284,7 +500,7 @@ export const attemptFeedback = (graph: TargetGraph, samples: readonly MotionSamp
 export const MOTION_GAME_DEFAULTS = {
   minScore: 0,
   maxScore: MAX_TOTAL_SCORE,
-  maxRetries: MOTION_GRAPHS.length,
+  maxRetries: MOTION_GRAPH_COUNT,
   leaderboardLimit: 10,
   localStorageKey: 'physics-nook-motion-game-local-leaderboard-v1',
 } as const;
@@ -370,12 +586,21 @@ const asRecord = (value: unknown): Record<string, unknown> | null =>
  * synthesise a noisy trace; no purely client-side game can. It defeats editing
  * a number in a request.
  */
-export const validateMotionGameScoreSubmission = (payload: {
-  name?: unknown;
-  score?: unknown;
-  retriesUsed?: unknown;
-  attempts?: unknown;
-}): MotionGameValidationResult => {
+export const validateMotionGameScoreSubmission = (
+  payload: {
+    name?: unknown;
+    score?: unknown;
+    retriesUsed?: unknown;
+    attempts?: unknown;
+  },
+  /**
+   * The seed the run was minted with. Targets are rebuilt from it here rather
+   * than taken from the payload, so a player cannot submit a run scored against
+   * easier curves than the ones they were shown.
+   */
+  seed: number,
+): MotionGameValidationResult => {
+  const graphs = generateMotionGraphs(seed);
   const errors: string[] = [];
   const name = sanitizeLeaderboardName(payload.name);
 
@@ -386,11 +611,11 @@ export const validateMotionGameScoreSubmission = (payload: {
   const rawAttempts = Array.isArray(payload.attempts) ? payload.attempts : [];
   const graphScores: number[] = [];
 
-  if (rawAttempts.length !== MOTION_GRAPHS.length) {
-    errors.push(`exactly ${MOTION_GRAPHS.length} attempts are required.`);
+  if (rawAttempts.length !== MOTION_GRAPH_COUNT) {
+    errors.push(`exactly ${MOTION_GRAPH_COUNT} attempts are required.`);
   }
 
-  MOTION_GRAPHS.forEach((graph, index) => {
+  graphs.forEach((graph, index) => {
     const row = asRecord(rawAttempts[index]);
     const position = index + 1;
 

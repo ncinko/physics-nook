@@ -111,6 +111,16 @@ const breakoutClass =
     inset: 0;
     z-index: 70;
     margin: 0;
+    /* The shell is transparent in normal flow — it borrows the page
+       background. Fullscreen takes that away and paints the UA backdrop, which
+       is black, so a light-theme simulation went dark. Restate the page
+       background here rather than on the shell itself, so the in-page
+       appearance of every existing block is untouched. */
+    background: var(--bg-primary);
+  }
+
+  :global(.simulation-shell:fullscreen)::backdrop {
+    background: var(--bg-primary, #ffffff);
   }
 
   :global(.simulation-shell:fullscreen .simulation-content),

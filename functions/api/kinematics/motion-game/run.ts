@@ -4,6 +4,7 @@ import {
   hashClientAddress,
   jsonResponse,
 } from '../../../../src/lib/kinematics/leaderboardApi';
+import { randomSeed } from '../../../../src/lib/kinematics/motionGame';
 
 const RUNS_PER_HOUR = 60;
 
@@ -58,17 +59,24 @@ export const onRequestPost = async ({
   const runId = crypto.randomUUID();
   const expiresAt = now + RUN_TTL_MS;
 
+  // The seed is minted here, not by the browser. The player gets it so their
+  // page can draw the targets, but the copy that counts is the one stored
+  // against the run — a submission is always scored against the graphs this
+  // endpoint chose.
+  const seed = randomSeed(() => crypto.getRandomValues(new Uint32Array(1))[0] / 0x100000000);
+
   await db
     .prepare(
-      `INSERT INTO kinematics_motion_game_runs (id, ip_hash, user_agent, created_at, expires_at, used_at)
-       VALUES (?, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO kinematics_motion_game_runs (id, ip_hash, user_agent, created_at, expires_at, used_at, seed)
+       VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     )
-    .bind(runId, ipHash, getUserAgent(request), now, expiresAt)
+    .bind(runId, ipHash, getUserAgent(request), now, expiresAt, seed)
     .run();
 
   return jsonResponse({
     ok: true,
     runId,
     expiresAt,
+    seed,
   });
 };

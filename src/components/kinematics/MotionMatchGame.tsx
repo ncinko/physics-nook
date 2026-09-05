@@ -49,6 +49,16 @@ const ON_MARK_TOLERANCE = 0.1;
 
 const LOCAL_LIMIT = MOTION_GAME_DEFAULTS.leaderboardLimit;
 
+/**
+ * The heading names the quantity and nothing else. Telling someone how to walk
+ * the curve would be reading the graph for them, which is the one thing this
+ * activity is asking them to do. The shape is on screen; that is the whole
+ * exercise. (`graph.hint` survives in the plot's aria-label, where it is the
+ * only description of the curve a screen-reader user gets.)
+ */
+const quantityTitle = (quantity: 'position' | 'velocity') =>
+  quantity === 'position' ? 'Position vs time' : 'Velocity vs time';
+
 interface LocalScore extends MotionGameLeaderboardScore {
   id: string;
 }
@@ -357,7 +367,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     liveDistance !== null && Math.abs(liveDistance - graph.startMeters) <= ON_MARK_TOLERANCE;
 
   return (
-    <div className={`not-prose ${className}`.trim()}>
+    <div className={`not-prose px-5 py-4 ${className}`.trim()}>
       {phase === 'setup' && (
         <>
           <VernierConnectPanel device={device} />
@@ -377,69 +387,98 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
       {phase !== 'setup' && phase !== 'finished' && (
         <div>
-          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-              Graph {roundIndex + 1} of {MOTION_GRAPHS.length}: {graph.label}
-            </h3>
-            <p className="text-sm text-[var(--text-muted)]">{graph.hint}</p>
-          </div>
+          <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">
+            Graph {roundIndex + 1} of {MOTION_GRAPHS.length}: {quantityTitle(graph.quantity)}
+          </h3>
 
-          <TargetPlot
-            graph={graph}
-            trace={tracePoints}
-            now={phase === 'recording' ? elapsed : null}
-          />
+          {/* The controls sit on the plot rather than under it. Whoever presses
+              them is about to walk away from the screen, so they should be the
+              biggest thing in view and in the place the eye is already resting.
+              Recording is the one phase with no overlay — nothing should cover
+              the trace while it is being drawn. */}
+          {/* The aspect ratio is on the wrapper, not left to the SVG's own
+              intrinsic sizing. An inline SVG sized only by `width: 100%` can
+              resolve to zero height, and then `inset-0` has no box to centre
+              the controls in and the card spills out of the plot. Fixing the
+              ratio here matches the viewBox and makes the overlay reliable. */}
+          <div className="relative aspect-[720/340] w-full">
+            <TargetPlot
+              className="absolute inset-0 h-full w-full"
+              graph={graph}
+              trace={tracePoints}
+              now={phase === 'recording' ? elapsed : null}
+            />
+
+            {phase !== 'recording' && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+                <div className="pointer-events-auto max-w-md rounded-xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-6 py-5 text-center shadow-lg">
+                  {phase === 'ready' && (
+                    <>
+                      <p className="text-sm text-[var(--text-primary)]">
+                        Stand {fixed(graph.startMeters, 2)} m from the detector.{' '}
+                        {liveDistance === null ? (
+                          <span className="text-[var(--text-muted)]">No echo yet.</span>
+                        ) : (
+                          <span
+                            className={
+                              onMark ? 'text-[var(--accent-green)]' : 'text-[var(--text-muted)]'
+                            }
+                          >
+                            You are at {fixed(liveDistance, 2)} m.
+                          </span>
+                        )}
+                      </p>
+                      <Button
+                        className="mt-3 px-6 py-2.5 text-base"
+                        onClick={startCountdown}
+                        disabled={!onMark}
+                      >
+                        {onMark ? 'Start the round' : 'Move onto the mark'}
+                      </Button>
+                    </>
+                  )}
+
+                  {phase === 'countdown' && (
+                    <p
+                      className="text-6xl font-semibold tabular-nums text-[var(--accent-red)]"
+                      role="status"
+                    >
+                      {countdown > 0 ? countdown : 'Go'}
+                    </p>
+                  )}
+
+                  {phase === 'review' && results[roundIndex] && (
+                    <>
+                      <p className="text-sm text-[var(--text-primary)]">
+                        <strong>{results[roundIndex]!.score} / 100.</strong>{' '}
+                        {results[roundIndex]!.feedback}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
+                        {!results[roundIndex]!.retried && (
+                          <Button variant="secondary" className="px-5 py-2.5" onClick={retryRound}>
+                            Retry this graph
+                          </Button>
+                        )}
+                        <Button className="px-6 py-2.5 text-base" onClick={nextRound}>
+                          {roundIndex >= MOTION_GRAPHS.length - 1 ? 'See the total' : 'Next graph'}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {isPractice && (phase === 'ready' || phase === 'countdown' || phase === 'recording') && (
             <PracticeStrip device={device} />
           )}
 
-          <div className="mt-3 min-h-[3.5rem]">
-            {phase === 'ready' && (
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-[var(--text-primary)]">
-                  Stand {fixed(graph.startMeters, 2)} m from the detector.{' '}
-                  {liveDistance === null ? (
-                    <span className="text-[var(--text-muted)]">No echo yet.</span>
-                  ) : (
-                    <span className={onMark ? 'text-[var(--accent-green)]' : 'text-[var(--text-muted)]'}>
-                      You are at {fixed(liveDistance, 2)} m.
-                    </span>
-                  )}
-                </span>
-                <Button onClick={startCountdown} disabled={!onMark}>
-                  {onMark ? 'Start the round' : 'Move onto the mark'}
-                </Button>
-              </div>
-            )}
-
-            {phase === 'countdown' && (
-              <p className="text-2xl font-semibold text-[var(--accent-red)]" role="status">
-                {countdown > 0 ? countdown : 'Go'}
-              </p>
-            )}
-
+          <div className="mt-3 min-h-[1.75rem]">
             {phase === 'recording' && (
               <p className="text-sm text-[var(--text-primary)]" role="status">
                 Recording — {fixed(ROUND_SECONDS - elapsed, 1)} s left
               </p>
-            )}
-
-            {phase === 'review' && results[roundIndex] && (
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-sm text-[var(--text-primary)]">
-                  <strong>{results[roundIndex]!.score} / 100.</strong>{' '}
-                  {results[roundIndex]!.feedback}
-                </span>
-                {!results[roundIndex]!.retried && (
-                  <Button variant="secondary" onClick={retryRound}>
-                    Retry this graph (one allowed)
-                  </Button>
-                )}
-                <Button onClick={nextRound}>
-                  {roundIndex >= MOTION_GRAPHS.length - 1 ? 'See the total' : 'Next graph'}
-                </Button>
-              </div>
             )}
           </div>
         </div>
@@ -451,7 +490,10 @@ export default function MotionMatchGame({ className = '' }: { className?: string
             {totalScore} out of {MAX_TOTAL_SCORE}
           </h3>
           <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {MOTION_GRAPHS.map((target, index) => `${target.label.split(' — ')[0]} ${completed[index]?.score ?? 0}`).join(' · ')}
+            {MOTION_GRAPHS.map(
+              (target, index) =>
+                `Graph ${index + 1} (${target.quantity}) ${completed[index]?.score ?? 0}`,
+            ).join(' · ')}
             {retriesUsed > 0 && ` · ${retriesUsed} retr${retriesUsed === 1 ? 'y' : 'ies'} used`}
           </p>
 

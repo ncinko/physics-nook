@@ -570,6 +570,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['potential energy', 'energy', 'conservative force'],
   },
   {
+    id: 'topographic-landscape',
+    title: 'From Landscape to Contour Map',
+    description: 'Tilt a 3D landscape into a top-down map and follow contours at equal 100-meter elevation intervals.',
+    href: '/electromagnetism/potential#topographic-landscape',
+    module: 'Electromagnetism',
+    kind: 'inline',
+    tags: ['topography', 'contours', 'potential', '3D'],
+  },
+  {
     id: 'scalar-potential-2d',
     title: 'Scalar Potential Map',
     description: 'Visualize the electric potential V(x,y) of a point charge as a color map with equipotential contours.',

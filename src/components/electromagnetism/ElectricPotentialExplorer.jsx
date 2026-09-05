@@ -1,18 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { choosePotentialLevels, traceContours } from "../../lib/electromagnetism/contours";
 import { coulombFieldAt } from "../../lib/electromagnetism";
 import { themeColors } from "../shared/themeColors";
 import { ControlBar, Toggle, Button, Select } from "../shared/InlineControls";
 
-// ElectricPotentialSimulation — with potential colormap + equipotential lines (togglable)
-// -------------------------------------------------------------------------------
-// What’s new vs your original file:
-//  • Show potential as a 2D color map (diverging palette, negative→blue, zero→white, positive→red)
-//  • Optional equipotential lines overlay (computed with marching-squares from the sampled V(x,y) grid)
-//  • Toggles to show/hide: colormap, equipotentials, field arrows, field lines
-//  • Colormap quality slider (controls the sampling resolution / performance)
-//  • Resize-safe: regenerates cached colormap/contours only when size/charges/settings change
-//  • Keeps all of your interactions: add/drag/delete charges + draggable/animatable test charge
-
+// Cached potential map and contours at one linear voltage interval.
 const ElectricPotentialExplorer = () => {
   const canvasRef = useRef(null);
   const k = 9e9; // Coulomb's constant
@@ -26,7 +18,7 @@ const ElectricPotentialExplorer = () => {
     const parentWidth = parent
       ? parent.getBoundingClientRect().width
       : window.innerWidth - 48;
-    const w = clamp(parentWidth, 320, 900);
+    const w = clamp(parentWidth, 180, 900);
     return { width: Math.round(w), height: Math.round(w * ASPECT) };
   };
 
@@ -105,6 +97,7 @@ const ElectricPotentialExplorer = () => {
   // Cached colormap + contours so we don't recompute in every frame
   const colorCacheRef = useRef({ imageBitmap: null, w: 0, h: 0 });
   const contourCacheRef = useRef({ paths: [], w: 0, h: 0 });
+  const [contourInfo, setContourInfo] = useState({ step: 1, levels: [] });
 
   const initialTestChargeFromSize = (W, H) => ({ x: 0.5 * W, y: 0.33 * H, vx: 0, vy: 0, q: 1e-8, m: 1e-6 });
   const testChargeRef = useRef(initialTestChargeFromSize(size.width, size.height));
@@ -139,165 +132,6 @@ const ElectricPotentialExplorer = () => {
   };
 
   const distToAnyCharge = (x, y, localCharges = charges) => localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
-
-  // === Equipotentials orthogonal to streamlines (no marching squares) ===
-
-  // One Newton step along ∇V to snap (x,y) back onto V(x,y)=V0
-  const projectToIsoOnto = (V0, x, y) => {
-    const { Ex, Ey } = computeField(x, y);   // ∇V = -E
-    const gx = -Ex, gy = -Ey;
-    const g2 = gx * gx + gy * gy + 1e-9;
-    const Vhere = computePotential(x, y);
-    const t = (Vhere - V0) / g2;
-    return [x - t * gx, y - t * gy];
-  }
-
-  // Integrate one streamline and return a polyline of points
-  const traceStreamlinePolyline = (x0, y0, dir, baseStepPx, maxSteps) => {
-    const pts = [[x0, y0]];
-    let x = x0, y = y0;
-
-    const fieldUnit = (X, Y) => {
-      const { Ex, Ey } = computeField(X, Y);
-      const m = Math.hypot(Ex, Ey) || 1e-12;
-      return [dir * (Ex / m), dir * (Ey / m)];
-    };
-
-    for (let i = 0; i < maxSteps; i++) {
-      const dNear = distToAnyCharge(x, y);
-      const nearFactor = Math.max(0.25, Math.min(1, (dNear - 8) / 40));
-      let h = baseStepPx * nearFactor;
-
-      const [k1x, k1y] = fieldUnit(x, y);
-      const [k2x, k2y] = fieldUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
-      const [k3x, k3y] = fieldUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
-      const [k4x, k4y] = fieldUnit(x + h * k3x, y + h * k3y);
-
-      x += (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
-      y += (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
-      pts.push([x, y]);
-
-      if (x < 0 || x > size.width || y < 0 || y > size.height) break;
-      if (distToAnyCharge(x, y) < 10) break;
-    }
-    return pts;
-  }
-
-  // Trace a single equipotential curve through (x0,y0) at level V0, ⟂ to E
-  const traceEquipotentialCurve = (V0, x0, y0, dir, baseStepPx, maxSteps) => {
-    // Start exactly on the iso
-    let [x, y] = projectToIsoOnto(V0, x0, y0);
-
-    const path = new Path2D();
-    path.moveTo(x, y);
-
-    const samples = [[x, y]];   // sparse samples for de-dup occupancy
-    const closeTol = 3;          // px
-    const minLoop = 50;
-    const avoidCore = 15;
-
-    const tanUnit = (X, Y) => {
-      // perpendicular to E: T = ±(Ey, -Ex)/||E||
-      const { Ex, Ey } = computeField(X, Y);
-      let tx = dir * Ey, ty = dir * -Ex;
-      const m = Math.hypot(tx, ty) || 1e-12;
-      return [tx / m, ty / m];
-    };
-
-    const clampIn = (X, Y) => [
-      Math.max(0, Math.min(size.width, X)),
-      Math.max(0, Math.min(size.height, Y)),
-    ];
-
-    const xStart = x, yStart = y;
-
-    for (let i = 0; i < maxSteps; i++) {
-      const dNear = distToAnyCharge(x, y);
-      const nearFactor = Math.max(0.4, Math.min(1.2, (dNear - 8) / 36)); // adaptive step
-      const h = baseStepPx * (0.72 + 0.28 * nearFactor);
-
-      const [k1x, k1y] = tanUnit(x, y);
-      const [k2x, k2y] = tanUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
-      const [k3x, k3y] = tanUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
-      const [k4x, k4y] = tanUnit(x + h * k3x, y + h * k3y);
-
-      let xn = x + (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
-      let yn = y + (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
-
-      // snap back to the exact V0 iso and keep inside the canvas
-      [xn, yn] = projectToIsoOnto(V0, xn, yn);
-      [xn, yn] = clampIn(xn, yn);
-
-      if (xn <= 0 || xn >= size.width || yn <= 0 || yn >= size.height) break;
-      if (distToAnyCharge(xn, yn) < avoidCore) break;
-
-      path.lineTo(xn, yn);
-      if (i % 4 === 0) samples.push([xn, yn]);
-      x = xn; y = yn;
-
-      if (i > minLoop && Math.hypot(x - xStart, y - yStart) < closeTol) {
-        path.closePath();
-        break;
-      }
-    }
-
-    if (samples.length < 8) return null;
-    return { path, samples };
-  }
-
-  // Build equipotentials by sampling a few points along streamlines, then tracing ⟂
-  const buildEquipotentialsOrthogonalToStreamlines = () => {
-    const paths = [];
-    const cell = 24;                                       // occupancy grid cell (px)
-    const key = (x, y) => `${Math.floor(x / cell)}|${Math.floor(y / cell)}`;
-    const occupied = new Set();
-
-    const baseStepPx = Math.max(0.9, Math.min(size.width, size.height) / 420);
-    const maxStepsSL = 1200;   // streamline steps
-    const maxStepsEQ = 3000;   // equipotential steps
-    const r0 = 10;             // seed radius around charge
-    const maxPaths = 30;       // overall cap
-
-    // If linesPerMicroC is missing, fall back to a sensible default
-    const _linesPerMicroC = (typeof linesPerMicroC !== "undefined") ? linesPerMicroC : 8;
-
-    // Seed streamlines as you already do, but collect polylines (not drawing)
-    for (const c of charges) {
-      const muC = Math.abs(c.q) / 1e-6;
-      const N = Math.max(4, Math.min(24, Math.round(_linesPerMicroC * muC)));
-      for (let k = 0; k < N; k++) {
-        const theta = (2 * Math.PI * k) / N;
-        const sx = c.x + r0 * Math.cos(theta);
-        const sy = c.y + r0 * Math.sin(theta);
-        const dir = c.q >= 0 ? +1 : -1;
-
-        const poly = traceStreamlinePolyline(sx, sy, dir, baseStepPx, maxStepsSL);
-        if (poly.length < 20) continue;
-
-        // Sample 2–3 points along this streamline away from ends
-        const picks = [0.3, 0.55, 0.8]; // fractions along the polyline
-        for (const frac of picks) {
-          const idx = Math.min(poly.length - 1, Math.max(0, Math.floor(frac * poly.length)));
-          const [px, py] = poly[idx];
-          if (distToAnyCharge(px, py) < 12) continue;
-
-          const V0 = computePotential(px, py);
-          if (occupied.has(key(px, py))) continue;
-
-          // Trace both directions ⟂ to E
-          for (const sgn of [+1, -1]) {
-            const traced = traceEquipotentialCurve(V0, px, py, sgn, baseStepPx, maxStepsEQ);
-            if (!traced) continue;
-            for (const [ux, uy] of traced.samples) occupied.add(key(ux, uy));
-            paths.push(traced.path);
-            if (paths.length >= maxPaths) return paths;
-          }
-        }
-      }
-    }
-    return paths;
-  }
-  // === End orthogonal-equipotential helpers ===
 
   // --- Field lines helpers ---
   const norm2 = (x, y) => { const m = Math.hypot(x, y) || 1e-12; return [x / m, y / m]; };
@@ -417,7 +251,7 @@ const ElectricPotentialExplorer = () => {
 
       // Symmetric range about 0 for diverging colors; robust clip (winsorize)
       const absVals = [];
-      for (let s = 0; s < V.length; s += Math.max(1, (W * H) / 5000)) absVals.push(Math.abs(V[s]));
+      for (let s = 0; s < V.length; s += Math.max(1, Math.floor((W * H) / 5000))) absVals.push(Math.abs(V[s]));
       absVals.sort((a, b) => a - b);
       const qIdx = Math.max(0, Math.min(absVals.length - 1, Math.floor(absVals.length * 0.98)));
       const Vabs = absVals[qIdx] || Math.max(Math.abs(vMin), Math.abs(vMax)) || 1;
@@ -450,21 +284,44 @@ const ElectricPotentialExplorer = () => {
       }
       ictx.putImageData(img, 0, 0);
 
-      // Cache imageBitmap for fast drawImage scaling
-      off.toBlob((blob) => {
-        if (!blob) return;
-        createImageBitmap(blob).then((bmp) => {
-          colorCacheRef.current = { imageBitmap: bmp, w: W, h: H };
-        });
-      });
+      // A synchronous canvas cache cannot be overwritten by an older bitmap
+      // promise after a fast drag or preset change.
+      colorCacheRef.current = { imageBitmap: off, w: W, h: H };
 
-      // Equipotential contours via orthogonal-to-E tracer
       if (showEquipotentials) {
-        const paths = buildEquipotentialsOrthogonalToStreamlines();
-        contourCacheRef.current = { paths, w: W, h: H };
+        // Use a fixed screen resolution independent of the color transfer
+        // function, and exclude a small disk around each charge marker.
+        const cols = Math.ceil(size.width / 4) + 1;
+        const rows = Math.ceil(size.height / 4) + 1;
+        const grid = new Float64Array(cols * rows);
+        for (let j = 0; j < rows; j++) {
+          for (let i = 0; i < cols; i++) {
+            const x = i / (cols - 1) * size.width;
+            const y = j / (rows - 1) * size.height;
+            grid[j * cols + i] = distToAnyCharge(x, y) < 16
+              ? NaN : computePotential(x, y);
+          }
+        }
+        const info = choosePotentialLevels(grid, size.width < 500 ? 4 : 7);
+        const contours = traceContours(grid, cols, rows, size.width, size.height, info.levels);
+        const paths = contours.filter(c => c.segments.length).map(({ level, segments }) => {
+          const path = new Path2D();
+          for (const [a, b] of segments) {
+            path.moveTo(...a);
+            path.lineTo(...b);
+          }
+          // A label away from the frame and charge cores, once per level.
+          const candidates = segments.map(s => s[0]).filter(([x, y]) =>
+            x > 40 && x < size.width - 40 && y > 18 && y < size.height - 18);
+          const label = candidates[Math.floor(candidates.length * 0.65)];
+          return { path, level, label };
+        });
+        contourCacheRef.current = { paths, w: cols, h: rows };
+        setContourInfo({ ...info, levels: paths.map(p => p.level) });
       } else {
         contourCacheRef.current = { paths: [], w: W, h: H };
-      };
+      }
+
     }
   }, [size.width, size.height, charges, quality, logColors, showColormap, showEquipotentials]);
 
@@ -473,10 +330,11 @@ const ElectricPotentialExplorer = () => {
     // Throttle regeneration a bit while dragging to reduce flicker
     const isDragging = draggingTestCharge || draggingChargeIndex !== null;
     const delay = isDragging ? 80 : 0; // ms
+    let frame;
     const id = setTimeout(() => {
-      requestAnimationFrame(regenerateColormapAndContours);
+      frame = requestAnimationFrame(regenerateColormapAndContours);
     }, delay);
-    return () => clearTimeout(id);
+    return () => { clearTimeout(id); cancelAnimationFrame(frame); };
   }, [regenerateColormapAndContours, draggingTestCharge, draggingChargeIndex]);
 
   // Config change
@@ -584,15 +442,14 @@ const ElectricPotentialExplorer = () => {
       const { width, height } = size;
 
       // HiDPI/crisp
-      if (canvas.width !== width || canvas.height !== height) {
-        const dpr = window.devicePixelRatio || 1;
+      const dpr = window.devicePixelRatio || 1;
+      if (canvas.width !== Math.round(width * dpr) || canvas.height !== Math.round(height * dpr)) {
         canvas.width = Math.round(width * dpr);
         canvas.height = Math.round(height * dpr);
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
       }
       const ctx = canvas.getContext("2d");
-      const dpr = window.devicePixelRatio || 1;
       const palette = themeColors();
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, width, height);
@@ -610,9 +467,33 @@ const ElectricPotentialExplorer = () => {
         ctx.lineWidth = 1.4;
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
-        ctx.strokeStyle = palette.text;
-        ctx.globalAlpha = 0.7;
-        for (const p of contourCacheRef.current.paths) ctx.stroke(p);
+        ctx.globalAlpha = 0.75;
+        for (const { path, level } of contourCacheRef.current.paths) {
+          // A halo keeps themed lines legible on both ends of the colormap.
+          ctx.strokeStyle = palette.surface;
+          ctx.lineWidth = level === 0 ? 4 : 3;
+          ctx.stroke(path);
+          ctx.strokeStyle = palette.text;
+          ctx.lineWidth = level === 0 ? 2.2 : 1.4;
+          ctx.stroke(path);
+        }
+        ctx.globalAlpha = 1;
+        ctx.font = "11px system-ui";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        const labels = [];
+        for (const { level, label } of contourCacheRef.current.paths) {
+          if (!label) continue;
+          const [x, y] = label;
+          if (labels.some(([lx, ly]) => Math.abs(lx - x) < 64 && Math.abs(ly - y) < 22)) continue;
+          const text = `${level.toLocaleString()} V`;
+          const w = ctx.measureText(text).width + 8;
+          ctx.fillStyle = palette.surface;
+          ctx.fillRect(x - w / 2, y - 8, w, 16);
+          ctx.fillStyle = palette.text;
+          ctx.fillText(text, x, y);
+          labels.push(label);
+        }
         ctx.restore();
       }
 
@@ -727,6 +608,16 @@ const ElectricPotentialExplorer = () => {
         }}
       />
 
+      {showEquipotentials && (
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          {contourInfo.levels.length ? <>
+            Contour interval: <strong>{contourInfo.step.toLocaleString()} V</strong>.
+            {" "}Shown: {Math.min(...contourInfo.levels).toLocaleString()} to {Math.max(...contourInfo.levels).toLocaleString()} V.
+            {" "}The interval adapts to the charge configuration; extreme values and charge cores are omitted to limit clutter.
+          </> : "No contours in this view: the potential is constant or the contour range is too small."}
+          {" "}Equal voltage steps do not mean equal distances between lines.
+        </p>
+      )}
       <ControlBar className="mt-2">
         <Button variant="secondary" onClick={resetSimulation}>Reset Simulation</Button>
         <Button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge}>

@@ -14,6 +14,7 @@ import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSecti
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import PotentialEnergyLandscape from '../../components/electromagnetism/PotentialEnergyLandscape.jsx';
 import ScalarPotential2D from '../../components/electromagnetism/ScalarPotential2D.jsx';
+import TopographicLandscape from '../../components/electromagnetism/TopographicLandscape';
 import ElectricPotentialExplorer from '../../components/electromagnetism/ElectricPotentialExplorer.jsx';
 import { electromagnetismPath } from '../../data/modules';
 
@@ -89,6 +90,17 @@ $$
 
 where $q$ is the charge. Its units are J/C, which we call **volts**. Only *changes* in potential energy — and therefore changes in potential — are physical: $V$ can be shifted by any constant without changing the physics, just as elevation does not depend on our choice of sea level. Picking that constant is choosing a "zero of potential."
 
+## Reading a Landscape with Contour Lines
+
+Imagine walking around a hill without climbing or descending. Your path follows a **contour line**: every point on it has the same elevation. A topographical map draws these lines from above, marking heights at a fixed interval.
+
+
+<InteractiveAnchor id="topographic-landscape" />
+
+<TopographicLandscape client:visible />
+
+The lines are equally spaced in **height**, not in horizontal distance. Crossing several lines over a short distance means a steep slope. Electric **equipotential lines** work the same way, with volts replacing meters: each line joins points of equal potential, and closer lines at a fixed voltage interval indicate a stronger electric field. 
+
 ## Point Charge Potential
 
 The electric potential due to a point charge $Q$ is
@@ -114,16 +126,17 @@ V = \frac{U}{q} = k\,\frac{Q}{r}.
 $$
 
 </DerivationPanel>
+This choice of potential function implicitly chooses the **zero potential** to be infinitely far away; $V(r \to \infty) \to 0$.  The important feature of the function is the $1/r$ proportionality.  There are many other functions that would work perfectly well.  
 
-We can picture $V(x,y)$ with a color map. Below, brighter colors are higher potential; it decreases as you move away from the positive charge, since $V \propto 1/r$. Drag the charge, and toggle the equipotential rings — they are circles of constant $V$.
+Although not as common, it can be fun to visualize this electric potential function in 2D with a color map. 
 
 <InteractiveAnchor id="scalar-potential-2d" />
 
 <ScalarPotential2D client:only="react" />
 
-In 3D we draw *equipotential surfaces*, the analog of these rings. Because $U = qV$, positive and negative charges behave differently in the *same* potential: both tend toward lower *potential energy*, not lower *potential*. When the signs get confusing, fall back on "like charges repel, opposites attract."
+In 3D we draw *equipotential surfaces*, the analog of the equipotential lines shown above. Because the **electric potential energy** $U = qV$, positive and negative charges behave differently in the *same* potential: both tend toward lower *potential energy*, not lower *potential*. When the signs get confusing, fall back on "like charges repel, opposites attract."
 
-This last explorer overlays the potential color map and equipotentials on the field arrows and lines. Build intuition for how source charges shape the potential, how a test charge moves, and how field and potential relate.
+This last explorer overlays the potential color map and equipotentials in the space around a collection of point charges.  Note that **zero potential** isn't always infinitely far away.
 
 <InteractiveAnchor id="electric-potential-explorer" />
 
@@ -133,6 +146,8 @@ This last explorer overlays the potential color map and equipotentials on the fi
 >
   <ElectricPotentialExplorer client:only="react" />
 </SimulationBlock>
+
+The explorer uses one voltage interval throughout each view, displayed below the plot. It adapts that interval to the charges and leaves out extreme values near the charge cores to keep the drawing readable.
 
 Notice that the equipotential lines are everywhere perpendicular to the field lines. Just as $F \approx -\tfrac{\Delta U}{\Delta x}$ in one dimension, the field is the (negative) slope of the potential:
 

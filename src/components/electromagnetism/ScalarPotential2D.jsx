@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { choosePotentialLevels } from "../../lib/electromagnetism/contours";
 import { themeColors, onThemeChange } from "../shared/themeColors";
 import { ControlBar, Slider, Toggle, Button } from "../shared/InlineControls";
 
@@ -31,6 +32,7 @@ export default function ScalarPotential2D() {
   // Toggles
   const [snap, setSnap] = useState(false);
   const [showContours, setShowContours] = useState(false);
+  const [contourStep, setContourStep] = useState(0);
   const [themeTick, setThemeTick] = useState(0);
 
   // --------------------------- State & refs ---------------------------
@@ -38,6 +40,7 @@ export default function ScalarPotential2D() {
   const canvasRef = useRef(null);
   const legendRef = useRef(null);
   const rafRef = useRef(0);
+  const renderRef = useRef(null);
   const renderingRef = useRef(false);
 
   // Charge position in world units (meters). Start centered.
@@ -69,8 +72,10 @@ export default function ScalarPotential2D() {
   // --------------------------- Rendering ---------------------------
   const requestRender = () => {
     cancelAnimationFrame(rafRef.current);
-    rafRef.current = requestAnimationFrame(render);
+    rafRef.current = requestAnimationFrame(() => renderRef.current?.());
   };
+  // ResizeObserver must use the current charge and contour settings.
+  renderRef.current = render;
 
   useEffect(() => {
     const ob = new ResizeObserver(() => requestRender());
@@ -162,21 +167,28 @@ export default function ScalarPotential2D() {
       ctx.restore();
     }
 
-    // Equipotential lines (analytical circles) based on fixed legend levels
+    // Equal voltage steps, independent of the logarithmic color legend.
     if (showContours && q !== 0) {
-      const levelsT = linspace(0.15, 0.95, 9); // 9 levels in fixed legend space
+      const samples = [];
+      for (let row = 0; row <= 40; row++) {
+        for (let col = 0; col <= 40; col++) {
+          const r = Math.hypot(-L + col * L / 20 - charge.x, -L + row * L / 20 - charge.y);
+          if (r > 0.2) samples.push(k * q / r);
+        }
+      }
+      const { step, levels } = choosePotentialLevels(samples, cssW < 500 ? 4 : 7);
+      setContourStep(step);
       ctx.save();
       ctx.strokeStyle = "rgba(17,24,39,0.55)"; // dark gray
       ctx.lineWidth = 1.25;
-      for (const t of levelsT) {
-        const Vlev = invLogMap(t, VmaxRef); // *fixed* V levels per legend
+      for (const Vlev of levels) {
         if (Vlev <= 0) continue;
         const rMeters = (k * Math.abs(q)) / Vlev; // r = kq / V (depends on current q)
         if (!isFinite(rMeters) || rMeters <= 0) continue;
         const rp = rMeters * scale; // pixels
         const cx = wx2px(charge.x);
         const cy = wy2py(charge.y);
-        if (rp < 0.5) continue;
+        if (rp < 12 * dpr * quality) continue;
         ctx.beginPath(); ctx.arc(cx, cy, rp, 0, Math.PI * 2); ctx.stroke();
       }
       ctx.restore();
@@ -326,7 +338,6 @@ export default function ScalarPotential2D() {
     return lut;
   }
 
-  function linspace(a, b, n) { const arr = []; if (n <= 1) return [a]; const step = (b - a) / (n - 1); for (let i = 0; i < n; i++) arr.push(a + i * step); return arr; }
 
   // Formatting helpers
   const fmt = { num: (x) => x.toFixed(3).replace(/\.000$/, ".0"), si: (x, unit) => formatSI(x, unit) };
@@ -341,6 +352,10 @@ export default function ScalarPotential2D() {
         <Button variant="secondary" onClick={() => setCharge({ x: 0, y: 0 })}>Reset charge</Button>
       </ControlBar>
 
+      {showContours && <p className="my-2 text-sm text-[var(--text-muted)]">
+        Contour interval: <strong>{contourStep.toLocaleString()} V</strong>.
+        Equal voltage steps; the highest values near the charge are omitted.
+      </p>}
       {/* Color map fills the column; legend + caption sit below it */}
       <div ref={wrapRef} style={{ position: "relative" }}>
         <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "auto", marginInline: "auto", borderRadius: 8, border: "1px solid var(--grid-line)", background: "var(--sim-bg)", cursor: "crosshair" }} />

@@ -955,11 +955,6 @@ export function VideoAnalysisLab() {
                 ))}
                 <Toggle label="raw" checked={showRaw} onChange={setShowRaw} />
               </ControlBar>
-              <p className="m-0 text-xs leading-5 text-[var(--text-muted)]">
-                <span className="font-medium">raw</span> adds the frame number and the pixel
-                position of each click on the end — what was measured, before the scale and
-                origin turned it into metres.
-              </p>
             </div>
 
             {/* Export stays reachable whether or not the table is folded away. */}

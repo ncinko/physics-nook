@@ -188,19 +188,8 @@ export function ModeControls({
               <Toggle label="Follow last point" checked={followEnabled} onChange={onFollowChange} />
             </ControlBar>
             <p className="m-0 text-xs leading-5 text-[var(--text-muted)]">
-              How closely you can hit the same feature each time. It sets the error bars on the
-              graph and the weights in a fit
-              {metersPerPixel !== null ? (
-                <>
-                  {' '}
-                  — about{' '}
-                  <span className="font-mono tabular-nums">
-                    ±{fixed(metersPerPixel * calibration.positionUncertaintyPx, 4)}
-                  </span>{' '}
-                  m at this scale
-                </>
-              ) : null}
-              .
+              How closely you can mark the same feature each time. It sets the error bars on the
+              graph and the weights in a fit.
             </p>
           </>
         )}
@@ -269,13 +258,6 @@ export function ModeControls({
                   </Button>
                 </ControlBar>
               </div>
-              <p className="m-0 text-xs leading-5 text-[var(--text-muted)]">
-                {frameRateEstimate
-                  ? `Measured ${frameRateEstimate.measuredFps.toFixed(2)} fps from ${frameRateEstimate.sampleCount} frames${
-                      frameRateEstimate.snapped ? ', snapped to a standard rate.' : '.'
-                    }`
-                  : 'Not measured yet — set this to match your camera if you know it.'}
-              </p>
             </div>
           </>
         )}

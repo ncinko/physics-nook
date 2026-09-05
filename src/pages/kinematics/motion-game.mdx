@@ -14,18 +14,16 @@ import MotionMatchGame from '../../components/kinematics/MotionMatchGame';
 
 # Motion Match
 
-Reading a motion graph and *being* a motion graph are different skills. This one asks for the second: three target curves appear, and you match each by walking in front of an ultrasonic motion detector while it records where you are twenty times a second.
+Kinematic graphs represent the motion of real-life objects.  To build intuition for concepts like position and velocity, especially in the context of these graphs, try walking in front of an ultrasonic motion detector.
 
-Two of the targets are position against time, and the third is velocity against time — which is the one that catches people out, because a flat line no longer means standing still.
 
 ## What you need
 
-- A **Vernier LabQuest Mini** (or LabQuest 2 or 3) connected by USB.
-- A **Motion Detector** in the **DIG 1** port, with its sensitivity switch on the walking-figure setting.
-- **Chrome or Edge.** Reading a USB instrument from a web page uses WebHID, which Firefox and Safari do not implement. There is a practice mode that works in any browser.
-- About **two metres** of clear floor in front of the detector, and a clear line of sight — the sonar will happily range off a chair instead of you.
+**Vernier LabQuest Mini** (or LabQuest 2 or 3) connected by USB.
+**Motion Detector** in the **DIG 1** port, with its sensitivity switch on the walking-figure setting.
+**Chrome or Edge.** Other web browsers are not supported.
 
-Put the detector at roughly waist height, pointed down the open space. Every target stays between 0.6 m and 2.3 m away, so a perfect match is genuinely walkable rather than a sprint.
+Put the detector at roughly waist height, with plenty of open space in front of it.  
 
 <InteractiveAnchor id="motion-match" />
 
@@ -37,13 +35,3 @@ Put the detector at roughly waist height, pointed down the open space. Every tar
   <MotionMatchGame client:only="react" />
 </SimulationBlock>
 
-## Reading your own trace
-
-The green band is full credit — six centimetres either side of the target on a position graph, eight centimetres per second on a velocity graph. That is wide enough to absorb ordinary walking sway and narrow enough that you have to mean it.
-
-Where a run usually goes wrong:
-
-1. **Starting late.** The clock begins the instant the countdown ends, so the first flat section is part of the graph, not a grace period.
-2. **Turning too gently.** A corner on a position graph is a real change of direction. Rounding it costs marks on both sides of the turn.
-3. **On the velocity graph, drifting.** Holding a steady speed feels like doing nothing, which is exactly why it is hard. Watch the trace, not your feet.
-4. **Losing the echo.** Gaps in your line mean the detector did not hear you. Arms at your sides, and nothing between you and the sensor.

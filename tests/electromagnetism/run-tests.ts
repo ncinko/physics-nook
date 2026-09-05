@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { choosePotentialLevels, traceContours } from '../../src/lib/electromagnetism/contours.ts';
-import { buildTerrain, terrainHeight, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
+import { choosePotentialLevels, traceContours, nearestContour } from '../../src/lib/electromagnetism/contours.ts';
+import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
 import {
   COULOMB_K,
   coulombFieldAt,
@@ -78,6 +78,21 @@ const mobileLevels = choosePotentialLevels(Array.from({ length: 1001 }, (_, i) =
 assert.ok(mobileLevels.levels.length <= 9);
 assert.ok(mobileLevels.step >= signed.step);
 
+// Hover picks only real line segments and chooses the closest of nearby levels.
+const hoverLines = [
+  { level: -100, segments: [[[0, 0], [20, 0]]] },
+  { level: 0, segments: [[[0, 10], [20, 10]]] },
+  { level: 100, segments: [[[30, 0], [40, 0]]] },
+] as const;
+const hoverContours = hoverLines.map(c => ({ level: c.level, segments: [...c.segments] }));
+assert.equal(nearestContour(hoverContours, 10, 2)?.level, -100);
+assert.equal(nearestContour(hoverContours, 10, 8)?.level, 0);
+assert.equal(nearestContour(hoverContours, 42, 0)?.level, 100);
+assert.equal(nearestContour(hoverContours, 25, 0, 3), null, 'do not hit a gap between segments');
+assert.equal(nearestContour(hoverContours, 10, 30), null);
+assert.equal(nearestContour([], 10, 0), null);
+assert.deepEqual(nearestContour(hoverContours, 10, 2)?.point, [10, 0]);
+
 // A linear field has straight, correctly positioned contours, even at vertices.
 const ramp = Array.from({ length: 25 }, (_, i) => (i % 5) + 2 * Math.floor(i / 5));
 for (const contour of traceContours(ramp, 5, 5, 4, 4, [2, 4, 6])) {
@@ -104,6 +119,9 @@ for (const segment of zero.segments) for (const [x] of segment) near(x, 200);
 
 // Every terrain contour lies on the same height field as the 3D mesh.
 const terrain = buildTerrain();
+assert.ok(terrainHeight(-75, -65) > 600, 'broad summit above the last contour');
+assert.ok(terrainCover(-75, -65).snow > 0.95, 'summit remains snow-covered');
+assert.ok(terrainCover(900, 700).forest > 0.95, 'forest at the foot of the mountain');
 assert.deepEqual(terrain.contours.map(c => c.level), ELEVATION_LEVELS);
 for (const contour of terrain.contours) {
   assert.ok(contour.segments.length > 0);

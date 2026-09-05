@@ -1,15 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
-import { Button, ControlBar, Select } from '../shared/InlineControls';
-import { themeColors, onThemeChange } from '../shared/themeColors';
-import { buildTerrain, ELEVATION_LEVELS, TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../lib/electromagnetism/terrain';
+import { Button, ControlBar } from '../shared/InlineControls';
+import { themeColors, onThemeChange, getCssColor } from '../shared/themeColors';
+import { buildTerrain, terrainCover, TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../lib/electromagnetism/terrain';
 
 export default function TopographicLandscape() {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLCanvasElement>(null);
-  const controlsRef = useRef<(top: boolean, level: number) => void>(() => {});
+  const controlsRef = useRef<(top: boolean) => void>(() => {});
   const [topDown, setTopDown] = useState(false);
-  const [selected, setSelected] = useState(300);
   const [unavailable, setUnavailable] = useState(false);
 
   useEffect(() => {
@@ -53,8 +52,8 @@ export default function TopographicLandscape() {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     scene.add(new THREE.Mesh(geometry, material));
-    const ambient = new THREE.AmbientLight(0xffffff, 1.5);
-    const sun = new THREE.DirectionalLight(0xffffff, 2.3);
+    const ambient = new THREE.AmbientLight(0xffffff, 1.1);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.7);
     sun.position.set(-800, 1800, 600);
     scene.add(ambient, sun);
 
@@ -65,7 +64,7 @@ export default function TopographicLandscape() {
       }
       const lineGeometry = new THREE.BufferGeometry();
       lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(coords, 3));
-      const lineMaterial = new THREE.LineBasicMaterial();
+      const lineMaterial = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 });
       const line = new THREE.LineSegments(lineGeometry, lineMaterial);
       scene.add(line);
       // Spread labels along the front-right flank, including in the overhead view.
@@ -75,7 +74,7 @@ export default function TopographicLandscape() {
     });
 
     let width = 700, height = 460, frame = 0;
-    let angle = 34, startAngle = angle, targetAngle = angle, startTime = 0, highlighted = 300;
+    let angle = 34, startAngle = angle, targetAngle = angle, startTime = 0;
     let palette = themeColors();
     const ctx = labels.getContext('2d')!;
     const draw = () => {
@@ -87,8 +86,8 @@ export default function TopographicLandscape() {
       camera.lookAt(0, focus, 0);
       camera.updateMatrixWorld();
       // Remove directional shading overhead so this reads as a 2D contour map.
-      sun.intensity = 2.3 * (90 - angle) / 56;
-      ambient.intensity = 1.5 + 0.7 * (angle - 34) / 56;
+      sun.intensity = 1.7 * (90 - angle) / 56;
+      ambient.intensity = 1.1 + 1.1 * (angle - 34) / 56;
       renderer.render(scene, camera);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -109,24 +108,30 @@ export default function TopographicLandscape() {
       for (const { item, x, y, labelY: unshiftedY } of annotations) {
         const labelX = Math.min(width - 54, x + 18);
         const labelY = unshiftedY - overflow;
-        ctx.strokeStyle = item.level === highlighted ? palette.negative : palette.muted;
+        ctx.strokeStyle = palette.muted;
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(labelX - 3, labelY); ctx.stroke();
         ctx.fillStyle = palette.surface;
         ctx.fillRect(labelX - 2, labelY - 9, 51, 18);
-        ctx.fillStyle = item.level === highlighted ? palette.negative : palette.text;
+        ctx.fillStyle = palette.text;
         ctx.fillText(`${item.level} m`, labelX, labelY);
       }
     };
     const applyTheme = () => {
       palette = themeColors();
-      const low = new THREE.Color(palette.probe), high = new THREE.Color(palette.bg);
+      const forest = new THREE.Color(getCssColor('--terrain-forest', palette.probe));
+      const rock = new THREE.Color(getCssColor('--terrain-rock', palette.muted));
+      const snow = new THREE.Color(getCssColor('--terrain-snow', palette.bg));
       const colorAttribute = geometry.getAttribute('color');
       terrain.heights.forEach((h, i) => {
-        const color = low.clone().lerp(high, 0.15 + 0.7 * h / 700);
+        const { forest: forestCover, snow: snowCover } = terrainCover(positions[i * 3], positions[i * 3 + 2], h);
+        const color = rock.clone().lerp(forest, forestCover).lerp(snow, snowCover);
         colorAttribute.setXYZ(i, color.r, color.g, color.b);
       });
       colorAttribute.needsUpdate = true;
-      for (const item of lines) item.line.material.color.set(item.level === highlighted ? palette.negative : palette.text);
+      for (const item of lines) {
+        item.line.material.color.set(item.level <= 200
+          ? getCssColor('--terrain-snow', palette.bg) : getCssColor('--terrain-contour', palette.text));
+      }
       draw();
     };
     const animate = (time: number) => {
@@ -135,9 +140,7 @@ export default function TopographicLandscape() {
       draw();
       if (t < 1) frame = requestAnimationFrame(animate);
     };
-    controlsRef.current = (top, level) => {
-      highlighted = level;
-      applyTheme();
+    controlsRef.current = (top) => {
       const next = top ? 90 : 34;
       if (next === targetAngle) return;
       cancelAnimationFrame(frame);
@@ -174,7 +177,7 @@ export default function TopographicLandscape() {
     };
   }, []);
 
-  useEffect(() => { controlsRef.current(topDown, selected); }, [topDown, selected]);
+  useEffect(() => { controlsRef.current(topDown); }, [topDown]);
 
   return (
     <figure className="not-prose mx-auto my-8 max-w-3xl text-[var(--text-primary)]">
@@ -188,7 +191,7 @@ export default function TopographicLandscape() {
         This 3D view needs WebGL. Each contour joins places at the same elevation:
         100, 200, 300, 400, 500, and 600 m. Close contours indicate a steep slope.
       </p> : <div ref={hostRef} className="relative my-3 aspect-[3/2] w-full"
-        role="img" aria-label={`${topDown ? 'Top-down contour map' : 'Three-dimensional landscape'} of a mountain and a lower hill. Contours every 100 metres; the ${selected} metre contour is highlighted.`}>
+        role="img" aria-label={`${topDown ? 'Top-down contour map' : 'Three-dimensional landscape'} of a Mount Rainier-inspired snowy volcano, with glacier valleys and rocky ridges. Contours every 100 metres on this simplified landscape.`}>
         <canvas ref={labelsRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>}
       <figcaption className="text-center text-sm leading-relaxed text-[var(--text-muted)]">

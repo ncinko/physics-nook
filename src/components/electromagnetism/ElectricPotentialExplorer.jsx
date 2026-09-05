@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { choosePotentialLevels, traceContours } from "../../lib/electromagnetism/contours";
+import { choosePotentialLevels, traceContours, nearestContour } from "../../lib/electromagnetism/contours";
 import { coulombFieldAt } from "../../lib/electromagnetism";
 import { themeColors } from "../shared/themeColors";
 import { ControlBar, Toggle, Button, Select } from "../shared/InlineControls";
@@ -97,7 +97,7 @@ const ElectricPotentialExplorer = () => {
   // Cached colormap + contours so we don't recompute in every frame
   const colorCacheRef = useRef({ imageBitmap: null, w: 0, h: 0 });
   const contourCacheRef = useRef({ paths: [], w: 0, h: 0 });
-  const [contourInfo, setContourInfo] = useState({ step: 1, levels: [] });
+  const hoveredContourRef = useRef(null);
 
   const initialTestChargeFromSize = (W, H) => ({ x: 0.5 * W, y: 0.33 * H, vx: 0, vy: 0, q: 1e-8, m: 1e-6 });
   const testChargeRef = useRef(initialTestChargeFromSize(size.width, size.height));
@@ -110,7 +110,8 @@ const ElectricPotentialExplorer = () => {
   // CSS pixels — don't rescale by canvas.width/rect.width here.
   const getPointerPos = (canvas, evt) => {
     const rect = canvas.getBoundingClientRect();
-    return { x: evt.clientX - rect.left, y: evt.clientY - rect.top };
+    return { x: (evt.clientX - rect.left) * size.width / rect.width,
+      y: (evt.clientY - rect.top) * size.height / rect.height };
   };
 
   const computeField = (x, y, localCharges = charges) => {
@@ -231,6 +232,7 @@ const ElectricPotentialExplorer = () => {
   // --- Potential colormap generation (cached) ---
   const regenerateColormapAndContours = useMemo(() => {
     return () => {
+      hoveredContourRef.current = null;
       if (!showColormap && !showEquipotentials) return; // nothing to do
       const W = Math.max(64, Math.round(size.width * quality));
       const H = Math.max(64, Math.round(size.height * quality));
@@ -310,14 +312,13 @@ const ElectricPotentialExplorer = () => {
             path.moveTo(...a);
             path.lineTo(...b);
           }
-          // A label away from the frame and charge cores, once per level.
-          const candidates = segments.map(s => s[0]).filter(([x, y]) =>
-            x > 40 && x < size.width - 40 && y > 18 && y < size.height - 18);
+          // Zero is the only persistent label; keep it inside the visible plot.
+          const candidates = level === 0 ? segments.flat().filter(([x, y]) =>
+            x >= 0 && x <= size.width && y >= 0 && y <= size.height) : [];
           const label = candidates[Math.floor(candidates.length * 0.65)];
-          return { path, level, label };
+          return { path, level, label, segments };
         });
         contourCacheRef.current = { paths, w: cols, h: rows };
-        setContourInfo({ ...info, levels: paths.map(p => p.level) });
       } else {
         contourCacheRef.current = { paths: [], w: W, h: H };
       }
@@ -352,6 +353,7 @@ const ElectricPotentialExplorer = () => {
   // the primary way to choose add-negative/remove; Shift and Ctrl/Cmd stay on as
   // desktop shortcuts that override whatever the picker is set to.
   const handlePointerDown = (e) => {
+    hoveredContourRef.current = null;
     const canvas = canvasRef.current;
     // Capture keeps a drag alive past the canvas edge, but it throws if the
     // pointer is already gone — that must not abort the rest of the handler.
@@ -389,6 +391,9 @@ const ElectricPotentialExplorer = () => {
   const handlePointerMove = (e) => {
     const canvas = canvasRef.current;
     const { x, y } = getPointerPos(canvas, e);
+    hoveredContourRef.current = !draggingTestCharge && draggingChargeIndex === null && e.buttons === 0
+      && e.pointerType !== "touch" && showEquipotentials
+      ? nearestContour(contourCacheRef.current.paths, x, y) : null;
     if (draggingTestCharge) {
       testChargeRef.current = { ...testChargeRef.current, x, y, vx: 0, vy: 0 };
     } else if (draggingChargeIndex !== null) {
@@ -401,6 +406,7 @@ const ElectricPotentialExplorer = () => {
   };
 
   const handlePointerUp = () => { setDraggingTestCharge(false); setDraggingChargeIndex(null); };
+  const clearContourHover = () => { hoveredContourRef.current = null; };
 
   const resetSimulation = () => {
     const { width: W, height: H } = size;
@@ -419,13 +425,17 @@ const ElectricPotentialExplorer = () => {
     canvas.addEventListener("pointermove", handlePointerMove);
     canvas.addEventListener("pointerup", handlePointerUp);
     canvas.addEventListener("pointercancel", handlePointerUp);
+    canvas.addEventListener("pointerleave", clearContourHover);
+    canvas.addEventListener("pointercancel", clearContourHover);
     return () => {
       canvas.removeEventListener("pointerdown", handlePointerDown);
       canvas.removeEventListener("pointermove", handlePointerMove);
       canvas.removeEventListener("pointerup", handlePointerUp);
       canvas.removeEventListener("pointercancel", handlePointerUp);
+      canvas.removeEventListener("pointerleave", clearContourHover);
+      canvas.removeEventListener("pointercancel", clearContourHover);
     };
-  }, [draggingTestCharge, draggingChargeIndex, charges, tapAction]);
+  }, [draggingTestCharge, draggingChargeIndex, charges, tapAction, showEquipotentials, size]);
 
   // Animation
   useEffect(() => {
@@ -476,23 +486,6 @@ const ElectricPotentialExplorer = () => {
           ctx.strokeStyle = palette.text;
           ctx.lineWidth = level === 0 ? 2.2 : 1.4;
           ctx.stroke(path);
-        }
-        ctx.globalAlpha = 1;
-        ctx.font = "11px system-ui";
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        const labels = [];
-        for (const { level, label } of contourCacheRef.current.paths) {
-          if (!label) continue;
-          const [x, y] = label;
-          if (labels.some(([lx, ly]) => Math.abs(lx - x) < 64 && Math.abs(ly - y) < 22)) continue;
-          const text = `${level.toLocaleString()} V`;
-          const w = ctx.measureText(text).width + 8;
-          ctx.fillStyle = palette.surface;
-          ctx.fillRect(x - w / 2, y - 8, w, 16);
-          ctx.fillStyle = palette.text;
-          ctx.fillText(text, x, y);
-          labels.push(label);
         }
         ctx.restore();
       }
@@ -555,6 +548,28 @@ const ElectricPotentialExplorer = () => {
       ctx.beginPath(); ctx.arc(testChargeRef.current.x, testChargeRef.current.y, 6, 0, 2 * Math.PI);
       ctx.fillStyle = palette.probe; ctx.fill(); ctx.strokeStyle = palette.text; ctx.stroke();
 
+      // Draw labels last, so arrows and charges never paint over the tooltip.
+      if (showEquipotentials) {
+        const drawLabel = (level, point, hover = false) => {
+          ctx.save();
+          ctx.font = "12px system-ui";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          const text = `${level.toLocaleString()} V`;
+          const w = ctx.measureText(text).width + 12;
+          const lx = clamp(point[0], w / 2 + 3, width - w / 2 - 3);
+          const ly = clamp(point[1] - (hover ? 20 : 0), 12, height - 12);
+          ctx.fillStyle = palette.bg;
+          ctx.fillRect(lx - w / 2, ly - 10, w, 20);
+          ctx.fillStyle = palette.text;
+          ctx.fillText(text, lx, ly);
+          ctx.restore();
+        };
+        const zero = contourCacheRef.current.paths.find(c => c.level === 0);
+        if (zero?.label) drawLabel(0, zero.label);
+        const hovered = hoveredContourRef.current;
+        if (hovered && hovered.level !== 0) drawLabel(hovered.level, hovered.point, true);
+      }
       animationFrameId = requestAnimationFrame(animate);
     };
 
@@ -608,16 +623,6 @@ const ElectricPotentialExplorer = () => {
         }}
       />
 
-      {showEquipotentials && (
-        <p className="mt-2 text-sm text-[var(--text-muted)]">
-          {contourInfo.levels.length ? <>
-            Contour interval: <strong>{contourInfo.step.toLocaleString()} V</strong>.
-            {" "}Shown: {Math.min(...contourInfo.levels).toLocaleString()} to {Math.max(...contourInfo.levels).toLocaleString()} V.
-            {" "}The interval adapts to the charge configuration; extreme values and charge cores are omitted to limit clutter.
-          </> : "No contours in this view: the potential is constant or the contour range is too small."}
-          {" "}Equal voltage steps do not mean equal distances between lines.
-        </p>
-      )}
       <ControlBar className="mt-2">
         <Button variant="secondary" onClick={resetSimulation}>Reset Simulation</Button>
         <Button onClick={() => setAnimateTestCharge(true)} disabled={animateTestCharge}>

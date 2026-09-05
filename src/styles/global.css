@@ -2,6 +2,13 @@
 @import "katex/dist/katex.min.css";
 
 @layer base {
+  /* Physical terrain materials stay recognizable in every interface theme. */
+  :root {
+    --terrain-forest: #345c49;
+    --terrain-rock: #767c83;
+    --terrain-snow: #f0f5fa;
+    --terrain-contour: #253b42;
+  }
   /* Light Theme (Default) */
   :root, [data-theme="light"] {
     --bg-primary: #ffffff;

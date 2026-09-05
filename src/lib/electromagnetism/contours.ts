@@ -2,6 +2,23 @@ export type ContourPoint = readonly [number, number];
 export type ContourSegment = readonly [ContourPoint, ContourPoint];
 export interface Contour { level: number; segments: ContourSegment[] }
 
+/** Pick the closest drawn contour, including its endpoints, within a CSS-pixel
+ * tolerance. Looking at the actual segments keeps hits out of masked cores. */
+export function nearestContour(contours: readonly Contour[], x: number, y: number, tolerance = 7) {
+  let best: { level: number; point: ContourPoint; distance: number } | null = null;
+  for (const { level, segments } of contours) {
+    for (const [a, b] of segments) {
+      const dx = b[0] - a[0], dy = b[1] - a[1];
+      const lengthSquared = dx * dx + dy * dy;
+      const t = lengthSquared ? Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / lengthSquared)) : 0;
+      const point: ContourPoint = [a[0] + t * dx, a[1] + t * dy];
+      const distance = Math.hypot(x - point[0], y - point[1]);
+      if (distance <= tolerance && (!best || distance < best.distance)) best = { level, point, distance };
+    }
+  }
+  return best;
+}
+
 /** A linear, zero-anchored interval, with the extreme 2% excluded from the
  * displayed range. A singular charge must not determine the contour density.
  * At most 15 levels are selected, including zero when it is in range. */

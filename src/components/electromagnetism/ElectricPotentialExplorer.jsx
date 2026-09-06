@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { choosePotentialLevels, traceContours, nearestContour } from "../../lib/electromagnetism/contours";
+import { computeFieldLines } from "../../lib/electromagnetism/fieldLines";
 import { coulombFieldAt } from "../../lib/electromagnetism";
 import { themeColors } from "../shared/themeColors";
 import { ControlBar, Toggle, Button, Select } from "../shared/InlineControls";
@@ -86,7 +87,9 @@ const ElectricPotentialExplorer = () => {
   const [showArrows, setShowArrows] = useState(true);
   const [showFieldLines, setShowFieldLines] = useState(false);
   const [linesPerMicroC, setLinesPerMicroC] = useState(12);
-  const [maxStreamlines, setMaxStreamlines] = useState(100);
+  // A budget, not a truncation: over it, every charge's share shrinks together
+  // so the drawn density still reads as flux.
+  const [maxFieldLines, setMaxFieldLines] = useState(200);
 
   // Potential colormap & equipotentials
   const [showColormap, setShowColormap] = useState(true);
@@ -97,6 +100,7 @@ const ElectricPotentialExplorer = () => {
   // Cached colormap + contours so we don't recompute in every frame
   const colorCacheRef = useRef({ imageBitmap: null, w: 0, h: 0 });
   const contourCacheRef = useRef({ paths: [], w: 0, h: 0 });
+  const fieldLinePathRef = useRef(null);
   const hoveredContourRef = useRef(null);
 
   const initialTestChargeFromSize = (W, H) => ({ x: 0.5 * W, y: 0.33 * H, vx: 0, vy: 0, q: 1e-8, m: 1e-6 });
@@ -134,83 +138,30 @@ const ElectricPotentialExplorer = () => {
 
   const distToAnyCharge = (x, y, localCharges = charges) => localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
 
-  // --- Field lines helpers ---
-  const norm2 = (x, y) => { const m = Math.hypot(x, y) || 1e-12; return [x / m, y / m]; };
-
-  // --- RK4 streamline integrator with adaptive step on curvature ---
-  const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
-    let x = x0, y = y0;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-
-    const fieldUnit = (X, Y) => {
-      const { Ex, Ey } = computeField(X, Y);
-      let [ux, uy] = norm2(Ex, Ey);
-      return [ux * dir, uy * dir];
+  // --- Field lines (traced in the lib, cached as one Path2D) ---
+  // Tracing is far too expensive to redo on every animation frame, and the
+  // result only depends on the scene, so it is cached like the colormap is.
+  const regenerateFieldLines = useMemo(() => {
+    return () => {
+      if (!showFieldLines) { fieldLinePathRef.current = null; return; }
+      const lines = computeFieldLines(charges, {
+        width: size.width,
+        height: size.height,
+        linesPerReferenceCharge: linesPerMicroC,
+        maxLines: maxFieldLines,
+        softenSquared: 25, // match computeField, or lines drift off the arrows
+      });
+      // One path for every line: the whole overlay strokes in a single call.
+      const path = new Path2D();
+      for (const line of lines) {
+        for (const points of line.segments) {
+          path.moveTo(points[0], points[1]);
+          for (let i = 2; i < points.length; i += 2) path.lineTo(points[i], points[i + 1]);
+        }
+      }
+      fieldLinePathRef.current = path;
     };
-
-    let [uxPrev, uyPrev] = fieldUnit(x, y);
-
-    for (let i = 0; i < maxSteps; i++) {
-      const dNear = distToAnyCharge(x, y);
-      const nearFactor = Math.max(0.25, Math.min(1, (dNear - 8) / 40));
-      let h = baseStepPx * nearFactor;
-
-      const [k1x, k1y] = fieldUnit(x, y);
-      const [k2x, k2y] = fieldUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
-      const [k3x, k3y] = fieldUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
-      const [k4x, k4y] = fieldUnit(x + h * k3x, y + h * k3y);
-
-      let dx = (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
-      let dy = (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
-
-      let [uxCurr, uyCurr] = norm2(dx, dy);
-      if (uxCurr * uxPrev + uyCurr * uyPrev < 0) {
-        h *= 0.5;
-        const [k1x2, k1y2] = fieldUnit(x, y);
-        const [k2x2, k2y2] = fieldUnit(x + 0.5 * h * k1x2, y + 0.5 * h * k1y2);
-        const [k3x2, k3y2] = fieldUnit(x + 0.5 * h * k2x2, y + 0.5 * h * k2y2);
-        const [k4x2, k4y2] = fieldUnit(x + h * k3x2, y + h * k3y2);
-        dx = (h / 6) * (k1x2 + 2 * k2x2 + 2 * k3x2 + k4x2);
-        dy = (h / 6) * (k1y2 + 2 * k2y2 + 2 * k3y2 + k4y2);
-        [uxCurr, uyCurr] = norm2(dx, dy);
-      }
-
-      x += dx; y += dy;
-      ctx.lineTo(x, y);
-      [uxPrev, uyPrev] = [uxCurr, uyCurr];
-
-      if (x < 0 || x > size.width || y < 0 || y > size.height) break;
-      if (distToAnyCharge(x, y) < 10) break;
-    }
-    ctx.stroke();
-  };
-
-  const drawFieldLines = (ctx) => {
-    if (!showFieldLines) return;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = themeColors().muted;
-
-    const baseStepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
-    const maxSteps = 2000;
-    const r0 = 10;
-    let streamlineCount = 0;
-
-    for (const c of charges) {
-      if (streamlineCount >= maxStreamlines) break;
-      const muC = Math.abs(c.q) / 1e-6;
-      const N = Math.max(4, Math.min(24, Math.round(linesPerMicroC * muC)));
-      for (let k = 0; k < N; k++) {
-        if (streamlineCount >= maxStreamlines) break;
-        const theta = (2 * Math.PI * k) / N;
-        const sx = c.x + r0 * Math.cos(theta);
-        const sy = c.y + r0 * Math.sin(theta);
-        const dir = c.q >= 0 ? +1 : -1; // from +q outward, into –q
-        traceFieldLine(ctx, sx, sy, dir, baseStepPx, maxSteps);
-        streamlineCount++;
-      }
-    }
-  };
+  }, [charges, size.width, size.height, showFieldLines, linesPerMicroC, maxFieldLines]);
 
   const divergingColor = (t) => {
     // t in [-1,1]; -1 deep blue, 0 white, +1 deep red
@@ -333,10 +284,13 @@ const ElectricPotentialExplorer = () => {
     const delay = isDragging ? 80 : 0; // ms
     let frame;
     const id = setTimeout(() => {
-      frame = requestAnimationFrame(regenerateColormapAndContours);
+      frame = requestAnimationFrame(() => {
+        regenerateColormapAndContours();
+        regenerateFieldLines();
+      });
     }, delay);
     return () => { clearTimeout(id); cancelAnimationFrame(frame); };
-  }, [regenerateColormapAndContours, draggingTestCharge, draggingChargeIndex]);
+  }, [regenerateColormapAndContours, regenerateFieldLines, draggingTestCharge, draggingChargeIndex]);
 
   // Config change
   const handleConfigurationChange = (newConfig) => {
@@ -523,7 +477,15 @@ const ElectricPotentialExplorer = () => {
       }
 
       // Optional field lines overlay
-      drawFieldLines(ctx);
+      if (showFieldLines && fieldLinePathRef.current) {
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.strokeStyle = palette.muted;
+        ctx.stroke(fieldLinePathRef.current);
+        ctx.restore();
+      }
 
       // Charges
       charges.forEach((c) => {
@@ -575,7 +537,7 @@ const ElectricPotentialExplorer = () => {
 
     animationFrameId = requestAnimationFrame(animate);
     return () => { mounted = false; cancelAnimationFrame(animationFrameId); };
-  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, linesPerMicroC, maxStreamlines, size, showColormap, showArrows, showEquipotentials]);
+  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, size, showColormap, showArrows, showEquipotentials]);
 
   // UI
   return (

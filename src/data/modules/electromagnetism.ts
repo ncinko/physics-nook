@@ -6,12 +6,13 @@ export const electromagnetismModule: ModuleMeta = {
   title: 'Electromagnetism',
   navLabel: 'Electromagnetism',
   summary:
-    'Coulomb’s law, electric fields and field lines, electric potential, and circuits with Ohm’s law.',
+    'Coulomb’s law, electric fields, Gauss’ law and flux, electric potential, and circuits with Ohm’s law.',
   audience: 'Self-learners moving from mechanics into electricity and the field picture.',
   prerequisites: ['Vectors in two dimensions', 'Coulomb’s law and charge', 'Work and potential energy'],
   learningObjectives: [
     'Define the electric field as force per unit charge and build it from point charges',
     'Use superposition to combine fields and read field lines',
+    'Connect electric flux to enclosed charge and use symmetry to apply Gauss’ law',
     'Connect electric potential energy, electric potential, and the field as its gradient',
     'Relate microscopic electron drift to Ohm’s law and circuit behavior',
   ],
@@ -33,6 +34,21 @@ export const electromagnetismModule: ModuleMeta = {
         description:
           'Learn the electric field as force per unit charge, build it from point charges, and explore superposition and field lines with interactive simulations.',
         canonicalPath: '/electromagnetism',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'electromagnetism-gauss-law',
+      href: '/electromagnetism/gauss-law',
+      title: 'Gauss’ Law',
+      shortTitle: 'Gauss’ Law',
+      description:
+        'Understand electric flux, relate closed surfaces to enclosed charge, and use symmetry to find the field.',
+      seo: {
+        title: 'Gauss’ Law',
+        description:
+          'Explore electric flux and Gauss’ law with interactive surfaces and charges, then use spherical, cylindrical, and planar symmetry to calculate electric fields.',
+        canonicalPath: '/electromagnetism/gauss-law',
         image: '/social/physics-nook-card.svg',
       },
     },

@@ -1,0 +1,268 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Gauss’ Law
+description: Understand electric flux, connect closed surfaces to enclosed charge, and use symmetry to find electric fields.
+canonicalPath: /electromagnetism/gauss-law
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import { ElectricFluxPatch, ClosedSurfaceFlux } from '../../components/electromagnetism/FluxDiagrams';
+import GaussLawExplorer from '../../components/electromagnetism/GaussLawExplorer';
+import GaussSymmetry from '../../components/electromagnetism/GaussSymmetry.astro';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/gauss-law" />
+
+<div id="page-content"></div>
+
+# Gauss’ Law
+
+When representing the electric field using a field line diagram, we can imagine the field lines "flowing out of" positive charges and "flowing into" negative charges.  If you then enclose a region of space with a box, you can then begin counting the number of field lines flowing into/out of the box.  It turns out this counting procedure is deeply connected to the charges within the box.
+
+
+**Gauss’ law** makes this flowy analogy formal by connecting **electric flux** through a closed surface to the net charge inside the surface.
+
+
+**Electric flux** measures how much electric field "passes through" a surface.  The field itself is not a flowing substance; we are actually determining the field component perpendicular to the surface.
+
+For a flat surface in a uniform field,
+
+$$
+\Phi_E = EA\cos\theta,
+$$
+
+where $A$ is the area and $\theta$ is the angle between the electric field and the surface’s **normal** — an arrow perpendicular to the surface. Flux has units of $\text{N}\cdot\text{m}^2/\text{C}$.
+
+<InteractiveAnchor id="electric-flux-patch" />
+
+<ElectricFluxPatch client:load />
+
+When the normal points along the field, $\theta=0$ and $\Phi_E=EA$. When the field runs along the surface, $\theta=90^\circ$ and the flux is zero. Reversing the normal reverses the sign of the flux.
+
+<DerivationPanel title="Why does the cosine appear?">
+
+Only the perpendicular component $E\cos\theta$ contributes. Equivalently, the area presented to the field is the projected area $A\cos\theta$. Multiplying either way gives $\Phi_E=EA\cos\theta$.
+
+We can package the area and orientation into an **area vector**, $\mathbf A=A\hat{\mathbf n}$. The same relation is the dot product
+
+$$
+\Phi_E=\mathbf E\cdot\mathbf A.
+$$
+
+If the field varies or the surface curves, divide the surface into tiny patches, each with its own normal, and add their contributions:
+
+$$
+\Phi_E\approx\sum_i \mathbf E_i\cdot\hat{\mathbf n}_i\,\Delta A_i
+\quad\longrightarrow\quad
+\Phi_E=\int_S \mathbf E\cdot d\mathbf A.
+$$
+
+The integral is the limit of that sum as the patches become small.
+
+</DerivationPanel>
+
+## Closing the Surface
+
+A **closed surface** surrounds a volume completely, like the six faces of a box or the surface of a sphere. For a closed surface, we choose every normal to point *outward*. A field pointing out contributes positive flux; a field pointing in contributes negative flux.
+
+In a uniform field, a box has just as much inward flux as outward flux. Inspect its faces below, then change the field’s direction.
+
+<InteractiveAnchor id="closed-surface-flux" />
+
+<ClosedSurfaceFlux client:load />
+
+The net flux is zero even though the field is nonzero on the surface and throughout the box. Zero net flux means the signed contributions cancel; it does not mean there is no field.
+
+## Charge Inside, Flux Outside
+
+Gauss’ law states that
+
+$$
+\oint_S \mathbf E\cdot d\mathbf A
+=\frac{Q_{\mathrm{enclosed}}}{\varepsilon_0}.
+$$
+
+The circle on the integral reminds us to include the entire closed surface. $Q_{\mathrm{enclosed}}$ is the *net* charge inside, including both signs, and $\varepsilon_0\approx8.85\times10^{-12}\ \text{C}^2/(\text{N}\cdot\text{m}^2)$ is the vacuum permittivity. It is related to Coulomb’s constant by $k=1/(4\pi\varepsilon_0)$.
+
+The **Gaussian surface** is an imaginary boundary used for this calculation. It is not a conducting shell, and drawing or resizing it does not change the field.
+
+<DerivationPanel title="How does this agree with Coulomb’s law?">
+
+Place a point charge $Q$ at the center of a sphere of radius $r$. Its field is radial, so the normal component everywhere on the sphere is $kQ/r^2$. The sphere has area $4\pi r^2$, giving
+
+$$
+\Phi_E=\frac{kQ}{r^2}\,4\pi r^2
+=4\pi kQ
+=\frac{Q}{\varepsilon_0}.
+$$
+
+The inverse-square decrease in the field exactly balances the increase in area. A larger sphere has the same total flux. The sign of $Q$ determines whether the net flux is outward or inward.
+
+This calculation shows the spherical case. The full law applies to any closed surface: changing its shape redistributes the local contributions without changing their sum, as long as no charge crosses the boundary.
+
+</DerivationPanel>
+
+<DerivationPanel title="What about charges outside the surface?">
+
+An external charge can produce a strong field on a Gaussian surface. Its contributions to the total flux nevertheless cancel: some point inward and others outward. The cancellation follows from the inverse-square field and the orientation and area of the surface patches; the field strengths at the entry and exit points need not be equal.
+
+By superposition, every charge contributes to the field $\mathbf E$ on the left side of Gauss’ law. Only enclosed charges contribute to the net flux on the right side. Two equal and opposite enclosed charges also give zero net flux, despite producing a nonzero field.
+
+</DerivationPanel>
+
+## Gauss’ Law Explorer
+
+Start with a centered charge, then move it off-center. The field and surface shading change, but the total flux stays the same. Try an external charge, an enclosed dipole, and different surface shapes. A charge crossing the boundary changes the enclosed charge and the total flux.
+
+<InteractiveAnchor id="gauss-law-explorer" />
+
+<SimulationBlock title="Gauss’ Law Explorer" description="Move charges and change the Gaussian surface. Compare enclosed charge with total electric flux.">
+  <GaussLawExplorer client:only="react" />
+</SimulationBlock>
+
+The surface shading represents the signed normal component $\mathbf E\cdot\hat{\mathbf n}$. Hover over a patch to inspect it. A point charge exactly on the boundary makes the ordinary surface integral singular, so move it clearly inside or outside before reading the total.
+
+## Using Symmetry
+
+Gauss’ law is true for every closed surface. It becomes a shortcut for finding $E$ when symmetry tells us the field’s direction and where its magnitude is constant. The trick is in identifying the symmetry of the charge distribution and then choosing a surface that matches this symmetry.
+
+This isn't always possible.  But when it is: identify where the field is normal or tangent to the surface, simplify the flux integral, calculate the enclosed charge, and find the field.
+
+<DerivationPanel title="Spherical symmetry: a charged sphere">
+
+<GaussSymmetry kind="sphere" />
+
+For a spherically symmetric charge distribution, choose a concentric Gaussian sphere. The field is radial and has constant magnitude on that sphere. For positive enclosed charge,
+
+$$
+E(4\pi r^2)=\frac{Q_{\mathrm{enclosed}}}{\varepsilon_0}.
+$$
+
+Outside a sphere of radius $R$ and total charge $Q$, all its charge is enclosed, so $E=kQ/r^2$.
+
+Inside a *uniformly charged solid insulating sphere*, only the fraction $r^3/R^3$ of the charge is enclosed:
+
+$$
+Q_{\mathrm{enclosed}}=Q\frac{r^3}{R^3},
+\qquad E=\frac{kQr}{R^3}\quad(r<R).
+$$
+
+The field rises linearly from zero at the center, then falls as $1/r^2$ outside. This differs from a conductor in electrostatic equilibrium, whose field inside the conducting material is zero.
+
+</DerivationPanel>
+
+<DerivationPanel title="Cylindrical symmetry: an infinite line of charge">
+
+<GaussSymmetry kind="cylinder" />
+
+For an infinite straight line with uniform charge per length $\lambda$, use a coaxial cylinder of radius $r$ and length $L$. The field is radial and constant on the curved side. It is tangent to both end caps, which contribute zero flux.
+
+$$
+E(2\pi rL)=\frac{\lambda L}{\varepsilon_0},
+\qquad E=\frac{\lambda}{2\pi\varepsilon_0r}.
+$$
+
+For positive $\lambda$, the field points away from the line; for negative $\lambda$, it points toward it. A long finite wire approximates this result near its middle when $r$ is small compared with its length.
+
+</DerivationPanel>
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Net Charge and Total Flux" accent="blue">
+    #### Problem
+
+    A closed surface encloses $+3\,\text{nC}$ and $-1\,\text{nC}$. A $+5\,\text{nC}$ charge lies outside. What is the net electric flux?
+
+    #### Use
+
+    $\Phi_E=Q_{\mathrm{enclosed}}/\varepsilon_0$.
+
+    #### Solve
+
+    $$
+    Q_{\mathrm{enclosed}}=(3-1)\,\text{nC}=2\times10^{-9}\,\text{C},
+    \qquad\Phi_E=\frac{2\times10^{-9}}{8.85\times10^{-12}}
+    \approx226\ \text{N}\cdot\text{m}^2/\text{C}.
+    $$
+
+    #### Check
+
+    Positive net enclosed charge gives positive outward flux; the external charge affects the field but adds no net flux.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Inside a Uniformly Charged Sphere" accent="red">
+    #### Problem
+
+    A solid insulating sphere of radius $R=0.20\,\text{m}$ carries a uniformly distributed charge $Q=8\,\text{nC}$. Find the field at $r=0.10\,\text{m}$.
+
+    #### Use
+
+    $Q_{\mathrm{enclosed}}=Q(r/R)^3$ and $E=kQ_{\mathrm{enclosed}}/r^2$.
+
+    #### Solve
+
+    $$
+    Q_{\mathrm{enclosed}}=8\,\text{nC}\left(\frac{0.10}{0.20}\right)^3=1\,\text{nC},
+    \qquad E\approx\frac{(9\times10^9)(1\times10^{-9})}{(0.10)^2}
+    =900\,\text{N/C},
+    $$
+
+    directed radially outward.
+
+    #### Check
+
+    At half the sphere’s radius, the field is half its surface value, consistent with the linear dependence inside.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Field of an Infinite Sheet" accent="blue">
+    #### Problem
+
+    An isolated infinite sheet has uniform charge density $\sigma=4\,\text{nC/m}^2$. Find the field magnitude on either side.
+
+    #### Use
+
+    A pillbox has flux through two end caps: $2EA=\sigma A/\varepsilon_0$.
+
+    #### Solve
+
+    $$
+    E=\frac{\sigma}{2\varepsilon_0}
+    =\frac{4\times10^{-9}}{2(8.85\times10^{-12})}
+    \approx226\,\text{N/C}.
+    $$
+
+    The field points away from the positively charged sheet on each side.
+
+    #### Check
+
+    The arbitrary cap area cancels, and both sides contribute equally to the outward flux.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence client:load eyebrow="Gauss’ Law Checkpoint" questions={[
+  { id: 'gauss-flux-angle', question: 'A uniform electric field lies parallel to a flat surface. What is the flux through it?', options: [
+    { id: 'A', text: 'Zero.', isCorrect: true, explanation: 'The field is perpendicular to the surface normal, so the cosine is zero.' },
+    { id: 'B', text: 'EA.', isCorrect: false, explanation: 'EA is the maximum positive flux, when the field points along the normal, not along the surface.' },
+    { id: 'C', text: 'It must be negative.', isCorrect: false, explanation: 'Negative flux requires a component opposing the chosen normal. Here that component is zero.' },
+  ]},
+  { id: 'gauss-external-charge', question: 'A charge moves outside a fixed closed surface and stays outside. What must remain unchanged?', options: [
+    { id: 'A', text: 'The electric field everywhere on the surface.', isCorrect: false, explanation: 'The external charge contributes to the field, and moving it generally changes the local field.' },
+    { id: 'B', text: 'Its contribution to the net flux, which is zero.', isCorrect: true, explanation: 'Its inward and outward contributions cancel because it is not enclosed.' },
+    { id: 'C', text: 'The flux through every individual patch.', isCorrect: false, explanation: 'Individual patch contributions can change. Their sum over the entire closed surface remains zero.' },
+  ]},
+  { id: 'gauss-zero-flux', question: 'A closed surface encloses an equal positive and negative charge. What does Gauss’ law tell us?', options: [
+    { id: 'A', text: 'The electric field is zero at every point inside.', isCorrect: false, explanation: 'An enclosed dipole has a nonzero field at most points, even though its net charge is zero.' },
+    { id: 'B', text: 'There are no charges inside.', isCorrect: false, explanation: 'Zero net enclosed charge allows positive and negative charges that cancel in the sum.' },
+    { id: 'C', text: 'The net flux through the surface is zero.', isCorrect: true, explanation: 'Gauss’ law measures net enclosed charge. It does not require the local field to vanish.' },
+  ]},
+  { id: 'gauss-symmetry', question: 'When may we replace a spherical surface integral by E times its area?', options: [
+    { id: 'A', text: 'Whenever the Gaussian surface is a sphere.', isCorrect: false, explanation: 'The shape of an imaginary surface does not make an arbitrary electric field symmetric.' },
+    { id: 'B', text: 'When the field has constant magnitude and points along the outward normal everywhere on it.', isCorrect: true, explanation: 'Then every area element contributes the same positive normal component E, which can be factored out.' },
+    { id: 'C', text: 'Only when no charge is enclosed.', isCorrect: false, explanation: 'A centered positive point charge is a direct example with nonzero enclosed charge and flux equal to E times area.' },
+  ]},
+]} />

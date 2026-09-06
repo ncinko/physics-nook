@@ -59,6 +59,21 @@ const LOCAL_LIMIT = MOTION_GAME_DEFAULTS.leaderboardLimit;
 const quantityTitle = (quantity: 'position' | 'velocity') =>
   quantity === 'position' ? 'Position vs time' : 'Velocity vs time';
 
+/**
+ * The simulated walker is kept, but not offered.
+ *
+ * It is how the whole game gets exercised without hardware — the recording
+ * loop, scoring, retries and the local board all run identically off it — so
+ * deleting it would cost the only way to test any of that. It just has no
+ * business being a choice a reader can make: the activity is walking in front
+ * of a detector, and a mouse-driven run is a different exercise wearing the
+ * same clothes. Add `?practice=1` to the URL to bring it back.
+ */
+const isPracticeEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('practice');
+};
+
 interface LocalScore extends MotionGameLeaderboardScore {
   id: string;
 }
@@ -69,6 +84,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const [phase, setPhase] = useState<Phase>('setup');
   const [roundIndex, setRoundIndex] = useState(0);
   const [seed, setSeed] = useState(() => randomSeed());
+  const [allowPractice] = useState(isPracticeEnabled);
   const [results, setResults] = useState<(RoundResult | null)[]>([null, null, null]);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [elapsed, setElapsed] = useState(0);
@@ -385,14 +401,13 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     <div className={`not-prose px-5 py-4 ${className}`.trim()}>
       {phase === 'setup' && (
         <>
-          <VernierConnectPanel device={device} />
+          <VernierConnectPanel device={device} allowPractice={allowPractice} />
           {connected && (
             <div className="mt-4">
               <Button onClick={() => void beginGame()}>Start the three graphs</Button>
               {isPractice && (
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
-                  Practice runs are scored and saved on this device, but they do not go on the
-                  shared board — a mouse and a pair of legs are not the same contest.
+                  Simulated walker — scores stay on this device and never reach the shared board.
                 </p>
               )}
             </div>
@@ -557,7 +572,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
           {!canPostToCloud && (
             <p className="mt-3 text-sm text-[var(--text-muted)]">
-              Practice runs stay on this device. Connect a LabQuest and a Motion Detector to play
+              Simulated runs stay on this device. Connect a LabQuest and a Motion Detector to play
               for the shared board.
             </p>
           )}
@@ -590,7 +605,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 }
 
 /**
- * Pointer and keyboard control for practice mode. Left is close to the
+ * Pointer and keyboard control for the simulated walker. Left is close to the
  * detector, right is far — the same orientation as distance on the plot above,
  * so the mental mapping is the one the graph already teaches.
  */
@@ -609,7 +624,7 @@ function PracticeStrip({ device }: { device: ReturnType<typeof useVernierMotion>
     <div
       role="slider"
       tabIndex={0}
-      aria-label="Practice walker position"
+      aria-label="Simulated walker position"
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={Number(current.toFixed(2))}

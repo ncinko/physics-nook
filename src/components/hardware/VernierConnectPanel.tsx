@@ -15,6 +15,12 @@ import type { VernierMotionApi } from './useVernierMotion';
 
 interface VernierConnectPanelProps {
   device: VernierMotionApi;
+  /**
+   * Offers the simulated walker as a source. Off for readers: the activity is
+   * about walking in front of a detector, and a mouse-driven run is a different
+   * exercise wearing the same clothes. See `isPracticeEnabled`.
+   */
+  allowPractice?: boolean;
   className?: string;
 }
 
@@ -27,7 +33,11 @@ const STATUS_TONE: Record<string, string> = {
   idle: 'text-[var(--text-muted)]',
 };
 
-export default function VernierConnectPanel({ device, className = '' }: VernierConnectPanelProps) {
+export default function VernierConnectPanel({
+  device,
+  allowPractice = false,
+  className = '',
+}: VernierConnectPanelProps) {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [diagnostics, setDiagnostics] = useState('');
   const [copied, setCopied] = useState(false);
@@ -86,10 +96,12 @@ export default function VernierConnectPanel({ device, className = '' }: VernierC
           Connect a LabQuest
         </Button>
 
-        <Button variant="secondary" onClick={() => void device.selectSource('practice')}>
-          <Mouse aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-          Practice without one
-        </Button>
+        {allowPractice && (
+          <Button variant="secondary" onClick={() => void device.selectSource('practice')}>
+            <Mouse aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+            Simulated walker
+          </Button>
+        )}
 
         {sourceId && (
           <Button variant="secondary" onClick={() => void device.disconnect()}>
@@ -112,8 +124,7 @@ export default function VernierConnectPanel({ device, className = '' }: VernierC
 
       {!supportsHid && (
         <p className="mt-2 text-sm text-[var(--text-muted)]">
-          Reading a LabQuest from a web page needs WebHID, which only Chrome and Edge ship. In
-          Firefox or Safari the practice mode still works.
+          Reading a LabQuest from a web page needs WebHID, which only Chrome and Edge ship.
           {supportsUsb && (
             <>
               {' '}

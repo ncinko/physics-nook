@@ -9,6 +9,8 @@ import { validateGoalRushScoreSubmission } from '../../src/lib/kinematics/goalRu
 import { validateCaerbannogScoreSubmission } from '../../src/lib/caerbannog/leaderboard.ts';
 import { validateChickenCountScoreSubmission } from '../../src/lib/measurement/chickenCount.ts';
 import { validateMotionGameScoreSubmission } from '../../src/lib/kinematics/motionGame.ts';
+import { contrastRatio, ensureContrast, mixRgb, relativeLuminance,
+  type Rgb } from '../../src/components/shared/themeColors.ts';
 
 // --- names that must never reach a shared board --------------------------
 // Each entry is a distinct evasion the normalizer has to undo.
@@ -187,5 +189,57 @@ assert.equal(motionGame.name, 'Player');
 
 // The endpoints bind `validation.name`, so even if the `ok` check were ever
 // bypassed the value reaching D1 is the masked one, never the raw payload.
+
+
+// --- theme color helpers ---------------------------------------------------
+// These back the canvas interactives that bake a bitmap from the active theme.
+{
+  const white: Rgb = [255, 255, 255];
+  const black: Rgb = [0, 0, 0];
+
+  assert.equal(Math.round(contrastRatio(white, black)), 21);
+  assert.equal(Math.round(contrastRatio(white, white)), 1);
+  assert.ok(relativeLuminance(white) > 0.5 && relativeLuminance(black) < 0.5);
+
+  assert.deepEqual(mixRgb([0, 0, 0], [100, 200, 50], 0.5), [50, 100, 25]);
+  assert.deepEqual(mixRgb([10, 20, 30], white, 0), [10, 20, 30]);
+
+  // A color that already has the contrast is returned untouched.
+  assert.deepEqual(ensureContrast([0, 0, 0], white), black);
+
+  // The theme palettes as they are defined in src/styles/global.css. The
+  // regression this guards: the potential colormap used to blend toward a
+  // hardcoded white, so a dark theme painted the whole canvas near-white, and
+  // the hardcoded deep blue end sat at 2.3:1 on the dark background.
+  const themes: Array<[string, string, [number, number, number], Rgb, Rgb]> = [
+    ['light', '#f9fafb', [249, 250, 251], [239, 68, 68], [59, 130, 246]],
+    ['dark', '#1f2937', [31, 41, 55], [248, 113, 113], [96, 165, 250]],
+    ['pastel', '#fefae0', [254, 250, 224], [255, 180, 162], [189, 224, 254]],
+  ];
+  for (const [name, , bg, positive, negative] of themes) {
+    for (const [role, accent] of [['positive', positive], ['negative', negative]] as const) {
+      const end = ensureContrast(accent, bg);
+      assert.ok(
+        contrastRatio(end, bg) >= 4.5,
+        `${name} ${role} colormap end is legible on its own background`,
+      );
+    }
+  }
+
+  // Zero potential is painted as the theme's own background, so a dark theme
+  // stays dark. Blending toward white, as the colormap used to, would have put
+  // the neutral at 14.7:1 against the dark background — the bug being fixed.
+  const darkBg: Rgb = [31, 41, 55];
+  assert.ok(relativeLuminance(darkBg) < 0.5, 'the dark theme background is dark');
+  assert.ok(contrastRatio([255, 255, 255], darkBg) > 10, 'white was the wrong neutral for it');
+
+  // The dark theme is the case that motivated all of this: its own accents
+  // already clear the bar, so they are used as-is rather than being muddied.
+  assert.deepEqual(ensureContrast([248, 113, 113], [31, 41, 55]), [248, 113, 113]);
+  // The pastel accents do not, so they get pushed until they do.
+  const pastelEnd = ensureContrast([255, 180, 162], [254, 250, 224]);
+  assert.notDeepEqual(pastelEnd, [255, 180, 162]);
+  assert.ok(contrastRatio(pastelEnd, [254, 250, 224]) >= 4.5);
+}
 
 console.log('shared leaderboard name tests passed');

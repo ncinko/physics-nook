@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { choosePotentialLevels, traceContours, nearestContour } from "../../lib/electromagnetism/contours";
 import { computeFieldLines } from "../../lib/electromagnetism/fieldLines";
 import { coulombFieldAt } from "../../lib/electromagnetism";
-import { themeColors } from "../shared/themeColors";
+import { themeColors, onThemeChange, cssColorToRgb, ensureContrast } from "../shared/themeColors";
 import { ControlBar, Toggle, Button, Select } from "../shared/InlineControls";
 
 // Cached potential map and contours at one linear voltage interval.
@@ -91,6 +91,12 @@ const ElectricPotentialExplorer = () => {
   // so the drawn density still reads as flux.
   const [maxFieldLines, setMaxFieldLines] = useState(200);
 
+  // Bumped whenever the active theme changes. The animation loop re-reads the
+  // palette every frame on its own, but the colormap is a cached bitmap baked
+  // from the old theme's colors, so it has to be told to rebuild.
+  const [themeTick, setThemeTick] = useState(0);
+  useEffect(() => onThemeChange(() => setThemeTick((n) => n + 1)), []);
+
   // Potential colormap & equipotentials
   const [showColormap, setShowColormap] = useState(true);
   const [showEquipotentials, setShowEquipotentials] = useState(true);
@@ -163,21 +169,33 @@ const ElectricPotentialExplorer = () => {
     };
   }, [charges, size.width, size.height, showFieldLines, linesPerMicroC, maxFieldLines]);
 
-  const divergingColor = (t) => {
-    // t in [-1,1]; -1 deep blue, 0 white, +1 deep red
-    t = Math.max(-1, Math.min(1, t));
-    const w = 1 - Math.abs(t); // whiteness toward center
-    const to255 = (x) => Math.max(0, Math.min(255, Math.round(x)));
+  // The colormap is opaque and covers the whole canvas, so its neutral end is
+  // what the reader sees as the background. Anchoring that to --sim-bg (rather
+  // than to white) is what keeps a dark theme dark: zero potential reads as
+  // empty space in every theme instead of washing the canvas out.
+  const divergingRamp = (palette) => {
+    const bg = cssColorToRgb(palette.bg, [249, 250, 251]);
+    // The ends follow the same accents as the charge markers, darkened or
+    // lightened only as far as this background needs: a hardcoded pair cannot
+    // serve both themes, since the light theme's deep blue reads at 2.3:1 on
+    // the dark background and the pastel accents are paler still.
+    return {
+      bg,
+      positive: ensureContrast(cssColorToRgb(palette.positive, [239, 68, 68]), bg),
+      negative: ensureContrast(cssColorToRgb(palette.negative, [59, 130, 246]), bg),
+    };
+  };
 
-    // endpoints
-    const neg = [30, 90, 200];  // blue
-    const pos = [230, 60, 50];  // red
-
-    const base = t < 0 ? neg : pos;
-    const r = base[0] * Math.abs(t) + 255 * w;
-    const g = base[1] * Math.abs(t) + 255 * w;
-    const b = base[2] * Math.abs(t) + 255 * w;
-    return [to255(r), to255(g), to255(b)];
+  const divergingColor = (t, ramp) => {
+    // t in [-1,1]: negative end, background at 0, positive end.
+    t = clamp(t, -1, 1);
+    const a = Math.abs(t);
+    const end = t < 0 ? ramp.negative : ramp.positive;
+    return [
+      Math.round(ramp.bg[0] + (end[0] - ramp.bg[0]) * a),
+      Math.round(ramp.bg[1] + (end[1] - ramp.bg[1]) * a),
+      Math.round(ramp.bg[2] + (end[2] - ramp.bg[2]) * a),
+    ];
   }
 
   // --- Potential colormap generation (cached) ---
@@ -219,6 +237,7 @@ const ElectricPotentialExplorer = () => {
 
       const logAlpha = 1 / (Vscale * 0.2 + 1e-9); // mapping strength
       const logDen = Math.log(1 + logAlpha * Vscale);
+      const ramp = divergingRamp(themeColors());
 
       let p = 0;
       for (let j = 0; j < H; j++) {
@@ -231,7 +250,7 @@ const ElectricPotentialExplorer = () => {
             const a = Math.log(1 + logAlpha * Math.abs(t) * Vscale) / logDen; // 0..1
             t = sgn * a; // -1..1
           }
-          const [r, g, b] = divergingColor(t);
+          const [r, g, b] = divergingColor(t, ramp);
           data[p++] = r; data[p++] = g; data[p++] = b; data[p++] = 255;
         }
       }
@@ -275,7 +294,7 @@ const ElectricPotentialExplorer = () => {
       }
 
     }
-  }, [size.width, size.height, charges, quality, logColors, showColormap, showEquipotentials]);
+  }, [size.width, size.height, charges, quality, logColors, showColormap, showEquipotentials, themeTick]);
 
   // Regenerate when dependencies change
   useEffect(() => {

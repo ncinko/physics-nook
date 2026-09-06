@@ -11,6 +11,7 @@ interface Props {
 
 const { module, currentPath = module.href } = Astro.props;
 const normalizedCurrentPath = normalizePath(currentPath);
+const currentPageIndex = module.pages.findIndex((page) => normalizePath(page.href) === normalizedCurrentPath);
 ---
 
 <section class="not-prose relative left-1/2 my-10 w-[calc(100vw-2rem)] max-w-7xl -translate-x-1/2 sm:w-screen sm:px-6 lg:px-8">
@@ -30,11 +31,12 @@ const normalizedCurrentPath = normalizePath(currentPath);
           {module.pages.map((page, index) => {
             const isCurrent = normalizePath(page.href) === normalizedCurrentPath;
             const linkHref = isCurrent ? '#page-content' : page.href;
-            const stateLabel = isCurrent ? 'Here' : index === 0 ? 'Start' : index === module.pages.length - 1 ? 'Finish' : 'Next';
+            const stateLabel = isCurrent ? 'Here' : index === 0 ? 'Start' : currentPageIndex >= 0 && index === currentPageIndex + 1 ? 'Next' : undefined;
 
             return (
               <a
                 href={linkHref}
+                title={page.description}
                 class:list={[
                   'block min-w-0 rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
                   isCurrent
@@ -47,7 +49,7 @@ const normalizedCurrentPath = normalizePath(currentPath);
                   <div class="min-w-0">
                     <h2 class="m-0 break-words text-base font-semibold leading-6 text-theme-text">{page.title}</h2>
                   </div>
-                  <span
+                  {stateLabel && <span
                     class:list={[
                       'shrink-0 rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.12em] sm:px-2.5 sm:tracking-[0.18em]',
                       isCurrent
@@ -56,8 +58,8 @@ const normalizedCurrentPath = normalizePath(currentPath);
                     ]}
                   >
                     {stateLabel}
-                  </span>
-                  <p class="col-span-2 mt-0 mb-0 break-words text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
+                  </span>}
+                  <p class="col-span-2 m-0 min-w-0 truncate text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
                 </div>
               </a>
             );

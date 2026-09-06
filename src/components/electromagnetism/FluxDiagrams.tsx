@@ -9,9 +9,20 @@ type Projection = typeof project;
 const points = (vertices: Vector3[], projection: Projection) => vertices.map(v => projection(v).join(',')).join(' ');
 const ink = 'var(--text-primary)', fieldColor = 'var(--accent-blue)', normalColor = 'var(--accent-green)';
 
+type View = readonly [yaw: number, pitch: number];
+
+// Default viewing angles, one per diagram because each has a different normal.
+// Unrotated, both normals lie almost exactly in the picture plane: the patch
+// collapses to a sliver and neither arrow shows which way it actually points.
+// These turn each scene so its normal reads up and to the right and tilted
+// ~20deg out of the page toward the reader, which is enough to open the patch
+// up and to give the cube a three-quarter view.
+const PATCH_VIEW: View = [-0.67, -0.17];
+const BOX_VIEW: View = [-0.69, -0.67];
+
 // Rotate the geometry before applying the original projection: the initial drawing stays exact.
-function useDiagramRotation() {
-  const [[yaw, pitch], setRotation] = useState([0, 0]);
+function useDiagramRotation(initial: View = [0, 0]) {
+  const [[yaw, pitch], setRotation] = useState<View>(initial);
   const drag = useRef<{ id: number; x: number; y: number } | null>(null);
   const rotate = ([x, y, z]: Vector3): Vector3 => {
     const xx = x * Math.cos(yaw) + z * Math.sin(yaw);
@@ -45,11 +56,11 @@ function useDiagramRotation() {
       onPointerUp: stop,
       onPointerCancel: stop,
       onLostPointerCapture: () => { drag.current = null; },
-      onDoubleClick: () => setRotation([0, 0]),
+      onDoubleClick: () => setRotation(initial),
       onKeyDown: (event: KeyboardEvent<SVGSVGElement>) => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
         event.preventDefault();
-        if (event.key === 'Home') setRotation([0, 0]);
+        if (event.key === 'Home') setRotation(initial);
         else setRotation(([a, b]) => [a + (event.key === 'ArrowLeft' ? -0.1 : event.key === 'ArrowRight' ? 0.1 : 0),
           b + (event.key === 'ArrowUp' ? -0.1 : event.key === 'ArrowDown' ? 0.1 : 0)]);
       },
@@ -69,7 +80,7 @@ function Markers({ id }: { id: string }) {
 }
 
 export function ElectricFluxPatch() {
-  const { project, interaction } = useDiagramRotation();
+  const { project, interaction } = useDiagramRotation(PATCH_VIEW);
   const [angle, setAngle] = useState(30), [area, setArea] = useState(2);
   const id = useId();
   const a = angle * Math.PI / 180;
@@ -107,7 +118,7 @@ export function ElectricFluxPatch() {
 }
 
 export function ClosedSurfaceFlux() {
-  const { project, depth, interaction } = useDiagramRotation();
+  const { project, depth, interaction } = useDiagramRotation(BOX_VIEW);
   const [angle, setAngle] = useState(0), [selected, setSelected] = useState(1);
   const id = useId(), a = angle * Math.PI / 180;
   const direction: Vector3 = [Math.cos(a), Math.sin(a), 0];

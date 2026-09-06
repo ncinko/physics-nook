@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { coulombFieldAt } from "../../lib/electromagnetism";
+import { computeFieldLines } from "../../lib/electromagnetism/fieldLines";
 import { themeColors } from "../shared/themeColors";
 import { ControlBar, Slider, Toggle, Button, Select } from "../shared/InlineControls";
 
@@ -62,7 +63,7 @@ const ElectricFieldExplorer = () => {
     { x: 0.3 * W, y: 0.5 * H, q: 1e-6 },
     { x: 0.7 * W, y: 0.5 * H, q: -1e-6 },
   ];
-  const capacitorConfig = (W, H) => {
+  const chargedRowsConfig = (W, H) => {
     const rows = 5;
     const ys = Array.from(
       { length: rows },
@@ -70,9 +71,9 @@ const ElectricFieldExplorer = () => {
     );
     const leftX = 0.2 * W,
       rightX = 0.8 * W;
-    const leftPlate = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
-    const rightPlate = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
-    return [...leftPlate, ...rightPlate];
+    const leftRow = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
+    const rightRow = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
+    return [...leftRow, ...rightRow];
   };
 
   // -------- State --------
@@ -90,6 +91,8 @@ const ElectricFieldExplorer = () => {
   // Field lines UI
   const [showFieldLines, setShowFieldLines] = useState(false);
   const [linesPerMicroC, setLinesPerMicroC] = useState(12);
+  // The traced overlay, kept as one Path2D between scene changes.
+  const fieldLinePathRef = useRef(null);
 
   const initialTestChargeFromSize = (W, H) => ({
     x: 0.5 * W,
@@ -146,103 +149,56 @@ const ElectricFieldExplorer = () => {
     ctx.restore();
   };
 
-  // --- Field lines helpers ---
-  const norm2 = (x, y) => {
-    const m = Math.hypot(x, y) || 1e-12;
-    return [x / m, y / m];
-  };
-  const distToAnyCharge = (x, y, localCharges = charges) =>
-    localCharges.reduce((d, c) => Math.min(d, Math.hypot(x - c.x, y - c.y)), Infinity);
-  
-
-  // --- RK4 streamline integrator with adaptive step on curvature ---
-const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
-  let x = x0, y = y0;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-
-  const fieldUnit = (X, Y) => {
-    const { Ex, Ey } = computeField(X, Y);
-    let [ux, uy] = norm2(Ex, Ey);
-    return [ux * dir, uy * dir];
-  };
-
-  const turnAngle = (ax, ay, bx, by) => {
-    const dot = Math.max(-1, Math.min(1, ax * bx + ay * by));
-    return Math.acos(dot);
-  };
-
-  // initialize previous direction from local field
-  let [uxPrev, uyPrev] = fieldUnit(x, y);
-
-  for (let i = 0; i < maxSteps; i++) {
-    // distance-based step shrink near charges
-    const dNear = distToAnyCharge(x, y);
-    const nearFactor = Math.max(0.25, Math.min(1, (dNear - 8) / 40)); // 0.25..1
-    let h = baseStepPx * nearFactor;
-
-    // RK4 in the unit direction field
-    const [k1x, k1y] = fieldUnit(x, y);
-    const [k2x, k2y] = fieldUnit(x + 0.5 * h * k1x, y + 0.5 * h * k1y);
-    const [k3x, k3y] = fieldUnit(x + 0.5 * h * k2x, y + 0.5 * h * k2y);
-    const [k4x, k4y] = fieldUnit(x + h * k3x, y + h * k3y);
-
-    let dx = (h / 6) * (k1x + 2 * k2x + 2 * k3x + k4x);
-    let dy = (h / 6) * (k1y + 2 * k2y + 2 * k3y + k4y);
-
-    // anti-backtracking: if we flipped  > 90°, reduce step and retry once
-    let [uxCurr, uyCurr] = norm2(dx, dy);
-    if (uxCurr * uxPrev + uyCurr * uyPrev < 0) {
-      h *= 0.5;
-      const [k1x2, k1y2] = fieldUnit(x, y);
-      const [k2x2, k2y2] = fieldUnit(x + 0.5 * h * k1x2, y + 0.5 * h * k1y2);
-      const [k3x2, k3y2] = fieldUnit(x + 0.5 * h * k2x2, y + 0.5 * h * k2y2);
-      const [k4x2, k4y2] = fieldUnit(x + h * k3x2, y + h * k3y2);
-      dx = (h / 6) * (k1x2 + 2 * k2x2 + 2 * k3x2 + k4x2);
-      dy = (h / 6) * (k1y2 + 2 * k2y2 + 2 * k3y2 + k4y2);
-      [uxCurr, uyCurr] = norm2(dx, dy);
-    }
-
-    // curvature limiter: if turn > 30°, take a half-step
-    const dTheta = turnAngle(uxPrev, uyPrev, uxCurr, uyCurr);
-    if (dTheta > Math.PI / 6) { dx *= 0.5; dy *= 0.5; }
-
-    x += dx; y += dy;
-    ctx.lineTo(x, y);
-    [uxPrev, uyPrev] = [uxCurr, uyCurr];
-
-    // termination
-    if (x < 0 || x > size.width || y < 0 || y > size.height) break;
-    if (distToAnyCharge(x, y) < 10) break;
-  }
-  ctx.stroke();
-};
-
-
-  const drawFieldLines = (ctx) => {
-    if (!showFieldLines) return;
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = themeColors().muted;
-
-    const baseStepPx = Math.max(0.75, Math.min(size.width, size.height) / 500);
-    const maxSteps = 2000;
-
-    // ↑ modestly larger to get outside the highest-curvature core
-    const r0 = 10; // was 12
-
-    for (const c of charges) {
-      const muC = Math.abs(c.q) / 1e-6;
-      const N = Math.max(4, Math.min(24, Math.round(linesPerMicroC * muC)));
-      for (let k = 0; k < N; k++) {
-        const theta = (2 * Math.PI * k) / N;
-        const sx = c.x + r0 * Math.cos(theta);
-        const sy = c.y + r0 * Math.sin(theta);
-        const dir = c.q >= 0 ? +1 : -1; // from +q outward, into –q
-        traceFieldLine(ctx, sx, sy, dir, baseStepPx, maxSteps);
+  // --- Field lines (traced in the lib, cached as one Path2D) ---
+  //
+  // This used to be an inline tracer re-run from scratch on every animation
+  // frame, seeding an even ring around every charge. The ring is what the lib
+  // replaced: seeds now carry equal flux rather than equal angle, so a charge
+  // in a row aims its lines into the gap instead of splitting them evenly
+  // between the gap and the weak field out the back, so spacing reads as
+  // strength the way the diagram asks you to. Two older bugs go with it — the lib
+  // traces from sources only, so a dipole's lines are drawn once instead of
+  // once from each end, and a line ends only on a charge that is a sink for its
+  // direction, rather than on whichever charge it passed within 10 px of.
+  const regenerateFieldLines = useMemo(() => {
+    return () => {
+      if (!showFieldLines) {
+        fieldLinePathRef.current = null;
+        return;
       }
-    }
-  };
+      const lines = computeFieldLines(charges, {
+        width: size.width,
+        height: size.height,
+        linesPerReferenceCharge: linesPerMicroC,
+        softenSquared: 25, // match computeField, or lines drift off the arrows
+      });
+      // One path for every line: the whole overlay strokes in a single call.
+      const path = new Path2D();
+      for (const line of lines) {
+        for (const points of line.segments) {
+          path.moveTo(points[0], points[1]);
+          for (let i = 2; i < points.length; i += 2) {
+            path.lineTo(points[i], points[i + 1]);
+          }
+        }
+      }
+      fieldLinePathRef.current = path;
+    };
+  }, [charges, size.width, size.height, showFieldLines, linesPerMicroC]);
 
+  // Dragging a charge rewrites `charges` on every pointer move, so tracing is
+  // held back a beat there and runs on the next frame everywhere else.
+  useEffect(() => {
+    const delay = draggingChargeIndex !== null ? 80 : 0;
+    let frame;
+    const id = setTimeout(() => {
+      frame = requestAnimationFrame(regenerateFieldLines);
+    }, delay);
+    return () => {
+      clearTimeout(id);
+      cancelAnimationFrame(frame);
+    };
+  }, [regenerateFieldLines, draggingChargeIndex]);
 
   // Config change
   const handleConfigurationChange = (newConfig) => {
@@ -250,8 +206,8 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     const { width: W, height: H } = size;
     if (newConfig === "dipole") {
       setCharges(dipoleConfig(W, H));
-    } else if (newConfig === "capacitor") {
-      setCharges(capacitorConfig(W, H));
+    } else if (newConfig === "chargedRows") {
+      setCharges(chargedRowsConfig(W, H));
     } else if (newConfig === "monopole") {
       setCharges(monopoleConfig(W, H));
     }
@@ -323,8 +279,8 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
     const { width: W, height: H } = size;
     if (configuration === "dipole") {
       setCharges(dipoleConfig(W, H));
-    } else if (configuration === "capacitor") {
-      setCharges(capacitorConfig(W, H));
+    } else if (configuration === "chargedRows") {
+      setCharges(chargedRowsConfig(W, H));
     } else if (configuration === "monopole") {
       setCharges(monopoleConfig(W, H));
     }
@@ -402,7 +358,15 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
       }
 
       // Optional field lines overlay
-      drawFieldLines(ctx);
+      if (showFieldLines && fieldLinePathRef.current) {
+        ctx.save();
+        ctx.lineWidth = 1;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+        ctx.strokeStyle = palette.muted;
+        ctx.stroke(fieldLinePathRef.current);
+        ctx.restore();
+      }
 
       // Charges
       charges.forEach(c => {
@@ -446,7 +410,7 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
       mounted = false;
       cancelAnimationFrame(animationFrameId);
     };
-  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, linesPerMicroC, size]);
+  }, [charges, animateTestCharge, draggingTestCharge, showFieldLines, size]);
 
   return (
     <div style={{ textAlign: "center", color: "var(--text-primary)" }}>
@@ -458,7 +422,7 @@ const traceFieldLine = (ctx, x0, y0, dir, baseStepPx, maxSteps) => {
           options={[
             { value: "monopole", label: "Monopole" },
             { value: "dipole", label: "Dipole" },
-            { value: "capacitor", label: "Capacitor Plates" },
+            { value: "chargedRows", label: "Charged Rows" },
           ]}
         />
         <Select

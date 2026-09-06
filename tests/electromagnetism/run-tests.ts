@@ -274,25 +274,25 @@ const H = 456;
     near(theta, (2 * Math.PI * j) / 12, 0.01);
   });
 
-  // A plate charge is the case the profile exists for. Half its seeds pointed
-  // into the weak field behind the plate when they were spaced by angle.
-  const plate: PointCharge[] = [
+  // A charge in a row is the case the profile exists for. Half its seeds
+  // pointed into the weak field behind the row when they were spaced by angle.
+  const row: PointCharge[] = [
     ...Array.from({ length: 7 }, (_, i) => ({ x: 0.4 * W, y: ((i + 1) / 8) * H, q: 1e-6 })),
     ...Array.from({ length: 7 }, (_, i) => ({ x: 0.6 * W, y: ((i + 1) / 8) * H, q: -1e-6 })),
   ];
-  // The probe circle reads the plate's spacing, staying clear of the neighbour
+  // The probe circle reads the row's spacing, staying clear of the neighbour
   // it would otherwise sample the far side of.
-  assert.ok(probeRadius(plate, 3, seedRadius) < H / 8, 'the probe clears the next charge along');
-  assert.ok(probeRadius(plate, 3, seedRadius) > seedRadius * 1.5, 'and reads out past the core');
-  const intoGap = seedAngles(plate, 3, 12, { seedRadius }).filter((t) => Math.cos(t) > 0).length;
-  assert.ok(intoGap > 6, `a plate charge aims most of its seeds into the gap (got ${intoGap}/12)`);
-  // Its mirror image on the far plate has to aim the same seeds back, angle for
+  assert.ok(probeRadius(row, 3, seedRadius) < H / 8, 'the probe clears the next charge along');
+  assert.ok(probeRadius(row, 3, seedRadius) > seedRadius * 1.5, 'and reads out past the core');
+  const intoGap = seedAngles(row, 3, 12, { seedRadius }).filter((t) => Math.cos(t) > 0).length;
+  assert.ok(intoGap > 6, `a charge in a row aims most of its seeds into the gap (got ${intoGap}/12)`);
+  // Its mirror image in the far row has to aim the same seeds back, angle for
   // angle, or the two ends of one physical line seed different curves and the
   // line gets drawn twice.
   const wrap = (t: number) => ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
   const sorted = (a: number[]) => a.map(wrap).sort((x, y) => x - y);
-  const mirrored = sorted(seedAngles(plate, 3, 12, { seedRadius }).map((t) => Math.PI - t));
-  sorted(seedAngles(plate, 10, 12, { seedRadius })).forEach((theta, j) => {
+  const mirrored = sorted(seedAngles(row, 3, 12, { seedRadius }).map((t) => Math.PI - t));
+  sorted(seedAngles(row, 10, 12, { seedRadius })).forEach((theta, j) => {
     near(theta, mirrored[j], 1e-6);
   });
 }
@@ -313,13 +313,24 @@ const presets: Record<string, PointCharge[]> = {
     { x: 0.35 * W, y: 0.5 * H, q: 1e-6 },
     { x: 0.65 * W, y: 0.5 * H, q: -1e-6 },
   ],
-  capacitor: [
+  chargedRows: [
     ...Array.from({ length: 7 }, (_, i) => ({ x: 0.4 * W, y: ((i + 1) / 8) * H, q: 1e-6 })),
     ...Array.from({ length: 7 }, (_, i) => ({ x: 0.6 * W, y: ((i + 1) / 8) * H, q: -1e-6 })),
   ],
   likeCharges: [
     { x: 0.35 * W, y: 0.5 * H, q: 1e-6 },
     { x: 0.65 * W, y: 0.5 * H, q: 1e-6 },
+  ],
+  // The field explorer lays its scenes out differently from the potential
+  // explorer — wider dipole, wider gap, five charges a row — and both call this
+  // module, so both geometries are held to the same promises.
+  wideDipole: [
+    { x: 0.3 * W, y: 0.5 * H, q: 1e-6 },
+    { x: 0.7 * W, y: 0.5 * H, q: -1e-6 },
+  ],
+  wideChargedRows: [
+    ...Array.from({ length: 5 }, (_, i) => ({ x: 0.2 * W, y: ((i + 1) / 6) * H, q: 1e-6 })),
+    ...Array.from({ length: 5 }, (_, i) => ({ x: 0.8 * W, y: ((i + 1) / 6) * H, q: -1e-6 })),
   ],
 };
 
@@ -329,7 +340,7 @@ for (const [name, charges] of Object.entries(presets)) {
   // The regression this module exists for: seeding every charge and tracing
   // each seed independently drew the same line twice and left sinks carrying
   // roughly double the ends of sources. Every charge should show the same
-  // twelve, monopole and capacitor alike.
+  // twelve, a lone charge and a row of them alike.
   assert.deepEqual(
     endsPerCharge(charges, lines),
     charges.map(() => 12),

@@ -13,11 +13,11 @@
 // The other half of reading a flux diagram is spacing: a reader takes crowded
 // curves to mean a strong field. Equal-angle seeding delivers that only for an
 // isolated charge, whose seed ring sees the same field strength all the way
-// round. Put that charge in a row of others — a capacitor plate — and the ring
-// still fires half its lines out the back, into the field the plates nearly
-// cancel, and half into the strong field in the gap. So seeds are placed at
-// equal increments of flux through a probe circle instead: the same ring for
-// the isolated charge, and lines that follow the field everywhere else.
+// round. Put that charge in a row of others facing a row of the opposite sign
+// and the ring still fires half its lines out the back, into the field the two
+// rows nearly cancel, and half into the strong field between them. So seeds are
+// placed at equal increments of flux through a probe circle instead: the same
+// ring for the isolated charge, and lines that follow the field everywhere else.
 
 import {
   COULOMB_K,
@@ -89,7 +89,7 @@ const DEFAULTS = {
   maxLines: 200,
   seedRadius: 10,
   softenSquared: 25,
-  // Chosen against the capacitor preset: 1.5 lets the fringing lines complete
+  // Chosen against the charged-rows preset: 1.5 lets the fringing lines complete
   // their loop outside the frame, and past that the extra tracing buys very
   // few extra source-to-sink connections.
   margin: 1.5,
@@ -109,8 +109,8 @@ const MAX_STEP_HALVINGS = 6;
 /**
  * Probe circle radius, as a multiple of the spacing of the charge's like-sign
  * neighbours. That spacing is the scale at which a row of point charges stops
- * looking like separate points and starts looking like a plate, which is
- * exactly the scale the flux profile has to see. Inside it the charge's own
+ * looking like separate points and starts acting as one sheet of charge, which
+ * is exactly the scale the flux profile has to see. Inside it the charge's own
  * 1/r² field swamps everything else and the profile flattens back to a ring.
  */
 const PROBE_PER_NEIGHBOUR = 1.2;
@@ -379,15 +379,15 @@ export function allocateLineCounts(
 
 /**
  * Where a charge's seeds are counted from: the direction the rest of the scene
- * pushes this charge's own flux, which for a plate charge is across the gap and
- * for a lone charge is nothing in particular.
+ * pushes this charge's own flux, which for a charge in a row is across the gap
+ * and for a lone charge is nothing in particular.
  *
  * Equal shares of a flux profile are a partition of a circle, and a partition
  * has to start somewhere — shift the start and every seed moves. Two things pin
- * the choice. It has to survive any symmetry of the scene: mirror a capacitor
- * and its sources become its sinks, so a mirrored source has to quantise to the
- * partition its sink already chose, or the two ends seed different lines and
- * the same physical curve gets drawn twice. The external field is a vector of
+ * the choice. It has to survive any symmetry of the scene: mirror two facing
+ * rows and the sources become the sinks, so a mirrored source has to quantise
+ * to the partition its sink already chose, or the two ends seed different lines
+ * and the same physical curve gets drawn twice. The external field is a vector of
  * the scene and mirrors with it, once the charge's own sign is divided out;
  * a fixed angle or an offset from a neighbour direction would not.
  *
@@ -430,7 +430,7 @@ export function seedAnchor(
  * Radius of the circle whose flux profile decides where a charge's seeds go.
  *
  * Exported so the choice can be checked directly: it is the one number that
- * decides whether the profile sees a lone charge or a plate.
+ * decides whether the profile sees a lone charge or a row of them.
  */
 export function probeRadius(
   charges: readonly PointCharge[],
@@ -464,8 +464,8 @@ export function probeRadius(
  * Partitioning that profile into equal shares is the flux-tube rule the whole
  * diagram is read by, applied at the one place a line's fate is still ours to
  * choose. An isolated charge has a flat profile and so keeps the even ring
- * this replaces, anchor and all; a plate charge sends most of its share into
- * the gap, because that is where most of its flux goes.
+ * this replaces, anchor and all; a charge in a row sends most of its share
+ * into the gap, because that is where most of its flux goes.
  */
 export function seedAngles(
   charges: readonly PointCharge[],

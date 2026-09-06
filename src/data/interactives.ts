@@ -554,7 +554,7 @@ export const interactiveEntries: InteractiveEntry[] = [
   {
     id: 'electric-field-explorer',
     title: 'Electric Field Explorer',
-    description: 'Place charges, choose monopole/dipole/capacitor presets, draw field lines, and launch a test charge.',
+    description: 'Place charges, choose monopole, dipole, or charged-row presets, draw field lines, and launch a test charge.',
     href: '/electromagnetism#electric-field-explorer',
     module: 'Electromagnetism',
     kind: 'standalone',

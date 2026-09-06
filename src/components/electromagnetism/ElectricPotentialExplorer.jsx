@@ -64,13 +64,13 @@ const ElectricPotentialExplorer = () => {
     { x: 0.35 * W, y: 0.5 * H, q: 1e-6 },
     { x: 0.65 * W, y: 0.5 * H, q: -1e-6 },
   ];
-  const capacitorConfig = (W, H) => {
+  const chargedRowsConfig = (W, H) => {
     const rows = 7;
     const ys = Array.from({ length: rows }, (_, i) => ((i + 1) / (rows + 1)) * H);
     const leftX = 0.4 * W, rightX = 0.6 * W;
-    const leftPlate = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
-    const rightPlate = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
-    return [...leftPlate, ...rightPlate];
+    const leftRow = ys.map((y) => ({ x: leftX, y, q: 1e-6 }));
+    const rightRow = ys.map((y) => ({ x: rightX, y, q: -1e-6 }));
+    return [...leftRow, ...rightRow];
   };
 
   // -------- State --------
@@ -316,7 +316,7 @@ const ElectricPotentialExplorer = () => {
     setConfiguration(newConfig);
     const { width: W, height: H } = size;
     if (newConfig === "dipole") setCharges(dipoleConfig(W, H));
-    else if (newConfig === "capacitor") setCharges(capacitorConfig(W, H));
+    else if (newConfig === "chargedRows") setCharges(chargedRowsConfig(W, H));
     else if (newConfig === "monopole") setCharges(monopoleConfig(W, H));
     testChargeRef.current = initialTestChargeFromSize(W, H);
     setAnimateTestCharge(false);
@@ -384,7 +384,7 @@ const ElectricPotentialExplorer = () => {
   const resetSimulation = () => {
     const { width: W, height: H } = size;
     if (configuration === "dipole") setCharges(dipoleConfig(W, H));
-    else if (configuration === "capacitor") setCharges(capacitorConfig(W, H));
+    else if (configuration === "chargedRows") setCharges(chargedRowsConfig(W, H));
     else if (configuration === "monopole") setCharges(monopoleConfig(W, H));
     testChargeRef.current = initialTestChargeFromSize(W, H);
     setAnimateTestCharge(false);
@@ -569,7 +569,7 @@ const ElectricPotentialExplorer = () => {
           options={[
             { value: "monopole", label: "Monopole" },
             { value: "dipole", label: "Dipole" },
-            { value: "capacitor", label: "Capacitor Plates" },
+            { value: "chargedRows", label: "Charged Rows" },
           ]}
         />
         <Select

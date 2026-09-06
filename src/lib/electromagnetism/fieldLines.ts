@@ -9,8 +9,22 @@
 // sinks end up with roughly twice as many ends as sources. This module traces
 // from sources only, and keeps a sink-seeded line just when it arrives from
 // outside the scene, so every drawn curve is one physical line.
+//
+// The other half of reading a flux diagram is spacing: a reader takes crowded
+// curves to mean a strong field. Equal-angle seeding delivers that only for an
+// isolated charge, whose seed ring sees the same field strength all the way
+// round. Put that charge in a row of others — a capacitor plate — and the ring
+// still fires half its lines out the back, into the field the plates nearly
+// cancel, and half into the strong field in the gap. So seeds are placed at
+// equal increments of flux through a probe circle instead: the same ring for
+// the isolated charge, and lines that follow the field everywhere else.
 
-import { COULOMB_K, coulombFieldAt, type PointCharge } from "./index.ts";
+import {
+  COULOMB_K,
+  coulombFieldAt,
+  fieldFromCharge,
+  type PointCharge,
+} from "./index.ts";
 
 export type FieldLineEnd =
   /** Reached a charge of the opposite sign: the line terminates there. */
@@ -91,6 +105,31 @@ const MIN_STEP_PX = 0.35;
 /** How fast the step may grow back after the field forces it down. */
 const STEP_GROWTH = 1.5;
 const MAX_STEP_HALVINGS = 6;
+
+/**
+ * Probe circle radius, as a multiple of the spacing of the charge's like-sign
+ * neighbours. That spacing is the scale at which a row of point charges stops
+ * looking like separate points and starts looking like a plate, which is
+ * exactly the scale the flux profile has to see. Inside it the charge's own
+ * 1/r² field swamps everything else and the profile flattens back to a ring.
+ */
+const PROBE_PER_NEIGHBOUR = 1.2;
+/** Radius for a charge with no like-sign neighbour, in seed-ring radii. */
+const PROBE_ISOLATED = 1.5;
+/**
+ * The probe circle stays this fraction of the way to the nearest charge of any
+ * sign, in every direction — a circle, not a curve pushed out where there is
+ * room. A 2D slice of a 1/r² field has no radius-independent flux (the flux a
+ * wedge carries falls off as 1/r), so shares read at different radii are not
+ * comparable and a curve that bulges reads as a field that fades. And reaching
+ * past a neighbour samples its near field pointing outward: one enormous spike
+ * that swallows every seed, which is how two like charges end up with all their
+ * lines crammed into the null between them.
+ */
+const PROBE_CLEARANCE = 0.9;
+/** Flux samples around the probe circle, per line seeded, and a floor. */
+const FLUX_SAMPLES_PER_LINE = 16;
+const MIN_FLUX_SAMPLES = 180;
 
 export interface Rect {
   x0: number;
@@ -339,31 +378,150 @@ export function allocateLineCounts(
 }
 
 /**
- * Angle offset for a charge's seed ring. A seed fired straight at a like-sign
- * neighbour walks into the null point between them and draws as a stub, so the
- * ring is rotated to straddle that direction instead of landing on it. With no
- * like-sign neighbour the phase stays 0, which puts a line on the axis of a
- * dipole — the one every textbook sketch draws.
+ * Where a charge's seeds are counted from: the direction the rest of the scene
+ * pushes this charge's own flux, which for a plate charge is across the gap and
+ * for a lone charge is nothing in particular.
+ *
+ * Equal shares of a flux profile are a partition of a circle, and a partition
+ * has to start somewhere — shift the start and every seed moves. Two things pin
+ * the choice. It has to survive any symmetry of the scene: mirror a capacitor
+ * and its sources become its sinks, so a mirrored source has to quantise to the
+ * partition its sink already chose, or the two ends seed different lines and
+ * the same physical curve gets drawn twice. The external field is a vector of
+ * the scene and mirrors with it, once the charge's own sign is divided out;
+ * a fixed angle or an offset from a neighbour direction would not.
+ *
+ * And it has to land somewhere flux actually leaves by. Anchoring on the
+ * nearest like-sign neighbour — the direction a seed would walk into the null
+ * point — puts the first share on a stretch of profile that is flat zero, where
+ * the partition is degenerate and picks an edge of the dead wedge by the
+ * accident of which way the angles run. The external field points the other
+ * way, into the strongest flux there is. For a charge with nothing around it
+ * there is no external field and the anchor is 0, which is what keeps a line on
+ * the axis of a dipole — the one every textbook sketch draws.
  */
-export function seedPhase(
+export function seedAnchor(
+  charges: readonly PointCharge[],
+  index: number,
+  softenSquared = DEFAULTS.softenSquared,
+): number {
+  const self = charges[index];
+  let ex = 0;
+  let ey = 0;
+  for (let i = 0; i < charges.length; i++) {
+    if (i === index) continue;
+    const f = fieldFromCharge(
+      charges[i].q,
+      self.x - charges[i].x,
+      self.y - charges[i].y,
+      softenSquared,
+    );
+    ex += f.x;
+    ey += f.y;
+  }
+  // Divided by this charge's own sign, so a sink anchors where its lines
+  // arrive from rather than the reverse.
+  const sign = Math.sign(self.q);
+  if (sign === 0 || (ex === 0 && ey === 0)) return 0;
+  return Math.atan2(sign * ey, sign * ex);
+}
+
+/**
+ * Radius of the circle whose flux profile decides where a charge's seeds go.
+ *
+ * Exported so the choice can be checked directly: it is the one number that
+ * decides whether the profile sees a lone charge or a plate.
+ */
+export function probeRadius(
+  charges: readonly PointCharge[],
+  index: number,
+  seedRadius: number,
+): number {
+  const self = charges[index];
+  let nearestLike = Infinity;
+  let nearestAny = Infinity;
+  for (let i = 0; i < charges.length; i++) {
+    if (i === index || charges[i].q === 0) continue;
+    const d = Math.hypot(charges[i].x - self.x, charges[i].y - self.y);
+    if (d === 0) continue;
+    if (d < nearestAny) nearestAny = d;
+    if (Math.sign(charges[i].q) === Math.sign(self.q) && d < nearestLike) {
+      nearestLike = d;
+    }
+  }
+  const wanted = Number.isFinite(nearestLike)
+    ? Math.max(PROBE_PER_NEIGHBOUR * nearestLike, seedRadius * PROBE_ISOLATED)
+    : seedRadius * PROBE_ISOLATED;
+  return Math.min(wanted, PROBE_CLEARANCE * nearestAny);
+}
+
+/**
+ * Where to start a charge's lines: `count` angles carrying equal flux each.
+ *
+ * The profile is the outward component of the net field around the probe
+ * circle, clipped at zero — an angle the field points back through is one no
+ * line leaves by, and a seed fired there would only walk into a null point.
+ * Partitioning that profile into equal shares is the flux-tube rule the whole
+ * diagram is read by, applied at the one place a line's fate is still ours to
+ * choose. An isolated charge has a flat profile and so keeps the even ring
+ * this replaces, anchor and all; a plate charge sends most of its share into
+ * the gap, because that is where most of its flux goes.
+ */
+export function seedAngles(
   charges: readonly PointCharge[],
   index: number,
   count: number,
-): number {
+  options: { seedRadius?: number; softenSquared?: number } = {},
+): number[] {
+  if (count <= 0) return [];
+  const seedRadius = options.seedRadius ?? DEFAULTS.seedRadius;
+  const softenSquared = options.softenSquared ?? DEFAULTS.softenSquared;
+  const anchor = seedAnchor(charges, index, softenSquared);
+  const uniform = () =>
+    Array.from({ length: count }, (_, j) => anchor + (2 * Math.PI * j) / count);
+
   const self = charges[index];
-  let best = Infinity;
-  let angle: number | null = null;
-  for (let i = 0; i < charges.length; i++) {
-    if (i === index) continue;
-    const other = charges[i];
-    if (Math.sign(other.q) !== Math.sign(self.q)) continue;
-    const d = Math.hypot(other.x - self.x, other.y - self.y);
-    if (d < best) {
-      best = d;
-      angle = Math.atan2(other.y - self.y, other.x - self.x);
-    }
+  const radius = probeRadius(charges, index, seedRadius);
+  if (!(radius > 0)) return uniform();
+
+  const sign = Math.sign(self.q);
+  const samples = Math.max(MIN_FLUX_SAMPLES, count * FLUX_SAMPLES_PER_LINE);
+  const flux = new Float64Array(samples);
+  const cumulative = new Float64Array(samples + 1);
+  for (let m = 0; m < samples; m++) {
+    // Sampled at the bin's midpoint, not its edge. A mirror of the scene maps
+    // midpoints to midpoints but left edges to right ones, and a source and the
+    // sink mirroring it have to quantise their profiles to the same partition
+    // or the same physical line gets seeded from both ends and drawn twice.
+    const theta = anchor + (2 * Math.PI * (m + 0.5)) / samples;
+    const nx = Math.cos(theta);
+    const ny = Math.sin(theta);
+    const f = coulombFieldAt(
+      charges,
+      self.x + radius * nx,
+      self.y + radius * ny,
+      softenSquared,
+    );
+    const outward = sign * (f.x * nx + f.y * ny);
+    flux[m] = outward > 0 ? outward : 0;
+    cumulative[m + 1] = cumulative[m] + flux[m];
   }
-  return angle === null ? 0 : angle + Math.PI / count;
+
+  const total = cumulative[samples];
+  if (!(total > 0)) return uniform();
+
+  // Invert the cumulative profile. With a flat profile every share falls
+  // exactly on `anchor + 2πj/count`, so the isolated charge is untouched.
+  const angles: number[] = [];
+  let bin = 0;
+  for (let j = 0; j < count; j++) {
+    const target = (j / count) * total;
+    while (bin < samples - 1 && cumulative[bin + 1] <= target) bin++;
+    const share = flux[bin];
+    const within = share > 0 ? (target - cumulative[bin]) / share : 0;
+    angles.push(anchor + (2 * Math.PI * (bin + within)) / samples);
+  }
+  return angles;
 }
 
 /** Trace the field lines for a scene, ready to stroke in canvas coordinates. */
@@ -411,10 +569,8 @@ export function computeFieldLines(
   const seed = (index: number, direction: 1 | -1): TraceResult[] => {
     const n = counts[index];
     if (n <= 0) return [];
-    const phase = seedPhase(charges, index, n);
     const out: TraceResult[] = [];
-    for (let j = 0; j < n; j++) {
-      const theta = phase + (2 * Math.PI * j) / n;
+    for (const theta of seedAngles(charges, index, n, { seedRadius, softenSquared })) {
       out.push(
         traceFieldLine(
           charges[index].x + seedRadius * Math.cos(theta),

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { EPSILON_0, flatFlux, field3D, gaussianSurface, measureFlux, gaussPreset, uniformBoxFlux,
   dot3, scale3, type GaussianShape, type Charge3D } from '../../src/lib/electromagnetism/gauss.ts';
 import { choosePotentialLevels, traceContours, nearestContour } from '../../src/lib/electromagnetism/contours.ts';
-import { allocateLineCounts, clipPolyline, computeFieldLines, seedPhase,
-  type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
+import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedAnchor,
+  seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
 import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
 import {
   COULOMB_K,
@@ -224,17 +224,77 @@ const H = 456;
   assert.ok(many.every((n) => n === many[0] && n > 0), 'no charge is starved by array order');
 }
 
-// A seed ring is rotated off a like-sign neighbour, which a line fired straight
-// at would only follow into the null point between them.
+// Seeds are counted from the direction the rest of the scene pushes the
+// charge's flux, an anchor that mirrors with the scene and never lands in a
+// stretch of profile the field has already been clipped out of.
 {
   const pair: PointCharge[] = [
     { x: 0, y: 0, q: 1e-6 },
     { x: 100, y: 0, q: 1e-6 },
   ];
-  near(seedPhase(pair, 0, 12), Math.PI / 12);
-  near(seedPhase([{ x: 0, y: 0, q: 1e-6 }], 0, 12), 0);
-  // No like-sign neighbour: the phase stays 0, keeping a line on a dipole axis.
-  near(seedPhase([...pair.slice(0, 1), { x: 100, y: 0, q: -1e-6 }], 0, 12), 0);
+  // Pushed away from a like-sign neighbour, drawn towards an opposite one.
+  near(Math.abs(seedAnchor(pair, 0)), Math.PI);
+  near(seedAnchor([...pair.slice(0, 1), { x: 100, y: 0, q: -1e-6 }], 0), 0);
+  // A sink divides its own sign out, so it anchors on the source that feeds it
+  // — the mirror image of that source's own anchor, not its opposite.
+  near(seedAnchor([{ x: 0, y: 0, q: -1e-6 }, { x: 100, y: 0, q: 1e-6 }], 0), 0);
+  near(Math.abs(seedAnchor([{ x: 0, y: 0, q: 1e-6 }, { x: 100, y: 0, q: -1e-6 }], 1)), Math.PI);
+  // Nothing around it: the anchor is 0, keeping a line on a dipole axis.
+  near(seedAnchor([{ x: 0, y: 0, q: 1e-6 }], 0), 0);
+
+  // The dead wedge towards a like-sign neighbour is clipped out of the profile,
+  // so seeds step over it — further off than the fixed half-step this replaced.
+  for (const theta of seedAngles(pair, 0, 12)) {
+    const offNeighbour = Math.abs(Math.atan2(Math.sin(theta), Math.cos(theta)));
+    assert.ok(offNeighbour >= Math.PI / 12,
+      `no seed is fired at a like-sign neighbour (got ${(offNeighbour * 180) / Math.PI}°)`);
+  }
+}
+
+// Seeds carry equal flux rather than equal angle, so a charge sends more of
+// them where more of its field goes — the density a reader is asked to trust.
+{
+  const seedRadius = 10;
+  const lone: PointCharge[] = [{ x: 0, y: 0, q: 1e-6 }];
+  // An isolated charge sees the same field all the way round its probe circle,
+  // so the partition has to come back out as the even ring it replaces.
+  seedAngles(lone, 0, 12, { seedRadius }).forEach((theta, j) => {
+    near(theta, (2 * Math.PI * j) / 12, 1e-9);
+  });
+  // ... and it has no neighbour spacing to read, so it probes close in.
+  near(probeRadius(lone, 0, seedRadius), seedRadius * 1.5);
+
+  // A dipole is far enough apart that its probe circles stay isotropic too: the
+  // textbook picture, including the line straight down the axis.
+  const dipolePair: PointCharge[] = [
+    { x: 0.35 * W, y: 0.5 * H, q: 1e-6 },
+    { x: 0.65 * W, y: 0.5 * H, q: -1e-6 },
+  ];
+  seedAngles(dipolePair, 0, 12, { seedRadius }).forEach((theta, j) => {
+    near(theta, (2 * Math.PI * j) / 12, 0.01);
+  });
+
+  // A plate charge is the case the profile exists for. Half its seeds pointed
+  // into the weak field behind the plate when they were spaced by angle.
+  const plate: PointCharge[] = [
+    ...Array.from({ length: 7 }, (_, i) => ({ x: 0.4 * W, y: ((i + 1) / 8) * H, q: 1e-6 })),
+    ...Array.from({ length: 7 }, (_, i) => ({ x: 0.6 * W, y: ((i + 1) / 8) * H, q: -1e-6 })),
+  ];
+  // The probe circle reads the plate's spacing, staying clear of the neighbour
+  // it would otherwise sample the far side of.
+  assert.ok(probeRadius(plate, 3, seedRadius) < H / 8, 'the probe clears the next charge along');
+  assert.ok(probeRadius(plate, 3, seedRadius) > seedRadius * 1.5, 'and reads out past the core');
+  const intoGap = seedAngles(plate, 3, 12, { seedRadius }).filter((t) => Math.cos(t) > 0).length;
+  assert.ok(intoGap > 6, `a plate charge aims most of its seeds into the gap (got ${intoGap}/12)`);
+  // Its mirror image on the far plate has to aim the same seeds back, angle for
+  // angle, or the two ends of one physical line seed different curves and the
+  // line gets drawn twice.
+  const wrap = (t: number) => ((t % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const sorted = (a: number[]) => a.map(wrap).sort((x, y) => x - y);
+  const mirrored = sorted(seedAngles(plate, 3, 12, { seedRadius }).map((t) => Math.PI - t));
+  sorted(seedAngles(plate, 10, 12, { seedRadius })).forEach((theta, j) => {
+    near(theta, mirrored[j], 1e-6);
+  });
 }
 
 /** Line ends touching each charge — what a reader counts around a dot. */

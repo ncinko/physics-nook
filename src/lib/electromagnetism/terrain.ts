@@ -1,7 +1,9 @@
 import { traceContours } from './contours.ts';
+import { TERRAIN_WIDTH, TERRAIN_DEPTH, type Landscape } from './surveyedLandscape.ts';
 
-export const TERRAIN_WIDTH = 2000;
-export const TERRAIN_DEPTH = 1600;
+// The world box every landscape is fitted to; shared so the camera works
+// against any of them unchanged.
+export { TERRAIN_WIDTH, TERRAIN_DEPTH } from './surveyedLandscape.ts';
 export const ELEVATION_LEVELS = [100, 200, 300, 400, 500, 600];
 
 /** This landscape is modelled directly in world units, so a metre of elevation
@@ -83,3 +85,24 @@ export function buildTerrain(columns = 321, rows = 257) {
   return { columns, rows, heights, contours: traceContours(heights, columns, rows,
     TERRAIN_WIDTH, TERRAIN_DEPTH, ELEVATION_LEVELS) };
 }
+
+/** The modelled volcano packaged like the surveyed landscapes, so it can stand
+ * in for either of them in TopographicLandscape without touching the component. */
+export const landscape: Landscape = {
+  name: 'a modelled volcano',
+  ELEVATION_LEVELS,
+  EXAGGERATION,
+  VERTICAL_SCALE,
+  FOCUS_HEIGHT: 180,
+  LIGHT_CONTOUR_MAX,
+  LANDSCAPE_DESCRIPTION,
+  ELEVATION_CREDIT,
+  LOWEST_METRES: 0,
+  HIGHEST_METRES: 650,
+  terrainHeight,
+  // Analytic ground, so the slope is just a tight central difference.
+  slope: (x, z) => Math.hypot((terrainHeight(x + 1, z) - terrainHeight(x - 1, z)) / 2,
+    (terrainHeight(x, z + 1) - terrainHeight(x, z - 1)) / 2),
+  terrainCover,
+  buildTerrain,
+};

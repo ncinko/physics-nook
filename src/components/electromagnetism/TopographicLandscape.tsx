@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { Button, ControlBar } from '../shared/InlineControls';
 import { themeColors, onThemeChange, getCssColor } from '../shared/themeColors';
-// The landscape this figure draws. Swap this one import for
-// '../../lib/electromagnetism/terrain' to go back to the modelled volcano;
-// both modules expose the same names.
 import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
   type Vector3 } from '../../lib/electromagnetism/landscapeView';
-import { buildTerrain, terrainCover, TERRAIN_WIDTH, TERRAIN_DEPTH, VERTICAL_SCALE,
-  LIGHT_CONTOUR_MAX, LANDSCAPE_DESCRIPTION, ELEVATION_CREDIT,
-  ELEVATION_LEVELS, EXAGGERATION } from '../../lib/electromagnetism/terrainHakone';
+import { TERRAIN_WIDTH, TERRAIN_DEPTH, type Landscape } from '../../lib/electromagnetism/surveyedLandscape';
+// Hakone ships with the page; Mount Rainier is another 120 KB of packed
+// elevations, so it is fetched only if someone asks for it. The modelled
+// volcano in '../../lib/electromagnetism/terrain' exports a `landscape` of the
+// same shape and can stand in for either.
+import { hakone } from '../../lib/electromagnetism/terrainHakone';
+const ALTERNATIVE = {
+  name: 'Mount Rainier',
+  load: () => import('../../lib/electromagnetism/terrainRainier').then(module => module.rainier),
+};
 
 // Camera elevation above the horizontal: the default three-quarter view, a true
 // overhead orthographic view that reads as a flat contour map, and how far down
@@ -32,6 +36,11 @@ export default function TopographicLandscape() {
   const controlsRef = useRef<(view: View) => void>(() => {});
   const [view, setView] = useState<View>('tilted');
   const [unavailable, setUnavailable] = useState(false);
+  const [landscape, setLandscape] = useState<Landscape>(hakone);
+  const [loading, setLoading] = useState(false);
+  // Held across a change of landscape so the same viewpoint carries over, which
+  // is what makes the two comparable.
+  const eyeRef = useRef({ elevation: TILTED, azimuth: 0 });
 
   useEffect(() => {
     const host = hostRef.current;
@@ -50,6 +59,8 @@ export default function TopographicLandscape() {
     host.prepend(renderer.domElement);
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1300, 1300, 900, -900, 1, 10000);
+    const { buildTerrain, terrainCover, VERTICAL_SCALE, LIGHT_CONTOUR_MAX,
+      ELEVATION_LEVELS, FOCUS_HEIGHT } = landscape;
     const terrain = buildTerrain();
     const positions: number[] = [], colors: number[] = [], indices: number[] = [];
     for (let row = 0; row < terrain.rows; row++) {
@@ -94,15 +105,19 @@ export default function TopographicLandscape() {
     });
     const pointCount = lines.reduce((total, item) => total + item.points.length / 3, 0);
     // Corners of the box the landscape sits in, for keeping it inside the frame.
-    let ceiling = 0;
-    for (let i = 1; i < positions.length; i += 3) ceiling = Math.max(ceiling, positions[i]);
+    // Rainier's valley floors sit a kilometre up, so the box starts at the
+    // lowest ground rather than at zero, or the frame would hold empty air.
+    let floor = Infinity, ceiling = -Infinity;
+    for (let i = 1; i < positions.length; i += 3) {
+      floor = Math.min(floor, positions[i]); ceiling = Math.max(ceiling, positions[i]);
+    }
     const bounds: Vector3[] = [];
-    for (const x of [-TERRAIN_WIDTH / 2, TERRAIN_WIDTH / 2]) for (const y of [0, ceiling]) {
+    for (const x of [-TERRAIN_WIDTH / 2, TERRAIN_WIDTH / 2]) for (const y of [floor, ceiling]) {
       for (const z of [-TERRAIN_DEPTH / 2, TERRAIN_DEPTH / 2]) bounds.push([x, y, z]);
     }
 
     let width = 700, height = 460, frame = 0;
-    let elevation = TILTED, azimuth = 0;
+    let { elevation, azimuth } = eyeRef.current;
     let startElevation = elevation, startAzimuth = azimuth;
     let elevationTurn = 0, azimuthTurn = 0, startTime = 0, duration = 0;
     let palette = themeColors();
@@ -146,7 +161,9 @@ export default function TopographicLandscape() {
     const place = () => {
       // Keep the whole landscape framed as the eye rises: the look-at point
       // drops from the hillside to the ground plane on the way overhead.
-      const eye = orbitEye(elevation, azimuth, 3000, 180 * (1 - (elevation - TILTED) / SWEEP));
+      eyeRef.current.elevation = elevation; eyeRef.current.azimuth = azimuth;
+      const eye = orbitEye(elevation, azimuth, 3000,
+        FOCUS_HEIGHT * (1 - (elevation - TILTED) / SWEEP));
       camera.position.set(...eye.position);
       camera.up.set(...eye.up);
       camera.lookAt(...eye.target);
@@ -322,12 +339,24 @@ export default function TopographicLandscape() {
       for (const item of lines) { item.line.geometry.dispose(); item.line.material.dispose(); }
       renderer.dispose(); renderer.domElement.remove();
     };
-  }, []);
+  }, [landscape]);
 
   useEffect(() => { controlsRef.current(view); }, [view]);
 
-  const interval = ELEVATION_LEVELS[1] - ELEVATION_LEVELS[0];
-  const highest = ELEVATION_LEVELS[ELEVATION_LEVELS.length - 1];
+  const levels = landscape.ELEVATION_LEVELS;
+  const interval = levels[1] - levels[0];
+  const highest = levels[levels.length - 1];
+  const other = landscape === hakone ? ALTERNATIVE.name : hakone.name;
+  const showOther = () => {
+    if (loading) return;
+    if (landscape !== hakone) { setLandscape(hakone); return; }
+    setLoading(true);
+    ALTERNATIVE.load()
+      .then(setLandscape)
+      // Nothing to recover: the landscape on screen stays, and the label with it.
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
   return (
     <figure className="not-prose mx-auto my-8 max-w-3xl text-[var(--text-primary)]">
       <ControlBar>
@@ -338,19 +367,26 @@ export default function TopographicLandscape() {
       </ControlBar>
       {unavailable ? <p className="p-6 text-center" role="status">
         This 3D view needs WebGL. Each contour joins places at the same elevation:
-        {' '}{ELEVATION_LEVELS.join(', ')} m. Close contours indicate a steep slope,
-        widely spaced ones a gentle slope. The landscape is {LANDSCAPE_DESCRIPTION}.
+        {' '}{levels.join(', ')} m. Close contours indicate a steep slope,
+        widely spaced ones a gentle slope. The landscape is {landscape.LANDSCAPE_DESCRIPTION}.
       </p> : <div ref={hostRef}
         className="relative my-3 aspect-[3/2] w-full cursor-grab touch-pan-y active:cursor-grabbing"
-        role="img" aria-label={`${view === 'overhead' ? 'Top-down contour map' : 'Three-dimensional landscape'} of ${LANDSCAPE_DESCRIPTION}. Contours every ${interval} metres from ${ELEVATION_LEVELS[0]} m to ${highest} m: crowded where the ground is steep, widely spaced where it is gentle.`}>
+        role="img" aria-label={`${view === 'overhead' ? 'Top-down contour map' : 'Three-dimensional landscape'} of ${landscape.LANDSCAPE_DESCRIPTION}. Contours every ${interval} metres from ${levels[0]} m to ${highest} m: crowded where the ground is steep, widely spaced where it is gentle.`}>
         <canvas ref={overlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>}
       <figcaption className="text-center text-sm leading-relaxed text-[var(--text-muted)]">
         Drag the landscape to turn it, or switch to the map to see the same hills from
         above. Point at a contour to read its height; they run every {interval} m, from
-        {' '}{ELEVATION_LEVELS[0]} m to {highest} m. Close lines mean steep slopes,
+        {' '}{levels[0]} m to {highest} m. Close lines mean steep slopes,
         widely spaced lines gentler ones.
-        {ELEVATION_CREDIT && <><br /><span className="text-xs">{ELEVATION_CREDIT}. Heights shown with {EXAGGERATION}x vertical exaggeration.</span></>}
+        <br />
+        <button type="button" onClick={showOther} aria-busy={loading}
+          className="mt-1 text-xs underline decoration-dotted underline-offset-2
+            hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2
+            focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)]">
+          {landscape.ELEVATION_CREDIT}. Heights shown with {landscape.EXAGGERATION}x vertical
+          exaggeration. <span className="whitespace-nowrap">{loading ? `Loading ${other}…` : `Show ${other} instead`}</span>
+        </button>
       </figcaption>
     </figure>
   );

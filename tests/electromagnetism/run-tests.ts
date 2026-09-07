@@ -4,12 +4,15 @@ import { EPSILON_0, flatFlux, field3D, gaussianSurface, measureFlux, gaussPreset
 import { choosePotentialLevels, traceContours, nearestContour } from '../../src/lib/electromagnetism/contours.ts';
 import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedAnchor,
   seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
-import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS,
-  TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../src/lib/electromagnetism/terrain.ts';
+import { buildTerrain, terrainHeight, terrainCover,
+  ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
 import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
   type Vector3 } from '../../src/lib/electromagnetism/landscapeView.ts';
-import * as modelledLandscape from '../../src/lib/electromagnetism/terrain.ts';
-import * as hakone from '../../src/lib/electromagnetism/terrainHakone.ts';
+import { landscape as modelledLandscape } from '../../src/lib/electromagnetism/terrain.ts';
+import { hakone } from '../../src/lib/electromagnetism/terrainHakone.ts';
+import { rainier } from '../../src/lib/electromagnetism/terrainRainier.ts';
+import { TERRAIN_WIDTH, TERRAIN_DEPTH,
+  type Landscape } from '../../src/lib/electromagnetism/surveyedLandscape.ts';
 import { advanceDrift, establishment, frontMeetingReach, relaxationTime, sampleAt, sampleLoop,
   seedDrift, slabPolarization, solveLoop, transitionSnapshot, type LoopElement,
   type LoopSample } from '../../src/lib/electromagnetism/surfaceCharge.ts';
@@ -168,63 +171,89 @@ assert.ok(terrainHeight(640, 300) > 500, 'the spire climbs past the 500 m contou
 assert.ok(terrainHeight(470, -420) > 300, 'the hill climbs past the 300 m contour');
 assert.ok(spire < 55, `the spire crowds its contours (${spire})`);
 assert.ok(hill > 2.5 * spire, `the hill spreads them much wider (${hill} vs ${spire})`);
-// The surveyed Hakone landscape is a drop-in alternative to the modelled one,
-// so the component can swap between them by changing a single import.
-for (const name of ['TERRAIN_WIDTH', 'TERRAIN_DEPTH', 'ELEVATION_LEVELS', 'VERTICAL_SCALE',
-  'EXAGGERATION', 'LIGHT_CONTOUR_MAX', 'LANDSCAPE_DESCRIPTION', 'ELEVATION_CREDIT',
-  'buildTerrain', 'terrainHeight', 'terrainCover'] as const) {
-  assert.ok(name in hakone, `Hakone landscape is missing ${name}`);
-  assert.ok(name in modelledLandscape, `modelled landscape is missing ${name}`);
-  // Signatures are pinned by the shared types in contours.ts and checked by
-  // `npm run check`; this only catches an export going missing or changing kind.
-  assert.equal(typeof (hakone as Record<string, unknown>)[name],
-    typeof (modelledLandscape as Record<string, unknown>)[name], `${name} changes shape between landscapes`);
-}
-for (const cover of [modelledLandscape.terrainCover(0, 0), hakone.terrainCover(0, 0)]) {
-  assert.deepEqual(Object.keys(cover).sort(), ['forest', 'snow', 'water']);
-  for (const share of Object.values(cover)) assert.ok(share >= 0 && share <= 1);
+// The three landscapes are interchangeable: TopographicLandscape renders
+// whichever it is handed, and switches between them at runtime.
+const landscapes: Landscape[] = [modelledLandscape, hakone, rainier];
+for (const landscape of landscapes) {
+  for (const name of ['name', 'ELEVATION_LEVELS', 'EXAGGERATION', 'VERTICAL_SCALE', 'FOCUS_HEIGHT',
+    'LIGHT_CONTOUR_MAX', 'LANDSCAPE_DESCRIPTION', 'ELEVATION_CREDIT', 'LOWEST_METRES',
+    'HIGHEST_METRES', 'terrainHeight', 'slope', 'terrainCover', 'buildTerrain'] as const) {
+    assert.ok(landscape[name] !== undefined, `${landscape.name} is missing ${name}`);
+  }
+  const built = landscape.buildTerrain();
+  assert.equal(built.heights.length, built.columns * built.rows);
+  assert.deepEqual(built.contours.map(c => c.level), [...landscape.ELEVATION_LEVELS]);
+  // A contour interval has to be even, or "every N metres" in the caption lies.
+  const levels = landscape.ELEVATION_LEVELS;
+  const interval = levels[1] - levels[0];
+  for (let i = 1; i < levels.length; i++) {
+    assert.equal(levels[i] - levels[i - 1], interval, `${landscape.name} has an uneven interval`);
+  }
+  for (const contour of built.contours) {
+    assert.ok(contour.segments.length > 0, `${landscape.name} has no ${contour.level} m contour`);
+  }
+  // Cover shares are fractions and never oversubscribe the ground.
+  for (const [x, z] of [[0, 0], [-700, 400], [500, -300], [900, 700]] as const) {
+    const cover = landscape.terrainCover(x, z);
+    assert.deepEqual(Object.keys(cover).sort(), ['forest', 'snow', 'water']);
+    let total = 0;
+    for (const share of Object.values(cover)) {
+      assert.ok(share >= 0 && share <= 1, `${landscape.name} cover out of range`);
+      total += share;
+    }
+    assert.ok(total <= 1 + 1e-9, `${landscape.name} cover sums past one at ${x}, ${z}`);
+  }
+  // Relief lands at a readable height whichever landscape is showing: that is
+  // what the per-landscape exaggeration is for, and it keeps one camera working.
+  const relief = (landscape.HIGHEST_METRES - landscape.LOWEST_METRES) * landscape.VERTICAL_SCALE;
+  assert.ok(relief > 480 && relief < 700, `${landscape.name} relief is ${relief} world units`);
 }
 
-const hakoneTerrain = hakone.buildTerrain();
-assert.equal(hakoneTerrain.heights.length, hakoneTerrain.columns * hakoneTerrain.rows);
-assert.equal(hakoneTerrain.columns, 241);
-assert.equal(hakoneTerrain.rows, 193);
-// The packing is row-wise differences, so a decode slip shows up as drift, not noise.
-let lowest = Infinity, highest = -Infinity;
-for (const metres of hakoneTerrain.heights) { lowest = Math.min(lowest, metres); highest = Math.max(highest, metres); }
-assert.equal(lowest, 87, 'Hayakawa valley floor');
-assert.equal(highest, hakone.HIGHEST_METRES, 'Kamiyama, the high point of the window');
-assert.ok(highest > 1400 && highest < 1450, `summit near Kamiyama's 1438 m, got ${highest}`);
-// Grid corners land exactly on stored cells, which pins the world-to-grid mapping.
-for (const [x, z, index] of [
-  [-hakone.TERRAIN_WIDTH / 2, -hakone.TERRAIN_DEPTH / 2, 0],
-  [hakone.TERRAIN_WIDTH / 2, -hakone.TERRAIN_DEPTH / 2, hakoneTerrain.columns - 1],
-  [hakone.TERRAIN_WIDTH / 2, hakone.TERRAIN_DEPTH / 2, hakoneTerrain.heights.length - 1],
-] as const) near(hakone.terrainHeight(x, z), hakoneTerrain.heights[index], 1e-6);
-// Every traced contour lies on the surveyed height field, as for the modelled one.
-assert.deepEqual(hakoneTerrain.contours.map(c => c.level), hakone.ELEVATION_LEVELS);
-for (const contour of hakoneTerrain.contours) {
-  assert.ok(contour.segments.length > 0, `no ${contour.level} m contour`);
+// Both surveyed landscapes read their contours off the surface they draw.
+for (const landscape of [hakone, rainier]) {
+  const built = landscape.buildTerrain();
+  let lowest = Infinity, highest = -Infinity;
+  for (const metres of built.heights) { lowest = Math.min(lowest, metres); highest = Math.max(highest, metres); }
+  assert.equal(lowest, landscape.LOWEST_METRES, `${landscape.name} lowest ground`);
+  assert.equal(highest, landscape.HIGHEST_METRES, `${landscape.name} highest ground`);
+  assert.equal(built.columns, 241);
+  assert.equal(built.rows, 193);
+  // Grid corners land exactly on stored cells, which pins the world-to-grid mapping.
+  for (const [x, z, index] of [
+    [-TERRAIN_WIDTH / 2, -TERRAIN_DEPTH / 2, 0],
+    [TERRAIN_WIDTH / 2, -TERRAIN_DEPTH / 2, built.columns - 1],
+    [TERRAIN_WIDTH / 2, TERRAIN_DEPTH / 2, built.heights.length - 1],
+  ] as const) near(landscape.terrainHeight(x, z), built.heights[index], 1e-6);
   // Exact, not approximate: terrainHeight reads the same triangulated surface
   // the tracer cut these segments from.
-  for (const segment of contour.segments) for (const [x, z] of segment) {
-    near(hakone.terrainHeight(x - hakone.TERRAIN_WIDTH / 2, z - hakone.TERRAIN_DEPTH / 2), contour.level, 1e-9);
+  for (const contour of built.contours) {
+    for (const segment of contour.segments) for (const [x, z] of segment) {
+      near(landscape.terrainHeight(x - TERRAIN_WIDTH / 2, z - TERRAIN_DEPTH / 2), contour.level, 1e-9);
+    }
   }
 }
 // Real ground runs off the edge of any window, so these contours are not all
 // closed — the modelled landscape's closure check deliberately does not apply.
-// The vertical scale is what keeps the shared camera framing: 1432 m of relief
-// has to land at roughly the height the modelled summit reaches. Widening the
-// window flattens the model unless the exaggeration takes up the slack.
-near(highest * hakone.VERTICAL_SCALE, 630, 20);
 
-// Lake Ashi is the one sheet of standing water on the map, and the window has
-// to hold all of it — that is what the wider window was cut for.
+assert.ok(hakone.HIGHEST_METRES > 1400 && hakone.HIGHEST_METRES < 1450,
+  `Kamiyama near its 1438 m, got ${hakone.HIGHEST_METRES}`);
+assert.equal(hakone.LOWEST_METRES, 87, 'Hayakawa valley floor');
+// Rainier's summit is 4392 m; averaging 75 m cells rounds the very point off.
+assert.ok(rainier.HIGHEST_METRES > 4300 && rainier.HIGHEST_METRES <= 4392,
+  `Columbia Crest near its 4392 m, got ${rainier.HIGHEST_METRES}`);
+assert.ok(rainier.LOWEST_METRES > 900 && rainier.LOWEST_METRES < 1200, 'river valleys around the park');
+// Rainier is genuinely far steeper than the worn caldera, so it needs less
+// stretching to read. If that ever inverts, one of the two is mis-scaled.
+assert.ok(rainier.EXAGGERATION < hakone.EXAGGERATION,
+  'the steeper mountain should need less vertical exaggeration');
+
+// Hakone alone carries standing water; Rainier alone carries permanent snow.
+const hakoneTerrain = hakone.buildTerrain();
 const lakeCells: number[] = [];
 for (let row = 0; row < hakoneTerrain.rows; row++) {
   for (let column = 0; column < hakoneTerrain.columns; column++) {
-    const x = column / (hakoneTerrain.columns - 1) * hakone.TERRAIN_WIDTH - hakone.TERRAIN_WIDTH / 2;
-    const z = row / (hakoneTerrain.rows - 1) * hakone.TERRAIN_DEPTH - hakone.TERRAIN_DEPTH / 2;
+    const x = column / (hakoneTerrain.columns - 1) * TERRAIN_WIDTH - TERRAIN_WIDTH / 2;
+    const z = row / (hakoneTerrain.rows - 1) * TERRAIN_DEPTH - TERRAIN_DEPTH / 2;
     const cover = hakone.terrainCover(x, z, hakoneTerrain.heights[row * hakoneTerrain.columns + column]);
     assert.equal(cover.snow, 0, 'Hakone holds no permanent snow');
     lakeCells.push(cover.water > 0.5 ? 1 : 0);
@@ -251,10 +280,8 @@ for (let seed = 0; seed < lakeCells.length; seed++) {
   blobs.push(size);
 }
 assert.equal(blobs.length, 1, `Lake Ashi should be one sheet, found ${blobs.length}`);
-const cellArea = (hakone.HALF_EAST_METRES * 2 / (hakoneTerrain.columns - 1))
-  * (hakone.HALF_NORTH_METRES * 2 / (hakoneTerrain.rows - 1)) / 1e6;
 // The real lake covers 6.9 km2; a 48 m grid loses a little of the narrow inlets.
-near(blobs[0] * cellArea, 6.8, 0.5);
+near(blobs[0] * 48 * 48 / 1e6, 6.8, 0.5);
 // It sits clear of every edge, which is the whole point of the wider window.
 let westmost = Infinity, eastmost = -Infinity, northmost = Infinity, southmost = -Infinity;
 for (let i = 0; i < lakeCells.length; i++) {
@@ -269,6 +296,31 @@ assert.ok(eastmost < hakoneTerrain.columns - 1 && southmost < hakoneTerrain.rows
 const lakeMiddle = hakone.terrainCover(-607, 340);
 assert.equal(lakeMiddle.water, 1, 'open water mid-lake');
 assert.equal(lakeMiddle.forest, 0);
+
+// Rainier's summit cone is under permanent ice, its valleys are forest, and it
+// has no lake for the flat-sheet rule to find.
+const rainierTerrain = rainier.buildTerrain();
+let snowTotal = 0, forestTotal = 0, waterTotal = 0;
+for (let row = 0; row < rainierTerrain.rows; row++) {
+  for (let column = 0; column < rainierTerrain.columns; column++) {
+    const x = column / (rainierTerrain.columns - 1) * TERRAIN_WIDTH - TERRAIN_WIDTH / 2;
+    const z = row / (rainierTerrain.rows - 1) * TERRAIN_DEPTH - TERRAIN_DEPTH / 2;
+    const cover = rainier.terrainCover(x, z, rainierTerrain.heights[row * rainierTerrain.columns + column]);
+    waterTotal += cover.water;
+    snowTotal += cover.snow;
+    forestTotal += cover.forest;
+  }
+}
+const cells = rainierTerrain.heights.length;
+assert.equal(waterTotal, 0, 'no lake was asked for on Rainier');
+// The mountain's 78 km2 of glacier over this 259 km2 window is about 30% ice.
+// The band is wide because the cover model is a snowline, not a glacier survey.
+const iceShare = snowTotal / cells;
+assert.ok(iceShare > 0.15 && iceShare < 0.4, `ice covers ${(iceShare * 100).toFixed(0)}% of the window`);
+assert.ok(forestTotal / cells > 0.2, `forest covers ${(forestTotal / cells * 100).toFixed(0)}%`);
+// High on the cone it is ice; down on the lowest valley floor it is forest.
+assert.ok(rainier.terrainCover(0, 0).snow > 0.9, 'the summit cone should be under ice');
+assert.equal(rainier.terrainCover(-TERRAIN_WIDTH / 2, -717).forest, 1, 'the valley floor is forest');
 
 // Turning the landscape always takes the short way round.
 near(shortestTurn(0, 90), 90);
@@ -299,14 +351,19 @@ near(facing.position[2], 3000 * Math.cos(34 * Math.PI / 180), 1e-9);
 // box the Hakone landscape sits in must stay inside the frame at every angle a
 // drag can reach, while the fixed views keep the framing they were tuned with.
 const FRAME_HALF_WIDTH = 1280, FRAME_MARGIN = 1.04, FRAME_ASPECT = 2 / 3;
-let ceiling = 0;
-for (const metres of hakoneTerrain.heights) ceiling = Math.max(ceiling, metres * hakone.VERTICAL_SCALE);
+// The component measures the box from the lowest ground, not from zero.
+let floorHeight = Infinity, ceiling = -Infinity;
+for (const metres of hakoneTerrain.heights) {
+  floorHeight = Math.min(floorHeight, metres * hakone.VERTICAL_SCALE);
+  ceiling = Math.max(ceiling, metres * hakone.VERTICAL_SCALE);
+}
 const corners: Vector3[] = [];
-for (const x of [-hakone.TERRAIN_WIDTH / 2, hakone.TERRAIN_WIDTH / 2]) for (const y of [0, ceiling]) {
-  for (const z of [-hakone.TERRAIN_DEPTH / 2, hakone.TERRAIN_DEPTH / 2]) corners.push([x, y, z]);
+for (const x of [-TERRAIN_WIDTH / 2, TERRAIN_WIDTH / 2]) for (const y of [floorHeight, ceiling]) {
+  for (const z of [-TERRAIN_DEPTH / 2, TERRAIN_DEPTH / 2]) corners.push([x, y, z]);
 }
 const framing = (elevation: number, azimuth: number) => {
-  const eye = orbitEye(elevation, azimuth, 3000, 180 * (1 - (elevation - 34) / 56));
+  const eye = orbitEye(elevation, azimuth, 3000,
+    hakone.FOCUS_HEIGHT * (1 - (elevation - 34) / 56));
   return {
     needed: frameHalfWidth(corners, eye, FRAME_ASPECT),
     applied: Math.max(FRAME_HALF_WIDTH, FRAME_MARGIN * frameHalfWidth(corners, eye, FRAME_ASPECT)),
@@ -315,6 +372,7 @@ const framing = (elevation: number, azimuth: number) => {
 for (let elevation = 12; elevation <= 90; elevation += 3) {
   for (let azimuth = -180; azimuth < 180; azimuth += 5) {
     const { needed, applied } = framing(elevation, azimuth);
+    assert.ok(Number.isFinite(needed) && needed > 0, `frame width came out ${needed}`);
     assert.ok(applied >= needed, `landscape clips at elevation ${elevation}, bearing ${azimuth}`);
   }
 }

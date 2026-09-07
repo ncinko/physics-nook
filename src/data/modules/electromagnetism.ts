@@ -73,11 +73,11 @@ export const electromagnetismModule: ModuleMeta = {
       title: 'Electric Current',
       shortTitle: 'Current',
       description:
-        'Follow charges into motion: the Drude model of electron drift, Ohm’s law, and series–parallel circuits.',
+        'Follow charges into motion: electron drift, the surface charge that steers the field, Ohm’s law, and circuits.',
       seo: {
         title: 'Electric Current',
         description:
-          'Learn electric current from the microscopic Drude model of electron drift up to Ohm’s law, power, and series–parallel circuit behavior.',
+          'Learn electric current from the microscopic Drude model of electron drift through the surface charge that guides the field around a circuit, up to Ohm’s law, power, and series–parallel behavior.',
         canonicalPath: '/electromagnetism/current',
         image: '/social/physics-nook-card.svg',
       },

@@ -13,6 +13,8 @@ import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import ElectronGas from '../../components/electromagnetism/ElectronGas.jsx';
+import ConductorPolarization from '../../components/electromagnetism/ConductorPolarization';
+import CircuitSurfaceCharge from '../../components/electromagnetism/CircuitSurfaceCharge';
 import CircuitKit from '../../components/electromagnetism/CircuitKit.jsx';
 import { electromagnetismPath } from '../../data/modules';
 
@@ -24,22 +26,19 @@ import { electromagnetismPath } from '../../data/modules';
 
 The microscopic motion of charges and the macroscopic behavior of circuits are two views of the same physics. Inside a metal, a sea of conduction electrons collides with the lattice while being nudged along by an electric field. In a circuit, components shape that field to control current and energy transfer. Bridging the two pictures is the essence of **Ohm's law**.
 
-
-## Microscopic Picture of Conduction
-
-In the classical **Drude model**, a metal hosts a dense gas of conduction electrons that ricochet off the ionic lattice. Each collision resets an electron's random thermal velocity, but an applied field biases the motion into a slow net **drift**. Click and drag in the scene to set the field's direction and strength.
+In the classical **Drude model**, a metal hosts a dense gas of conduction electrons that ricochet off the ionic lattice. Each collision resets an electron's random thermal velocity, but an applied field biases the motion into a slow net drift. 
 
 <InteractiveAnchor id="electron-gas" />
 
 <ElectronGas client:only="react" />
 
-The drift velocity can be estimated from the average time between collisions $\tau$ and the field $E$:
+The **drift velocity** can be estimated from the average time between collisions $\tau$ and the field $E$:
 
 $$
 v_d = -\frac{eE\tau}{m_e},
 $$
 
-where $e$ and $m_e$ are the electron charge and mass. The negative sign means electrons drift *opposite* the field. The drift speed is tiny compared with the random thermal speed — in copper, with $\tau \approx 2.5\times10^{-14}\,\text{s}$ and a field of $1.0\,\text{V/m}$, the drift speed is only about $0.4\,\text{mm/s}$.
+where $e$ and $m_e$ are the electron charge and mass. The negative sign means electrons drift *opposite* the field. The drift speed is tiny compared with the random thermal speed.  In copper, with $\tau \approx 2.5\times10^{-14}\,\text{s}$ and a field of $1.0\,\text{V/m}$, the drift speed is only about $0.4\,\text{mm/s}$.
 
 <DerivationPanel title="How does this connect to Ohm's law?">
 
@@ -75,13 +74,71 @@ Materials with more conduction electrons or longer times between collisions cond
 
 The Drude model is a useful first picture, but it has limits: it treats electrons as classical particles and ignores quantum effects such as the Pauli exclusion principle. Explaining superconductivity or the temperature dependence of resistivity needs more.
 
+## Polarization Dynamics
+
+Before wiring anything up, let's consider the simpler case of a neutral conducting block placed in a uniform electric field.  Its conduction electrons are free to move, so they move until the net field within the conductor is zero.
+
+As these electrons move, the sides of the block acquire a net positive or net negative charge.  We say a nonzero **surface charge** distribution has formed.
+
+<InteractiveAnchor id="conductor-polarization" />
+
+<ConductorPolarization client:visible />
+
+<DerivationPanel title="How quickly does a conductor screen a field?">
+
+Charge arriving at a face is just the conduction current that got there, so the surface charge density $\sigma$ grows at the rate
+
+$$
+\frac{d\sigma}{dt} = J = \sigma_c E_{\text{in}},
+$$
+
+writing $\sigma_c$ for the conductivity to keep it apart from the surface charge. Meanwhile the two charged faces act as a parallel-plate pair, pulling the interior field down from its applied value:
+
+$$
+E_{\text{in}} = E_0 - \frac{\sigma}{\varepsilon_0}.
+$$
+
+Eliminating $E_{\text{in}}$ leaves a single relaxation equation,
+
+$$
+\frac{d\sigma}{dt} = \frac{\sigma_c}{\varepsilon_0}\left(\varepsilon_0 E_0 - \sigma\right)
+\quad\Longrightarrow\quad
+\sigma(t) = \varepsilon_0 E_0\left(1 - e^{-t/\tau}\right),
+\qquad
+\tau = \frac{\varepsilon_0}{\sigma_c}.
+$$
+
+The interior field decays as $E_0 e^{-t/\tau}$. This **dielectric relaxation time** is startlingly short: copper's $\sigma_c = 5.8\times10^{7}\,\text{S/m}$ gives $\tau = 1.5\times10^{-19}\,\text{s}$.
+
+Note this number is far *below* the collision time $\tau_{\text{coll}} \approx 2.5\times10^{-14}\,\text{s}$ that the Drude model itself depends on, so electrons cannot possibly redistribute that fast. The true settling in a good metal is governed by the collision time and by plasma oscillations of the electron gas, and takes something closer to $10^{-14}\,\text{s}$. In any case, these surface charges form on a very fast time scale.
+
+</DerivationPanel>
+
+
+## Surface Charge Around a Circuit
+
+A wire carrying a steady current is *not* in electrostatic equilibrium. The field inside it is small, but it is not zero.  That field cannot be coming directly from the battery. A battery's own field falls off with distance and has no way to suddenly turn a corner as a wire bends. It comes instead from the surface charge distribution of the conductors.
+
+Start with the switch open.  Every conductor is in static equilibrium, but that does not mean the surfaces are bare.  Each branch is still wired to a battery terminal, so each branch sits at that terminal's potential, and its surface carries some charge. 
+
+Close the switch, and relaxation dynamics similar to the polarized block occur.  However, this time it cannot finish: the battery keeps re-supplying charge to its terminals as electrons begin drifting through the circuit.  Instead of settling into a zero field equilibrium, the surfaces acquire a **gradient** of charge, one that leaves a small electric field pointing along the wire at every point on the loop.
+
+<InteractiveAnchor id="circuit-surface-charge" />
+
+<CircuitSurfaceCharge client:visible />
+
+
+
+- Surface charge density tracks the local **potential**.  It is strongly positive near the positive terminal, passing through zero somewhere around the loop, and strongly negative near the negative terminal.
+- Its *gradient* sets the interior field, so the charge piles up most steeply where the field has to be strongest. A resistor needs a far larger field than the wire to carry the same current, so a significant change in surface charge happens across it.
+
 ## Macroscopic Circuits
 
-Circuit components act as macroscopic guides for the electric field. Following a single charge carrier around the loop, its potential energy changes as it moves with or against the field. Rather than tracking the field in detail, it is simpler to track the **potential differences** across components.
+The previous section gives a taste of what it means for a circuit to *guide* the electric field.  However, once the circuit has settled, following the charge in that much detail is rarely worth the trouble. It is simpler to track the **potential differences** across components, since a charge carrier's potential energy changes as it moves with or against the field.
 
 A battery provides a potential difference that drives the current. Resistors, bulbs, and other components limit and direct that current, each with its own voltage drop. Applying Ohm's law to each component, together with how the components are wired, predicts the current in every branch.
 
-Build your own circuit below. Drag components from the palette onto the grid, wire them together, and run the transient simulation. Beyond resistors and batteries, you can add **capacitors**, **inductors**, and **switches**, then watch each component's voltage and current evolve on the scope — including RC charging and LC oscillation.
+Build your own circuit below. Drag components from the palette onto the grid, wire them together, and run the simulation. Beyond resistors and batteries, you can add **capacitors**, **inductors**, and **switches**.
 
 <InteractiveAnchor id="circuit-kit" />
 
@@ -168,6 +225,24 @@ which is converted into thermal energy, heating the resistor.
         { id: 'A', text: 'In the same direction as the electric field.', isCorrect: false, explanation: 'Electrons are negatively charged, so their force and drift are opposite the electric field direction.' },
         { id: 'B', text: 'Opposite the electric field direction.', isCorrect: true, explanation: 'Exactly. The drift velocity relation includes the negative electron charge, so electrons drift opposite $\\vec{\\mathbf E}$.' },
         { id: 'C', text: 'Only perpendicular to the field.', isCorrect: false, explanation: 'Collisions randomize the motion, but the small average drift is along or against the field line, not automatically perpendicular.' }
+      ]
+    },
+    {
+      id: 'conductor-screening',
+      question: 'A copper block has been sitting in a uniform external field for a microsecond. What is the electric field inside the metal?',
+      options: [
+        { id: 'A', text: 'Zero, because the induced surface charge produces a field that cancels the applied one.', isCorrect: true, explanation: 'Right. Electrons keep drifting until their own faces cancel the applied field, and then there is nothing left to push them.' },
+        { id: 'B', text: 'The same as the applied field, since a conductor does not block electric fields.', isCorrect: false, explanation: 'A conductor is exactly what does block a static field: its mobile charge rearranges until the interior field is zero.' },
+        { id: 'C', text: 'Larger than the applied field, because the surface charge adds to it.', isCorrect: false, explanation: 'The induced field points against the applied field, not along it. Adding would leave the electrons accelerating forever.' }
+      ]
+    },
+    {
+      id: 'surface-charge-gradient',
+      question: 'Around a loop of uniform wire carrying a steady current through one resistor, where does the surface charge density change most steeply?',
+      options: [
+        { id: 'A', text: 'Evenly around the whole loop, since the current is the same everywhere.', isCorrect: false, explanation: 'The current is the same everywhere, but the field needed to drive it is not. The gradient follows the field, not the current.' },
+        { id: 'B', text: 'Across the resistor.', isCorrect: true, explanation: 'Exactly. The resistor needs a much stronger internal field to pass the same current, and that field is the gradient of the surface charge.' },
+        { id: 'C', text: 'Along the longest stretch of wire, because it accumulates the most charge.', isCorrect: false, explanation: 'A long low-resistance wire drops very little potential, so its surface charge changes only gradually along its length.' }
       ]
     },
     {

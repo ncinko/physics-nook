@@ -5,6 +5,9 @@ import { choosePotentialLevels, traceContours, nearestContour } from '../../src/
 import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedAnchor,
   seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
 import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
+import { establishment, frontMeetingReach, relaxationTime, sampleLoop, slabPolarization,
+  solveLoop, transitionSnapshot, type LoopElement,
+  type LoopSample } from '../../src/lib/electromagnetism/surfaceCharge.ts';
 import {
   COULOMB_K,
   coulombFieldAt,
@@ -405,5 +408,141 @@ for (const [name, charges] of Object.entries(presets)) {
 assert.deepEqual(computeFieldLines([], { width: W, height: H }), []);
 assert.deepEqual(computeFieldLines([{ x: 1, y: 1, q: 0 }], { width: W, height: H }), []);
 assert.deepEqual(computeFieldLines(presets.dipole, { width: 0, height: H }), []);
+
+{
+  // A conducting block screens an applied field out of its own interior with
+  // the dielectric relaxation time tau = eps0/sigma.
+  const tau = relaxationTime(5.8e7);
+  near(tau, EPSILON_0 / 5.8e7);
+  assert.equal(relaxationTime(0), Infinity);
+  assert.equal(relaxationTime(-1), Infinity);
+
+  const start = slabPolarization(100, 0, tau);
+  near(start.fraction, 0);
+  near(start.internalField, 100);
+  near(start.surfaceChargeDensity, 0);
+
+  for (const multiple of [0.25, 1, 3, 12]) {
+    const state = slabPolarization(100, multiple * tau, tau);
+    near(state.internalField, 100 * Math.exp(-multiple), 1e-9);
+    near(state.inducedField + state.internalField, 100, 1e-9);
+    // Charge on the faces is exactly the field that has gone missing inside.
+    near(EPSILON_0 * state.internalField + state.surfaceChargeDensity, EPSILON_0 * 100, 1e-18);
+  }
+  assert.ok(slabPolarization(100, 40 * tau, tau).internalField < 1e-15, 'screening finishes');
+
+  // Charge only ever arrives, and the current feeding it dies with the field.
+  const early = slabPolarization(100, 0.5 * tau, tau);
+  const late = slabPolarization(100, 2 * tau, tau);
+  assert.ok(late.surfaceChargeDensity > early.surfaceChargeDensity);
+  assert.ok(late.currentDensity < early.currentDensity);
+  // Time before the field was applied is not a way to un-polarise the block.
+  near(slabPolarization(100, -5, tau).fraction, 0);
+}
+
+{
+  // Battery, wire, switch, resistor. Arc length runs 0-100 wire, 100-140
+  // battery, 140-240 wire, 240-260 switch, 260-320 resistor.
+  const loop = (switchResistance: number): LoopElement[] => [
+    { id: 'lower', kind: 'wire', length: 100, resistance: 0.25 },
+    { id: 'battery', kind: 'battery', length: 40, resistance: 0.2, emf: 6 },
+    { id: 'upper', kind: 'wire', length: 100, resistance: 0.25 },
+    { id: 'gate', kind: 'switch', length: 20, resistance: switchResistance },
+    { id: 'resistor', kind: 'resistor', length: 60, resistance: 5 },
+  ];
+  const closed = loop(0);
+  const open = loop(1e9);
+
+  const solved = solveLoop(closed);
+  near(solved.length, 320);
+  near(solved.resistance, 5.7);
+  near(solved.current, 6 / 5.7);
+
+  const flowing = sampleLoop(closed, 320);
+  assert.equal(flowing.length, 320);
+  // An isolated loop carries no net charge, so the profile has zero mean.
+  near(flowing.reduce((sum, s) => sum + s.potential, 0) / flowing.length, 0, 1e-12);
+
+  const nearest = (list: readonly LoopSample[], s: number) =>
+    list.reduce((best, sample) => (Math.abs(sample.s - s) < Math.abs(best.s - s) ? sample : best));
+
+  // Potential peaks just past the positive terminal and bottoms out just before
+  // the negative one, separated by the emf less the internal drop.
+  near(nearest(flowing, 141).potential - nearest(flowing, 99).potential, 6 - solved.current * 0.2, 0.05);
+  // Positive charge on the run out to the resistor, negative on the way back.
+  assert.ok(nearest(flowing, 200).potential > 0);
+  assert.ok(nearest(flowing, 50).potential < 0);
+
+  // Each element drops I*R, so its internal field is that drop over its length:
+  // the short resistor needs a far stronger field than the long wire.
+  const inResistor = flowing.filter((s) => s.kind === 'resistor');
+  const inWire = flowing.filter((s) => s.kind === 'wire');
+  near(inResistor[0].field, (solved.current * 5) / 60, 1e-12);
+  near(inWire[0].field, (solved.current * 0.25) / 100, 1e-12);
+  assert.ok(inResistor[0].field > 30 * inWire[0].field);
+
+  // Opening the switch does not clear the surface charge. It stops the current,
+  // makes each branch an equipotential, and moves the whole drop into the gap.
+  const idle = sampleLoop(open, 320);
+  assert.ok(solveLoop(open).current < 1e-8, 'an open switch carries no useful current');
+  assert.ok(
+    Math.abs(nearest(idle, 200).potential - nearest(idle, 180).potential) < 1e-6,
+    'a branch of an open circuit is an equipotential',
+  );
+  near(nearest(idle, 239).potential - nearest(idle, 261).potential, 6, 0.1);
+  assert.ok(Math.max(...idle.map((s) => Math.abs(s.potential))) > 2.9, 'the branches still carry charge');
+  assert.ok(idle.filter((s) => s.kind === 'wire').every((s) => Math.abs(s.field) < 1e-9));
+
+  // Throwing the switch starts a change at the gap and nowhere else.
+  near(frontMeetingReach(closed, 'gate'), 150);
+  const opts = (frontReach: number) => ({ originId: 'gate', frontReach, relaxationLength: 25 });
+
+  const done = transitionSnapshot(closed, idle, flowing, opts(Infinity));
+  done.forEach((s, i) => near(s.potential, flowing[i].potential, 1e-9));
+  const untouched = transitionSnapshot(closed, idle, flowing, opts(0));
+  untouched.forEach((s, i) => near(s.potential, idle[i].potential, 1e-9));
+
+  const partial = transitionSnapshot(closed, idle, flowing, opts(40));
+  near(partial.reduce((sum, s) => sum + s.potential, 0) / partial.length, 0, 1e-12);
+  assert.ok(partial.some((s) => s.established === 0), 'a front 40 in has not crossed a loop of 320');
+  assert.ok(
+    partial.every((s) => s.distanceFromOrigin < 40 || s.established === 0),
+    'nothing ahead of the front has begun to move',
+  );
+  // Ahead of the front the old arrangement stands, up to the shared re-centring
+  // that keeps the loop neutral.
+  const shift = partial[0].potential - idle[0].potential;
+  partial.forEach((s, i) => {
+    if (s.established === 0) near(s.potential, idle[i].potential + shift, 1e-9);
+  });
+  // The switch's own span never has to wait, so it leads the rest of the loop.
+  const leader = Math.max(...partial.map((s) => s.established));
+  assert.ok(partial.filter((s) => s.kind === 'switch').every((s) => s.established === leader));
+
+  // Current builds as the fronts advance, and stops at the steady value.
+  const flow = (reach: number) =>
+    Math.max(...transitionSnapshot(closed, idle, flowing, opts(reach)).map((s) => s.current));
+  assert.ok(flow(40) < flow(120));
+  assert.ok(flow(120) < flow(300));
+  near(flow(Infinity), solved.current, 1e-12);
+
+  // Opening again runs the same machinery the other way.
+  const opening = transitionSnapshot(open, flowing, idle, opts(60));
+  near(opening.reduce((sum, s) => sum + s.potential, 0) / opening.length, 0, 1e-12);
+  assert.ok(
+    Math.max(...opening.filter((s) => s.established === 0).map((s) => Math.abs(s.current))) > 1,
+    'wire the fronts have not reached is still carrying the old current',
+  );
+
+  assert.throws(() => sampleLoop(closed, 0));
+  assert.throws(() => sampleLoop(closed, 2.5));
+  assert.deepEqual(sampleLoop([], 10), []);
+  assert.throws(() => transitionSnapshot(closed, idle, flowing.slice(1), opts(10)));
+  assert.throws(() => transitionSnapshot(closed, idle, flowing, { originId: 'nope', frontReach: 10 }));
+
+  near(establishment(10, 5, 3), 0);
+  near(establishment(0, Infinity, 3), 1);
+  assert.ok(establishment(2, 10, 3) > establishment(6, 10, 3));
+}
 
 console.log('electromagnetism tests passed');

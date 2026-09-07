@@ -16,22 +16,25 @@ export const TERRAIN_DEPTH = 1600;
  * too fine to read the spacing through at this figure's size. */
 export const ELEVATION_LEVELS = [200, 400, 600, 800, 1000, 1200, 1400];
 
-/** World units per metre of elevation. Nine kilometres of ground compressed
- * into 2000 units would leave the relief nearly flat, so heights carry a x2
- * exaggeration — the usual convention for a terrain model, and worth saying
- * out loud because it makes every slope look twice as steep as it is. */
-export const EXAGGERATION = 2;
+/** World units per metre of elevation. Eleven and a half kilometres of ground
+ * compressed into 2000 units would leave the relief nearly flat, so heights
+ * carry an exaggeration — the usual convention for a terrain model, and worth
+ * saying out loud because it makes every slope look that much steeper than it
+ * is. Chosen so the summit stands about as proud as it did over the narrower
+ * window this landscape started from. */
+export const EXAGGERATION = 2.5;
 export const VERTICAL_SCALE = EXAGGERATION * TERRAIN_WIDTH / (HALF_EAST_METRES * 2);
 
-export const LAKE_ASHI_METRES = 723;
+/** Lake Ashi's surface, as the survey records it. */
+export const LAKE_ASHI_METRES = 724.5;
 
 /** Contours at or below this draw in the light colour: that is the ground the
  * forest covers, and a dark line on dark forest cannot be followed. */
 export const LIGHT_CONTOUR_MAX = 600;
 
 export const LANDSCAPE_DESCRIPTION =
-  'the Hakone caldera in Japan, with the Kamiyama and Komagatake cone complex to the west, '
-  + 'the north end of Lake Ashi in the south-west corner, and the Hayakawa gorge cutting east';
+  'the Hakone caldera in Japan, with the Kamiyama and Komagatake cone complex at its centre, '
+  + 'Lake Ashi filling the caldera floor to the south-west, and the Hayakawa gorge cutting east';
 
 export const ELEVATION_CREDIT = 'Elevation data: Geospatial Information Authority of Japan (processed)';
 
@@ -76,19 +79,65 @@ export function slope(x: number, z: number): number {
     (cell(c, r + 1) - cell(c, r - 1)) / (2 * CELL_NORTH));
 }
 
+/** The lake, as a 0-or-1 mask over the grid.
+ *
+ * Flat ground at the lake's own height turns up in a dozen other places around
+ * the caldera — terraces, a golf course, the Sengokuhara flats — so a height
+ * test alone paints blue patches across the hillsides. A lake is not merely
+ * ground at that height, it is the single connected sheet of it, which is what
+ * this picks out: every run of touching cells is measured and the largest wins. */
+function findLake() {
+  const level = new Uint8Array(COLUMNS * ROWS);
+  for (let i = 0; i < level.length; i++) {
+    level[i] = Math.abs(metres[i] - LAKE_ASHI_METRES) <= 2 ? 1 : 0;
+  }
+  const mask = new Float32Array(COLUMNS * ROWS);
+  const queue = new Int32Array(COLUMNS * ROWS);
+  let bestSize = 0, bestSeed = -1;
+  const component = new Int32Array(COLUMNS * ROWS).fill(-1);
+  for (let seed = 0; seed < level.length; seed++) {
+    if (!level[seed] || component[seed] >= 0) continue;
+    let head = 0, tail = 0, size = 0;
+    queue[tail++] = seed; component[seed] = seed;
+    while (head < tail) {
+      const i = queue[head++];
+      size++;
+      const column = i % COLUMNS, row = (i - column) / COLUMNS;
+      if (column > 0) push(i - 1);
+      if (column < COLUMNS - 1) push(i + 1);
+      if (row > 0) push(i - COLUMNS);
+      if (row < ROWS - 1) push(i + COLUMNS);
+      function push(j: number) {
+        if (level[j] && component[j] < 0) { component[j] = seed; queue[tail++] = j; }
+      }
+    }
+    if (size > bestSize) { bestSize = size; bestSeed = seed; }
+  }
+  if (bestSeed >= 0) {
+    for (let i = 0; i < mask.length; i++) if (component[i] === bestSeed) mask[i] = 1;
+  }
+  return mask;
+}
+const lake = findLake();
+
 /** Cover for the mesh colours. Hakone holds no permanent snow, so that share
  * stays zero; Lake Ashi takes its place as the one surface that is not ground. */
 export function terrainCover(x: number, z: number, height = terrainHeight(x, z)) {
   const steepness = slope(x, z);
-  // Lake Ashi reads as a dead-flat shelf sitting at its own surface height.
-  const water = (1 - smoothstep(6, 14, Math.abs(height - LAKE_ASHI_METRES)))
-    * (1 - smoothstep(0.05, 0.14, steepness));
+  // Sampled between cells, so the shoreline softens over a cell instead of
+  // following the grid in steps.
+  const { column, row } = locate(x, z);
+  const c = Math.floor(column), r = Math.floor(row), fc = column - c, fr = row - r;
+  const water = lakeAt(c, r) * (1 - fc) * (1 - fr) + lakeAt(c + 1, r) * fc * (1 - fr)
+    + lakeAt(c, r + 1) * (1 - fc) * fr + lakeAt(c + 1, r + 1) * fc * fr;
   // Cedar and broadleaf forest covers the caldera, thinning with altitude and
   // stripping off faces too steep to hold soil.
   const forest = (1 - smoothstep(400, 1320, height))
     * (1 - smoothstep(0.62, 1.05, steepness)) * (1 - water);
   return { forest, snow: 0, water };
 }
+const lakeAt = (column: number, row: number) =>
+  lake[clampRow(row) * COLUMNS + clampColumn(column)];
 
 export function buildTerrain() {
   return {
@@ -97,4 +146,4 @@ export function buildTerrain() {
   };
 }
 
-export { HIGHEST_METRES };
+export { HIGHEST_METRES, HALF_EAST_METRES, HALF_NORTH_METRES };

@@ -187,12 +187,12 @@ for (const cover of [modelledLandscape.terrainCover(0, 0), hakone.terrainCover(0
 
 const hakoneTerrain = hakone.buildTerrain();
 assert.equal(hakoneTerrain.heights.length, hakoneTerrain.columns * hakoneTerrain.rows);
-assert.equal(hakoneTerrain.columns, 201);
-assert.equal(hakoneTerrain.rows, 161);
+assert.equal(hakoneTerrain.columns, 241);
+assert.equal(hakoneTerrain.rows, 193);
 // The packing is row-wise differences, so a decode slip shows up as drift, not noise.
 let lowest = Infinity, highest = -Infinity;
 for (const metres of hakoneTerrain.heights) { lowest = Math.min(lowest, metres); highest = Math.max(highest, metres); }
-assert.equal(lowest, 86, 'Hayakawa valley floor');
+assert.equal(lowest, 87, 'Hayakawa valley floor');
 assert.equal(highest, hakone.HIGHEST_METRES, 'Kamiyama, the high point of the window');
 assert.ok(highest > 1400 && highest < 1450, `summit near Kamiyama's 1438 m, got ${highest}`);
 // Grid corners land exactly on stored cells, which pins the world-to-grid mapping.
@@ -214,13 +214,61 @@ for (const contour of hakoneTerrain.contours) {
 // Real ground runs off the edge of any window, so these contours are not all
 // closed — the modelled landscape's closure check deliberately does not apply.
 // The vertical scale is what keeps the shared camera framing: 1432 m of relief
-// has to land at roughly the height the modelled summit reaches.
-near(highest * hakone.VERTICAL_SCALE, 638, 10);
-// Lake Ashi is the one flat, level surface in the window.
-const lake = hakone.terrainCover(-hakone.TERRAIN_WIDTH / 2 + 120, hakone.TERRAIN_DEPTH / 2 - 40);
-assert.ok(lake.water > 0.9, `Lake Ashi should read as water, got ${lake.water}`);
-assert.equal(lake.forest, 0);
-for (const cover of [hakone.terrainCover(0, 0), lake]) assert.equal(cover.snow, 0, 'Hakone holds no permanent snow');
+// has to land at roughly the height the modelled summit reaches. Widening the
+// window flattens the model unless the exaggeration takes up the slack.
+near(highest * hakone.VERTICAL_SCALE, 630, 20);
+
+// Lake Ashi is the one sheet of standing water on the map, and the window has
+// to hold all of it — that is what the wider window was cut for.
+const lakeCells: number[] = [];
+for (let row = 0; row < hakoneTerrain.rows; row++) {
+  for (let column = 0; column < hakoneTerrain.columns; column++) {
+    const x = column / (hakoneTerrain.columns - 1) * hakone.TERRAIN_WIDTH - hakone.TERRAIN_WIDTH / 2;
+    const z = row / (hakoneTerrain.rows - 1) * hakone.TERRAIN_DEPTH - hakone.TERRAIN_DEPTH / 2;
+    const cover = hakone.terrainCover(x, z, hakoneTerrain.heights[row * hakoneTerrain.columns + column]);
+    assert.equal(cover.snow, 0, 'Hakone holds no permanent snow');
+    lakeCells.push(cover.water > 0.5 ? 1 : 0);
+  }
+}
+// Flat ground at the lake's height turns up all over the caldera, so the cover
+// model takes the largest connected sheet. One blob, or that has regressed.
+const visited = new Uint8Array(lakeCells.length);
+const blobs: number[] = [];
+for (let seed = 0; seed < lakeCells.length; seed++) {
+  if (!lakeCells[seed] || visited[seed]) continue;
+  let size = 0;
+  const stack = [seed];
+  visited[seed] = 1;
+  while (stack.length) {
+    const i = stack.pop()!;
+    size++;
+    const column = i % hakoneTerrain.columns, row = (i - column) / hakoneTerrain.columns;
+    const neighbours = [column > 0 ? i - 1 : -1, column < hakoneTerrain.columns - 1 ? i + 1 : -1,
+      row > 0 ? i - hakoneTerrain.columns : -1,
+      row < hakoneTerrain.rows - 1 ? i + hakoneTerrain.columns : -1];
+    for (const j of neighbours) if (j >= 0 && lakeCells[j] && !visited[j]) { visited[j] = 1; stack.push(j); }
+  }
+  blobs.push(size);
+}
+assert.equal(blobs.length, 1, `Lake Ashi should be one sheet, found ${blobs.length}`);
+const cellArea = (hakone.HALF_EAST_METRES * 2 / (hakoneTerrain.columns - 1))
+  * (hakone.HALF_NORTH_METRES * 2 / (hakoneTerrain.rows - 1)) / 1e6;
+// The real lake covers 6.9 km2; a 48 m grid loses a little of the narrow inlets.
+near(blobs[0] * cellArea, 6.8, 0.5);
+// It sits clear of every edge, which is the whole point of the wider window.
+let westmost = Infinity, eastmost = -Infinity, northmost = Infinity, southmost = -Infinity;
+for (let i = 0; i < lakeCells.length; i++) {
+  if (!lakeCells[i]) continue;
+  const column = i % hakoneTerrain.columns, row = (i - column) / hakoneTerrain.columns;
+  westmost = Math.min(westmost, column); eastmost = Math.max(eastmost, column);
+  northmost = Math.min(northmost, row); southmost = Math.max(southmost, row);
+}
+assert.ok(westmost > 0 && northmost > 0, 'the lake reaches the north or west edge');
+assert.ok(eastmost < hakoneTerrain.columns - 1 && southmost < hakoneTerrain.rows - 1,
+  'the lake reaches the south or east edge');
+const lakeMiddle = hakone.terrainCover(-607, 340);
+assert.equal(lakeMiddle.water, 1, 'open water mid-lake');
+assert.equal(lakeMiddle.forest, 0);
 
 // Turning the landscape always takes the short way round.
 near(shortestTurn(0, 90), 90);

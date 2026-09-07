@@ -177,8 +177,8 @@ const ElectricPotentialExplorer = () => {
     const bg = cssColorToRgb(palette.bg, [249, 250, 251]);
     // The ends follow the same accents as the charge markers, darkened or
     // lightened only as far as this background needs: a hardcoded pair cannot
-    // serve both themes, since the light theme's deep blue reads at 2.3:1 on
-    // the dark background and the pastel accents are paler still.
+    // serve every theme, since the light theme's deep blue reads at 2.3:1 on
+    // the dark background.
     return {
       bg,
       positive: ensureContrast(cssColorToRgb(palette.positive, [239, 68, 68]), bg),

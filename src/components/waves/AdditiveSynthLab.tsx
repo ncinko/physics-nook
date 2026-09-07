@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Volume2,
 } from 'lucide-react';
+import { getCssColor, onThemeChange } from '../shared/themeColors';
 
 type Envelope = {
   attack: number;
@@ -1497,8 +1498,9 @@ export default function AdditiveSynthLab() {
     const frequencyData = new Uint8Array(1024);
 
     const drawIdle = () => {
-      const darkMode = document.documentElement.getAttribute('data-theme') === 'dark';
-      context.fillStyle = darkMode ? '#111827' : '#f8fafc';
+      const theme = document.documentElement.getAttribute('data-theme');
+      const darkMode = theme === 'dark';
+      context.fillStyle = darkMode ? '#111827' : theme === 'paper' ? getCssColor('--sim-bg', '#f8fafc') : '#f8fafc';
       context.fillRect(0, 0, width, height);
       context.fillStyle = darkMode ? 'rgba(15, 118, 110, 0.12)' : 'rgba(59, 130, 246, 0.08)';
       context.fillRect(0, 0, width, height);
@@ -1513,6 +1515,9 @@ export default function AdditiveSynthLab() {
       }
 
       const darkMode = document.documentElement.getAttribute('data-theme') === 'dark';
+      const quietColor = document.documentElement.getAttribute('data-theme') === 'paper'
+        ? `color-mix(in srgb, ${getCssColor('--sim-bg', '#f8fafc')} 6%, transparent)`
+        : darkMode ? 'rgba(15, 23, 42, 0.08)' : 'rgba(248, 250, 252, 0.06)';
       graph.analyser.getByteFrequencyData(frequencyData);
       context.drawImage(canvas, 0, 0, width, height - SPECTROGRAM_ROW_HEIGHT, 0, SPECTROGRAM_ROW_HEIGHT, width, height - SPECTROGRAM_ROW_HEIGHT);
 
@@ -1531,9 +1536,7 @@ export default function AdditiveSynthLab() {
 
         context.fillStyle = alpha > 0.02
           ? `rgba(${red}, ${green}, ${blue}, ${alpha})`
-          : darkMode
-            ? 'rgba(15, 23, 42, 0.08)'
-            : 'rgba(248, 250, 252, 0.06)';
+          : quietColor;
         context.fillRect(x, 0, 1, SPECTROGRAM_ROW_HEIGHT);
       }
     };
@@ -1557,7 +1560,13 @@ export default function AdditiveSynthLab() {
 
     draw();
 
+    const stopWatchingTheme = onThemeChange(() => {
+      // Repaint the empty display; retain any recorded spectrogram and audio state.
+      if (!graphRef.current) drawIdle();
+    });
+
     return () => {
+      stopWatchingTheme();
       if (animationRef.current !== null) {
         window.cancelAnimationFrame(animationRef.current);
         animationRef.current = null;

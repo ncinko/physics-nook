@@ -1,5 +1,5 @@
 // Shared helper so canvas-based interactives read the active theme's CSS custom
-// properties (light / dark / pastel) instead of hardcoded colors.
+// properties (light / dark / paper) instead of hardcoded colors.
 //
 // `getCssColor` and `onThemeChange` are generic primitives any domain can reuse.
 // `themeColors()` is the convenience palette used by the field/charge canvases.

@@ -39,11 +39,14 @@ const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString
     <script is:inline>
       const THEME_STORAGE_KEY = 'physics-nook-theme';
       const theme = (() => {
-        if (typeof localStorage !== 'undefined') {
+        try {
           const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-          if (savedTheme === 'light' || savedTheme === 'dark') {
+          if (savedTheme === 'pastel') return 'paper';
+          if (savedTheme === 'light' || savedTheme === 'dark' || savedTheme === 'paper') {
             return savedTheme;
           }
+        } catch {
+          // Storage can be unavailable; the current page still supports themes.
         }
         return 'light';
       })();

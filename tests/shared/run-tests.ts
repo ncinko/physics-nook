@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   generateLeaderboardName,
   isBlockedLeaderboardName,
@@ -211,12 +212,21 @@ assert.equal(motionGame.name, 'Player');
   // regression this guards: the potential colormap used to blend toward a
   // hardcoded white, so a dark theme painted the whole canvas near-white, and
   // the hardcoded deep blue end sat at 2.3:1 on the dark background.
-  const themes: Array<[string, string, [number, number, number], Rgb, Rgb]> = [
-    ['light', '#f9fafb', [249, 250, 251], [239, 68, 68], [59, 130, 246]],
-    ['dark', '#1f2937', [31, 41, 55], [248, 113, 113], [96, 165, 250]],
-    ['pastel', '#fefae0', [254, 250, 224], [255, 180, 162], [189, 224, 254]],
-  ];
-  for (const [name, , bg, positive, negative] of themes) {
+  const themeCss = readFileSync(new URL('../../src/styles/global.css', import.meta.url), 'utf8');
+  const palette = (name: string) => {
+    const block = themeCss.match(new RegExp(`\\[data-theme="${name}"\\]\\s*\\{([^}]+)\\}`))?.[1];
+    assert.ok(block, `${name} theme exists in CSS`);
+    return (token: string): Rgb => {
+      const hex = block.match(new RegExp(`${token}:\\s*#([0-9a-f]{6});`, 'i'))?.[1];
+      assert.ok(hex, `${name} ${token} is a hex color`);
+      return [0, 2, 4].map((offset) => parseInt(hex.slice(offset, offset + 2), 16)) as Rgb;
+    };
+  };
+  for (const name of ['light', 'dark', 'paper']) {
+    const color = palette(name);
+    const bg = color('--sim-bg');
+    const positive = color('--accent-red');
+    const negative = color('--accent-blue');
     for (const [role, accent] of [['positive', positive], ['negative', negative]] as const) {
       const end = ensureContrast(accent, bg);
       assert.ok(
@@ -225,6 +235,15 @@ assert.equal(motionGame.name, 'Player');
       );
     }
   }
+
+  const paper = palette('paper');
+  for (const surface of ['--bg-primary', '--sim-bg', '--surface-elevated']) {
+    assert.ok(contrastRatio(paper('--text-primary'), paper(surface)) >= 7, `Paper body text on ${surface}`);
+    for (const token of ['--text-muted', '--accent-blue', '--accent-red', '--accent-green', '--accent-purple']) {
+      assert.ok(contrastRatio(paper(token), paper(surface)) >= 4.5, `Paper ${token} on ${surface}`);
+    }
+  }
+  assert.ok(contrastRatio(white, paper('--accent-blue')) >= 4.5, 'Paper primary button label');
 
   // Zero potential is painted as the theme's own background, so a dark theme
   // stays dark. Blending toward white, as the colormap used to, would have put
@@ -236,10 +255,10 @@ assert.equal(motionGame.name, 'Player');
   // The dark theme is the case that motivated all of this: its own accents
   // already clear the bar, so they are used as-is rather than being muddied.
   assert.deepEqual(ensureContrast([248, 113, 113], [31, 41, 55]), [248, 113, 113]);
-  // The pastel accents do not, so they get pushed until they do.
-  const pastelEnd = ensureContrast([255, 180, 162], [254, 250, 224]);
-  assert.notDeepEqual(pastelEnd, [255, 180, 162]);
-  assert.ok(contrastRatio(pastelEnd, [254, 250, 224]) >= 4.5);
+  // Low-contrast inputs still need correction, independent of shipped themes.
+  const paleEnd = ensureContrast([255, 180, 162], [254, 250, 224]);
+  assert.notDeepEqual(paleEnd, [255, 180, 162]);
+  assert.ok(contrastRatio(paleEnd, [254, 250, 224]) >= 4.5);
 }
 
 console.log('shared leaderboard name tests passed');

@@ -160,7 +160,7 @@ const buttonClass =
 /**
  * One colour per quantity, matching the graph explorers earlier in the lesson:
  * position blue, velocity green, acceleration purple. Blue and purple come from
- * the theme tokens so they follow light, dark, and pastel; velocity keeps the
+ * the theme tokens so they follow light, dark, and paper; velocity keeps the
  * same fixed green the explorers use, which is legible against all three.
  */
 interface QuantityColor {

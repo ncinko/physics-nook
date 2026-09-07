@@ -82,7 +82,7 @@
   border-radius: inherit;
 
   /* Dimming is a fixed dark wash rather than a theme surface: on the light and
-     pastel themes `--bg-primary` is near white, and a white scrim brightens the
+     paper themes `--bg-primary` is near white, and a white scrim brightens the
      surroundings instead of pushing them back. */
   --tour-dim: rgb(15 23 42 / 0.45);
 }

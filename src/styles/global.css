@@ -38,18 +38,19 @@
     --accent-purple: #a78bfa;
   }
 
-  /* Pastel Theme */
-  [data-theme="pastel"] {
-    --bg-primary: #fdf6e3;
-    --text-primary: #5c6b73;
-    --text-muted: #7a8a92;
-    --grid-line: #e2e8f0;
-    --sim-bg: #fefae0;
-    --surface-elevated: rgba(255, 250, 224, 0.9);
-    --accent-red: #ffb4a2;
-    --accent-blue: #bde0fe;
-    --accent-green: #b7e4c7;
-    --accent-purple: #cdb4db;
+  /* Paper: warm reading surfaces with high-contrast text and accents. */
+  [data-theme="paper"] {
+    color-scheme: light;
+    --bg-primary: #f6f1e7;
+    --text-primary: #292722;
+    --text-muted: #625d52;
+    --grid-line: #b9b1a2;
+    --sim-bg: #eee7da;
+    --surface-elevated: #fbf7ef;
+    --accent-red: #b13f36;
+    --accent-blue: #285e87;
+    --accent-green: #356b48;
+    --accent-purple: #72508c;
   }
 }
 
@@ -77,6 +78,21 @@
     color: var(--text-primary);
     font-weight: 700;
     letter-spacing: -0.03em;
+  }
+
+  [data-theme="paper"] .prose-theme :where(a):not(:where(.not-prose, .not-prose *)) {
+    color: var(--accent-blue);
+    text-decoration: underline;
+    text-underline-offset: 0.18em;
+  }
+
+  [data-theme="paper"] .prose-theme :where(pre):not(:where(.not-prose, .not-prose *)) {
+    color: var(--text-primary);
+    background-color: var(--sim-bg);
+  }
+
+  [data-theme="paper"] .prose-theme :where(code):not(:where(pre *, .not-prose, .not-prose *)) {
+    color: var(--accent-red);
   }
 
   .prose-theme :where(p) {

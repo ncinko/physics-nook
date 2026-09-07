@@ -1,27 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { Button, ControlBar, Slider, Toggle } from '../shared/InlineControls';
+import Readout from '../shared/Readout';
 import './CircuitKit.css';
 
 /**
- * CircuitKit.jsx — Transient Circuit Simulator
+ * CircuitKit — transient circuit builder and simulator.
  *
- * This refactored version includes:
- * - A full transient simulation engine using the Trapezoidal method.
- * - Time-dependent simulation for Capacitors.
- * - A new Inductor component.
- * - A responsive layout that adapts to window size.
- * - A dark theme for the canvas and UI elements.
- * - A real-time Voltage/Current scope to plot component values.
- * - Simulation controls (Play, Pause, Reset).
- * - Live updating of component values during simulation.
- * - Scope locking to observe one component while interacting with another.
- * - Self-contained styling CircuitKit.css.
- * - Adjustable simulation speed control
- * - Cleaner component visuals where symbols break the wire.
- * - Reduced internal wire resistance for near-ideal LC oscillations.
- * - Slider controls for simulation and animation speed.
- * - Improved battery and capacitor visual symbols with correct polarity.
- * - Relocated polarity symbols for better visual separation from labels.
- * - Added a pre-built circuit menu with an RC charging/discharging example.
+ * Drag components from the palette onto the workspace, wire them by dragging
+ * endpoints together (they snap-merge within SNAP_RADIUS), and watch a live
+ * voltage/current scope. The solver is modified nodal analysis with trapezoidal
+ * companion models, so RC, RL and LC/RLC transients are integrated properly
+ * rather than approximated.
+ *
+ * Colour comes entirely from the theme tokens in global.css, applied as
+ * `var(--token)` SVG paint values and Tailwind arbitrary-value classes, so the
+ * tool follows the site's light/dark toggle with no runtime theme reading.
  */
 
 /******************* Visual & Interaction Constants *******************/
@@ -33,24 +26,24 @@ const LABEL_OFF = 12 * SCALE;
 const SNAP_RADIUS = 18 * SCALE;
 const ANIM_EPS = 1e-3; // Increased to reduce jitter
 
+// Theme tokens from global.css, inlined as SVG paint values. The browser re-resolves
+// custom properties when data-theme flips, so there is nothing to observe or redraw.
+//
+// Two of these are mixes rather than plain tokens, because no single token survives
+// the flip: --grid-line as a wire colour is ~1.2:1 on the light canvas (invisible),
+// and --surface-elevated composites to ~#fdfdfe over the light canvas (the palette
+// bar disappears). Anchoring both to --sim-bg keeps them correct in either direction.
 const THEME = {
-  background: "#1f2937",
-  canvas: "#111827",
-  text: "#f9fafb",
-  textMuted: "#9ca3af",
-  component: "#d1d5db",
-  wire: "#6b7280",
-  palette: "#374151",
-  paletteHover: "#4b5563",
-  select: "#2563eb",
-  glow: "#38bdf8",
-  snap: "#16a34a",
-  current: "#3b82f6",
-  button: "#374151",
-  buttonText: "#f9fafb",
-  border: "#4b5563",
-  scopeGrid: "#374151",
-  scopePlot: "#2563eb",
+  canvas: "var(--sim-bg)",
+  text: "var(--text-primary)",
+  component: "var(--text-primary)",
+  wire: "color-mix(in srgb, var(--text-primary) 55%, var(--sim-bg))",
+  palette: "color-mix(in srgb, var(--text-primary) 8%, var(--sim-bg))",
+  // Selection is purple, not blue: blue already means current, and a selected
+  // element used to get a blue stroke with blue flow dots painted on top of it.
+  select: "var(--accent-purple)",
+  current: "var(--accent-blue)",
+  border: "var(--grid-line)",
 };
 
 /******************* Circuit Modeling & Simulation *******************/
@@ -66,9 +59,63 @@ const PALETTE = {
   CAPACITOR: "capacitor",
   INDUCTOR: "inductor",
   SWITCH: "switch",
-};
+} as const;
 
-const PALETTE_ITEMS = [
+type ElementType = (typeof PALETTE)[keyof typeof PALETTE];
+
+interface Point { x: number; y: number }
+interface Rect { x: number; y: number; w: number; h: number }
+interface CircuitNode { id: string; x: number; y: number }
+
+// Params are flat and optional rather than a per-type discriminated union. This is a
+// dynamic editor: the inspector patches params by string key, PALETTE_ITEMS[].def is
+// heterogeneous, and resetSimulation clears v/i on unnarrowed clones. A union would
+// need a cast at every one of those sites to buy safety the code cannot use.
+interface ElementParams {
+  R?: number; V?: number; C?: number; L?: number;
+  v?: number; i?: number; closed?: boolean;
+}
+
+interface AnimState {
+  active: boolean; dir: number; I_disp?: number;
+  phasePx: number; spacingPx: number;
+}
+
+interface CircuitElement {
+  id: string;
+  type: ElementType;
+  n1: string;
+  n2: string;
+  params: ElementParams;
+  anim?: AnimState;
+}
+
+interface PaletteItem { type: ElementType; label: string; icon: string; def: ElementParams }
+
+interface Solution {
+  nodeV: Map<string, number>;
+  elemI: Map<string, number>;
+  ground?: string | null;
+}
+interface TransientResult extends Solution {
+  ground: string | null;
+  newStates: Record<string, ElementParams>;
+}
+
+interface ScopeSample { time: number; value: number }
+type ScopeMode = 'voltage' | 'current';
+interface SymbolProps { mx: number; my: number; ux: number; uy: number; px: number; py: number }
+
+// Drag state, unlike params, IS worth a discriminated union: every handler already
+// switches on `type` and then reaches for variant-only fields.
+type Carry =
+  | { type: 'selectbox'; start: Point; last: Point }
+  | { type: 'palette'; item: PaletteItem }
+  | { type: 'element'; id: string; start: Point; a_start: Point; b_start: Point }
+  | { type: 'group'; start: Point; nodeStarts: Map<string, Point> }
+  | { type: 'end'; id: string; end: 'n1' | 'n2'; nodeId: string; snapTargetId: string | null };
+
+const PALETTE_ITEMS: PaletteItem[] = [
   { type: PALETTE.RESISTOR,  label: "Resistor",  icon: "Ω",  def: { R: 10 } },
   { type: PALETTE.BATTERY,   label: "Battery",   icon: "+−", def: { V: 5 } },
   { type: PALETTE.CAPACITOR, label: "Capacitor", icon: "∥",  def: { C: 1e-6, v: 0, i: 0 } },
@@ -78,16 +125,16 @@ const PALETTE_ITEMS = [
 ];
 
 const uid = (() => { let n = 1; return () => String(n++); })();
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /******************* Pre-built Circuit Generators *******************/
-function generateRCChargeDischargeCircuit() {
+function generateRCChargeDischargeCircuit(): { nodes: CircuitNode[]; elements: CircuitElement[] } {
   const l_uid = (() => { let n = 1; return () => `rc_${n++}`; })();
 
   // Grid helper
   const origin = { x: 350, y: 160 };
   const dx = 220, dy = 160;
-  const grid = (c, r) => ({ x: origin.x + c * dx, y: origin.y + r * dy });
+  const grid = (c: number, r: number) => ({ x: origin.x + c * dx, y: origin.y + r * dy });
 
   // Top row: battery+ -> series R -> switch -> cap top
   // Bottom row: ground bus
@@ -105,7 +152,7 @@ function generateRCChargeDischargeCircuit() {
 
   const nodes = [nodeA, nodeB, nodeC, nodeE, gBus1, gBus2, rTop, rBottom];
 
-  const elements = [
+  const elements: CircuitElement[] = [
     // Battery
     { id: l_uid(), type: PALETTE.BATTERY,   n1: nodeA.id, n2: nodeB.id, params: { V: 10 } },
 
@@ -133,7 +180,7 @@ function generateRCChargeDischargeCircuit() {
 
 
 /******************* Linear Solver (Gauss, partial pivot) *******************/
-function solveLinearSystem(A, b) {
+function solveLinearSystem(A: number[][], b: number[]): number[] {
   const n = A.length;
   if (n === 0) return [];
   const M = A.map((row, i) => [...row, b[i]]);
@@ -162,11 +209,11 @@ function solveLinearSystem(A, b) {
 }
 
 /******************* Transient MNA Solver *******************/
-function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
+function buildAndSolveTransient(nodes: CircuitNode[], elements: CircuitElement[], dt: number): TransientResult {
     if (!nodes.length || dt <= 0) return { nodeV: new Map(), elemI: new Map(), ground: null, newStates: {} };
 
-    const ground = groundNodeId || chooseGround(nodes);
-    const nodeVarIndex = new Map();
+    const ground = chooseGround(nodes);
+    const nodeVarIndex = new Map<string, number>();
     let varCounter = 0;
     nodes.forEach(n => { if (n.id !== ground) nodeVarIndex.set(n.id, varCounter++); });
 
@@ -183,7 +230,7 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
 
     const A = Array.from({ length: nVars }, () => Array(nVars).fill(0));
     const b = Array(nVars).fill(0);
-    const idx = (nodeId) => nodeId === ground ? null : nodeVarIndex.get(nodeId);
+    const idx = (nodeId: string): number | null => (nodeId === ground ? null : nodeVarIndex.get(nodeId) ?? null);
 
     // Stamp GMIN for stability
     for (let i = 0; i < n; i++) A[i][i] += GMIN;
@@ -258,11 +305,11 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
     const x = solveLinearSystem(A, b);
 
     // Extract solutions
-    const nodeV = new Map();
-    nodes.forEach(n => { nodeV.set(n.id, idx(n.id) != null ? x[idx(n.id)] : 0); });
+    const nodeV = new Map<string, number>();
+    nodes.forEach(n => { const k = idx(n.id); nodeV.set(n.id, k != null ? x[k] : 0); });
 
-    const elemI = new Map();
-    const newStates = {};
+    const elemI = new Map<string, number>();
+    const newStates: Record<string, ElementParams> = {};
 
     elements.forEach(e => {
         const v1 = nodeV.get(e.n1) || 0;
@@ -299,7 +346,7 @@ function buildAndSolveTransient(nodes, elements, groundNodeId, dt) {
 }
 
 
-function chooseGround(nodes){
+function chooseGround(nodes: CircuitNode[]): string | null {
   if (!nodes.length) return null;
   const minIdx = nodes.reduce((best, n, i) => {
     if (best === -1) return i;
@@ -309,8 +356,8 @@ function chooseGround(nodes){
   return nodes[minIdx]?.id ?? null;
 }
 
-function updateElementAnimations(elements, elemI, animSpeed, realDT, nodes, maxAbsI) {
-  const getLen = (e) => {
+function updateElementAnimations(elements: CircuitElement[], elemI: Map<string, number>, animSpeed: number, realDT: number, nodes: CircuitNode[], maxAbsI: number): CircuitElement[] {
+  const getLen = (e: CircuitElement) => {
     const a = nodes.find(n => n.id === e.n1);
     const b = nodes.find(n => n.id === e.n2);
     if (!a || !b) return 0;
@@ -363,7 +410,7 @@ function updateElementAnimations(elements, elemI, animSpeed, realDT, nodes, maxA
 
 
 /******************* Symbol Helpers *******************/
-function ResSymbol({ mx, my, ux, uy, px, py }) {
+function ResSymbol({ mx, my, ux, uy, px, py }: SymbolProps) {
   // Half-length of the symbol along the element axis
   const L = 30 * SCALE;          // <-- keep this in sync with getSymbolLength (2*L)
   const steps = 3;               // number of interior peaks (adjust taste)
@@ -392,7 +439,7 @@ function ResSymbol({ mx, my, ux, uy, px, py }) {
     />
   );
 }
-function BatSymbol({ mx,my,ux,uy,px,py }){
+function BatSymbol({ mx,my,ux,uy,px,py }: SymbolProps){
   const L_long = 16*SCALE, L_short = 8*SCALE, separation = 6*SCALE;
   return (
     <g>
@@ -403,7 +450,7 @@ function BatSymbol({ mx,my,ux,uy,px,py }){
     </g>
   );
 }
-function SwSymbol({ mx,my,ux,uy,px,py,closed }){
+function SwSymbol({ mx,my,ux,uy,px,py,closed }: SymbolProps & { closed: boolean }){
   const L=20*SCALE; return (
     <g>
       {closed ? (
@@ -414,7 +461,7 @@ function SwSymbol({ mx,my,ux,uy,px,py,closed }){
     </g>
   );
 }
-function CapSymbol({ mx,my,ux,uy,px,py }){
+function CapSymbol({ mx,my,ux,uy,px,py }: SymbolProps){
   const L=6*SCALE, plateW=16*SCALE;
   return (
     <g>
@@ -423,7 +470,7 @@ function CapSymbol({ mx,my,ux,uy,px,py }){
     </g>
   );
 }
-function InductorSymbol({ mx,my,ux,uy,px,py }){
+function InductorSymbol({ mx,my,ux,uy,px,py }: SymbolProps){
     const len=40*SCALE, radius=8*SCALE, coils=4;
     const pts = [];
     for(let i=0; i<=coils*360; i+=30){
@@ -439,20 +486,19 @@ function InductorSymbol({ mx,my,ux,uy,px,py }){
 /******************* Main Component *******************/
 export default function CircuitKit() {
   const [size, setSize] = useState({ width: 800, height: 600 });
-  const svgRef = useRef(null);
+  const svgRef = useRef<HTMLDivElement | null>(null);
 
   // graph
-  const [nodes, setNodes] = useState([]);
-  const [elements, setElements] = useState([]);
-  const [selection, setSelection] = useState([]);
-  const [groundNodeId, setGroundNodeId] = useState(null);
-  const [selectionBox, setSelectionBox] = useState(null);
+  const [nodes, setNodes] = useState<CircuitNode[]>([]);
+  const [elements, setElements] = useState<CircuitElement[]>([]);
+  const [selection, setSelection] = useState<string[]>([]);
+  const [selectionBox, setSelectionBox] = useState<Rect | null>(null);
   const nextIdRef = useRef(1000000);
   const allocNodeId = () => `n${nextIdRef.current++}`;
 
 
   // drag state
-  const [carry, setCarry] = useState(null);
+  const [carry, setCarry] = useState<Carry | null>(null);
   const [mouseWS, setMouseWS] = useState({ x: 0, y: 0 });
 
   // simulation state
@@ -461,14 +507,13 @@ export default function CircuitKit() {
   const [simRate, setSimRate] = useState(3.0);
   const [animSpeed, setAnimSpeed] = useState(1000);
   
-  const [visTime, setVisTime] = useState(0);
   const [showDebug, setShowDebug] = useState(false);
   const [showNodeVoltages, setShowNodeVoltages] = useState(false);
-  const [solution, setSolution] = useState({ nodeV: new Map(), elemI: new Map() });
-  const [scopeData, setScopeData] = useState([]);
-  const [scopedElementId, setScopedElementId] = useState(null);
+  const [solution, setSolution] = useState<Solution>({ nodeV: new Map(), elemI: new Map() });
+  const [scopeData, setScopeData] = useState<ScopeSample[]>([]);
+  const [scopedElementId, setScopedElementId] = useState<string | null>(null);
   const [isScopeLocked, setIsScopeLocked] = useState(false);
-  const [scopeMode, setScopeMode] = useState('voltage');
+  const [scopeMode, setScopeMode] = useState<ScopeMode>('voltage');
 
   // Responsive canvas size
   useEffect(() => {
@@ -489,52 +534,71 @@ export default function CircuitKit() {
     };
   }, []);
 
+  // The loop reads the graph through refs rather than through the dep array. Putting
+  // `nodes` in the deps tore the loop down on every pointer-move during a drag, which
+  // reset lastTS and stalled the flow animation for the duration of the drag.
+  const elementsRef = useRef(elements);
+  const nodesRef = useRef(nodes);
+  useEffect(() => { nodesRef.current = nodes; }, [nodes]);
+
+  // Every write to `elements` goes through here. The sim loop overwrites
+  // elementsRef each frame, so any writer that only called setElements would be
+  // clobbered by the next frame before React had committed and re-synced the ref.
+  // The loop never writes `nodes`, so nodesRef can stay a plain effect sync.
+  const commitElements = useCallback((updater: CircuitElement[] | ((prev: CircuitElement[]) => CircuitElement[])) => {
+    const next = typeof updater === 'function' ? updater(elementsRef.current) : updater;
+    elementsRef.current = next;
+    setElements(next);
+    return next;
+  }, []);
+
   // Main simulation loop
-useEffect(() => {
-  let animFrameId;
-  let lastTS = performance.now() / 1000;
-  const effectiveDT = SIM_DT * simRate;
+  useEffect(() => {
+    let animFrameId = 0;
+    let lastTS = performance.now() / 1000;
+    const effectiveDT = SIM_DT * simRate;
 
-  const step = () => {
-    const now = performance.now() / 1000;
-    const realDT = Math.max(0, Math.min(0.1, now - lastTS));
-    lastTS = now;
-    setVisTime(tv => tv + realDT);
+    const step = () => {
+      const now = performance.now() / 1000;
+      const realDT = Math.max(0, Math.min(0.1, now - lastTS));
+      lastTS = now;
 
-    if (isRunning) {
-      setElements(prevElements => {
+      if (isRunning) {
+        const currentNodes = nodesRef.current;
+        const prevElements = elementsRef.current;
         const { nodeV, elemI, ground, newStates } =
-          buildAndSolveTransient(nodes, prevElements, groundNodeId, effectiveDT);
+          buildAndSolveTransient(currentNodes, prevElements, effectiveDT);
 
-        setSolution({ nodeV, elemI, ground });
-        setSimTime(t => t + effectiveDT);
+        // Carry state updates for reactive components. params.v / params.i ARE the
+        // trapezoidal integrator's state, so they have to survive frame to frame.
+        const nextElements = prevElements.map(el => (
+          newStates[el.id]
+            ? { ...el, params: { ...el.params, ...newStates[el.id] } }
+            : el
+        ));
 
-        // carry state updates for reactive components
-        const nextElements = prevElements.map(el => {
-          if (newStates[el.id]) {
-            return { ...el, params: { ...el.params, ...newStates[el.id] } };
-          }
-          return el;
-        });
-
-        // NEW: compute max current magnitude for relative scaling
+        // Max current magnitude, for relative flow-dot scaling.
         let maxAbsI = 0;
         for (const v of elemI.values()) maxAbsI = Math.max(maxAbsI, Math.abs(v));
 
-        // NEW: phase-based animation update with anti-alias clamp
+        // Phase-based animation update with anti-alias clamp.
         const withAnim = updateElementAnimations(
-          nextElements, elemI, animSpeed, realDT, nodes, maxAbsI
+          nextElements, elemI, animSpeed, realDT, currentNodes, maxAbsI
         );
-        return withAnim;
-      });
-    }
+
+        // Keep the ref ahead of the commit: the next frame runs before React has
+        // re-rendered, and reading pre-commit state would stall the integrator.
+        commitElements(withAnim);
+        setSolution({ nodeV, elemI, ground });
+        setSimTime(t => t + effectiveDT);
+      }
+
+      animFrameId = requestAnimationFrame(step);
+    };
 
     animFrameId = requestAnimationFrame(step);
-  };
-
-  animFrameId = requestAnimationFrame(step);
-  return () => cancelAnimationFrame(animFrameId);
-}, [isRunning, nodes, groundNodeId, simRate, animSpeed]);
+    return () => cancelAnimationFrame(animFrameId);
+  }, [isRunning, simRate, animSpeed]);
 
 
   // Scope data recording
@@ -567,13 +631,13 @@ useEffect(() => {
 
 
   // Helper functions
-  const nodeById = (id) => nodes.find(n => n.id === id);
-  const elementById = (id) => elements.find(e => e.id === id);
+  const nodeById = (id: string) => nodes.find(n => n.id === id);
+  const elementById = (id: string | null) => elements.find(e => e.id === id) ?? null;
 
   const resetSimulation = () => {
       setSimTime(0);
       setScopeData([]);
-      setElements(els => els.map(el => {
+      commitElements(els => els.map(el => {
           const newParams = { ...el.params };
           if (el.type === PALETTE.CAPACITOR) { newParams.v = 0; newParams.i = 0; }
           if (el.type === PALETTE.INDUCTOR) newParams.i = 0;
@@ -581,42 +645,42 @@ useEffect(() => {
       }));
   };
   
-  const addNode = (x, y) => { const id = uid(); setNodes(arr => [...arr, { id, x, y }]); return id; };
+  const addNode = (x: number, y: number) => { const id = uid(); setNodes(arr => [...arr, { id, x, y }]); return id; };
   
-  const addElement = (type, x, y) => {
+  const addElement = (type: ElementType, x: number, y: number) => {
     const half = 50 * SCALE; // Increased default length
     const n1 = addNode(x - half, y);
     const n2 = addNode(x + half, y);
     const item = PALETTE_ITEMS.find(p => p.type === type);
     const params = item ? { ...item.def } : {};
     const id = uid();
-    setElements(arr => [...arr, { id, type, n1, n2, params }]);
+    commitElements(arr => [...arr, { id, type, n1, n2, params }]);
     setSelection([id]);
     resetSimulation();
   };
   
-  const deleteElement = (id) => {
+  const deleteElement = (id: string) => {
     if (scopedElementId === id) {
         setScopedElementId(null);
         setIsScopeLocked(false);
     }
-    setElements(arr => {
-        const newEls = arr.filter(e => e.id !== id);
-        setNodes(reapOrphans(newEls, nodes));
-        return newEls;
-    });
+    // Read through the ref, and reap orphans functionally. Reading `nodes` from the
+    // enclosing closure here used to snap surviving nodes back to their positions at
+    // selection time, because the handler was memoized on [sel].
+    const newEls = commitElements(arr => arr.filter(e => e.id !== id));
+    setNodes(prev => reapOrphans(newEls, prev));
     setSelection([]);
   };
   
-  const reapOrphans = (elArr, nodesArr) => {
-    const used = new Set();
+  const reapOrphans = (elArr: CircuitElement[], nodesArr: CircuitNode[]) => {
+    const used = new Set<string>();
     elArr.forEach(e => { used.add(e.n1); used.add(e.n2); });
     return nodesArr.filter(n => used.has(n.id));
   };
   
-  const nearestSnapTarget = (nodeId, nodesArr) => {
+  const nearestSnapTarget = (nodeId: string, nodesArr: CircuitNode[]) => {
     const self = nodesArr.find(n => n.id === nodeId); if (!self) return null;
-    let best = null, bestD2 = Infinity;
+    let best: CircuitNode | null = null, bestD2 = Infinity;
     for (const n of nodesArr) {
       if (n.id === nodeId) continue;
       const d2 = (n.x - self.x) ** 2 + (n.y - self.y) ** 2;
@@ -625,25 +689,25 @@ useEffect(() => {
     return (best && Math.sqrt(bestD2) <= SNAP_RADIUS) ? best : null;
   };
   
-  const loadPrebuiltCircuit = (generator) => {
+  const loadPrebuiltCircuit = (generator: () => { nodes: CircuitNode[]; elements: CircuitElement[] }) => {
     setIsRunning(false);
     setSelection([]);
     const { nodes: newNodes, elements: newElements } = generator();
     setNodes(newNodes);
-    setElements(newElements);
+    commitElements(newElements);
     setTimeout(resetSimulation, 0); 
   };
 
 
   
   // Selection helpers
-  const rectFromPoints = (a, b) => {
+  const rectFromPoints = (a: Point, b: Point) => {
     const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
     const w = Math.abs(a.x - b.x), h = Math.abs(a.y - b.y);
     return { x, y, w, h };
   };
-  const lineIntersectsRect = (x1, y1, x2, y2, rx, ry, rw, rh) => {
-    const inside = (x, y) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
+  const lineIntersectsRect = (x1: number, y1: number, x2: number, y2: number, rx: number, ry: number, rw: number, rh: number) => {
+    const inside = (x: number, y: number) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh;
     if (inside(x1, y1) || inside(x2, y2)) return true;
     const p = [-(x2 - x1), (x2 - x1), -(y2 - y1), (y2 - y1)];
     const q = [x1 - rx, rx + rw - x1, y1 - ry, ry + rh - y1];
@@ -658,7 +722,7 @@ useEffect(() => {
     }
     return true;
   };
-  const elementsInRect = (rect) => {
+  const elementsInRect = (rect: Rect) => {
     const { x: rx, y: ry, w: rw, h: rh } = rect;
     const picked = [];
     for (const e of elements) {
@@ -669,7 +733,7 @@ useEffect(() => {
     return picked;
   };
 
-    const breakElementFree = (elId) => {
+    const breakElementFree = (elId: string) => {
     const el = elementById(elId);
     if (!el) return;
     const a = nodeById(el.n1);
@@ -678,10 +742,10 @@ useEffect(() => {
     const n1 = allocNodeId();
     const n2 = allocNodeId();
     setNodes(arr => [...arr, { id: n1, x: a.x, y: a.y }, { id: n2, x: b.x, y: b.y }]);
-    setElements(arr => arr.map(e => e.id === elId ? { ...e, n1, n2 } : e));
+    commitElements(arr => arr.map(e => e.id === elId ? { ...e, n1, n2 } : e));
   };
 // Pointer Handlers
-  const toWorkspaceCoords = (clientX, clientY) => {
+  const toWorkspaceCoords = (clientX: number, clientY: number): Point => {
     if (!svgRef.current) return { x: 0, y: 0 };
     const rect = svgRef.current.getBoundingClientRect();
     const xSVG = clamp(clientX - rect.left, 0, size.width);
@@ -690,13 +754,13 @@ useEffect(() => {
   };
   
   
-  const onWorkspaceDown = (e) => {
+  const onWorkspaceDown = (e: React.PointerEvent<SVGElement>) => {
     if (carry) return;
     const p = toWorkspaceCoords(e.clientX, e.clientY);
     setCarry({ type: 'selectbox', start: p, last: p });
     setSelectionBox({ x: p.x, y: p.y, w: 0, h: 0 });
   };
-const onPointerMove = (e) => {
+const onPointerMove = (e: React.PointerEvent<SVGElement>) => {
     const p = toWorkspaceCoords(e.clientX, e.clientY);
     setMouseWS(p);
     if (!carry) return;
@@ -704,7 +768,7 @@ const onPointerMove = (e) => {
     if (carry.type === 'selectbox') {
       const rect = rectFromPoints(carry.start, p);
       setSelectionBox(rect);
-      setCarry(c => ({ ...c, last: p }));
+      setCarry(c => (c && c.type === 'selectbox' ? { ...c, last: p } : c));
       return;
     }
     
@@ -732,11 +796,11 @@ const onPointerMove = (e) => {
     if (carry.type === 'end') {
       setNodes(arr => arr.map(n => n.id === carry.nodeId ? { ...n, x: p.x, y: p.y } : n));
       const target = nearestSnapTarget(carry.nodeId, nodes);
-      setCarry(c => ({ ...c, snapTargetId: target ? target.id : null }));
+      setCarry(c => (c && c.type === 'end' ? { ...c, snapTargetId: target ? target.id : null } : c));
     }
   };
   
-  const onPointerUp = (e) => {
+  const onPointerUp = () => {
     if (!carry) return;
     if (carry.type === 'selectbox') {
       const rect = selectionBox;
@@ -759,8 +823,7 @@ const onPointerMove = (e) => {
         const el = elementById(carry.id);
         if (el) {
           const updated = carry.end === 'n1' ? { ...el, n1: carry.snapTargetId } : { ...el, n2: carry.snapTargetId };
-          const newEls = elements.map(e => e.id === el.id ? updated : e);
-          setElements(newEls);
+          const newEls = commitElements(arr => arr.map(e => e.id === el.id ? updated : e));
           setNodes(prev => reapOrphans(newEls, prev));
           resetSimulation();
         }
@@ -774,9 +837,9 @@ const onPointerMove = (e) => {
     }
   };
   
-  const onPaletteDown = (item, e) => { e.preventDefault(); e.stopPropagation(); setCarry({ type: 'palette', item }); };
+  const onPaletteDown = (item: PaletteItem, e: React.PointerEvent<SVGElement>) => { e.preventDefault(); e.stopPropagation(); setCarry({ type: 'palette', item }); };
 
-  const onElementDown = (elId, e) => {
+  const onElementDown = (elId: string, e: React.PointerEvent<SVGElement>) => {
     e.preventDefault(); e.stopPropagation();
     const el = elementById(elId); if(!el) return;
     // SHIFT-CLICK: break element free
@@ -811,7 +874,7 @@ const isInCurrent = selection.includes(elId);
     }
   };
 
-  const onEndDown = (elId, endKey, e) => {
+  const onEndDown = (elId: string, endKey: 'n1' | 'n2', e: React.PointerEvent<SVGElement>) => {
     e.preventDefault(); e.stopPropagation();
     const el = elementById(elId); if (!el) return;
     const nodeId = endKey === 'n1' ? el.n1 : el.n2;
@@ -826,25 +889,23 @@ const isInCurrent = selection.includes(elId);
   const sel = selection.length === 1 ? elementById(selection[0]) : null;
   const scopedElement = scopedElementId ? elementById(scopedElementId) : null;
 
-  const maxCurrent = useMemo(() => {
-    if (!solution.elemI || solution.elemI.size === 0) return 0;
-    return Math.max(0, ...Array.from(solution.elemI.values()).map(Math.abs));
-  }, [solution.elemI]);
-
-  const handleElementChange = useCallback((patch) => {
+  // Not memoized: ElementInspector is memo'd on an `element` prop that gets a fresh
+  // identity every frame from updateElementAnimations, so the memo never hit anyway,
+  // and memoizing these on [sel] is what made the delete handler capture stale state.
+  const handleElementChange = (patch: ElementParams) => {
     if (!sel) return;
-    setElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, ...patch } } : e));
-  }, [sel]);
+    commitElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, ...patch } } : e));
+  };
 
-  const handleElementDelete = useCallback(() => {
+  const handleElementDelete = () => {
     if (!sel) return;
     deleteElement(sel.id);
-  }, [sel]);
+  };
 
-  const handleElementToggle = useCallback(() => {
+  const handleElementToggle = () => {
     if (!sel) return;
-    setElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, closed: !e.params.closed } } : e));
-  }, [sel]);
+    commitElements(arr => arr.map(e => e.id === sel.id ? { ...e, params: { ...e.params, closed: !e.params.closed } } : e));
+  };
 
   return (
     <div className="circuit-kit-container">
@@ -853,13 +914,6 @@ const isInCurrent = selection.includes(elId);
              onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}
              className="circuit-kit-svg">
           <rect x={0} y={0} width={size.width} height={size.height} fill={THEME.canvas} />
-          <defs>
-            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="4" result="b"/>
-              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-            </filter>
-          </defs>
-
           {/* Palette */}
           <g transform="translate(8,8)">
             <rect x={0} y={0} rx={12} ry={12} width={size.width - 16} height={64} fill={THEME.palette} stroke={THEME.border} />
@@ -873,7 +927,7 @@ const isInCurrent = selection.includes(elId);
           </g>
 
           {/* Workspace */}
-          <g transform={`translate(0,${WORK_OFFSET_Y})`} onPointerDown={onWorkspaceDown}>
+          <g transform={`translate(0,${WORK_OFFSET_Y})`}>
             {/* Invisible hit-rect to capture empty-space drags for marquee */}
             <rect
               data-workspace-hit
@@ -887,9 +941,7 @@ const isInCurrent = selection.includes(elId);
             />
             {carry?.type === 'palette' && <PreviewElement type={carry.item.type} x={mouseWS.x} y={mouseWS.y} />}
             {elements.map(e => (
-              <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution} t={visTime} dragInfo={carry}
-                animSpeed={animSpeed}
-                maxCurrent={maxCurrent}
+              <ElementSVG key={e.id} e={e} nodes={nodes} solution={solution}
                 onElementDown={onElementDown} onEndDown={onEndDown} selected={selection.includes(e.id)} showDebug={showDebug} />
             ))}
             {showNodeVoltages && nodes.map(n => {
@@ -913,39 +965,35 @@ const isInCurrent = selection.includes(elId);
       </div>
 
       {/* Controls & Inspector */}
-      <div className="circuit-kit-controls-inspector">
-        <div className="circuit-kit-controls">
-            <div className="circuit-kit-buttons">
-                <button className="circuit-kit-button" onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</button>
-                <button className="circuit-kit-button" onClick={resetSimulation}>Reset</button>
-                <button className="circuit-kit-button" onClick={() => { setNodes([]); setElements([]); setSelection([]); }}>Clear All</button>
-                <button className="circuit-kit-button" onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC Circuit</button>
-                <button className="circuit-kit-button" onClick={() => setShowNodeVoltages(s => !s)}>{showNodeVoltages ? 'Hide' : 'Show'} Voltages</button>
-            </div>
-            <div className="circuit-kit-sliders">
-                <label className="circuit-kit-slider-label">
-                    Sim Speed ({simRate.toFixed(1)}x)
-                    <input type="range" min="0.1" max="10" step="0.1" value={simRate} onChange={(e) => setSimRate(Number(e.target.value))} />
-                </label>
-                 <label className="circuit-kit-slider-label">
-                    Anim. Speed ({animSpeed})
-                    <input type="range" min="50" max="5000" step="50" value={animSpeed} onChange={(e) => setAnimSpeed(Number(e.target.value))} />
-                </label>
-            </div>
-                            <label className="circuit-kit-slider-label">
-                    
-                </label>
-<div className="circuit-kit-sim-time">Sim Time: {(simTime * 1000).toFixed(2)} ms</div>
+      <div className="flex flex-shrink-0 flex-col gap-3 border-t border-[var(--grid-line)] bg-[var(--surface-elevated)] p-3 text-[var(--text-primary)] sm:flex-row sm:items-start sm:gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <ControlBar align="start">
+                <Button onClick={() => setIsRunning(s => !s)}>{isRunning ? 'Pause' : 'Play'}</Button>
+                <Button variant="secondary" onClick={resetSimulation}>Reset</Button>
+                <Button variant="secondary" onClick={() => { setNodes([]); commitElements([]); setSelection([]); }}>Clear all</Button>
+                <Button variant="secondary" onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC circuit</Button>
+            </ControlBar>
+            <ControlBar align="start">
+                <Toggle label="Node voltages" checked={showNodeVoltages} onChange={setShowNodeVoltages} />
+                <Toggle label="Element currents" checked={showDebug} onChange={setShowDebug} />
+            </ControlBar>
+            <ControlBar align="start">
+                <Slider label="Sim speed" min={0.1} max={10} step={0.1} value={simRate} onChange={setSimRate} format={(v) => `${v.toFixed(1)}×`} />
+                <Slider label="Flow speed" min={50} max={5000} step={50} value={animSpeed} onChange={setAnimSpeed} />
+                <Readout variant="inline">
+                  <Readout.Value label="Sim time" value={(simTime * 1000).toFixed(2)} unit="ms" />
+                </Readout>
+            </ControlBar>
         </div>
         {sel && <ElementInspector element={sel} onChange={handleElementChange} onDelete={handleElementDelete} onToggle={handleElementToggle} />}
-         <ScopePlot data={scopeData} element={scopedElement} isLocked={isScopeLocked} onLockToggle={() => setIsScopeLocked(l => !l)} scopeMode={scopeMode} onScopeModeChange={() => setScopeMode(m => m === 'voltage' ? 'current' : 'voltage')} />
+        <ScopePlot data={scopeData} element={scopedElement} isLocked={isScopeLocked} onLockToggle={() => setIsScopeLocked(l => !l)} scopeMode={scopeMode} onScopeModeChange={() => setScopeMode(m => m === 'voltage' ? 'current' : 'voltage')} />
       </div>
     </div>
   );
 }
 
 /******************* Element SVG *******************/
-const getSymbolLength = (type) => {
+const getSymbolLength = (type: ElementType) => {
     switch(type) {
         case PALETTE.RESISTOR: return 60 * SCALE;
         case PALETTE.INDUCTOR: return 80 * SCALE;
@@ -956,7 +1004,17 @@ const getSymbolLength = (type) => {
     }
 };
 
-function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, onElementDown, onEndDown, selected, showDebug }){
+interface ElementSVGProps {
+  e: CircuitElement;
+  nodes: CircuitNode[];
+  solution: Solution;
+  onElementDown: (id: string, ev: React.PointerEvent<SVGElement>) => void;
+  onEndDown: (id: string, end: 'n1' | 'n2', ev: React.PointerEvent<SVGElement>) => void;
+  selected: boolean;
+  showDebug: boolean;
+}
+
+function ElementSVG({ e, nodes, solution, onElementDown, onEndDown, selected, showDebug }: ElementSVGProps){
   const a = nodes.find(n=>n.id===e.n1), b = nodes.find(n=>n.id===e.n2); if (!a||!b) return null;
   const {x:x1, y:y1} = a, {x:x2, y:y2} = b;
   const dx=x2-x1, dy=y2-y1; const L = Math.max(1e-6, Math.hypot(dx,dy)); // avoid 0
@@ -1049,15 +1107,19 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
         {/* Hit areas */}
         <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth={CAPTURE_W} pointerEvents="stroke" style={{ cursor:'grab' }}
               onPointerDown={(ev)=>onElementDown(e.id, ev)} />
-        <circle cx={x1} cy={y1} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n1',ev)} />
-        <circle cx={x2} cy={y2} r={END_R} fill={THEME.glow} fillOpacity={0.12} stroke={THEME.glow} strokeWidth={3} filter="url(#glow)" style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n2',ev)} />
+        {/* Opaque-centre rings. The old neon idiom (12% fill under a Gaussian blur)
+            only read against a near-black canvas; on the light canvas it was a smudge. */}
+        <circle cx={x1} cy={y1} r={END_R} fill={THEME.canvas} stroke={THEME.current} strokeWidth={3} style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n1',ev)} />
+        <circle cx={x2} cy={y2} r={END_R} fill={THEME.canvas} stroke={THEME.current} strokeWidth={3} style={{ cursor:'crosshair' }} onPointerDown={(ev)=>onEndDown(e.id,'n2',ev)} />
 
         {/* Dots — NEW phasePx/spacingPx renderer (direction always correct) */}
         {showDots && Array.from({ length: nDots }).map((_, i) => {
           const sPx = (anim.phasePx + i * spacingPx) % L;
           const s = sPx / L;
           const cx = x1 + dx * s, cy = y1 + dy * s;
-          return <circle key={i} cx={cx} cy={cy} r={2.5 * SCALE} fill={THEME.current} pointerEvents="none" />;
+          // Halo in the canvas colour: dot-on-background is fine, but dot-on-wire is
+          // only ~1.6:1 without it.
+          return <circle key={i} cx={cx} cy={cy} r={2.5 * SCALE} fill={THEME.current} stroke={THEME.canvas} strokeWidth={2.5} pointerEvents="none" />;
       })}
 
       {/* Debug overlay */}
@@ -1070,7 +1132,7 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
             const Idisp = e.anim?.I_disp ?? (solution.elemI?.get(e.id) ?? 0);
             const dirVal = e.anim?.dir ?? (Math.sign(Idisp) || 1);
             const dirArrow = dirVal > 0 ? "→" : "←";
-            const fmt = (x) => {
+            const fmt = (x: number) => {
               const a = Math.abs(x);
               if (a >= 1) return x.toFixed(2) + " A";
               if (a >= 1e-3) return (x*1e3).toFixed(2) + " mA";
@@ -1094,8 +1156,8 @@ function ElementSVG({ e, nodes, solution, t, dragInfo, animSpeed, maxCurrent, on
   );
 }
 
-function labelFor(e){
-  const formatVal = (val, unit) => {
+function labelFor(e: CircuitElement){
+  const formatVal = (val: number | undefined, unit: string) => {
       if(val === undefined || val === null) return `? ${unit}`;
       if (Math.abs(val) >= 1e6) return `${(val/1e6).toPrecision(3)} M${unit}`;
       if (Math.abs(val) >= 1e3) return `${(val/1e3).toPrecision(3)} k${unit}`;
@@ -1113,17 +1175,33 @@ function labelFor(e){
 }
 
 /******************* Inspector & Scope *******************/
-const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey, onChange }) {
-  const [localValue, setLocalValue] = useState(value);
-  const inputRef = useRef(null);
+// InlineControls has no text-input primitive, and adding one for a single caller
+// would change a shared five-consumer API. ModeControls.tsx sets the precedent of a
+// module-local class string instead. Note the arbitrary-value form: the Tailwind
+// `theme-*` aliases in tailwind.config.mjs are never loaded and emit no CSS.
+const numberFieldClass =
+  'w-32 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-2 py-1 ' +
+  'text-right font-mono tabular-nums text-[var(--text-primary)]';
+
+interface ParamInputProps {
+  label: string;
+  unit: string;
+  value: number | undefined;
+  paramKey: keyof ElementParams;
+  onChange: (patch: ElementParams) => void;
+}
+
+const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey, onChange }: ParamInputProps) {
+  const [localValue, setLocalValue] = useState<string | number>(value ?? '');
+  const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (document.activeElement !== inputRef.current) {
-      setLocalValue(value);
+      setLocalValue(value ?? '');
     }
   }, [value]);
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setLocalValue(e.target.value);
   };
 
@@ -1132,27 +1210,28 @@ const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey
     if (!isNaN(numValue) && numValue !== value) {
       onChange({ [paramKey]: numValue });
     } else {
-      setLocalValue(value); // revert
+      setLocalValue(value ?? ''); // revert
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleBlur();
-      e.target.blur();
+      e.currentTarget.blur();
     } else if (e.key === 'Escape') {
-      setLocalValue(value);
-      e.target.blur();
+      setLocalValue(value ?? '');
+      e.currentTarget.blur();
     }
   };
 
   return (
-    <label className="element-inspector-param">
-      <span className="element-inspector-param-label">{label} ({unit}):</span>
+    <label className="flex items-center gap-2 text-sm">
+      <span className="w-10 font-medium">{label} ({unit})</span>
       <input
         ref={inputRef}
         type="text"
-        className="element-inspector-input"
+        inputMode="decimal"
+        className={numberFieldClass}
         value={localValue}
         onChange={handleChange}
         onBlur={handleBlur}
@@ -1162,31 +1241,43 @@ const ParamInput = React.memo(function ParamInput({ label, unit, value, paramKey
   );
 });
 
-const ElementInspector = React.memo(function ElementInspector({ element, onChange, onDelete, onToggle }) {
+interface ElementInspectorProps {
+  element: CircuitElement | null;
+  onChange: (patch: ElementParams) => void;
+  onDelete: () => void;
+  onToggle: () => void;
+}
+
+const ElementInspector = React.memo(function ElementInspector({ element, onChange, onDelete, onToggle }: ElementInspectorProps) {
   if (!element) return null;
 
   return (
-    <div className="element-inspector">
-      <div className="element-inspector-title">{element.type.charAt(0).toUpperCase() + element.type.slice(1)}</div>
+    <div className="flex flex-shrink-0 flex-col gap-2 rounded-lg border border-[var(--grid-line)] p-3">
+      <div className="text-sm font-semibold">{element.type.charAt(0).toUpperCase() + element.type.slice(1)}</div>
       {element.type === PALETTE.RESISTOR && <ParamInput label="R" unit="Ω" value={element.params.R} paramKey="R" onChange={onChange} />}
       {element.type === PALETTE.BATTERY && <ParamInput label="V" unit="V" value={element.params.V} paramKey="V" onChange={onChange} />}
       {element.type === PALETTE.CAPACITOR && <ParamInput label="C" unit="F" value={element.params.C} paramKey="C" onChange={onChange} />}
       {element.type === PALETTE.INDUCTOR && <ParamInput label="L" unit="H" value={element.params.L} paramKey="L" onChange={onChange} />}
       {element.type === PALETTE.SWITCH && (
-        <label className="element-inspector-checkbox">
-          <input type="checkbox" checked={!!element.params.closed} onChange={onToggle} /> Closed
-        </label>
+        <Toggle label="Closed" checked={!!element.params.closed} onChange={onToggle} />
       )}
-      <div className="element-inspector-actions">
-        <button className="element-inspector-delete-button" onClick={onDelete}>Delete</button>
-      </div>
+      <Button variant="secondary" className="circuit-kit-delete self-start" onClick={onDelete}>Delete</Button>
     </div>
   );
 });
 
-function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeModeChange }) {
+interface ScopePlotProps {
+  data: ScopeSample[];
+  element: CircuitElement | null;
+  isLocked: boolean;
+  onLockToggle: () => void;
+  scopeMode: ScopeMode;
+  onScopeModeChange: () => void;
+}
+
+function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeModeChange }: ScopePlotProps) {
   const width = 400, height = 150;
-  if (!element) return <div className="scope-plot-no-element">Select an element to scope its value.</div>;
+  if (!element) return <div className="flex flex-shrink-0 items-center justify-center rounded-lg border border-dashed border-[var(--grid-line)] p-3 text-sm text-[var(--text-muted)]">Select an element to scope its value.</div>;
 
   const values = data.map(d => d.value);
   const min = Math.min(0, ...values);
@@ -1205,35 +1296,33 @@ function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeMo
   const lastVal = data.length > 0 ? data[data.length-1].value : 0;
 
   return (
-      <div className="scope-plot-container">
-        <button onClick={onLockToggle} className={`scope-plot-lock-button ${isLocked ? 'locked' : ''}`}>
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-              {isLocked ? 
-                <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/> :
-                <path d="M11 1a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h5V3a3 3 0 0 1 6 0v4a.5.5 0 0 1-1 0V3a2 2 0 0 0-2-2z"/>
-              }
-            </svg>
-        </button>
-        {canToggleMode && <button onClick={onScopeModeChange} className="scope-plot-mode-button">{scopeMode === 'voltage' ? 'Show Current' : 'Show Voltage'}</button>}
-        <div className="scope-plot-header" style={{ marginBottom: 8 }}>
-        
-            <span>Scope: {element.type} {type}</span>
-            <span className="scope-plot-value">{lastVal.toPrecision(3)} {unit}</span>
-        </div>
+      <div className="flex flex-shrink-0 flex-col gap-2 rounded-lg border border-[var(--grid-line)] p-2">
+        {/* The lock and mode buttons used to be absolutely-positioned overlays sized by
+            a tiny padding override. `.btn` is unlayered in global.css, so Tailwind
+            utilities cannot reach it — a header row is the honest layout anyway. */}
+        <ControlBar align="start">
+            <span className="text-sm font-semibold">Scope: {element.type} {type}</span>
+            <span className="font-mono text-sm tabular-nums">{lastVal.toPrecision(3)} {unit}</span>
+            <Toggle label="Lock" checked={isLocked} onChange={onLockToggle} />
+            {canToggleMode && (
+              <Button variant="secondary" onClick={onScopeModeChange}>
+                {scopeMode === 'voltage' ? 'Show current' : 'Show voltage'}
+              </Button>
+            )}
+        </ControlBar>
         <svg width={width} height={height}>
             {/* Grid lines */}
-            <line x1={0} y1={height/2} x2={width} y2={height/2} className="scope-grid" />
-            <line x1={0} y1={0} x2={width} y2={0} className="scope-grid" />
-            <line x1={0} y1={height} x2={width} y2={height} className="scope-grid" />
-            <text x={5} y={12} className="scope-text">{max.toPrecision(2)}</text>
-            <text x={5} y={height-4} className="scope-text">{min.toPrecision(2)}</text>
-            
+            <line x1={0} y1={height/2} x2={width} y2={height/2} stroke={THEME.border} strokeWidth={1} strokeDasharray="4 4" />
+            <line x1={0} y1={0.5} x2={width} y2={0.5} stroke={THEME.border} strokeWidth={1} />
+            <line x1={0} y1={height-0.5} x2={width} y2={height-0.5} stroke={THEME.border} strokeWidth={1} />
+            <text x={5} y={12} fill={THEME.text} fontSize={11}>{max.toPrecision(2)}</text>
+            <text x={5} y={height-4} fill={THEME.text} fontSize={11}>{min.toPrecision(2)}</text>
+
             {data.length > 1 && (
   <polyline
     points={points}
-    className="scope-plot"
     fill="none"
-    stroke={THEME.current}        // or a hard-coded color like "#1f6feb"
+    stroke={THEME.current}
     strokeWidth={2.5}
     strokeLinejoin="round"
     strokeLinecap="round"
@@ -1246,7 +1335,7 @@ function ScopePlot({ data, element, isLocked, onLockToggle, scopeMode, onScopeMo
 }
 
 /******************* Preview (ghost) *******************/
-function PreviewElement({ type, x, y }){
+function PreviewElement({ type, x, y }: { type: ElementType; x: number; y: number }){
   const len = 90 * SCALE; const x1 = x - len/2, y1 = y, x2 = x + len/2, y2 = y;
   const dx=x2-x1, dy=y2-y1; const L=Math.hypot(dx,dy)||1; const ux=dx/L, uy=dy/L; const px=-uy, py=ux; const mx=(x1+x2)/2, my=(y1+y2)/2;
   const stroke = type===PALETTE.WIRE? THEME.wire : THEME.component;

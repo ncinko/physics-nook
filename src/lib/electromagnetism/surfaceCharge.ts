@@ -311,3 +311,83 @@ export function frontMeetingReach(elements: readonly LoopElement[], originId: st
   const origin = elements.find((element) => element.id === originId);
   return Math.max(0, (perimeterOf(elements) - (origin ? origin.length : 0)) / 2);
 }
+
+/* -------------------------------------------------------------------------
+ * 3. The carriers themselves
+ * ---------------------------------------------------------------------- */
+
+/**
+ * The sample covering arc position `s`, for a profile laid out by `sampleLoop`:
+ * `count` cells of equal width, each sampled at its own midpoint.
+ */
+export function sampleAt(
+  samples: readonly LoopSample[],
+  s: number,
+  perimeter: number,
+): LoopSample | undefined {
+  if (samples.length === 0 || !(perimeter > 0)) return undefined;
+  const t = ((s % perimeter) + perimeter) % perimeter;
+  const index = Math.min(samples.length - 1, Math.floor((t / perimeter) * samples.length));
+  return samples[index];
+}
+
+export interface DriftOptions {
+  /** Perimeter of the loop, in the same arc units as the positions. */
+  perimeter: number;
+  /** Current at which a carrier moves at `speed`, in amperes. */
+  referenceCurrent: number;
+  /** Drift speed at `referenceCurrent`, in arc units per second. */
+  speed: number;
+  /** Cap on |I| / referenceCurrent, so a near short circuit stays watchable. */
+  maxFactor?: number;
+}
+
+export interface DriftState {
+  positions: number[];
+  /** Signed arc units per second, negative wherever the conventional current is positive. */
+  velocities: number[];
+}
+
+/** Carriers spread evenly around the loop, which is what uniform density means here. */
+export function seedDrift(count: number, perimeter: number): number[] {
+  if (!Number.isInteger(count) || count < 1) {
+    throw new Error('seedDrift needs a positive integer carrier count.');
+  }
+  return Array.from({ length: count }, (_, index) => ((index + 0.5) * perimeter) / count);
+}
+
+/**
+ * Move every carrier on by one frame.
+ *
+ * Two things are worth reading off the result. The carriers are negative, so
+ * they creep the *opposite* way round the loop from the conventional current;
+ * and each one takes its speed from the current at its own position, which
+ * during a transient is whatever the fronts have established there so far. A
+ * carrier therefore sits still until the news of the switch reaches it, however
+ * long the wire is - the drift is slow, the signal that starts it is not.
+ */
+export function advanceDrift(
+  positions: readonly number[],
+  samples: readonly LoopSample[],
+  dt: number,
+  options: DriftOptions,
+): DriftState {
+  const { perimeter, referenceCurrent, speed } = options;
+  const maxFactor = options.maxFactor ?? Infinity;
+  const step = Math.max(0, dt);
+  const next: number[] = [];
+  const velocities: number[] = [];
+
+  for (const position of positions) {
+    const sample = sampleAt(samples, position, perimeter);
+    const ratio =
+      sample && referenceCurrent !== 0 ? sample.current / referenceCurrent : 0;
+    const clamped = Math.max(-maxFactor, Math.min(maxFactor, ratio));
+    const velocity = -clamped * speed;
+    const moved = position + velocity * step;
+    next.push(perimeter > 0 ? ((moved % perimeter) + perimeter) % perimeter : moved);
+    velocities.push(velocity);
+  }
+
+  return { positions: next, velocities };
+}

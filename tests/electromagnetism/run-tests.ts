@@ -5,8 +5,8 @@ import { choosePotentialLevels, traceContours, nearestContour } from '../../src/
 import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedAnchor,
   seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
 import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
-import { establishment, frontMeetingReach, relaxationTime, sampleLoop, slabPolarization,
-  solveLoop, transitionSnapshot, type LoopElement,
+import { advanceDrift, establishment, frontMeetingReach, relaxationTime, sampleAt, sampleLoop,
+  seedDrift, slabPolarization, solveLoop, transitionSnapshot, type LoopElement,
   type LoopSample } from '../../src/lib/electromagnetism/surfaceCharge.ts';
 import {
   COULOMB_K,
@@ -543,6 +543,77 @@ assert.deepEqual(computeFieldLines(presets.dipole, { width: 0, height: H }), [])
   near(establishment(10, 5, 3), 0);
   near(establishment(0, Infinity, 3), 1);
   assert.ok(establishment(2, 10, 3) > establishment(6, 10, 3));
+
+  // The profile is not symmetric about the axis. Referring the potential to the
+  // loop mean puts that mean nearer the longer, low-resistance stretch, so one
+  // half of the profile runs further from it than the other - past a full half
+  // of the emf, in fact, which is what the figure's plot has to leave room for
+  // if it is not to flatten the tall side off.
+  const unit = (s: LoopSample) => s.potential / 3;
+  const openHigh = Math.max(...idle.map(unit));
+  const openLow = Math.min(...idle.map(unit));
+  assert.ok(openHigh > 1.1, 'the far side of an open loop passes a half-emf unit');
+  assert.ok(Math.abs(openLow) < openHigh, 'and it does so asymmetrically');
+  assert.ok(Math.max(...flowing.map(unit)) < 1.5 && Math.min(...flowing.map(unit)) > -1.5,
+    'but one and a half units is room enough for either state');
+
+  // Carriers start evenly spread, which is what uniform carrier density means.
+  const seeded = seedDrift(8, 320);
+  assert.equal(seeded.length, 8);
+  near(seeded[0], 20);
+  seeded.slice(1).forEach((s, i) => near(s - seeded[i], 40));
+  assert.throws(() => seedDrift(0, 320));
+  assert.throws(() => seedDrift(2.5, 320));
+
+  // sampleAt picks the cell holding s, and wraps the way arc length does.
+  assert.equal(sampleAt(flowing, 0.4, 320), flowing[0]);
+  assert.equal(sampleAt(flowing, 319.9, 320), flowing[319]);
+  assert.equal(sampleAt(flowing, -0.5, 320), flowing[319]);
+  assert.equal(sampleAt(flowing, 320.5, 320), flowing[0]);
+  assert.equal(sampleAt([], 10, 320), undefined);
+
+  const drift = (positions: readonly number[], profile: readonly LoopSample[], dt: number) =>
+    advanceDrift(positions, profile, dt, {
+      perimeter: 320,
+      referenceCurrent: solved.current,
+      speed: 40,
+      maxFactor: 2.5,
+    });
+
+  // Negative carriers run against the conventional current, at the reference
+  // speed when the loop carries the reference current.
+  const steady = drift([100], flowing, 1);
+  near(steady.velocities[0], -40, 1e-9);
+  near(steady.positions[0], 60, 1e-9);
+  // And they wrap rather than running off the end of the loop.
+  near(drift([10], flowing, 1).positions[0], 290, 1e-9);
+
+  // An open switch leaves them where they stand.
+  const stopped = drift([100], idle, 1);
+  assert.ok(Math.abs(stopped.velocities[0]) < 1e-6, 'no current, no drift');
+  near(stopped.positions[0], 100, 1e-6);
+
+  // Mid-transient the loop shows both at once: a carrier behind the front has
+  // been set moving while one the front has not reached is still at rest.
+  const spreading = transitionSnapshot(closed, idle, flowing, opts(40));
+  const behind = spreading.find((s) => s.established > 0.5 && s.kind === 'wire');
+  const ahead = spreading.find((s) => s.established === 0);
+  assert.ok(behind && ahead, 'a 40-unit front leaves wire on both sides of it');
+  const mixed = drift([behind!.s, ahead!.s], spreading, 1);
+  assert.ok(Math.abs(mixed.velocities[0]) > 1, 'the carrier behind the front is moving');
+  assert.ok(Math.abs(mixed.velocities[1]) < 1e-6, 'the carrier ahead of it has heard nothing');
+
+  // A loop stiff enough to draw twenty amps is capped rather than allowed to blur.
+  const stiff = sampleLoop([
+    { id: 'lower', kind: 'wire', length: 160, resistance: 0.1 },
+    { id: 'battery', kind: 'battery', length: 40, resistance: 0.1, emf: 6 },
+    { id: 'upper', kind: 'wire', length: 120, resistance: 0.1 },
+  ], 320);
+  near(stiff[0].current, 20);
+  near(drift([100], stiff, 1).velocities[0], -40 * 2.5, 1e-9);
+  // A frame of no elapsed time moves nobody.
+  near(drift([100], flowing, 0).positions[0], 100, 1e-12);
+  near(drift([100], flowing, -1).positions[0], 100, 1e-12);
 }
 
 console.log('electromagnetism tests passed');

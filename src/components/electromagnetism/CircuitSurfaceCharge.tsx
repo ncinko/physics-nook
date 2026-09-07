@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Button, ControlBar, Slider } from '../shared/InlineControls';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, ControlBar, Slider, Toggle } from '../shared/InlineControls';
 import { Readout } from '../shared/Readout';
 import {
+  advanceDrift,
   frontMeetingReach,
   sampleLoop,
+  seedDrift,
   solveLoop,
   transitionSnapshot,
   type LoopElement,
@@ -64,6 +66,20 @@ const SETTLED_REACH = PERIMETER / 2 + 6 * RELAXATION_LENGTH;
 // Below this there is no current worth drawing a field arrow for.
 const CURRENT_FLOOR = 1e-4;
 
+// Conduction electrons. They are drawn tiny on purpose: what matters is that
+// they crawl, and that a front travelling nineteen times faster is what tells
+// them to start. Their speed is quoted against the current the default 6 ohm
+// setting draws, so moving the slider visibly speeds them up or slows them down.
+const ELECTRON_COUNT = 96;
+const ELECTRON_SPEED = 34; // arc units per second at the reference current
+const ELECTRON_MAX_FACTOR = 2.5;
+const ELECTRON_RADIUS = 1.5;
+const ELECTRON_LANE = 2.6;
+// The two places the drawn loop is actually broken, in arc length: no carrier
+// should be left hanging in the battery's plate gap or an open switch's gap.
+const BATTERY_GAP_START = Y1 - PLATE_SHORT_Y; // 100
+const BATTERY_GAP_END = Y1 - PLATE_LONG_Y; // 114
+
 const ink = 'var(--text-primary)';
 const muted = 'var(--text-muted)';
 const positive = 'var(--accent-red)';
@@ -97,6 +113,10 @@ function buildLoop(resistance: number, closed: boolean): LoopElement[] {
     wire('bottom', SPAN),
   ];
 }
+
+// The current the loop draws at the slider's starting value, which is what the
+// carriers' quoted drift speed refers to.
+const REFERENCE_CURRENT = Math.abs(solveLoop(buildLoop(6, true)).current);
 
 interface LoopPoint {
   x: number;
@@ -162,6 +182,78 @@ function ChargeMark({ point, weight }: { point: LoopPoint; weight: number }) {
   );
 }
 
+/**
+ * The conduction electrons, drifting against the current.
+ *
+ * They own their own animation frame rather than riding the parent's: the loop
+ * has to keep turning while the circuit sits in a settled state, when nothing
+ * else on the figure is changing. Positions live in a ref because they are
+ * integrated, not derived - each carrier's speed is read from the current where
+ * it happens to be standing, so the transient is what the row of dots is
+ * showing: stationary electrons ahead of the front, moving ones behind it.
+ */
+function DriftElectrons({ samples, active, switchOpen }: {
+  samples: LoopTransitionSample[];
+  active: boolean;
+  switchOpen: boolean;
+}) {
+  const latest = useRef(samples);
+  latest.current = samples;
+  const positions = useRef<number[]>(seedDrift(ELECTRON_COUNT, PERIMETER));
+  const velocities = useRef<number[]>(new Array(ELECTRON_COUNT).fill(0));
+  const [, setFrame] = useState(0);
+
+  useEffect(() => {
+    if (!active) return;
+    let handle = 0;
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const next = advanceDrift(positions.current, latest.current, dt, {
+        perimeter: PERIMETER,
+        referenceCurrent: REFERENCE_CURRENT,
+        speed: ELECTRON_SPEED,
+        maxFactor: ELECTRON_MAX_FACTOR,
+      });
+      positions.current = next.positions;
+      velocities.current = next.velocities;
+      setFrame((value) => value + 1);
+      handle = requestAnimationFrame(step);
+    };
+    handle = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(handle);
+  }, [active]);
+
+  // A carrier in the battery's plate gap, or in an open switch's gap, is
+  // standing where no conductor is drawn, so it is left out rather than floated.
+  const hidden = (s: number) => {
+    if (s > BATTERY_GAP_START && s < BATTERY_GAP_END) return true;
+    return switchOpen && s > SWITCH_START && s < SWITCH_START + SWITCH_LENGTH;
+  };
+
+  return (
+    <g>
+      {positions.current.map((s, index) => {
+        if (hidden(s)) return null;
+        const point = pointAt(s);
+        const lane = index % 2 === 0 ? ELECTRON_LANE : -ELECTRON_LANE;
+        const moving = Math.min(1, Math.abs(velocities.current[index]) / ELECTRON_SPEED);
+        return (
+          <circle
+            key={index}
+            cx={point.x + point.nx * lane}
+            cy={point.y + point.ny * lane}
+            r={ELECTRON_RADIUS}
+            fill={negative}
+            opacity={0.4 + 0.55 * moving}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
 const strip = (sample: LoopSample): LoopSample => ({
   s: sample.s,
   elementId: sample.elementId,
@@ -174,6 +266,7 @@ const strip = (sample: LoopSample): LoopSample => ({
 export default function CircuitSurfaceCharge() {
   const [resistance, setResistance] = useState(6);
   const [closed, setClosed] = useState(false);
+  const [showElectrons, setShowElectrons] = useState(true);
   // Arc length the fronts have covered since the switch was last thrown, and
   // the profile the loop was holding at that moment.
   const [reach, setReach] = useState(Infinity);
@@ -291,6 +384,7 @@ export default function CircuitSurfaceCharge() {
           onChange={setResistance}
           format={(value) => value.toFixed(1)}
         />
+        <Toggle label="Drift electrons" checked={showElectrons} onChange={setShowElectrons} />
       </ControlBar>
 
       <svg
@@ -340,6 +434,11 @@ export default function CircuitSurfaceCharge() {
           switch
         </text>
 
+        {/* The carriers, drifting the other way at a crawl. */}
+        {showElectrons && (
+          <DriftElectrons samples={samples} active={closed || running} switchOpen={!closed} />
+        )}
+
         {/* Surface charge on the outside of the conductor. */}
         {samples.map((sample, index) =>
           sample.kind === 'battery' || sample.kind === 'switch' || index % 3 !== 0 ? null : (
@@ -382,8 +481,8 @@ export default function CircuitSurfaceCharge() {
       </Readout>
 
       <figcaption className="mt-3 text-center text-sm text-[var(--text-muted)]">
-        Charges indicate the relative surface charge density along the circuit elements and the arrows are the resulting electric field.  Note the field in a resistor is typically a hundred times the
-        field in the wire. Real corners carry extra charge to steer the field around them.
+        Charges indicate the relative surface charge density along the circuit elements and the arrows are the resulting electric field. The small blue dots are conduction electrons, drifting the opposite way to the
+        conventional current.
       </figcaption>
     </figure>
   );
@@ -397,8 +496,18 @@ function ChargeProfile({ samples, charge, fronts }: {
 }) {
   const left = 56;
   const right = 664;
-  const mid = 66;
+  // One unit of the display scale is half the emf's worth of potential, and the
+  // profile is not symmetric about the axis: with the resistor short and the
+  // wire back to the battery long, the loop mean the potential is referred to
+  // sits below the middle of its range, so the positive half runs to about one
+  // and a half units while the negative half stays inside one and a fifth. The
+  // plot is laid out with room for the tallest bar any setting produces rather
+  // than flattening the tops off at a unit.
   const amp = 40;
+  const headroom = 1.55;
+  const top = 16;
+  const mid = top + amp * headroom;
+  const floor = mid + amp * headroom;
   const toX = (s: number) => left + ((right - left) * (((s % PERIMETER) + PERIMETER) % PERIMETER)) / PERIMETER;
   const barWidth = (right - left) / (samples.length || 1);
 
@@ -409,11 +518,11 @@ function ChargeProfile({ samples, charge, fronts }: {
   ];
 
   return (
-    <svg viewBox="0 0 700 152" className="mx-auto mt-1 block w-full" role="presentation" aria-hidden="true">
+    <svg viewBox={`0 0 700 ${floor + 40}`} className="mx-auto mt-1 block w-full" role="presentation" aria-hidden="true">
       <line x1={left} y1={mid} x2={right} y2={mid} stroke="var(--grid-line)" strokeWidth={1} />
       {samples.map((sample) => {
         const value = charge(sample);
-        const height = amp * Math.min(1, Math.abs(value));
+        const height = amp * Math.min(headroom, Math.abs(value));
         if (height < 0.4) return null;
         return (
           <rect
@@ -428,20 +537,20 @@ function ChargeProfile({ samples, charge, fronts }: {
         );
       })}
       {fronts.map((s, index) => (
-        <line key={index} x1={toX(s)} y1={mid - amp - 6} x2={toX(s)} y2={mid + amp + 6}
+        <line key={index} x1={toX(s)} y1={top} x2={toX(s)} y2={floor + 4}
           stroke="var(--accent-green)" strokeWidth={1.5} strokeDasharray="4 3" />
       ))}
       {bands.map((band) => (
         <g key={band.label}>
-          <rect x={toX(band.start)} y={mid + amp + 8} width={Math.max(4, toX(band.start + band.length) - toX(band.start))} height={8}
+          <rect x={toX(band.start)} y={floor + 8} width={Math.max(4, toX(band.start + band.length) - toX(band.start))} height={8}
             fill={band.color} fillOpacity={0.75} />
-          <text x={toX(band.start + band.length / 2)} y={mid + amp + 32} fill={muted} fontSize={13} textAnchor="middle">
+          <text x={toX(band.start + band.length / 2)} y={floor + 32} fill={muted} fontSize={13} textAnchor="middle">
             {band.label}
           </text>
         </g>
       ))}
-      <text x={left} y={mid - amp - 10} fill={muted} fontSize={13}>surface charge density</text>
-      <text x={right} y={mid + amp + 32} fill={muted} fontSize={13} textAnchor="end">once around the loop →</text>
+      <text x={left} y={top - 4} fill={muted} fontSize={13}>surface charge density</text>
+      <text x={right} y={floor + 32} fill={muted} fontSize={13} textAnchor="end">once around the loop →</text>
     </svg>
   );
 }

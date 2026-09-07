@@ -31,3 +31,6 @@ qa-screenshots/
 
 # jetbrains setting folder
 .idea/
+
+# Generated caches
+.cache/

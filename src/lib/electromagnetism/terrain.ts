@@ -4,6 +4,23 @@ export const TERRAIN_WIDTH = 2000;
 export const TERRAIN_DEPTH = 1600;
 export const ELEVATION_LEVELS = [100, 200, 300, 400, 500, 600];
 
+/** This landscape is modelled directly in world units, so a metre of elevation
+ * is a unit of mesh height. The surveyed alternative in [terrainHakone.ts]
+ * needs a real scale here; both expose the same names so the component can
+ * swap between them by changing one import. */
+export const VERTICAL_SCALE = 1;
+export const EXAGGERATION = 1;
+
+/** Contours at or below this draw in the light colour, for contrast against
+ * the forest that covers the lower slopes. */
+export const LIGHT_CONTOUR_MAX = 200;
+
+export const LANDSCAPE_DESCRIPTION =
+  'a Mount Rainier-inspired snowy volcano, with glacier valleys and rocky ridges. A steep spire '
+  + 'stands in front of it to the right and a long, low hill behind it to the right';
+
+export const ELEVATION_CREDIT = '';
+
 const smoothstep = (a: number, b: number, x: number) => {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
   return t * t * (3 - 2 * t);
@@ -49,7 +66,9 @@ export function terrainCover(x: number, z: number, height = terrainHeight(x, z))
   const forest = 1 - smoothstep(100, 230, height);
   const snowline = 295 + 115 * ribs + 12 * Math.sin(x / 21) * Math.cos(z / 26);
   const snow = smoothstep(snowline - 22, snowline + 35, height);
-  return { forest, snow };
+  // No standing water on this landscape; the surveyed one uses that share for
+  // its lake, and the component blends the same four covers for both.
+  return { forest, snow, water: 0 };
 }
 
 export function buildTerrain(columns = 321, rows = 257) {

@@ -6,6 +6,10 @@ import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedA
   seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
 import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS,
   TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../src/lib/electromagnetism/terrain.ts';
+import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
+  type Vector3 } from '../../src/lib/electromagnetism/landscapeView.ts';
+import * as modelledLandscape from '../../src/lib/electromagnetism/terrain.ts';
+import * as hakone from '../../src/lib/electromagnetism/terrainHakone.ts';
 import { advanceDrift, establishment, frontMeetingReach, relaxationTime, sampleAt, sampleLoop,
   seedDrift, slabPolarization, solveLoop, transitionSnapshot, type LoopElement,
   type LoopSample } from '../../src/lib/electromagnetism/surfaceCharge.ts';
@@ -164,6 +168,141 @@ assert.ok(terrainHeight(640, 300) > 500, 'the spire climbs past the 500 m contou
 assert.ok(terrainHeight(470, -420) > 300, 'the hill climbs past the 300 m contour');
 assert.ok(spire < 55, `the spire crowds its contours (${spire})`);
 assert.ok(hill > 2.5 * spire, `the hill spreads them much wider (${hill} vs ${spire})`);
+// The surveyed Hakone landscape is a drop-in alternative to the modelled one,
+// so the component can swap between them by changing a single import.
+for (const name of ['TERRAIN_WIDTH', 'TERRAIN_DEPTH', 'ELEVATION_LEVELS', 'VERTICAL_SCALE',
+  'EXAGGERATION', 'LIGHT_CONTOUR_MAX', 'LANDSCAPE_DESCRIPTION', 'ELEVATION_CREDIT',
+  'buildTerrain', 'terrainHeight', 'terrainCover'] as const) {
+  assert.ok(name in hakone, `Hakone landscape is missing ${name}`);
+  assert.ok(name in modelledLandscape, `modelled landscape is missing ${name}`);
+  // Signatures are pinned by the shared types in contours.ts and checked by
+  // `npm run check`; this only catches an export going missing or changing kind.
+  assert.equal(typeof (hakone as Record<string, unknown>)[name],
+    typeof (modelledLandscape as Record<string, unknown>)[name], `${name} changes shape between landscapes`);
+}
+for (const cover of [modelledLandscape.terrainCover(0, 0), hakone.terrainCover(0, 0)]) {
+  assert.deepEqual(Object.keys(cover).sort(), ['forest', 'snow', 'water']);
+  for (const share of Object.values(cover)) assert.ok(share >= 0 && share <= 1);
+}
+
+const hakoneTerrain = hakone.buildTerrain();
+assert.equal(hakoneTerrain.heights.length, hakoneTerrain.columns * hakoneTerrain.rows);
+assert.equal(hakoneTerrain.columns, 201);
+assert.equal(hakoneTerrain.rows, 161);
+// The packing is row-wise differences, so a decode slip shows up as drift, not noise.
+let lowest = Infinity, highest = -Infinity;
+for (const metres of hakoneTerrain.heights) { lowest = Math.min(lowest, metres); highest = Math.max(highest, metres); }
+assert.equal(lowest, 86, 'Hayakawa valley floor');
+assert.equal(highest, hakone.HIGHEST_METRES, 'Kamiyama, the high point of the window');
+assert.ok(highest > 1400 && highest < 1450, `summit near Kamiyama's 1438 m, got ${highest}`);
+// Grid corners land exactly on stored cells, which pins the world-to-grid mapping.
+for (const [x, z, index] of [
+  [-hakone.TERRAIN_WIDTH / 2, -hakone.TERRAIN_DEPTH / 2, 0],
+  [hakone.TERRAIN_WIDTH / 2, -hakone.TERRAIN_DEPTH / 2, hakoneTerrain.columns - 1],
+  [hakone.TERRAIN_WIDTH / 2, hakone.TERRAIN_DEPTH / 2, hakoneTerrain.heights.length - 1],
+] as const) near(hakone.terrainHeight(x, z), hakoneTerrain.heights[index], 1e-6);
+// Every traced contour lies on the surveyed height field, as for the modelled one.
+assert.deepEqual(hakoneTerrain.contours.map(c => c.level), hakone.ELEVATION_LEVELS);
+for (const contour of hakoneTerrain.contours) {
+  assert.ok(contour.segments.length > 0, `no ${contour.level} m contour`);
+  // Exact, not approximate: terrainHeight reads the same triangulated surface
+  // the tracer cut these segments from.
+  for (const segment of contour.segments) for (const [x, z] of segment) {
+    near(hakone.terrainHeight(x - hakone.TERRAIN_WIDTH / 2, z - hakone.TERRAIN_DEPTH / 2), contour.level, 1e-9);
+  }
+}
+// Real ground runs off the edge of any window, so these contours are not all
+// closed — the modelled landscape's closure check deliberately does not apply.
+// The vertical scale is what keeps the shared camera framing: 1432 m of relief
+// has to land at roughly the height the modelled summit reaches.
+near(highest * hakone.VERTICAL_SCALE, 638, 10);
+// Lake Ashi is the one flat, level surface in the window.
+const lake = hakone.terrainCover(-hakone.TERRAIN_WIDTH / 2 + 120, hakone.TERRAIN_DEPTH / 2 - 40);
+assert.ok(lake.water > 0.9, `Lake Ashi should read as water, got ${lake.water}`);
+assert.equal(lake.forest, 0);
+for (const cover of [hakone.terrainCover(0, 0), lake]) assert.equal(cover.snow, 0, 'Hakone holds no permanent snow');
+
+// Turning the landscape always takes the short way round.
+near(shortestTurn(0, 90), 90);
+near(shortestTurn(170, -170), 20, 1e-9);
+near(shortestTurn(-170, 170), -20, 1e-9);
+near(shortestTurn(0, 180), 180);
+near(shortestTurn(45, 45), 0);
+
+// The orbit camera pitches and spins but never rolls: up stays perpendicular to
+// the view direction and keeps its horizontal bearing aligned with the eye.
+for (const elevation of [12, 34, 60, 89, 90]) {
+  for (const azimuth of [-175, -90, 0, 37, 120, 180]) {
+    const eye = orbitEye(elevation, azimuth, 3000, 180);
+    const view = eye.target.map((v, i) => v - eye.position[i]);
+    const dot = view.reduce((total, v, i) => total + v * eye.up[i], 0);
+    near(dot, 0, 1e-9);
+    near(Math.hypot(...eye.up), 1, 1e-9);
+    // The eye is the orbit radius from the point it looks at, whatever the turn.
+    near(Math.hypot(...view), 3000, 1e-9);
+  }
+}
+// At bearing zero the eye sits due south and level with the old fixed camera.
+const facing = orbitEye(34, 0, 3000, 180);
+near(facing.position[0], 0, 1e-9);
+near(facing.position[2], 3000 * Math.cos(34 * Math.PI / 180), 1e-9);
+
+// Turning the map swings its corners wide, and the frame has to hold them. The
+// box the Hakone landscape sits in must stay inside the frame at every angle a
+// drag can reach, while the fixed views keep the framing they were tuned with.
+const FRAME_HALF_WIDTH = 1280, FRAME_MARGIN = 1.04, FRAME_ASPECT = 2 / 3;
+let ceiling = 0;
+for (const metres of hakoneTerrain.heights) ceiling = Math.max(ceiling, metres * hakone.VERTICAL_SCALE);
+const corners: Vector3[] = [];
+for (const x of [-hakone.TERRAIN_WIDTH / 2, hakone.TERRAIN_WIDTH / 2]) for (const y of [0, ceiling]) {
+  for (const z of [-hakone.TERRAIN_DEPTH / 2, hakone.TERRAIN_DEPTH / 2]) corners.push([x, y, z]);
+}
+const framing = (elevation: number, azimuth: number) => {
+  const eye = orbitEye(elevation, azimuth, 3000, 180 * (1 - (elevation - 34) / 56));
+  return {
+    needed: frameHalfWidth(corners, eye, FRAME_ASPECT),
+    applied: Math.max(FRAME_HALF_WIDTH, FRAME_MARGIN * frameHalfWidth(corners, eye, FRAME_ASPECT)),
+  };
+};
+for (let elevation = 12; elevation <= 90; elevation += 3) {
+  for (let azimuth = -180; azimuth < 180; azimuth += 5) {
+    const { needed, applied } = framing(elevation, azimuth);
+    assert.ok(applied >= needed, `landscape clips at elevation ${elevation}, bearing ${azimuth}`);
+  }
+}
+// The two fixed views keep the frame they were composed with.
+assert.ok(framing(34, 0).applied < FRAME_HALF_WIDTH * 1.02, 'the default view is framed as before');
+assert.equal(framing(90, 0).applied, FRAME_HALF_WIDTH, 'the overhead map is framed as before');
+// A quarter turn genuinely needs more room than face-on, which is the point.
+assert.ok(framing(34, 45).needed > framing(34, 0).needed * 1.2, 'a diagonal view is wider');
+
+// Reading a contour off the screen: three segments, one of them a degenerate
+// point, laid out so the answers can be worked out by hand.
+const drawn = new Float32Array([
+  0, 0, 0.5, 100, 0, 0.5,      // a horizontal segment at y = 0
+  0, 50, 0.1, 0, 50, 0.1,      // a zero-length segment at (0, 50)
+  40, 80, 0.9, 60, 100, 0.9,   // a diagonal
+]);
+const onLine = nearestSegment(drawn, 0, 6, 30, 4, 9)!;
+near(onLine.x, 30); near(onLine.y, 0); near(onLine.distance, 4); near(onLine.depth, 0.5);
+// Past the end of a segment the nearest point is its endpoint, not its infinite line.
+const pastEnd = nearestSegment(drawn, 0, 6, 106, 0, 9)!;
+near(pastEnd.x, 100); near(pastEnd.distance, 6);
+assert.equal(nearestSegment(drawn, 0, 6, 130, 0, 9), null, 'beyond the probe radius');
+// A zero-length segment still answers, rather than dividing by its own length.
+const degenerate = nearestSegment(drawn, 2, 2, 3, 54, 9)!;
+near(degenerate.x, 0); near(degenerate.y, 50); near(degenerate.distance, 5);
+assert.ok(Number.isFinite(degenerate.depth));
+// Points come in pairs, so an odd trailing point is not joined to the next one.
+assert.equal(nearestSegment(drawn, 1, 1, 100, 0, 9), null, 'a lone point is no segment');
+
+// Ranking: a closer line wins; within a pixel of each other the nearer one to
+// the eye wins, which is the one drawn in front of the hillside.
+assert.ok(hitScore({ x: 0, y: 0, distance: 2, depth: 0.9 })
+  < hitScore({ x: 0, y: 0, distance: 5, depth: -0.9 }), 'a clearly closer line wins');
+assert.ok(hitScore({ x: 0, y: 0, distance: 3.1, depth: -0.5 })
+  < hitScore({ x: 0, y: 0, distance: 2.9, depth: 0.5 }), 'a near-tie goes to the nearer line');
+
 // Flux through a flat patch: area, angle and normal orientation all matter.
 near(flatFlux(100, 2, 0), 200);
 near(flatFlux(100, 2, 90), 0);

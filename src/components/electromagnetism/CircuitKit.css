@@ -3,8 +3,8 @@
 .circuit-kit-container {
     display: flex;
     flex-direction: column;
-    height: 680px;
-    max-height: 85vh;
+    height: 780px;
+    max-height: 88vh;
     width: 100%;
     font-family: sans-serif;
 }

@@ -76,7 +76,7 @@ The Drude model is a useful first picture, but it has limits: it treats electron
 
 ## Polarization Dynamics
 
-Before wiring anything up, let's consider the simpler case of a neutral conducting block placed in a uniform electric field.  Its conduction electrons are free to move, so they move until the net field within the conductor is zero.
+Before wiring anything up, let's consider the simpler case of a neutral conducting block placed in a uniform electric field.  Its conduction electrons are free to move, so they drift until the net field within the conductor is zero.
 
 As these electrons move, the sides of the block acquire a net positive or net negative charge.  We say a nonzero **surface charge** distribution has formed.
 
@@ -117,7 +117,7 @@ Note this number is far *below* the collision time $\tau_{\text{coll}} \approx 2
 
 ## Surface Charge Around a Circuit
 
-A wire carrying a steady current is *not* in electrostatic equilibrium. The field inside it is small, but it is not zero.  That field cannot be coming directly from the battery. A battery's own field falls off with distance and has no way to suddenly turn a corner as a wire bends. It comes instead from the surface charge distribution of the conductors.
+A wire carrying a steady current is *not* in electrostatic equilibrium. The electric field inside it is small, but it is not zero.  That field cannot be coming directly from the battery. A battery's own field falls off with distance and has no way to suddenly turn a corner as a wire bends. It instead comes from the surface charge distribution of the circuit.
 
 Start with the switch open.  Every conductor is in static equilibrium, but that does not mean the surfaces are bare.  Each branch is still wired to a battery terminal, so each branch sits at that terminal's potential, and its surface carries some charge. 
 
@@ -145,7 +145,7 @@ Build your own circuit below. Drag components from the palette onto the grid, wi
 <SimulationBlock
   title="Circuit Builder"
   description="Drag components onto the grid, wire them up, and run a transient simulation with a live voltage/current scope. Use Fullscreen for more room."
-  width="full"
+  width="wide"
 >
   <CircuitKit client:only="react" />
 </SimulationBlock>

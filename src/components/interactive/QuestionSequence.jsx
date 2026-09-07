@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import renderMathInElement from 'katex/contrib/auto-render';
+import './QuestionSequence.css';
 
 export default function QuestionSequence({ questions = [], eyebrow = 'Concept Checkpoint' }) {
   const [questionIndex, setQuestionIndex] = useState(0);
@@ -68,36 +69,11 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
     optionRefs.current = {};
   };
 
-  const getOptionClasses = (option) => {
-    const isSelected = option.id === selectedOptionId;
-    const isSelectedCorrect = hasSubmitted && isSelected && option.isCorrect;
-    const isSelectedWrong = hasSubmitted && isSelected && !option.isCorrect;
-
-    if (isSelectedCorrect) {
-      return 'border-green-500 bg-green-100 text-green-950';
-    }
-
-    if (isSelectedWrong) {
-      return 'border-red-500 bg-red-100 text-red-950';
-    }
-
-    if (isSelected) {
-      return 'border-[var(--accent-blue)] bg-[color-mix(in_srgb,var(--accent-blue)_12%,white)] shadow-sm';
-    }
-
-    return 'border-[var(--grid-line)] bg-[var(--bg-primary)] hover:-translate-y-0.5 hover:shadow-md';
-  };
-
   return (
-    <section className="not-prose rounded-3xl border border-[var(--grid-line)] bg-[color:var(--sim-bg)] p-5 text-[color:var(--text-primary)] shadow-sm md:p-6">
-      <div className="mb-4 flex items-center justify-between gap-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
-          {eyebrow}
-        </p>
-        <p className="rounded-full border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-1 text-xs font-medium text-[var(--text-muted)]">
-          Question {questionIndex + 1} of {questions.length}
-        </p>
-      </div>
+    <section className="checkpoint not-prose rounded-3xl border border-[var(--grid-line)] bg-[color:var(--sim-bg)] p-5 text-[color:var(--text-primary)] shadow-sm md:p-6">
+      <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+        {eyebrow}
+      </p>
 
       <div ref={questionRef} className="mb-5 text-lg font-semibold leading-relaxed">
         {currentQuestion.question}
@@ -107,25 +83,18 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
         {currentQuestion.options.map((option, index) => {
           const isSelected = option.id === selectedOptionId;
           const isSelectedCorrect = hasSubmitted && isSelected && option.isCorrect;
-          const isSelectedWrong = hasSubmitted && isSelected && !option.isCorrect;
 
           return (
             <button
               key={option.id}
               type="button"
               onClick={() => handleSelect(option.id)}
-              className={`group flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition-all duration-300 ${getOptionClasses(option)}`}
+              aria-pressed={isSelected}
+              data-result={hasSubmitted && isSelected ? (isSelectedCorrect ? 'correct' : 'incorrect') : undefined}
+              className={`checkpoint-option group flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)] ${isSelected ? '' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
             >
               <span
-                className={`mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors ${
-                  isSelectedCorrect
-                    ? 'border-green-500 bg-green-500 text-white'
-                    : isSelectedWrong
-                      ? 'border-red-500 bg-red-500 text-white'
-                      : isSelected
-                        ? 'border-[var(--accent-blue)] bg-[var(--accent-blue)] text-white'
-                        : 'border-[var(--grid-line)] bg-white text-[color:var(--text-primary)]'
-                }`}
+                className="checkpoint-letter mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
               >
                 {String.fromCharCode(65 + index)}
               </span>
@@ -137,23 +106,28 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
               >
                 {option.text}
               </span>
+              {hasSubmitted && isSelected && (
+                <svg
+                  className="mt-1.5 h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  role="img"
+                  aria-label={isSelectedCorrect ? 'Correct answer' : 'Incorrect answer'}
+                >
+                  <path d={isSelectedCorrect ? 'm5 12 4 4 10-10' : 'm6 6 12 12M6 18 18 6'} />
+                </svg>
+              )}
             </button>
           );
         })}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-gray-500">
-          {hasSubmitted
-            ? isCorrect
-              ? isComplete
-                ? 'Correct. You finished the sequence.'
-                : 'Correct. Move on to the next concept.'
-              : 'Not quite. Review the explanation and try again.'
-            : 'Choose an answer to get instant feedback.'}
-        </p>
-
-        {hasSubmitted && isCorrect && !isComplete && (
+      {hasSubmitted && isCorrect && !isComplete && (
+        <div className="mt-5 flex justify-end">
           <button
             type="button"
             onClick={handleNext}
@@ -161,8 +135,8 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
           >
             Next Question
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {hasSubmitted && selectedOption && (
         <div className="explanation mt-5 rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">

@@ -7,6 +7,8 @@ import { buildTerrain, terrainCover, TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../
 // Camera elevation above the horizontal: the default three-quarter view, and a
 // true overhead orthographic view that reads as a flat contour map.
 const TILTED = 34, OVERHEAD = 90, SWEEP = OVERHEAD - TILTED;
+// Unhurried enough to follow a single contour from the flank onto the map.
+const FULL_TURN_MS = 1800;
 
 export default function TopographicLandscape() {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -144,7 +146,9 @@ export default function TopographicLandscape() {
       // is not silently spent and the turn always opens from a standstill.
       if (startTime < 0) startTime = time;
       const t = Math.max(0, Math.min(1, (time - startTime) / duration));
-      angle = startAngle + (targetAngle - startAngle) * (t * t * (3 - 2 * t));
+      // Smootherstep: acceleration as well as speed starts and ends at zero,
+      // so the turn eases off the standstill instead of snapping into it.
+      angle = startAngle + (targetAngle - startAngle) * t * t * t * (t * (6 * t - 15) + 10);
       draw();
       frame = t < 1 ? requestAnimationFrame(animate) : 0;
     };
@@ -156,7 +160,7 @@ export default function TopographicLandscape() {
       targetAngle = next;
       // Time the turn by the sweep still to cover, so a mid-turn reversal
       // travels at the same rate instead of crawling through what is left.
-      duration = 900 * Math.abs(next - startAngle) / SWEEP;
+      duration = FULL_TURN_MS * Math.abs(next - startAngle) / SWEEP;
       if (!duration || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
         angle = next; frame = 0; draw();
         return;

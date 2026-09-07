@@ -15,7 +15,7 @@ const currentPageIndex = module.pages.findIndex((page) => normalizePath(page.hre
 ---
 
 <section class="not-prose relative left-1/2 my-10 w-[calc(100vw-2rem)] max-w-7xl -translate-x-1/2 sm:w-screen sm:px-6 lg:px-8">
-  <div class="overflow-hidden rounded-[1.6rem] border border-theme-grid bg-[linear-gradient(145deg,rgba(59,130,246,0.08),transparent_45%),var(--surface-elevated)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
+  <div class="module-topics-panel overflow-hidden rounded-[1.6rem] border border-theme-grid bg-[linear-gradient(145deg,rgba(59,130,246,0.08),transparent_45%),var(--surface-elevated)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
     <div class="px-5 py-5 lg:px-6 lg:py-5">
       <p class="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">
         {module.cardEyebrow}
@@ -38,7 +38,7 @@ const currentPageIndex = module.pages.findIndex((page) => normalizePath(page.hre
                 href={linkHref}
                 title={page.description}
                 class:list={[
-                  'block min-w-0 rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
+                  'module-page-card block min-w-0 rounded-[1.1rem] border px-4 py-3 transition-all duration-200',
                   isCurrent
                     ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color:color-mix(in_srgb,var(--accent-blue)_10%,transparent)] shadow-sm'
                     : 'border-theme-grid bg-[color:color-mix(in_srgb,var(--bg-primary)_82%,transparent)] hover:-translate-y-0.5 hover:border-[var(--accent-blue)]',
@@ -69,3 +69,13 @@ const currentPageIndex = module.pages.findIndex((page) => normalizePath(page.hre
     </div>
   </div>
 </section>
+
+<style>
+  :global([data-theme='paper']) .module-topics-panel {
+    background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
+  }
+
+  :global([data-theme='paper']) .module-page-card {
+    background: var(--bg-primary);
+  }
+</style>

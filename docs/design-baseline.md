@@ -7,7 +7,7 @@ The published site at `https://physicsnook.com` is the visual source of truth. U
 - Homepage: a single-screen immersive entry with the fixed compact nav, animated wave-field background, soft atmospheric light, and three large module cards anchored near the bottom.
 - Navigation: warm ivory Paper surface by default, compact brand text, `Interactives` and `Resources` primary links, a search icon opening a command-palette search, three-segment circular theme button, and icon-only mobile menu.
 - Themes: Paper is the default for visitors without a saved preference; the button cycles Light → Dark → Paper. Paper uses warm ivory surfaces and charcoal text for reading, with the same layout and simulation color meanings. The selected wedge has a checkmark, and the user's chosen theme persists across pages and future visits.
-- Lesson pages: quiet textbook reading surfaces with generous top air, a wide module-path navigator, black-outlined cards, restrained blue active states, and prose in a centered column.
+- Lesson pages: quiet textbook reading surfaces with generous top air, a wide module-path navigator, black-outlined cards, restrained blue active states, and prose in a centered column. In Paper, the topics panel has a lighter cream background around warm ivory page cards; the current page retains its blue border and Here badge.
 - Interactives page: dense catalog layout, compact filters, grouped rows, small tags, and minimal explanatory copy.
 - Resources page: quiet intro copy, a module card grid, and grouped external links — no dropdown menu, just one page.
 - Mobile: stacked module cards, compact header controls, no horizontal page overflow, and readable card/prose rhythm.

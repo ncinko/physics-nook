@@ -372,7 +372,7 @@ export default function TopographicLandscape() {
         <Button variant={view === 'tilted' ? 'primary' : 'secondary'} aria-pressed={view === 'tilted'}
           onClick={() => setView('tilted')}>3D landscape</Button>
         <Button variant={view === 'overhead' ? 'primary' : 'secondary'} aria-pressed={view === 'overhead'}
-          onClick={() => setView('overhead')}>Top-down map</Button>
+          onClick={() => setView('overhead')}>Topo map</Button>
       </ControlBar>
       {unavailable ? <p className="p-6 text-center" role="status">
         This 3D view needs WebGL. Each contour joins places at the same elevation:
@@ -384,10 +384,8 @@ export default function TopographicLandscape() {
         <canvas ref={overlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>}
       <figcaption className="text-center text-sm leading-relaxed text-[var(--text-muted)]">
-        Drag the landscape to turn it, or switch to the map to see the same hills from
-        above. Point at a contour to read its height; they run every {interval} m, from
-        {' '}{levels[0]} m to {highest} m. Close lines mean steep slopes,
-        widely spaced lines gentler ones.
+        Contour lines run every {interval} m, from
+        {' '}{levels[0]} m to {highest} m. 
         <br />
         <button type="button" onClick={showNext} aria-busy={loading}
           className="mt-1 text-xs underline decoration-dotted underline-offset-2

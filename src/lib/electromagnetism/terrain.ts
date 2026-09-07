@@ -29,7 +29,18 @@ export function terrainHeight(x: number, z: number): number {
   const shoulder = 45 * Math.exp(-(((x + 360) / 170) ** 2) - ((z + 25) / 210) ** 2);
   const crater = -14 * Math.exp(-(((x + 60) / 35) ** 2) - ((z + 70) / 30) ** 2);
   const detail = 7 * Math.sin(x / 22 + Math.sin(z / 51)) * Math.sin(z / 29) * ridgeEnvelope;
-  return Math.max(0, cone + ridges + shoulder + crater + detail);
+  return Math.max(0, cone + ridges + shoulder + crater + detail + companions(x, z));
+}
+
+/** Two neighbours that carry the same 100 m interval over very different
+ * ground, so the spacing can be compared inside one view: a steep spire whose
+ * contours land about 40 m of ground apart, and a long, low hill that spreads
+ * its own more than three times wider. Both stay clear of the sampled area's
+ * edge, or their contours would no longer close. */
+function companions(x: number, z: number) {
+  const spire = 505 * Math.exp(-((Math.hypot(x - 640, z - 300) / 148) ** 1.8));
+  const hill = 280 * Math.exp(-(((x - 470) / 355) ** 2) - (((z + 420) / 250) ** 2));
+  return spire + hill;
 }
 
 /** Glacier tongues descend through valleys; exposed ribs break up the snowline. */

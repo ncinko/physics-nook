@@ -4,7 +4,8 @@ import { EPSILON_0, flatFlux, field3D, gaussianSurface, measureFlux, gaussPreset
 import { choosePotentialLevels, traceContours, nearestContour } from '../../src/lib/electromagnetism/contours.ts';
 import { allocateLineCounts, clipPolyline, computeFieldLines, probeRadius, seedAnchor,
   seedAngles, type FieldLine } from '../../src/lib/electromagnetism/fieldLines.ts';
-import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS } from '../../src/lib/electromagnetism/terrain.ts';
+import { buildTerrain, terrainHeight, terrainCover, ELEVATION_LEVELS,
+  TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../src/lib/electromagnetism/terrain.ts';
 import { advanceDrift, establishment, frontMeetingReach, relaxationTime, sampleAt, sampleLoop,
   seedDrift, slabPolarization, solveLoop, transitionSnapshot, type LoopElement,
   type LoopSample } from '../../src/lib/electromagnetism/surfaceCharge.ts';
@@ -136,13 +137,33 @@ for (const contour of terrain.contours) {
     near(terrainHeight(x - 1000, z - 800), contour.level, 1);
   }
   // All contours are closed: every endpoint connects to one other segment.
+  // That holds only while every rise stays clear of the sampled area's edge.
   const endpoints = new Map<string, number>();
   for (const segment of contour.segments) for (const p of segment) {
+    assert.ok(p[0] > 20 && p[0] < TERRAIN_WIDTH - 20 && p[1] > 20 && p[1] < TERRAIN_DEPTH - 20,
+      `contour ${contour.level} reaches the edge at ${p}`);
     const key = p.map(v => v.toFixed(6)).join(',');
     endpoints.set(key, (endpoints.get(key) ?? 0) + 1);
   }
   assert.ok([...endpoints.values()].every(count => count === 2));
 }
+// The steep spire and the long hill carry the same 100 m interval over very
+// different ground; that contrast is the whole point of the illustration.
+const contourSpacing = (x: number, z: number) => {
+  const crossings: number[] = [];
+  let previous = terrainHeight(x, z);
+  for (let step = 1; step < 700; step++) {
+    const height = terrainHeight(x + step, z);
+    for (const level of ELEVATION_LEVELS) if ((previous > level) !== (height > level)) crossings.push(step);
+    previous = height;
+  }
+  return (crossings[crossings.length - 1] - crossings[0]) / (crossings.length - 1);
+};
+const spire = contourSpacing(640, 300), hill = contourSpacing(470, -420);
+assert.ok(terrainHeight(640, 300) > 500, 'the spire climbs past the 500 m contour');
+assert.ok(terrainHeight(470, -420) > 300, 'the hill climbs past the 300 m contour');
+assert.ok(spire < 55, `the spire crowds its contours (${spire})`);
+assert.ok(hill > 2.5 * spire, `the hill spreads them much wider (${hill} vs ${spire})`);
 // Flux through a flat patch: area, angle and normal orientation all matter.
 near(flatFlux(100, 2, 0), 200);
 near(flatFlux(100, 2, 90), 0);

@@ -4,6 +4,10 @@ import { Button, ControlBar } from '../shared/InlineControls';
 import { themeColors, onThemeChange, getCssColor } from '../shared/themeColors';
 import { buildTerrain, terrainCover, TERRAIN_WIDTH, TERRAIN_DEPTH } from '../../lib/electromagnetism/terrain';
 
+// Camera elevation above the horizontal: the default three-quarter view, and a
+// true overhead orthographic view that reads as a flat contour map.
+const TILTED = 34, OVERHEAD = 90, SWEEP = OVERHEAD - TILTED;
+
 export default function TopographicLandscape() {
   const hostRef = useRef<HTMLDivElement>(null);
   const labelsRef = useRef<HTMLCanvasElement>(null);
@@ -67,27 +71,28 @@ export default function TopographicLandscape() {
       const lineMaterial = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 });
       const line = new THREE.LineSegments(lineGeometry, lineMaterial);
       scene.add(line);
-      // Spread labels along the front-right flank, including in the overhead view.
-      const anchor = contour.segments.flat().reduce((a, b) => b[0] + 0.7 * b[1] > a[0] + 0.7 * a[1] ? b : a);
+      // Spread labels down the volcano's front-left flank, in both views. The
+      // companion summits sit to the right, and their rings are too tightly
+      // packed to carry a label apiece.
+      const anchor = contour.segments.flat().reduce((a, b) => 0.7 * b[1] - b[0] > 0.7 * a[1] - a[0] ? b : a);
       return { level: contour.level, line, anchor: new THREE.Vector3(
         anchor[0] - TERRAIN_WIDTH / 2, contour.level + 2, anchor[1] - TERRAIN_DEPTH / 2) };
     });
 
     let width = 700, height = 460, frame = 0;
-    let angle = 34, startAngle = angle, targetAngle = angle, startTime = 0;
+    let angle = TILTED, startAngle = angle, targetAngle = angle, startTime = 0, duration = 0;
     let palette = themeColors();
     const ctx = labels.getContext('2d')!;
     const draw = () => {
-      // Elevation above the horizontal: a true overhead orthographic view at 90°.
       const radians = angle * Math.PI / 180;
-      const focus = 180 * (1 - (angle - 34) / 56);
+      const focus = 180 * (1 - (angle - TILTED) / SWEEP);
       camera.position.set(0, focus + 3000 * Math.sin(radians), 3000 * Math.cos(radians));
       camera.up.set(0, Math.cos(radians), -Math.sin(radians));
       camera.lookAt(0, focus, 0);
       camera.updateMatrixWorld();
       // Remove directional shading overhead so this reads as a 2D contour map.
-      sun.intensity = 1.7 * (90 - angle) / 56;
-      ambient.intensity = 1.1 + 1.1 * (angle - 34) / 56;
+      sun.intensity = 1.7 * (OVERHEAD - angle) / SWEEP;
+      ambient.intensity = 1.1 + 1.1 * (angle - TILTED) / SWEEP;
       renderer.render(scene, camera);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -106,10 +111,10 @@ export default function TopographicLandscape() {
       }
       const overflow = Math.max(0, nextLabelY - 19 - (height - 12));
       for (const { item, x, y, labelY: unshiftedY } of annotations) {
-        const labelX = Math.min(width - 54, x + 18);
+        const labelX = Math.max(4, x - 67);
         const labelY = unshiftedY - overflow;
         ctx.strokeStyle = palette.muted;
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(labelX - 3, labelY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(labelX + 52, labelY); ctx.stroke();
         ctx.fillStyle = palette.surface;
         ctx.fillRect(labelX - 2, labelY - 9, 51, 18);
         ctx.fillStyle = palette.text;
@@ -135,21 +140,29 @@ export default function TopographicLandscape() {
       draw();
     };
     const animate = (time: number) => {
-      const t = Math.min(1, (time - startTime) / 850);
+      // Start the clock on the first painted frame, so click-to-paint latency
+      // is not silently spent and the turn always opens from a standstill.
+      if (startTime < 0) startTime = time;
+      const t = Math.max(0, Math.min(1, (time - startTime) / duration));
       angle = startAngle + (targetAngle - startAngle) * (t * t * (3 - 2 * t));
       draw();
-      if (t < 1) frame = requestAnimationFrame(animate);
+      frame = t < 1 ? requestAnimationFrame(animate) : 0;
     };
     controlsRef.current = (top) => {
-      const next = top ? 90 : 34;
+      const next = top ? OVERHEAD : TILTED;
       if (next === targetAngle) return;
       cancelAnimationFrame(frame);
       startAngle = angle;
       targetAngle = next;
-      startTime = performance.now();
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-        angle = next; draw();
-      } else frame = requestAnimationFrame(animate);
+      // Time the turn by the sweep still to cover, so a mid-turn reversal
+      // travels at the same rate instead of crawling through what is left.
+      duration = 900 * Math.abs(next - startAngle) / SWEEP;
+      if (!duration || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        angle = next; frame = 0; draw();
+        return;
+      }
+      startTime = -1;
+      frame = requestAnimationFrame(animate);
     };
     const resize = () => {
       width = host.clientWidth;
@@ -190,8 +203,10 @@ export default function TopographicLandscape() {
       {unavailable ? <p className="p-6 text-center" role="status">
         This 3D view needs WebGL. Each contour joins places at the same elevation:
         100, 200, 300, 400, 500, and 600 m. Close contours indicate a steep slope.
+        The landscape holds a broad volcano, a steep spire whose contours crowd
+        together, and a long low hill whose contours are spread far apart.
       </p> : <div ref={hostRef} className="relative my-3 aspect-[3/2] w-full"
-        role="img" aria-label={`${topDown ? 'Top-down contour map' : 'Three-dimensional landscape'} of a Mount Rainier-inspired snowy volcano, with glacier valleys and rocky ridges. Contours every 100 metres on this simplified landscape.`}>
+        role="img" aria-label={`${topDown ? 'Top-down contour map' : 'Three-dimensional landscape'} of a Mount Rainier-inspired snowy volcano, with glacier valleys and rocky ridges. A steep spire stands in front of it to the right and a long, low hill behind it to the right. Contours every 100 metres on this simplified landscape: crowded on the spire, widely spread on the hill.`}>
         <canvas ref={labelsRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>}
       <figcaption className="text-center text-sm leading-relaxed text-[var(--text-muted)]">

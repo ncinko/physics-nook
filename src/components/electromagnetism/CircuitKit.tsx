@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Button, ControlBar, Slider, Toggle } from '../shared/InlineControls';
+import { TUTORIAL_STEPS, tutorialProgress } from '../../lib/electromagnetism/circuitTutorial';
 import Readout from '../shared/Readout';
 import './CircuitKit.css';
 
@@ -104,6 +105,9 @@ interface TransientResult extends Solution {
 
 interface ScopeSample { time: number; value: number }
 type ScopeMode = 'voltage' | 'current';
+
+/** 'choose' is the first-load picker; the other two are the working modes. */
+type BuilderMode = 'choose' | 'build' | 'tutorial';
 interface SymbolProps { mx: number; my: number; ux: number; uy: number; px: number; py: number }
 
 // Drag state, unlike params, IS worth a discriminated union: every handler already
@@ -503,7 +507,9 @@ export default function CircuitKit() {
 
   // simulation state
   const [simTime, setSimTime] = useState(0);
-  const [isRunning, setIsRunning] = useState(true);
+  // Paused on load: the page should be quiet until the reader asks for motion,
+  // and the tutorial's last step is to press Play.
+  const [isRunning, setIsRunning] = useState(false);
   const [simRate, setSimRate] = useState(3.0);
   const [animSpeed, setAnimSpeed] = useState(1000);
   
@@ -514,6 +520,16 @@ export default function CircuitKit() {
   const [scopedElementId, setScopedElementId] = useState<string | null>(null);
   const [isScopeLocked, setIsScopeLocked] = useState(false);
   const [scopeMode, setScopeMode] = useState<ScopeMode>('voltage');
+
+  // 'choose' shows the build-or-tutorial picker over the empty grid on first load.
+  const [mode, setMode] = useState<BuilderMode>('choose');
+
+  // Progress is derived from the circuit rather than latched, so it self-corrects
+  // when the learner undoes something. Only worth computing while guiding.
+  const progress = useMemo(
+    () => (mode === 'tutorial' ? tutorialProgress({ elements, isRunning }) : null),
+    [mode, elements, isRunning],
+  );
 
   // Responsive canvas size
   useEffect(() => {
@@ -656,6 +672,7 @@ export default function CircuitKit() {
     const id = uid();
     commitElements(arr => [...arr, { id, type, n1, n2, params }]);
     setSelection([id]);
+    setMode(m => (m === 'choose' ? 'build' : m));
     resetSimulation();
   };
   
@@ -693,6 +710,7 @@ export default function CircuitKit() {
     setIsRunning(false);
     setSelection([]);
     const { nodes: newNodes, elements: newElements } = generator();
+    setMode(m => (m === 'choose' ? 'build' : m));
     setNodes(newNodes);
     commitElements(newElements);
     setTimeout(resetSimulation, 0); 
@@ -962,6 +980,34 @@ const isInCurrent = selection.includes(elId);
             })}
           </g>
         </svg>
+
+        {/* Overlays sit above the SVG in the build area. The wrapper ignores
+            pointer events so the grid underneath stays fully draggable; only the
+            cards themselves opt back in. */}
+        <div className="circuit-kit-overlay" style={{ top: WORK_OFFSET_Y }}>
+          {mode === 'choose' && (
+            <ModeChooser
+              onBuild={() => setMode('build')}
+              onTutorial={() => setMode('tutorial')}
+            />
+          )}
+          {mode === 'tutorial' && progress && (
+            <TutorialPanel
+              progress={progress}
+              onExit={() => setMode('build')}
+              onRestart={() => {
+                setNodes([]);
+                commitElements([]);
+                setSelection([]);
+                setScopedElementId(null);
+                setIsScopeLocked(false);
+                setIsRunning(false);
+                setSimTime(0);
+                setScopeData([]);
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Controls & Inspector */}
@@ -972,6 +1018,12 @@ const isInCurrent = selection.includes(elId);
                 <Button variant="secondary" onClick={resetSimulation}>Reset</Button>
                 <Button variant="secondary" onClick={() => { setNodes([]); commitElements([]); setSelection([]); }}>Clear all</Button>
                 <Button variant="secondary" onClick={() => loadPrebuiltCircuit(generateRCChargeDischargeCircuit)}>Load RC circuit</Button>
+                {/* Re-entry point once the picker has been answered. Keeps whatever is
+                    already on the grid - progress is derived, so a part-built circuit
+                    just starts the tutorial part-way through. */}
+                {mode === 'build' && (
+                  <Button variant="secondary" onClick={() => setMode('tutorial')}>Tutorial</Button>
+                )}
             </ControlBar>
             <ControlBar align="start">
                 <Toggle label="Node voltages" checked={showNodeVoltages} onChange={setShowNodeVoltages} />
@@ -987,6 +1039,104 @@ const isInCurrent = selection.includes(elId);
         </div>
         {sel && <ElementInspector element={sel} onChange={handleElementChange} onDelete={handleElementDelete} onToggle={handleElementToggle} />}
         <ScopePlot data={scopeData} element={scopedElement} isLocked={isScopeLocked} onLockToggle={() => setIsScopeLocked(l => !l)} scopeMode={scopeMode} onScopeModeChange={() => setScopeMode(m => m === 'voltage' ? 'current' : 'voltage')} />
+      </div>
+    </div>
+  );
+}
+
+/******************* Mode chooser & tutorial *******************/
+function ModeChooser({ onBuild, onTutorial }: { onBuild: () => void; onTutorial: () => void }) {
+  return (
+    <div className="circuit-kit-choice">
+      <div className="circuit-kit-card max-w-md text-center">
+        <h3 className="text-base font-semibold">Build a circuit</h3>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          Drag parts from the palette above onto the grid, wire them together, and run a
+          real transient simulation. Start from scratch, or be walked through your first
+          working loop.
+        </p>
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
+          <Button onClick={onTutorial}>Guided tutorial</Button>
+          <Button variant="secondary" onClick={onBuild}>Build on my own</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TutorialPanel({
+  progress, onExit, onRestart,
+}: {
+  progress: ReturnType<typeof tutorialProgress>;
+  onExit: () => void;
+  onRestart: () => void;
+}) {
+  return (
+    <div className="circuit-kit-tutorial">
+      <div className="circuit-kit-card">
+        <div className="flex items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold">
+            {progress.complete ? 'Circuit complete' : 'Build your first circuit'}
+          </h3>
+          <span className="font-mono text-xs tabular-nums text-[var(--text-muted)]">
+            {progress.completedCount}/{TUTORIAL_STEPS.length}
+          </span>
+        </div>
+
+        <ol className="mt-3 flex flex-col gap-1.5">
+          {TUTORIAL_STEPS.map((step, i) => {
+            const done = progress.done[i];
+            const isActive = i === progress.activeIndex;
+            return (
+              <li key={step.id} className="text-sm leading-snug">
+                <div className="flex items-start gap-2">
+                  <span
+                    aria-hidden="true"
+                    className={
+                      'mt-px inline-flex h-4 w-4 flex-none items-center justify-center rounded-full border text-[10px] font-bold ' +
+                      (done
+                        ? 'border-[color-mix(in_srgb,var(--accent-green)_70%,var(--text-primary))] bg-[color-mix(in_srgb,var(--accent-green)_70%,var(--text-primary))] text-[var(--sim-bg)]'
+                        : isActive
+                          ? 'border-[var(--accent-blue)] text-[var(--accent-blue)]'
+                          : 'border-[var(--grid-line)] text-[var(--text-muted)]')
+                    }
+                  >
+                    {done ? '✓' : i + 1}
+                  </span>
+                  <span
+                    className={
+                      done
+                        ? 'text-[var(--text-muted)] line-through'
+                        : isActive
+                          ? 'font-semibold'
+                          : 'text-[var(--text-muted)]'
+                    }
+                  >
+                    {step.title}
+                  </span>
+                </div>
+                {isActive && (
+                  <p className="mt-1 pl-6 text-sm text-[var(--text-muted)]">{step.instruction}</p>
+                )}
+              </li>
+            );
+          })}
+        </ol>
+
+        {progress.complete && (
+          <p className="mt-3 text-sm">
+            That is a complete circuit: the battery drives current through the resistor,
+            and the switch can break the loop. Try opening the switch, or changing the
+            resistance in the inspector, and watch the scope.
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button variant="secondary" onClick={onExit}>
+            {progress.complete ? 'Done' : 'Exit tutorial'}
+          </Button>
+          <Button variant="secondary" onClick={onRestart}>Clear grid</Button>
+        </div>
       </div>
     </div>
   );

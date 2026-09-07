@@ -38,3 +38,42 @@
     color: var(--accent-red);
     border-color: color-mix(in srgb, var(--accent-red) 55%, var(--grid-line));
 }
+
+/* Overlays for the mode picker and the tutorial. The wrapper spans the build area
+   below the palette but ignores pointer events, so dragging on the grid still
+   works while a panel is open; the cards opt back in. */
+.circuit-kit-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.circuit-kit-choice {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.circuit-kit-tutorial {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    max-height: calc(100% - 1.5rem);
+    width: min(21rem, calc(100% - 1.5rem));
+    overflow-y: auto;
+}
+
+.circuit-kit-card {
+    pointer-events: auto;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: 1px solid var(--grid-line);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}

@@ -29,6 +29,8 @@ import {
   seriesResistance,
   type PointCharge,
 } from '../../src/lib/electromagnetism/index.ts';
+import { TUTORIAL_STEPS, analyzeLoop, tutorialProgress, REQUIRED_KINDS,
+  type TutorialElement } from '../../src/lib/electromagnetism/circuitTutorial.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -938,6 +940,91 @@ assert.deepEqual(computeFieldLines(presets.dipole, { width: 0, height: H }), [])
   // A frame of no elapsed time moves nobody.
   near(drift([100], flowing, 0).positions[0], 100, 1e-12);
   near(drift([100], flowing, -1).positions[0], 100, 1e-12);
+}
+
+{
+  // ---- Circuit Builder tutorial progress -------------------------------------
+  // A ring is four elements sharing four nodes: battery a-b, resistor b-c,
+  // switch c-d, wire d-a.
+  const ring = (closed: boolean): TutorialElement[] => [
+    { id: 'bat', type: 'battery', n1: 'a', n2: 'b' },
+    { id: 'res', type: 'resistor', n1: 'b', n2: 'c' },
+    { id: 'sw', type: 'switch', n1: 'c', n2: 'd', params: { closed } },
+    { id: 'w', type: 'wire', n1: 'd', n2: 'a' },
+  ];
+
+  const ctx = (elements: TutorialElement[], isRunning = false) => ({ elements, isRunning });
+
+  // Nothing built yet: the first step is the battery and nothing is done.
+  const empty = tutorialProgress(ctx([]));
+  assert.equal(empty.completedCount, 0);
+  assert.equal(TUTORIAL_STEPS[empty.activeIndex].id, 'battery');
+  assert.equal(empty.complete, false);
+
+  // An empty circuit has no battery, so no loop to speak of.
+  const none = analyzeLoop([]);
+  assert.equal(none.hasBattery, false);
+  assert.equal(none.isLoopClosed, false);
+
+  // Parts dropped on the grid but never joined: each endpoint is its own node, so
+  // the placement steps pass while the loop step does not.
+  const loose: TutorialElement[] = [
+    { id: 'bat', type: 'battery', n1: 'a1', n2: 'a2' },
+    { id: 'res', type: 'resistor', n1: 'b1', n2: 'b2' },
+    { id: 'sw', type: 'switch', n1: 'c1', n2: 'c2', params: { closed: true } },
+    { id: 'w', type: 'wire', n1: 'd1', n2: 'd2' },
+  ];
+  const looseProgress = tutorialProgress(ctx(loose));
+  assert.equal(TUTORIAL_STEPS[looseProgress.activeIndex].id, 'loop');
+  assert.equal(looseProgress.completedCount, 4);
+  assert.equal(analyzeLoop(loose).isLoopClosed, false);
+
+  // A ring with the switch still open: closed as a topology, so the tutorial moves
+  // on to asking for the switch rather than getting stuck on the wiring step.
+  const openRing = ring(false);
+  const openAnalysis = analyzeLoop(openRing);
+  assert.equal(openAnalysis.isLoopClosed, true, 'an open switch is still an edge in the graph');
+  assert.equal(openAnalysis.switchesClosed, false);
+  for (const kind of REQUIRED_KINDS) {
+    assert.ok(openAnalysis.kindsInLoop.includes(kind), `${kind} is on the loop`);
+  }
+  assert.equal(TUTORIAL_STEPS[tutorialProgress(ctx(openRing)).activeIndex].id, 'close-switch');
+
+  // Switch closed but still paused: only the run step is left.
+  const closedRing = ring(true);
+  assert.equal(analyzeLoop(closedRing).switchesClosed, true);
+  assert.equal(TUTORIAL_STEPS[tutorialProgress(ctx(closedRing)).activeIndex].id, 'run');
+
+  // Running as well: finished.
+  const finished = tutorialProgress(ctx(closedRing, true));
+  assert.equal(finished.complete, true);
+  assert.equal(finished.activeIndex, TUTORIAL_STEPS.length);
+  assert.equal(finished.completedCount, TUTORIAL_STEPS.length);
+
+  // A loop missing the resistor is a loop, but not the one being taught.
+  const noResistor: TutorialElement[] = [
+    { id: 'bat', type: 'battery', n1: 'a', n2: 'b' },
+    { id: 'sw', type: 'switch', n1: 'b', n2: 'd', params: { closed: true } },
+    { id: 'w', type: 'wire', n1: 'd', n2: 'a' },
+  ];
+  const noResAnalysis = analyzeLoop(noResistor);
+  assert.equal(noResAnalysis.isLoopClosed, true);
+  assert.equal(noResAnalysis.kindsInLoop.includes('resistor'), false);
+  assert.equal(TUTORIAL_STEPS[tutorialProgress(ctx(noResistor)).activeIndex].id, 'resistor');
+
+  // Progress is derived, not latched: pulling the battery back out of a finished
+  // circuit sends the tutorial back to step one.
+  const gutted = closedRing.filter((e) => e.type !== 'battery');
+  assert.equal(TUTORIAL_STEPS[tutorialProgress(ctx(gutted, true)).activeIndex].id, 'battery');
+  assert.equal(analyzeLoop(gutted).hasBattery, false);
+
+  // A dangling spur hanging off the ring does not break it.
+  const withSpur: TutorialElement[] = [...ring(true), { id: 'spur', type: 'wire', n1: 'a', n2: 'z' }];
+  assert.equal(analyzeLoop(withSpur).isLoopClosed, true);
+  assert.equal(TUTORIAL_STEPS[tutorialProgress(ctx(withSpur)).activeIndex].id, 'run');
+
+  // Step ids are unique and every step is reachable through isDone.
+  assert.equal(new Set(TUTORIAL_STEPS.map((s) => s.id)).size, TUTORIAL_STEPS.length);
 }
 
 console.log('electromagnetism tests passed');

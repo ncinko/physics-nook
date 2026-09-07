@@ -110,35 +110,35 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'battery',
     title: 'Place a battery',
     instruction:
-      'Drag the "+- Battery" tile out of the palette and drop it on the grid. It is the source that pushes charge around the loop.',
+      'Drag a battery out of the palette and drop it on the grid.  Many circuits need a "voltage source" to function.',
     isDone: ({ elements }) => countOf(elements, 'battery') >= 1,
   },
   {
     id: 'resistor',
     title: 'Add a resistor',
     instruction:
-      'Drag an "Ω Resistor" onto the grid. This is the load - the part that actually turns electrical energy into heat.',
+      'Place a resistor on the grid. This will act as the load, converting electrical energy into heat.',
     isDone: ({ elements }) => countOf(elements, 'resistor') >= 1,
   },
   {
     id: 'switch',
     title: 'Add a switch',
     instruction:
-      'Drag a "Switch" onto the grid. A switch is just a piece of wire you can break on purpose.',
+      'Place a switch on the grid.  This will allow us to break the circuit without removing any wires.',
     isDone: ({ elements }) => countOf(elements, 'switch') >= 1,
   },
   {
     id: 'wire',
     title: 'Add a wire',
     instruction:
-      'Drag a "- Wire" onto the grid. You need it to carry the current back to the battery and complete the ring.',
+      'Place a wire on the grid. Wires are used to connect other circuit components when they are to far apart to connect directly.',
     isDone: ({ elements }) => countOf(elements, 'wire') >= 1,
   },
   {
     id: 'loop',
     title: 'Join them into a loop',
     instruction:
-      'Drag the blue ring at the end of each part onto the ring of its neighbour - they snap together when they are close. Keep going until the four parts form one unbroken ring back to the battery.',
+      'Drag the blue ring at the end of each component onto the ring of its neighbor; they should snap together. Keep going until the four parts form one unbroken ring: battery -> switch -> resistor -> wire -> battery.',
     isDone: ({ elements }) => {
       const a = analyzeLoop(elements);
       return a.isLoopClosed && REQUIRED_KINDS.every((k) => a.kindsInLoop.includes(k));
@@ -148,14 +148,14 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: 'close-switch',
     title: 'Close the switch',
     instruction:
-      'Click the switch, then tick "Closed" in the inspector. An open switch is an enormous resistance, so almost no current flows.',
+      'Click the switch, then tick "Closed" in the inspector.',
     isDone: ({ elements }) => analyzeLoop(elements).switchesClosed,
   },
   {
     id: 'run',
     title: 'Run it',
     instruction:
-      'Press Play. Dots should start travelling around the loop, and the scope plots the value for whichever part you click.',
+      'Press Play. Animated dots indicate the flow of current.',
     isDone: ({ isRunning }) => isRunning,
   },
 ];

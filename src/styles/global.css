@@ -10,8 +10,8 @@
     --terrain-water: #2f5d7c;
     --terrain-contour: #253b42;
   }
-  /* Light Theme (Default) */
-  :root, [data-theme="light"] {
+  /* Light Theme */
+  [data-theme="light"] {
     --bg-primary: #ffffff;
     --text-primary: #111827;
     --text-muted: #4b5563;
@@ -38,8 +38,8 @@
     --accent-purple: #a78bfa;
   }
 
-  /* Paper: warm reading surfaces with high-contrast text and accents. */
-  [data-theme="paper"] {
+  /* Paper (Default): warm reading surfaces with high-contrast text and accents. */
+  :root:not([data-theme]), [data-theme="paper"] {
     color-scheme: light;
     --bg-primary: #f6f1e7;
     --text-primary: #292722;

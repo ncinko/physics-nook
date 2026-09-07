@@ -62,8 +62,8 @@ const mobileLinkClasses = (isActive: boolean) =>
         id="theme-toggle"
         type="button"
         class="flex h-10 w-10 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] shadow-sm transition-all duration-300 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
-        aria-label="Theme: Light. Switch to Dark."
-        title="Theme: Light. Switch to Dark."
+        aria-label="Theme: Paper. Switch to Light."
+        title="Theme: Paper. Switch to Light."
       >
         <svg
           aria-hidden="true"
@@ -148,7 +148,7 @@ const mobileLinkClasses = (isActive: boolean) =>
   const themeNames = { light: 'Light', dark: 'Dark', paper: 'Paper' };
   const currentTheme = () => {
     const value = document.documentElement.getAttribute('data-theme');
-    return value === 'dark' || value === 'paper' ? value : 'light';
+    return value === 'light' || value === 'dark' ? value : 'paper';
   };
   const nextTheme = () => themes[(themes.indexOf(currentTheme()) + 1) % themes.length];
   const mobileToggle = document.getElementById('mobile-nav-toggle');
@@ -278,7 +278,7 @@ const mobileLinkClasses = (isActive: boolean) =>
 
 <style>
   .theme-check { display: none; }
-  :global(html:not([data-theme])) .theme-check-light,
+  :global(html:not([data-theme])) .theme-check-paper,
   :global([data-theme="light"]) .theme-check-light,
   :global([data-theme="dark"]) .theme-check-dark,
   :global([data-theme="paper"]) .theme-check-paper { display: initial; }

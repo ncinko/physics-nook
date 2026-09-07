@@ -32,7 +32,7 @@ const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="paper">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
@@ -48,7 +48,7 @@ const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString
         } catch {
           // Storage can be unavailable; the current page still supports themes.
         }
-        return 'light';
+        return 'paper';
       })();
       document.documentElement.setAttribute('data-theme', theme);
     </script>

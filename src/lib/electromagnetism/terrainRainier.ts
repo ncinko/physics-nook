@@ -1,15 +1,12 @@
 import * as elevation from './rainierElevation.ts';
-import { surveyedLandscape } from './surveyedLandscape.ts';
+import { surveyedLandscape, STANDARD_EXAGGERATION } from './surveyedLandscape.ts';
 
 export const rainier = surveyedLandscape(elevation, {
   name: 'Mount Rainier',
   // Contours every 400 m. The mountain carries 3.4 km of relief, so a finer
   // interval would band its flanks solid.
   levels: [1200, 1600, 2000, 2400, 2800, 3200, 3600, 4000],
-  // Far less stretch than Hakone needs: an active stratovolcano rising 3.4 km
-  // out of its valleys is steep enough to read almost as it stands.
-  exaggeration: 1.5,
-  focusHeight: 420,
+  exaggeration: STANDARD_EXAGGERATION,
   // The low ground here is forest, the same as at Hakone, but the contours that
   // cross it are the first two only.
   lightContourMax: 1600,

@@ -5,15 +5,22 @@ import { themeColors, onThemeChange, getCssColor } from '../shared/themeColors';
 import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
   type Vector3 } from '../../lib/electromagnetism/landscapeView';
 import { TERRAIN_WIDTH, TERRAIN_DEPTH, type Landscape } from '../../lib/electromagnetism/surveyedLandscape';
-// Hakone ships with the page; Mount Rainier is another 120 KB of packed
-// elevations, so it is fetched only if someone asks for it. The modelled
-// volcano in '../../lib/electromagnetism/terrain' exports a `landscape` of the
-// same shape and can stand in for either.
+// Hakone ships with the page; the others are another 120 KB of packed
+// elevations apiece, so each is fetched only if someone asks for it. The
+// modelled volcano in '../../lib/electromagnetism/terrain' exports a
+// `landscape` of the same shape and can stand in for any of them.
 import { hakone } from '../../lib/electromagnetism/terrainHakone';
-const ALTERNATIVE = {
-  name: 'Mount Rainier',
-  load: () => import('../../lib/electromagnetism/terrainRainier').then(module => module.rainier),
-};
+const ALTERNATIVES = [
+  {
+    name: 'Mount Rainier',
+    load: () => import('../../lib/electromagnetism/terrainRainier').then(module => module.rainier),
+  },
+  {
+    name: 'Crater Lake',
+    load: () => import('../../lib/electromagnetism/terrainCraterLake').then(module => module.craterLake),
+  },
+];
+const LANDSCAPE_NAMES = [hakone.name, ...ALTERNATIVES.map(one => one.name)];
 
 // Camera elevation above the horizontal: the default three-quarter view, a true
 // overhead orthographic view that reads as a flat contour map, and how far down
@@ -37,6 +44,7 @@ export default function TopographicLandscape() {
   const [view, setView] = useState<View>('tilted');
   const [unavailable, setUnavailable] = useState(false);
   const [landscape, setLandscape] = useState<Landscape>(hakone);
+  const [shown, setShown] = useState(0);
   const [loading, setLoading] = useState(false);
   // Held across a change of landscape so the same viewpoint carries over, which
   // is what makes the two comparable.
@@ -346,13 +354,14 @@ export default function TopographicLandscape() {
   const levels = landscape.ELEVATION_LEVELS;
   const interval = levels[1] - levels[0];
   const highest = levels[levels.length - 1];
-  const other = landscape === hakone ? ALTERNATIVE.name : hakone.name;
-  const showOther = () => {
+  // Clicking the credit walks around the landscapes in turn.
+  const next = (shown + 1) % LANDSCAPE_NAMES.length;
+  const showNext = () => {
     if (loading) return;
-    if (landscape !== hakone) { setLandscape(hakone); return; }
+    if (next === 0) { setLandscape(hakone); setShown(0); return; }
     setLoading(true);
-    ALTERNATIVE.load()
-      .then(setLandscape)
+    ALTERNATIVES[next - 1].load()
+      .then(loaded => { setLandscape(loaded); setShown(next); })
       // Nothing to recover: the landscape on screen stays, and the label with it.
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -380,12 +389,13 @@ export default function TopographicLandscape() {
         {' '}{levels[0]} m to {highest} m. Close lines mean steep slopes,
         widely spaced lines gentler ones.
         <br />
-        <button type="button" onClick={showOther} aria-busy={loading}
+        <button type="button" onClick={showNext} aria-busy={loading}
           className="mt-1 text-xs underline decoration-dotted underline-offset-2
             hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2
             focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)]">
           {landscape.ELEVATION_CREDIT}. Heights shown with {landscape.EXAGGERATION}x vertical
-          exaggeration. <span className="whitespace-nowrap">{loading ? `Loading ${other}…` : `Show ${other} instead`}</span>
+          exaggeration. <span className="whitespace-nowrap">{loading
+            ? `Loading ${LANDSCAPE_NAMES[next]}…` : `Show ${LANDSCAPE_NAMES[next]} instead`}</span>
         </button>
       </figcaption>
     </figure>

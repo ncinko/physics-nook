@@ -11,7 +11,8 @@ import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
 import { landscape as modelledLandscape } from '../../src/lib/electromagnetism/terrain.ts';
 import { hakone } from '../../src/lib/electromagnetism/terrainHakone.ts';
 import { rainier } from '../../src/lib/electromagnetism/terrainRainier.ts';
-import { TERRAIN_WIDTH, TERRAIN_DEPTH,
+import { craterLake } from '../../src/lib/electromagnetism/terrainCraterLake.ts';
+import { TERRAIN_WIDTH, TERRAIN_DEPTH, STANDARD_EXAGGERATION,
   type Landscape } from '../../src/lib/electromagnetism/surveyedLandscape.ts';
 import { advanceDrift, establishment, frontMeetingReach, relaxationTime, sampleAt, sampleLoop,
   seedDrift, slabPolarization, solveLoop, transitionSnapshot, type LoopElement,
@@ -173,7 +174,7 @@ assert.ok(spire < 55, `the spire crowds its contours (${spire})`);
 assert.ok(hill > 2.5 * spire, `the hill spreads them much wider (${hill} vs ${spire})`);
 // The three landscapes are interchangeable: TopographicLandscape renders
 // whichever it is handed, and switches between them at runtime.
-const landscapes: Landscape[] = [modelledLandscape, hakone, rainier];
+const landscapes: Landscape[] = [modelledLandscape, hakone, rainier, craterLake];
 for (const landscape of landscapes) {
   for (const name of ['name', 'ELEVATION_LEVELS', 'EXAGGERATION', 'VERTICAL_SCALE', 'FOCUS_HEIGHT',
     'LIGHT_CONTOUR_MAX', 'LANDSCAPE_DESCRIPTION', 'ELEVATION_CREDIT', 'LOWEST_METRES',
@@ -203,14 +204,18 @@ for (const landscape of landscapes) {
     }
     assert.ok(total <= 1 + 1e-9, `${landscape.name} cover sums past one at ${x}, ${z}`);
   }
-  // Relief lands at a readable height whichever landscape is showing: that is
-  // what the per-landscape exaggeration is for, and it keeps one camera working.
+  // Relief has to stay in a range one camera can frame, but it is deliberately
+  // not equalised: see the ordering check below.
   const relief = (landscape.HIGHEST_METRES - landscape.LOWEST_METRES) * landscape.VERTICAL_SCALE;
-  assert.ok(relief > 480 && relief < 700, `${landscape.name} relief is ${relief} world units`);
+  assert.ok(relief > 150 && relief < 900, `${landscape.name} relief is ${relief} world units`);
+  // The camera looks at the middle of the ground, so the landscape sits centred
+  // however high its lowest valley is.
+  const middle = (landscape.HIGHEST_METRES + landscape.LOWEST_METRES) / 2 * landscape.VERTICAL_SCALE;
+  near(landscape.FOCUS_HEIGHT, middle, landscape === modelledLandscape ? 200 : 1e-9);
 }
 
 // Both surveyed landscapes read their contours off the surface they draw.
-for (const landscape of [hakone, rainier]) {
+for (const landscape of [hakone, rainier, craterLake]) {
   const built = landscape.buildTerrain();
   let lowest = Infinity, highest = -Infinity;
   for (const metres of built.heights) { lowest = Math.min(lowest, metres); highest = Math.max(highest, metres); }
@@ -242,60 +247,113 @@ assert.equal(hakone.LOWEST_METRES, 87, 'Hayakawa valley floor');
 assert.ok(rainier.HIGHEST_METRES > 4300 && rainier.HIGHEST_METRES <= 4392,
   `Columbia Crest near its 4392 m, got ${rainier.HIGHEST_METRES}`);
 assert.ok(rainier.LOWEST_METRES > 900 && rainier.LOWEST_METRES < 1200, 'river valleys around the park');
-// Rainier is genuinely far steeper than the worn caldera, so it needs less
-// stretching to read. If that ever inverts, one of the two is mis-scaled.
-assert.ok(rainier.EXAGGERATION < hakone.EXAGGERATION,
-  'the steeper mountain should need less vertical exaggeration');
+assert.ok(craterLake.LOWEST_METRES > 1600 && craterLake.LOWEST_METRES < 1800,
+  'the forests below the caldera');
 
-// Hakone alone carries standing water; Rainier alone carries permanent snow.
-const hakoneTerrain = hakone.buildTerrain();
-const lakeCells: number[] = [];
-for (let row = 0; row < hakoneTerrain.rows; row++) {
-  for (let column = 0; column < hakoneTerrain.columns; column++) {
-    const x = column / (hakoneTerrain.columns - 1) * TERRAIN_WIDTH - TERRAIN_WIDTH / 2;
-    const z = row / (hakoneTerrain.rows - 1) * TERRAIN_DEPTH - TERRAIN_DEPTH / 2;
-    const cover = hakone.terrainCover(x, z, hakoneTerrain.heights[row * hakoneTerrain.columns + column]);
-    assert.equal(cover.snow, 0, 'Hakone holds no permanent snow');
-    lakeCells.push(cover.water > 0.5 ? 1 : 0);
-  }
+// Every surveyed landscape is stretched by the same standard factor. That is
+// what makes them comparable: with one exaggeration for all three, whichever
+// looks steeper on screen is steeper on the ground.
+for (const landscape of [hakone, rainier, craterLake]) {
+  assert.equal(landscape.EXAGGERATION, STANDARD_EXAGGERATION, `${landscape.name} is scaled apart`);
 }
-// Flat ground at the lake's height turns up all over the caldera, so the cover
-// model takes the largest connected sheet. One blob, or that has regressed.
-const visited = new Uint8Array(lakeCells.length);
-const blobs: number[] = [];
-for (let seed = 0; seed < lakeCells.length; seed++) {
-  if (!lakeCells[seed] || visited[seed]) continue;
-  let size = 0;
-  const stack = [seed];
-  visited[seed] = 1;
+// So the relief drawn now follows the real relief per kilometre of window, and
+// is no longer levelled out: Rainier stands tallest, Crater Lake flattest.
+const steepness = (one: Landscape) =>
+  (one.HIGHEST_METRES - one.LOWEST_METRES) * one.VERTICAL_SCALE;
+assert.ok(steepness(rainier) > steepness(hakone),
+  'Rainier should stand taller on screen than the worn caldera');
+assert.ok(steepness(hakone) > steepness(craterLake),
+  'Hakone should stand taller on screen than the shallow Crater Lake rim');
+
+// Two of the three landscapes hold a lake. Flat ground at a lake's own height
+// turns up all over a caldera, so the cover model takes the largest connected
+// sheet; these check it found the lake and nothing else.
+for (const { landscape, squareKm, tolerance, islands, cellMetres } of [
+  { landscape: hakone, squareKm: 6.8, tolerance: 0.5, islands: 0, cellMetres: 48 },
+  { landscape: craterLake, squareKm: 53, tolerance: 3, islands: 3, cellMetres: 62.5 },
+]) {
+  const built = landscape.buildTerrain();
+  const wet: number[] = [];
+  for (let row = 0; row < built.rows; row++) {
+    for (let column = 0; column < built.columns; column++) {
+      const x = column / (built.columns - 1) * TERRAIN_WIDTH - TERRAIN_WIDTH / 2;
+      const z = row / (built.rows - 1) * TERRAIN_DEPTH - TERRAIN_DEPTH / 2;
+      const cover = landscape.terrainCover(x, z, built.heights[row * built.columns + column]);
+      assert.equal(cover.snow, 0, `${landscape.name} should hold no permanent snow`);
+      wet.push(cover.water > 0.5 ? 1 : 0);
+    }
+  }
+  const neighbours = (i: number) => {
+    const column = i % built.columns, row = (i - column) / built.columns;
+    return [column > 0 ? i - 1 : -1, column < built.columns - 1 ? i + 1 : -1,
+      row > 0 ? i - built.columns : -1, row < built.rows - 1 ? i + built.columns : -1];
+  };
+  // One sheet of water, of about the right size.
+  const seenWater = new Uint8Array(wet.length);
+  const sheets: number[] = [];
+  for (let seed = 0; seed < wet.length; seed++) {
+    if (!wet[seed] || seenWater[seed]) continue;
+    let size = 0;
+    const stack = [seed];
+    seenWater[seed] = 1;
+    while (stack.length) {
+      const i = stack.pop()!;
+      size++;
+      for (const j of neighbours(i)) if (j >= 0 && wet[j] && !seenWater[j]) { seenWater[j] = 1; stack.push(j); }
+    }
+    sheets.push(size);
+  }
+  assert.equal(sheets.length, 1, `${landscape.name}'s lake should be one sheet, found ${sheets.length}`);
+  near(sheets[0] * cellMetres * cellMetres / 1e6, squareKm, tolerance);
+
+  // It sits clear of every edge, which is what these windows were cut for.
+  let westmost = Infinity, eastmost = -Infinity, northmost = Infinity, southmost = -Infinity;
+  for (let i = 0; i < wet.length; i++) {
+    if (!wet[i]) continue;
+    const column = i % built.columns, row = (i - column) / built.columns;
+    westmost = Math.min(westmost, column); eastmost = Math.max(eastmost, column);
+    northmost = Math.min(northmost, row); southmost = Math.max(southmost, row);
+  }
+  assert.ok(westmost > 0 && northmost > 0, `${landscape.name}'s lake reaches the north or west edge`);
+  assert.ok(eastmost < built.columns - 1 && southmost < built.rows - 1,
+    `${landscape.name}'s lake reaches the south or east edge`);
+
+  // Islands: dry ground the shore cannot be walked to. Crater Lake has Wizard
+  // Island and the Phantom Ship; Lake Ashi has none.
+  const shore = new Uint8Array(wet.length);
+  const border: number[] = [];
+  for (let column = 0; column < built.columns; column++) {
+    border.push(column, (built.rows - 1) * built.columns + column);
+  }
+  for (let row = 0; row < built.rows; row++) border.push(row * built.columns, row * built.columns + built.columns - 1);
+  const stack = border.filter(i => !wet[i]);
+  for (const i of stack) shore[i] = 1;
   while (stack.length) {
     const i = stack.pop()!;
-    size++;
-    const column = i % hakoneTerrain.columns, row = (i - column) / hakoneTerrain.columns;
-    const neighbours = [column > 0 ? i - 1 : -1, column < hakoneTerrain.columns - 1 ? i + 1 : -1,
-      row > 0 ? i - hakoneTerrain.columns : -1,
-      row < hakoneTerrain.rows - 1 ? i + hakoneTerrain.columns : -1];
-    for (const j of neighbours) if (j >= 0 && lakeCells[j] && !visited[j]) { visited[j] = 1; stack.push(j); }
+    for (const j of neighbours(i)) if (j >= 0 && !wet[j] && !shore[j]) { shore[j] = 1; stack.push(j); }
   }
-  blobs.push(size);
+  const seenLand = new Uint8Array(wet.length);
+  let found = 0;
+  for (let seed = 0; seed < wet.length; seed++) {
+    if (wet[seed] || shore[seed] || seenLand[seed]) continue;
+    found++;
+    const island = [seed];
+    seenLand[seed] = 1;
+    while (island.length) {
+      const i = island.pop()!;
+      for (const j of neighbours(i)) if (j >= 0 && !wet[j] && !seenLand[j]) { seenLand[j] = 1; island.push(j); }
+    }
+  }
+  assert.equal(found, islands, `${landscape.name} should have ${islands} islands, found ${found}`);
 }
-assert.equal(blobs.length, 1, `Lake Ashi should be one sheet, found ${blobs.length}`);
-// The real lake covers 6.9 km2; a 48 m grid loses a little of the narrow inlets.
-near(blobs[0] * 48 * 48 / 1e6, 6.8, 0.5);
-// It sits clear of every edge, which is the whole point of the wider window.
-let westmost = Infinity, eastmost = -Infinity, northmost = Infinity, southmost = -Infinity;
-for (let i = 0; i < lakeCells.length; i++) {
-  if (!lakeCells[i]) continue;
-  const column = i % hakoneTerrain.columns, row = (i - column) / hakoneTerrain.columns;
-  westmost = Math.min(westmost, column); eastmost = Math.max(eastmost, column);
-  northmost = Math.min(northmost, row); southmost = Math.max(southmost, row);
-}
-assert.ok(westmost > 0 && northmost > 0, 'the lake reaches the north or west edge');
-assert.ok(eastmost < hakoneTerrain.columns - 1 && southmost < hakoneTerrain.rows - 1,
-  'the lake reaches the south or east edge');
-const lakeMiddle = hakone.terrainCover(-607, 340);
-assert.equal(lakeMiddle.water, 1, 'open water mid-lake');
-assert.equal(lakeMiddle.forest, 0);
+// Lake Ashi and Crater Lake, sampled where each is open water.
+assert.equal(hakone.terrainCover(-607, 340).water, 1, 'open water on Lake Ashi');
+assert.equal(craterLake.terrainCover(0, 0).water, 1, 'open water on Crater Lake');
+assert.equal(craterLake.terrainCover(0, 0).forest, 0);
+// Wizard Island stands above its own lake, which is why it survives as an island.
+assert.ok(craterLake.HIGHEST_METRES > 2650, `Mount Scott near its 2721 m, got ${craterLake.HIGHEST_METRES}`);
+
+const hakoneTerrain = hakone.buildTerrain();
 
 // Rainier's summit cone is under permanent ice, its valleys are forest, and it
 // has no lake for the flat-sheet rule to find.

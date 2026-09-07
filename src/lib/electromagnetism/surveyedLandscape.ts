@@ -10,6 +10,14 @@ import { traceContours, type Contour } from './contours.ts';
 export const TERRAIN_WIDTH = 2000;
 export const TERRAIN_DEPTH = 1600;
 
+/** How far heights are stretched against ground distance. Kilometres of ground
+ * squeezed into 2000 world units would leave any of these landscapes nearly
+ * flat, and doubling is the usual convention for a terrain model. Every
+ * landscape uses the same figure, so the one that looks steeper is steeper —
+ * which is the whole comparison the figure is for. Stated in the caption,
+ * because it makes every slope look twice what it is. */
+export const STANDARD_EXAGGERATION = 2;
+
 /** The generated modules that scripts/build-*-terrain.mjs write. */
 export interface ElevationSource {
   COLUMNS: number;
@@ -37,10 +45,9 @@ export interface LandscapeSpec {
   name: string;
   levels: readonly number[];
   /** Ground is far wider than it is tall, so heights are stretched to keep the
-   * relief readable. How much depends on how steep the place really is. */
+   * relief readable. The same factor is used for every landscape, which is what
+   * makes their slopes comparable: whatever looks steeper here is steeper. */
   exaggeration: number;
-  /** Height the camera looks at in the tilted view, in world units. */
-  focusHeight: number;
   /** Contours at or below this draw in the light colour, for contrast against
    * whatever covers the low ground. */
   lightContourMax: number;
@@ -77,6 +84,10 @@ export function surveyedLandscape(source: ElevationSource, spec: LandscapeSpec):
   const cellEast = source.HALF_EAST_METRES * 2 / (COLUMNS - 1);
   const cellNorth = source.HALF_NORTH_METRES * 2 / (ROWS - 1);
   const verticalScale = spec.exaggeration * TERRAIN_WIDTH / (source.HALF_EAST_METRES * 2);
+  // The camera looks at the middle of the ground it is drawing, so a landscape
+  // sits centred in frame whatever height its lowest valley happens to be at.
+  // Derived rather than given, or it would drift out of step with the scale.
+  const focusHeight = (source.LOWEST_METRES + source.HIGHEST_METRES) / 2 * verticalScale;
 
   const clampColumn = (c: number) => Math.max(0, Math.min(COLUMNS - 1, c));
   const clampRow = (r: number) => Math.max(0, Math.min(ROWS - 1, r));
@@ -176,7 +187,7 @@ export function surveyedLandscape(source: ElevationSource, spec: LandscapeSpec):
     ELEVATION_LEVELS: spec.levels,
     EXAGGERATION: spec.exaggeration,
     VERTICAL_SCALE: verticalScale,
-    FOCUS_HEIGHT: spec.focusHeight,
+    FOCUS_HEIGHT: focusHeight,
     LIGHT_CONTOUR_MAX: spec.lightContourMax,
     LANDSCAPE_DESCRIPTION: spec.description,
     ELEVATION_CREDIT: spec.credit,

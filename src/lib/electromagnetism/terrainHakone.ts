@@ -1,5 +1,5 @@
 import * as elevation from './hakoneElevation.ts';
-import { surveyedLandscape } from './surveyedLandscape.ts';
+import { surveyedLandscape, STANDARD_EXAGGERATION } from './surveyedLandscape.ts';
 
 /** Lake Ashi's surface, as the survey records it. */
 export const LAKE_ASHI_METRES = 724.5;
@@ -9,11 +9,7 @@ export const hakone = surveyedLandscape(elevation, {
   // Contours every 200 m. A 100 m interval over 1.35 km of relief draws a net
   // too fine to read the spacing through at this figure's size.
   levels: [200, 400, 600, 800, 1000, 1200, 1400],
-  // Eleven and a half kilometres of ground compressed into 2000 world units
-  // would leave this relief nearly flat. Hakone is a worn caldera, so it needs
-  // a good deal more stretch than Mount Rainier does.
-  exaggeration: 2.5,
-  focusHeight: 180,
+  exaggeration: STANDARD_EXAGGERATION,
   // Forest covers everything up to the high cones, and a dark line on dark
   // forest cannot be followed.
   lightContourMax: 600,

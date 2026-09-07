@@ -48,9 +48,12 @@ import {
   TUTORIAL_TARGET_POINTS,
   clampTutorialIndex,
   isLastTutorialStep,
+  type TutorialAnchor,
   type TutorialProgress,
 } from '../../src/lib/kinematics/videoTutorial.ts';
 import { readFileSync } from 'node:fs';
+import type { TargetGraph } from '../../src/lib/kinematics/motionGame.ts';
+import type { MotionSample } from '../../src/lib/vernier/motionStream.ts';
 import { fixed } from '../../src/utils/format.ts';
 import { TAU, pointerToTime, timeToAngle, wrapTime } from '../../src/lib/kinematics/stopwatch.ts';
 import {
@@ -1143,7 +1146,7 @@ const freshTutorialProgress = (): TutorialProgress => ({
     .join(' ');
 
   const anchors = new Set(
-    TUTORIAL_STEPS.map((step) => step.anchor).filter((anchor): anchor is string => anchor !== null),
+    TUTORIAL_STEPS.map((step) => step.anchor).filter((anchor): anchor is TutorialAnchor => anchor !== null),
   );
   assert.ok(anchors.size > 0);
   anchors.forEach((anchor) => {
@@ -1501,7 +1504,7 @@ console.log('Video analysis tests passed.');
   assert.match(describeTarget(linear), /Distance from the detector target:/);
 
   // --- scoring whole attempts --------------------------------------------
-  const traceFor = (graph, offset = 0, noise = 0) => {
+  const traceFor = (graph: TargetGraph, offset = 0, noise = 0): MotionSample[] => {
     let state = 12345;
     const random = () => {
       state = (state * 1103515245 + 12345) % 2147483648;
@@ -1574,7 +1577,7 @@ console.log('Video analysis tests passed.');
   }
 
   // Lag is the error mode a real walker actually has, and it is penalised.
-  const lagged = (graph, lag) => {
+  const lagged = (graph: TargetGraph, lag: number): MotionSample[] => {
     const count = Math.floor(graph.durationSeconds / SUBMISSION_PERIOD_SECONDS) + 1;
     return Array.from({ length: count }, (_, index) => {
       const t = index * SUBMISSION_PERIOD_SECONDS;
@@ -1591,7 +1594,7 @@ console.log('Video analysis tests passed.');
   );
 
   // --- but the sensor is forgiven ----------------------------------------
-  const withGap = (graph, seconds, startIndex = 50) => {
+  const withGap = (graph: TargetGraph, seconds: number, startIndex = 50): MotionSample[] => {
     const trace = traceFor(graph);
     const count = Math.round(seconds / SUBMISSION_PERIOD_SECONDS);
     for (let index = startIndex; index < startIndex + count && index < trace.length; index += 1) {
@@ -1617,7 +1620,7 @@ console.log('Video analysis tests passed.');
   assert.ok(SCORING_GAP_SECONDS >= 0.5 && SCORING_GAP_SECONDS <= 2);
 
   // Alternating dropouts are bridged rather than punished.
-  const speckled = traceFor(linear).map((sample, index) =>
+  const speckled: MotionSample[] = traceFor(linear).map((sample, index) =>
     index % 2 === 0 ? sample : { ...sample, distance: 0, quality: 'dropout' },
   );
   assert.ok(
@@ -1645,7 +1648,7 @@ console.log('Video analysis tests passed.');
   for (const seed of [0, 5, 41, 2024]) {
     generateMotionGraphs(seed).forEach((graph) => {
       const count = Math.floor(graph.durationSeconds / SUBMISSION_PERIOD_SECONDS) + 1;
-      const stillTrace = Array.from({ length: count }, (_, index) => ({
+      const stillTrace: MotionSample[] = Array.from({ length: count }, (_, index) => ({
         t: index * SUBMISSION_PERIOD_SECONDS,
         distance: graph.startMeters,
         quality: 'ok',
@@ -1674,7 +1677,7 @@ console.log('Video analysis tests passed.');
   // --- submission validation ---------------------------------------------
   const RUN_SEED = 4242;
 
-  const quantise = (samples) =>
+  const quantise = (samples: readonly MotionSample[]): MotionSample[] =>
     samples.map((sample) => ({
       ...sample,
       distance: Math.round(sample.distance * 1000) / 1000,

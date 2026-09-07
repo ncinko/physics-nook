@@ -241,7 +241,7 @@ g.addColorStop(1.0, `hsla(${p.hue}, 90%, 60%, 0)`);
         <canvas ref={trailRef} width={width} height={height} style={{ position: "absolute", inset: 0, pointerEvents: "none" }} />
       </div>
       <p style={{ marginTop: 6, fontSize: 13, opacity: 0.8 }}>
-        Tip: click and drag anywhere to set the electric field (arrow = direction, length = strength).
+        Click and drag to set the electric field.
       </p>
     </div>
   );

@@ -200,7 +200,7 @@ assert.equal(readInt32LE(Uint8Array.from([0xff, 0xff, 0xff, 0xff])), -1);
 /** Builds the reply the device would send for the command just written. */
 const replyTo = (
   written: Uint8Array,
-  status = NGIO_STATUS.SUCCESS,
+  status: number = NGIO_STATUS.SUCCESS,
   payload: number[] = [],
 ): Uint8Array => {
   const decoded = decodeResponse(written);

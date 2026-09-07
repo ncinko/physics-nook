@@ -15,7 +15,7 @@ export const hakone = surveyedLandscape(elevation, {
   lightContourMax: 600,
   description: 'the Hakone caldera in Japan, with the Kamiyama and Komagatake cone complex at its '
     + 'centre, Lake Ashi filling the caldera floor to the south-west, and the Hayakawa gorge cutting east',
-  credit: 'Elevation data: Geospatial Information Authority of Japan (processed)',
+  credit: 'Elevation data: Geospatial Information Authority of Japan',
   cover: {
     // Cedar and broadleaf forest covers the caldera, thinning with altitude.
     forestTop: [400, 1320],

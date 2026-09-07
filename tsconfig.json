@@ -5,14 +5,14 @@
     "astro.config.mjs",
     "tailwind.config.mjs",
     "src/**/*",
-    "functions/**/*"
+    "functions/**/*",
+    "tests/**/*"
   ],
   "exclude": [
     "apps",
     "dist",
     "packages",
     "server",
-    "tests",
     "node_modules"
   ],
   "compilerOptions": {

@@ -600,7 +600,7 @@ console.log('Caerbannog game step tests passed.');
       ...shop.stats,
       specials: {
         ...shop.stats.specials,
-        cluster: { owned: true, freqLevel: MAX_SPECIAL_LEVEL, powerLevel: MAX_SPECIAL_LEVEL },
+        cluster: { owned: true, freqLevel: MAX_SPECIAL_LEVEL, powerLevel: MAX_SPECIAL_LEVEL, enhanced: false },
       },
     },
   };
@@ -615,8 +615,8 @@ console.log('Caerbannog game step tests passed.');
   const ownsOnly = (id: 'cluster' | 'lightning', freqLevel = 1, powerLevel = 1) => ({
     ...startGame(createGame(7)).stats,
     specials: {
-      cluster: { owned: id === 'cluster', freqLevel: id === 'cluster' ? freqLevel : 0, powerLevel: id === 'cluster' ? powerLevel : 0 },
-      lightning: { owned: id === 'lightning', freqLevel: id === 'lightning' ? freqLevel : 0, powerLevel: id === 'lightning' ? powerLevel : 0 },
+      cluster: { owned: id === 'cluster', freqLevel: id === 'cluster' ? freqLevel : 0, powerLevel: id === 'cluster' ? powerLevel : 0, enhanced: false },
+      lightning: { owned: id === 'lightning', freqLevel: id === 'lightning' ? freqLevel : 0, powerLevel: id === 'lightning' ? powerLevel : 0, enhanced: false },
     },
   });
 

@@ -1,24 +1,24 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import WavePoolSection from '../components/waves/WavePoolSection';
-import { astronomyPath, getModuleBySlug, measurementPath, mechanicsPath } from '../data/modules';
+import { astronomyPath, electromagnetismPath, getModuleBySlug, mechanicsPath } from '../data/modules';
 
-const measurementModule = getModuleBySlug('measurement');
 const astronomyModule = getModuleBySlug('astronomy');
+const electromagnetismModule = getModuleBySlug('electromagnetism');
 const kinematicsModule = getModuleBySlug('kinematics');
 
 const homeCards = [
-  {
-    title: 'Lab Skills',
-    href: measurementPath.href,
-    description: measurementPath.summary,
-    accent: measurementModule?.accent ?? '#b45309',
-  },
   {
     title: astronomyModule?.title ?? 'Astronomy',
     href: astronomyPath.href,
     description: astronomyPath.summary,
     accent: astronomyModule?.accent ?? '#4f46e5',
+  },
+  {
+    title: electromagnetismModule?.title ?? 'Electromagnetism',
+    href: electromagnetismPath.href,
+    description: electromagnetismPath.summary,
+    accent: electromagnetismModule?.accent ?? '#6366f1',
   },
   {
     title: mechanicsPath.navLabel,

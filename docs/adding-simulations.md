@@ -31,11 +31,20 @@ Build controls and readouts from the shared primitives so every interactive them
 - `src/components/shared/Readout.tsx` - `Readout` with `Readout.Group` / `Readout.Value`; presentation- and count-agnostic.
 - `SimulationBlock` (standalone only) - the breakout shell, header, and fullscreen toggle.
 
-Colors come from CSS custom properties in `global.css` (`--text-primary`, `--grid-line`, `--surface-elevated`, `--accent-*`), mirrored by Tailwind `theme-*` aliases. Use these tokens, not hardcoded hex.
+Colors come from CSS custom properties in `global.css` (`--text-primary`, `--grid-line`, `--accent-*`, and the surface ladder below). Use these tokens, not hardcoded hex. The Tailwind `theme-*` aliases do not work - Tailwind v4 never reads `tailwind.config.mjs` here - so write `bg-[var(--token)]`.
 
 ## Scene Surfaces
 
-Treat a transparent, unboxed scene as the default for inline illustrations. Add a filled background, border, or shadow only when the surface carries useful meaning: for example, it defines a plot or data region, provides necessary contrast, or marks a direct-manipulation boundary. Do not put every animation on a `--sim-bg` panel merely to contain it visually; let simple diagrams and motion illustrations sit naturally in the reading flow.
+Treat a transparent, unboxed scene as the default for inline illustrations. Add a filled background, border, or shadow only when the surface carries useful meaning: for example, it defines a plot or data region, provides necessary contrast, or marks a direct-manipulation boundary. Do not put every animation on a panel merely to contain it visually; let simple diagrams and motion illustrations sit naturally in the reading flow.
+
+Once a surface is warranted, take it from the ladder in [design-baseline.md](design-baseline.md) rather than picking a shade:
+
+- `--sim-bg` for the panel itself - the box around an interactive, checkpoint, or reference block.
+- `--surface-plot` for the drawing surface itself: canvas `fillRect`, the SVG plot rect, a boxed diagram. `themeColors().bg` already resolves to this, so canvas islands built on the shared palette get it for free.
+- Readout and control cards resting on a panel keep `--bg-primary`, which is the existing site-wide convention for them; `--surface-plot` is for the data region, not for every box inside a panel.
+- `--surface-elevated` for chrome on top: block headers and secondary buttons.
+
+Never paint a panel `--bg-primary` (it disappears into the page) and never paint a plot `--sim-bg` (data marks end up on the panel's own warm surface). `tests/shared/run-tests.ts` pins the ordering.
 
 ## Readouts
 
@@ -44,7 +53,7 @@ Show the fewest values that make the point. Prefer the lightest form: values wov
 ## Inline Checklist
 
 - Mount directly in MDX (no `SimulationBlock`); the component owns its own centering and max width.
-- Default to a transparent scene; add a panel surface only when it improves meaning, contrast, or interaction clarity.
+- Default to a transparent scene; add a panel surface only when it improves meaning, contrast, or interaction clarity. When you do, use `--sim-bg` for the panel and `--surface-plot` for the plot inside it.
 - Keep controls in one `ControlBar`; keep any readout light (grouped `Readout` or inline values).
 - Read theme colors through `themeColors` / CSS tokens; no hardcoded palettes.
 - Hydrate with `client:visible`, or `client:only="react"` for canvas islands that gain nothing from SSR.

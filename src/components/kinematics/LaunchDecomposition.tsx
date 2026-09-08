@@ -116,7 +116,7 @@ export default function LaunchDecomposition() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.width, size.height);
 
-    const simBg = getCssColor('--sim-bg', '#f8fafc');
+    const simBg = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
@@ -252,7 +252,7 @@ export default function LaunchDecomposition() {
 
       <canvas
         ref={canvasRef}
-        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
         style={{ touchAction: 'none' }}
         aria-label="Launch velocity vector decomposed into horizontal and vertical components"
         onPointerDown={handlePointerDown}

@@ -518,7 +518,7 @@ export default function QuantizationExplorer() {
 
       return (
         <svg viewBox="0 0 680 280" className="h-auto w-full" role="img" aria-label="Infinite well state">
-          <rect x="24" y="20" width="632" height="232" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+          <rect x="24" y="20" width="632" height="232" rx="26" fill="var(--surface-plot)" />
           {Array.from({ length: 6 }, (_, index) => {
             const y = 46 + index * 30;
             return (
@@ -574,7 +574,7 @@ export default function QuantizationExplorer() {
 
       return (
         <svg viewBox="0 0 680 280" className="h-auto w-full" role="img" aria-label="Harmonic oscillator state">
-          <rect x="24" y="20" width="632" height="232" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+          <rect x="24" y="20" width="632" height="232" rx="26" fill="var(--surface-plot)" />
           {Array.from({ length: 6 }, (_, index) => {
             const y = 46 + index * 30;
             return (
@@ -638,7 +638,7 @@ export default function QuantizationExplorer() {
 
     return (
       <svg viewBox="0 0 680 280" className="h-auto w-full" role="img" aria-label="Hydrogen radial state">
-        <rect x="24" y="20" width="632" height="232" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+        <rect x="24" y="20" width="632" height="232" rx="26" fill="var(--surface-plot)" />
         {Array.from({ length: 6 }, (_, index) => {
           const y = 46 + index * 30;
           return (
@@ -705,7 +705,7 @@ export default function QuantizationExplorer() {
               <stop offset="100%" stopColor="color-mix(in srgb, var(--accent-blue) 6%, transparent)" />
             </linearGradient>
           </defs>
-          <rect x="24" y="20" width="632" height="200" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+          <rect x="24" y="20" width="632" height="200" rx="26" fill="var(--surface-plot)" />
           {Array.from({ length: 5 }, (_, index) => {
             const y = 48 + index * 34;
             return (
@@ -759,7 +759,7 @@ export default function QuantizationExplorer() {
               <stop offset="100%" stopColor="color-mix(in srgb, var(--accent-blue) 6%, transparent)" />
             </linearGradient>
           </defs>
-          <rect x="24" y="20" width="632" height="200" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+          <rect x="24" y="20" width="632" height="200" rx="26" fill="var(--surface-plot)" />
           {Array.from({ length: 5 }, (_, index) => {
             const y = 48 + index * 34;
             return (
@@ -811,7 +811,7 @@ export default function QuantizationExplorer() {
             <stop offset="100%" stopColor="color-mix(in srgb, var(--accent-blue) 6%, transparent)" />
           </linearGradient>
         </defs>
-        <rect x="24" y="20" width="632" height="200" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+        <rect x="24" y="20" width="632" height="200" rx="26" fill="var(--surface-plot)" />
         {Array.from({ length: 5 }, (_, index) => {
           const y = 48 + index * 34;
           return (
@@ -853,7 +853,7 @@ export default function QuantizationExplorer() {
   };
 
   return (
-    <div className="flex h-full min-h-[54rem] w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_30%),var(--sim-bg)] text-[color:var(--text-primary)]">
+    <div className="flex h-full min-h-[54rem] w-full flex-col overflow-hidden bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_30%)] text-[color:var(--text-primary)]">
       <div className="grid flex-1 lg:grid-cols-[1.45fr_0.95fr]">
         <div className="border-b border-[var(--grid-line)] lg:border-r lg:border-b-0">
           <div className="px-5 pt-5">

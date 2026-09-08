@@ -446,7 +446,7 @@ export default function QuantumTimeEvolution2DSimulator() {
     : `${gridSize * 2} x ${gridSize}`;
 
   return (
-    <div className="flex min-h-[46rem] w-full flex-col bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_30%),var(--sim-bg)] text-[color:var(--text-primary)] lg:min-h-[50rem]">
+    <div className="flex min-h-[46rem] w-full flex-col bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_30%)] text-[color:var(--text-primary)] lg:min-h-[50rem]">
       <div className="grid flex-1 lg:grid-cols-[minmax(0,1.65fr)_22rem]">
         <div className="flex min-w-0 flex-col border-b border-[var(--grid-line)] p-4 lg:border-r lg:border-b-0 lg:p-5">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

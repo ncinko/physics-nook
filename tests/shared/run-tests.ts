@@ -224,7 +224,7 @@ assert.equal(motionGame.name, 'Player');
   };
   for (const name of ['light', 'dark', 'paper']) {
     const color = palette(name);
-    const bg = color('--sim-bg');
+    const bg = color('--surface-plot');
     const positive = color('--accent-red');
     const negative = color('--accent-blue');
     for (const [role, accent] of [['positive', positive], ['negative', negative]] as const) {
@@ -237,13 +237,27 @@ assert.equal(motionGame.name, 'Player');
   }
 
   const paper = palette('paper');
-  for (const surface of ['--bg-primary', '--sim-bg', '--surface-elevated']) {
+  for (const surface of ['--bg-primary', '--sim-bg', '--surface-plot', '--surface-elevated']) {
     assert.ok(contrastRatio(paper('--text-primary'), paper(surface)) >= 7, `Paper body text on ${surface}`);
     for (const token of ['--text-muted', '--accent-blue', '--accent-red', '--accent-green', '--accent-purple']) {
       assert.ok(contrastRatio(paper(token), paper(surface)) >= 4.5, `Paper ${token} on ${surface}`);
     }
   }
   assert.ok(contrastRatio(white, paper('--accent-blue')) >= 4.5, 'Paper primary button label');
+
+  // The surface ladder from global.css: a panel is recessed from the page and a
+  // plot surface is lifted above the panel, in every theme. Panels stopped
+  // reading as panels when components picked --sim-bg for plot fills too, so
+  // pin the ordering rather than the individual hex values.
+  for (const name of ['light', 'dark', 'paper']) {
+    const color = palette(name);
+    const page = relativeLuminance(color('--bg-primary'));
+    const panel = relativeLuminance(color('--sim-bg'));
+    const plot = relativeLuminance(color('--surface-plot'));
+    assert.ok(Math.abs(page - panel) >= 0.01, `${name} panel is distinguishable from the page`);
+    assert.ok(Math.abs(plot - panel) >= 0.01, `${name} plot surface is distinguishable from its panel`);
+    assert.ok(plot > panel, `${name} plot surface sits above its panel`);
+  }
 
   // Zero potential is painted as the theme's own background, so a dark theme
   // stays dark. Blending toward white, as the colormap used to, would have put

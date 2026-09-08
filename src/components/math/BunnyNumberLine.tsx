@@ -116,7 +116,7 @@ export function BunnyNumberLine() {
         viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
         role="img"
         aria-label={`Number line with bunny at ${position} and carrot at ${target}`}
-        className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+        className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
       >
         {/* number line */}
         <line

@@ -106,7 +106,7 @@ export default function TargetPlot({ graph, trace, now, className = '' }: Target
       role="img"
       aria-label={describeTarget(graph)}
     >
-      <rect x={PLOT_L} y={PLOT_T} width={PLOT_R - PLOT_L} height={PLOT_B - PLOT_T} fill="var(--sim-bg)" />
+      <rect x={PLOT_L} y={PLOT_T} width={PLOT_R - PLOT_L} height={PLOT_B - PLOT_T} fill="var(--surface-plot)" />
 
       {yTicks.map((value) => (
         <g key={`y${value}`}>

@@ -107,7 +107,7 @@ export default function TwoChamberMicrostateExplorer() {
   };
 
   return (
-    <div className="flex h-full min-h-[43rem] w-full flex-col overflow-hidden bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,#ea580c_12%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_32%),var(--sim-bg)] text-[color:var(--text-primary)]">
+    <div className="flex h-full min-h-[43rem] w-full flex-col overflow-hidden bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_left,color-mix(in_srgb,#ea580c_12%,transparent),transparent_34%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_32%)] text-[color:var(--text-primary)]">
       <div className="grid flex-1 lg:grid-cols-[1.34fr_1fr]">
         <div className="border-b border-[var(--grid-line)] lg:border-r lg:border-b-0">
           <div className="p-5">

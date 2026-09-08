@@ -201,12 +201,12 @@ export default function AccelerationExplorer() {
     ticks: number[],
     yMap: (value: number) => number,
   ) => {
-    const panel = getCssColor('--sim-bg', '#f8fafc');
+    const plot = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = panel;
+    ctx.fillStyle = plot;
     ctx.fillRect(0, 0, width, height);
 
     ctx.strokeStyle = grid;
@@ -461,11 +461,11 @@ export default function AccelerationExplorer() {
       return;
     }
 
-    const panel = getCssColor('--sim-bg', '#f8fafc');
+    const plot = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
 
     ctx.clearRect(0, 0, size.w, MOTION_H);
-    ctx.fillStyle = panel;
+    ctx.fillStyle = plot;
     ctx.fillRect(0, 0, size.w, MOTION_H);
 
     ctx.strokeStyle = grid;

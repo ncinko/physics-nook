@@ -175,7 +175,7 @@ export default function RelativisticMomentumEnergyExplorer() {
 
   return (
     <div className="flex h-full min-h-[42rem] w-full flex-col overflow-hidden bg-[var(--sim-bg)] text-[var(--text-primary)]">
-      <div className="border-b border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.14),transparent_35%),var(--bg-primary)] p-5">
+      <div className="border-b border-[var(--grid-line)] bg-[color:var(--bg-primary)] bg-[image:radial-gradient(circle_at_top_right,rgba(59,130,246,0.18),transparent_38%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.14),transparent_35%)] p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">

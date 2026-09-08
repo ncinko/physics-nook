@@ -94,7 +94,7 @@ export const ForceArrow = ({
         fontSize="14"
         fontWeight="700"
         paintOrder="stroke"
-        stroke="var(--sim-bg)"
+        stroke="var(--surface-plot)"
         strokeWidth="4"
       >
         {label}

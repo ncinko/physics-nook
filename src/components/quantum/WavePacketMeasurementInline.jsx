@@ -203,7 +203,7 @@ export default function WavePacketMeasurementInline() {
   };
 
   return (
-    <div className="my-8 overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_34%),var(--sim-bg)] text-[color:var(--text-primary)] shadow-[0_22px_60px_rgba(15,23,42,0.12)]">
+    <div className="my-8 overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_left,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_32%),radial-gradient(circle_at_bottom_right,color-mix(in_srgb,var(--accent-red)_8%,transparent),transparent_34%)] text-[color:var(--text-primary)] shadow-[0_22px_60px_rgba(15,23,42,0.12)]">
       <div className="grid gap-0 lg:grid-cols-[1.3fr_0.9fr]">
         <div className="border-b border-[var(--grid-line)] lg:border-r lg:border-b-0">
           <div className="px-5 pt-5">
@@ -223,7 +223,7 @@ export default function WavePacketMeasurementInline() {
               </div>
 
               <svg viewBox="0 0 680 230" className="h-auto w-full" role="img" aria-label="Wave packet amplitude">
-                <rect x="24" y="20" width="632" height="180" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+                <rect x="24" y="20" width="632" height="180" rx="26" fill="var(--surface-plot)" />
                 {Array.from({ length: 5 }, (_, index) => {
                   const y = 46 + index * 34;
                   return (
@@ -292,7 +292,7 @@ export default function WavePacketMeasurementInline() {
                     <stop offset="100%" stopColor="color-mix(in srgb, var(--accent-blue) 6%, transparent)" />
                   </linearGradient>
                 </defs>
-                <rect x="24" y="20" width="632" height="188" rx="26" fill="color-mix(in srgb, var(--sim-bg) 84%, white)" />
+                <rect x="24" y="20" width="632" height="188" rx="26" fill="var(--surface-plot)" />
                 {Array.from({ length: 5 }, (_, index) => {
                   const y = 48 + index * 34;
                   return (

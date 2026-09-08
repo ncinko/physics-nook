@@ -1500,7 +1500,7 @@ export default function AdditiveSynthLab() {
     const drawIdle = () => {
       const theme = document.documentElement.getAttribute('data-theme');
       const darkMode = theme === 'dark';
-      context.fillStyle = darkMode ? '#111827' : theme === 'paper' ? getCssColor('--sim-bg', '#f8fafc') : '#f8fafc';
+      context.fillStyle = darkMode ? '#111827' : theme === 'paper' ? getCssColor('--surface-plot', '#ffffff') : '#f8fafc';
       context.fillRect(0, 0, width, height);
       context.fillStyle = darkMode ? 'rgba(15, 118, 110, 0.12)' : 'rgba(59, 130, 246, 0.08)';
       context.fillRect(0, 0, width, height);
@@ -1516,7 +1516,7 @@ export default function AdditiveSynthLab() {
 
       const darkMode = document.documentElement.getAttribute('data-theme') === 'dark';
       const quietColor = document.documentElement.getAttribute('data-theme') === 'paper'
-        ? `color-mix(in srgb, ${getCssColor('--sim-bg', '#f8fafc')} 6%, transparent)`
+        ? `color-mix(in srgb, ${getCssColor('--surface-plot', '#ffffff')} 6%, transparent)`
         : darkMode ? 'rgba(15, 23, 42, 0.08)' : 'rgba(248, 250, 252, 0.06)';
       graph.analyser.getByteFrequencyData(frequencyData);
       context.drawImage(canvas, 0, 0, width, height - SPECTROGRAM_ROW_HEIGHT, 0, SPECTROGRAM_ROW_HEIGHT, width, height - SPECTROGRAM_ROW_HEIGHT);
@@ -1792,7 +1792,7 @@ export default function AdditiveSynthLab() {
       tabIndex={0}
     >
       <div className="space-y-5">
-        <div className="overflow-hidden rounded-[1.7rem] border border-[var(--grid-line)] bg-[linear-gradient(145deg,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_42%),var(--bg-primary)] shadow-sm">
+        <div className="overflow-hidden rounded-[1.7rem] border border-[var(--grid-line)] bg-[color:var(--bg-primary)] bg-[image:linear-gradient(145deg,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_42%)] shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--grid-line)] px-5 py-5">
             <div>
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: SYNTH_ACCENT }}>

@@ -338,7 +338,7 @@ export default function FiniteBarrierScatteringInline() {
   };
 
   return (
-    <section className="not-prose my-8 overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_34%),var(--sim-bg)] text-[color:var(--text-primary)] shadow-sm">
+    <section className="not-prose my-8 overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_34%)] text-[color:var(--text-primary)] shadow-sm">
       <div className="border-b border-[var(--grid-line)] p-4">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="m-0 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--accent-blue)]">

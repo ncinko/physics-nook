@@ -137,7 +137,7 @@ export default function RollingRaceLab() {
     const textColor = cssVar('--text-primary', '#111827');
     const mutedColor = cssVar('--text-muted', '#4b5563');
     const gridColor = cssVar('--grid-line', '#d1d5db');
-    const surfaceColor = cssVar('--sim-bg', '#f9fafb');
+    const surfaceColor = cssVar('--surface-plot', '#ffffff');
 
     const w = size.w;
     const h = size.h;

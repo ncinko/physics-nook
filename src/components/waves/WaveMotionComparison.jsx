@@ -181,7 +181,7 @@ export default function WaveMotionComparison() {
 
   return (
     <section
-      className="overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_34%),var(--sim-bg)] p-4 shadow-sm md:p-6"
+      className="overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_left,rgba(59,130,246,0.14),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(249,115,22,0.12),transparent_34%)] p-4 shadow-sm md:p-6"
       style={{ overflowAnchor: 'none' }}
     >
       <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">

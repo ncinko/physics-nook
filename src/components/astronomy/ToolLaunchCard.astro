@@ -12,7 +12,7 @@ interface Props {
 const { title, description, href, cta = 'Open full screen' } = Astro.props;
 ---
 
-<aside class="not-prose my-8 overflow-hidden rounded-2xl border border-theme-grid bg-[linear-gradient(145deg,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_55%),var(--surface-elevated)] p-5 shadow-sm sm:p-6">
+<aside class="not-prose my-8 overflow-hidden rounded-2xl border border-theme-grid bg-[color:var(--surface-elevated)] bg-[image:linear-gradient(145deg,color-mix(in_srgb,var(--accent-blue)_10%,transparent),transparent_55%)] p-5 shadow-sm sm:p-6">
   <a
     href={href}
     class="group block rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"

@@ -170,7 +170,7 @@ const ElectricPotentialExplorer = () => {
   }, [charges, size.width, size.height, showFieldLines, linesPerMicroC, maxFieldLines]);
 
   // The colormap is opaque and covers the whole canvas, so its neutral end is
-  // what the reader sees as the background. Anchoring that to --sim-bg (rather
+  // what the reader sees as the background. Anchoring that to --surface-plot (rather
   // than to white) is what keeps a dark theme dark: zero potential reads as
   // empty space in every theme instead of washing the canvas out.
   const divergingRamp = (palette) => {
@@ -600,7 +600,7 @@ const ElectricPotentialExplorer = () => {
           display: "block",
           marginInline: "auto",
           touchAction: "none",
-          background: "var(--sim-bg)",
+          background: "var(--surface-plot)",
         }}
       />
 

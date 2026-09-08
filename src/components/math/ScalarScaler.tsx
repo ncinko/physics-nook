@@ -109,7 +109,7 @@ export function ScalarScaler() {
           viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
           role="img"
           aria-label={`Vector ${formatVector(base)} scaled by ${formatScalar(scalar, 1)} gives ${formatVector(scaled)}`}
-          className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+          className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
           style={{ touchAction: 'none' }}
         >
           <Grid />

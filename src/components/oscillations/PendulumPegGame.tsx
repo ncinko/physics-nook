@@ -329,7 +329,7 @@ export default function PendulumPegGame() {
     const drawBackground = (layout: StageLayout) => {
       const bg = getCssColor('--bg-primary', '#ffffff');
       const grid = getCssColor('--grid-line', '#d1d5db');
-      const sim = getCssColor('--sim-bg', '#f9fafb');
+      const sim = getCssColor('--surface-plot', '#ffffff');
 
       context.clearRect(0, 0, layout.width, layout.height);
       context.fillStyle = bg;
@@ -700,7 +700,7 @@ export default function PendulumPegGame() {
     <div
       ref={containerRef}
       data-testid="pendulum-peg-game"
-      className="relative isolate min-h-[100svh] overflow-hidden bg-theme-bg text-theme-text"
+      className="relative isolate min-h-[100svh] overflow-hidden bg-[var(--bg-primary)] text-[var(--text-primary)]"
       style={{ touchAction: 'none' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

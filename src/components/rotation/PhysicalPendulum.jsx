@@ -148,7 +148,7 @@ const PhysicalPendulum = () => {
             maxWidth: "100%",
             height: "auto",
             touchAction: "none",
-            backgroundColor: "var(--sim-bg)",
+            backgroundColor: "var(--surface-plot)",
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}

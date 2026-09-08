@@ -173,7 +173,7 @@ export default function SinusoidEquationExplorer() {
       </div>
 
       {activeConfig && (
-        <div className="overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_36%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_10%,transparent),transparent_40%),var(--sim-bg)] shadow-sm">
+        <div className="overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_12%,transparent),transparent_36%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_10%,transparent),transparent_40%)] shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--grid-line)] px-6 py-5">
             <div>
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: activeConfig.accent }}>
@@ -210,7 +210,7 @@ export default function SinusoidEquationExplorer() {
               </div>
 
               <svg viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} className="h-auto w-full">
-                <rect x="0" y="0" width={SVG_WIDTH} height={SVG_HEIGHT} rx="24" fill="color-mix(in srgb, var(--sim-bg) 76%, white)" />
+                <rect x="0" y="0" width={SVG_WIDTH} height={SVG_HEIGHT} rx="24" fill="var(--surface-plot)" />
 
                 {[0, 2, 4, 6, 8].map((tick) => {
                   const x = PADDING.left + (tick / TIME_MAX) * (SVG_WIDTH - PADDING.left - PADDING.right);

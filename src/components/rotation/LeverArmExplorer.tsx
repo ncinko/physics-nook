@@ -163,7 +163,7 @@ export default function LeverArmExplorer() {
           cx={PIVOT_X}
           cy={PIVOT_Y}
           r="17"
-          fill="var(--sim-bg)"
+          fill="var(--surface-plot)"
           stroke="var(--text-primary)"
           strokeWidth="3"
         />

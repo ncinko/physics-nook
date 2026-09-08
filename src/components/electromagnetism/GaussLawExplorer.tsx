@@ -207,7 +207,7 @@ export default function GaussLawExplorer() {
       <Slider label="Size" unit="m" min={0.6} max={1.7} step={0.1} value={radius} onChange={setRadius} format={v => v.toFixed(1)} />
     </ControlBar>
     {unavailable ? <p className="my-8 text-center" role="status">The 3D scene needs WebGL. The controls and flux readouts below still work.</p> :
-      <div ref={hostRef} className="relative my-2 aspect-[3/2] min-h-[280px] max-h-[520px] w-full overflow-hidden rounded-lg bg-[var(--sim-bg)]">
+      <div ref={hostRef} className="relative my-2 aspect-[3/2] min-h-[280px] max-h-[520px] w-full overflow-hidden rounded-lg bg-[var(--surface-plot)]">
         {hover && <div role="tooltip" className="pointer-events-none absolute rounded border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-xs"
           style={{ left: hover.x, top: hover.y }}>E · n̂ ≈ {formatFlux(hover.density)} N/C</div>}
       </div>}

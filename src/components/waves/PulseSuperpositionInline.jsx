@@ -177,7 +177,7 @@ export default function PulseSuperpositionInline() {
             role="img"
             aria-label="Two wave pulses passing through each other while their total displacement is shown"
           >
-            <rect x="0" y="0" width={STAGE.width} height={STAGE.height} rx="28" fill="color-mix(in srgb, var(--sim-bg) 76%, white)" />
+            <rect x="0" y="0" width={STAGE.width} height={STAGE.height} rx="28" fill="var(--surface-plot)" />
             <line
               x1={STAGE.left}
               x2={STAGE.right}

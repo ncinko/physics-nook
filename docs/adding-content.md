@@ -36,6 +36,10 @@ Match the voice already established in pages like `src/pages/astronomy/orbits.md
 
 - Open each page or major section with plain-language framing of the phenomenon or
   question before introducing formalism.
+- Keep the opening Markdown `#` heading immediately after the `page-content` anchor.
+  On pages with a topics panel, shared styles visually hide this redundant title and
+  its divider while retaining the heading for assistive navigation and existing links.
+  The introduction receives extra space below the topics panel.
 - Bold **key terms** the first time they're defined; do not bold for emphasis elsewhere.
 - Cross-reference earlier ideas by name ("the same two-frame thinking explains...")
   instead of re-explaining setup from scratch.

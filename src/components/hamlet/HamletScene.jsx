@@ -419,7 +419,7 @@ const HAMLET_STYLES = `
   margin-top: 1.25rem;
   border: 1px solid var(--grid-line);
   border-radius: 0.9rem;
-  background: var(--sim-bg);
+  background: var(--surface-plot);
   padding: 1.1rem 1.25rem 1.25rem;
 }
 .hamlet-mood {

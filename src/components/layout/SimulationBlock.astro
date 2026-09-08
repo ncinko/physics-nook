@@ -24,7 +24,7 @@ const breakoutClass =
 <section class={`not-prose relative left-1/2 my-10 -translate-x-1/2 sm:px-6 lg:px-8 ${breakoutClass}`}>
   <div
     data-simulation-block
-    class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-theme-sim shadow-sm"
+    class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-[var(--sim-bg)] shadow-sm"
   >
     {showFullscreen && (
       <button
@@ -111,11 +111,10 @@ const breakoutClass =
     inset: 0;
     z-index: 70;
     margin: 0;
-    /* The shell is transparent in normal flow — it borrows the page
-       background. Fullscreen takes that away and paints the UA backdrop, which
-       is black, so a light-theme simulation went dark. Restate the page
-       background here rather than on the shell itself, so the in-page
-       appearance of every existing block is untouched. */
+    /* The shell paints --sim-bg in normal flow, but fullscreen can reveal the
+       UA backdrop (black) behind any part the content does not cover, so a
+       light-theme simulation went dark. Restate a surface here; the page
+       background is the right one, since fullscreen has no page around it. */
     background: var(--bg-primary);
   }
 

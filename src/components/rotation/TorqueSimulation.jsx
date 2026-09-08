@@ -31,7 +31,7 @@ const TorqueSimulation = () => {
 
   return (
     <div style={{ color: "var(--text-primary)" }}>
-      <svg width="400" height="300" style={{ border: "1px solid var(--grid-line)", borderRadius: 12, background: "var(--sim-bg)", maxWidth: "100%" }}>
+      <svg width="400" height="300" style={{ border: "1px solid var(--grid-line)", borderRadius: 12, background: "var(--surface-plot)", maxWidth: "100%" }}>
         <defs>
           <marker
             id="arrow"

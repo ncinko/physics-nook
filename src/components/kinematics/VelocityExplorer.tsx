@@ -190,7 +190,7 @@ export default function VelocityExplorer() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const bg = getCssColor('--bg-primary', '#ffffff');
-    const panel = getCssColor('--sim-bg', '#f8fafc');
+    const plot = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
@@ -199,7 +199,7 @@ export default function VelocityExplorer() {
     const green = '#16a34a';
 
     ctx.clearRect(0, 0, size.w, size.h);
-    ctx.fillStyle = panel;
+    ctx.fillStyle = plot;
     ctx.fillRect(0, 0, size.w, size.h);
 
     ctx.strokeStyle = grid;
@@ -423,7 +423,7 @@ export default function VelocityExplorer() {
     canvas.style.height = `${height}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const panel = getCssColor('--sim-bg', '#f8fafc');
+    const plot = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const green = '#16a34a';
@@ -436,7 +436,7 @@ export default function VelocityExplorer() {
     const yMap = (v: number) => height - bottom - ((v + 2) / 5) * (height - top - bottom);
 
     ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = panel;
+    ctx.fillStyle = plot;
     ctx.fillRect(0, 0, width, height);
     ctx.strokeStyle = grid;
     ctx.lineWidth = 1;

@@ -358,7 +358,7 @@ export default function ScalarPotential2D() {
       </p>}
       {/* Color map fills the column; legend + caption sit below it */}
       <div ref={wrapRef} style={{ position: "relative" }}>
-        <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "auto", marginInline: "auto", borderRadius: 8, border: "1px solid var(--grid-line)", background: "var(--sim-bg)", cursor: "crosshair" }} />
+        <canvas ref={canvasRef} style={{ display: "block", width: "100%", height: "auto", marginInline: "auto", borderRadius: 8, border: "1px solid var(--grid-line)", background: "var(--surface-plot)", cursor: "crosshair" }} />
         <div style={{ position: "absolute", left: 8, bottom: 8, padding: "6px 8px", background: "var(--surface-elevated)", color: "var(--text-primary)", border: "1px solid var(--grid-line)", borderRadius: 6, fontSize: 12, lineHeight: 1.4 }}>
           <div><strong>x</strong> = {fmt.num(readout.x)} m, <strong>y</strong> = {fmt.num(readout.y)} m</div>
           <div><strong>r</strong> = {fmt.num(readout.r)} m</div>

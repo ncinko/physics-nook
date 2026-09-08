@@ -612,7 +612,7 @@ export default function Kinematics2DSandbox() {
     canvas.style.height = `${displayHeight}px`;
     ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
 
-    const bg = getCssColor('--sim-bg', '#f8fafc');
+    const bg = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
@@ -918,7 +918,7 @@ export default function Kinematics2DSandbox() {
           <div ref={stageRef} className="flex min-w-0 justify-center">
             <canvas
               ref={canvasRef}
-              className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+              className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
               style={{ touchAction: 'none' }}
               aria-label="Two-dimensional acceleration sandbox with velocity and acceleration vectors"
               onPointerDown={handlePointerDown}

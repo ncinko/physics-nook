@@ -32,7 +32,7 @@ const getSceneBackgroundColor = () => {
     return DARK_BACKGROUND_COLOR;
   }
 
-  return getComputedStyle(root).getPropertyValue('--sim-bg').trim() || LIGHT_BACKGROUND_FALLBACK;
+  return getComputedStyle(root).getPropertyValue('--surface-plot').trim() || LIGHT_BACKGROUND_FALLBACK;
 };
 
 const getTrailColorSet = (isCurvatureMode, paletteIndex) => {

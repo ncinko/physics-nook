@@ -92,7 +92,7 @@ const ForcePanel = ({ title, prompt, children, controls }: ForcePanelProps) => (
       </div>
       {controls && <div className="flex flex-wrap items-center gap-2">{controls}</div>}
     </div>
-    <div className="bg-[radial-gradient(circle_at_18%_16%,rgba(59,130,246,0.1),transparent_28%),linear-gradient(180deg,color-mix(in_srgb,var(--sim-bg)_94%,white),var(--sim-bg))]">
+    <div className="bg-[color:var(--surface-plot)] bg-[image:radial-gradient(circle_at_18%_16%,rgba(59,130,246,0.1),transparent_28%)]">
       {children}
     </div>
   </section>

@@ -564,7 +564,7 @@ export default function StandingWaveHarmonicsExplorer() {
       style={{ overflowAnchor: 'none' }}
     >
       <div className="space-y-5">
-        <div className="overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,118,110,0.12),transparent_36%),var(--bg-primary)] shadow-sm">
+        <div className="overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[color:var(--bg-primary)] bg-[image:radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(15,118,110,0.12),transparent_36%)] shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[var(--grid-line)] px-5 py-5">
             <div>
               <p className="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: HARMONIC_ACCENT }}>
@@ -603,7 +603,7 @@ export default function StandingWaveHarmonicsExplorer() {
                 </linearGradient>
               </defs>
 
-              <rect x="0" y="0" width={STAGE.width} height={STAGE.height} rx="28" fill="color-mix(in srgb, var(--sim-bg) 78%, white)" />
+              <rect x="0" y="0" width={STAGE.width} height={STAGE.height} rx="28" fill="var(--surface-plot)" />
 
               <line
                 x1={STAGE.left}

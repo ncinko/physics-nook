@@ -389,7 +389,7 @@ export default function ProjectileLauncher() {
     canvas.style.height = `${size.height}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const bg = getCssColor('--sim-bg', '#f8fafc');
+    const bg = getCssColor('--surface-plot', '#ffffff');
     const panel = getCssColor('--bg-primary', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
@@ -654,7 +654,7 @@ export default function ProjectileLauncher() {
 
       <canvas
         ref={canvasRef}
-        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
         style={{ touchAction: 'none' }}
         aria-label="Projectile launcher with draggable launch vector and target flag"
         onPointerDown={handlePointerDown}

@@ -33,13 +33,13 @@ const ANIM_EPS = 1e-3; // Increased to reduce jitter
 // Two of these are mixes rather than plain tokens, because no single token survives
 // the flip: --grid-line as a wire colour is ~1.2:1 on the light canvas (invisible),
 // and --surface-elevated composites to ~#fdfdfe over the light canvas (the palette
-// bar disappears). Anchoring both to --sim-bg keeps them correct in either direction.
+// bar disappears). Anchoring both to --surface-plot keeps them correct in either direction.
 const THEME = {
-  canvas: "var(--sim-bg)",
+  canvas: "var(--surface-plot)",
   text: "var(--text-primary)",
   component: "var(--text-primary)",
-  wire: "color-mix(in srgb, var(--text-primary) 55%, var(--sim-bg))",
-  palette: "color-mix(in srgb, var(--text-primary) 8%, var(--sim-bg))",
+  wire: "color-mix(in srgb, var(--text-primary) 55%, var(--surface-plot))",
+  palette: "color-mix(in srgb, var(--text-primary) 8%, var(--surface-plot))",
   // Selection is purple, not blue: blue already means current, and a selected
   // element used to get a blue stroke with blue flow dots painted on top of it.
   select: "var(--accent-purple)",

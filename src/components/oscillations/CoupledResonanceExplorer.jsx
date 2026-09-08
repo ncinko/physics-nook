@@ -659,7 +659,7 @@ export default function CoupledResonanceExplorer() {
   };
 
   return (
-    <section className="not-prose h-full bg-[radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_14%,transparent),transparent_38%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_10%,transparent),transparent_42%),var(--sim-bg)] p-4 md:p-5">
+    <section className="not-prose h-full bg-[color:var(--sim-bg)] bg-[image:radial-gradient(circle_at_top_right,color-mix(in_srgb,var(--accent-blue)_14%,transparent),transparent_38%),radial-gradient(circle_at_bottom_left,color-mix(in_srgb,var(--accent-red)_10%,transparent),transparent_42%)] p-4 md:p-5">
       <div className="space-y-4">
         <div className="overflow-hidden rounded-[1.8rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_88%,transparent)] shadow-sm">
           <div className="border-b border-[var(--grid-line)] px-5 py-4">

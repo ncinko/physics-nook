@@ -93,7 +93,7 @@ export interface ThemeColors {
 }
 
 export const themeColors = (): ThemeColors => ({
-  bg: getCssColor('--sim-bg', '#f9fafb'),
+  bg: getCssColor('--surface-plot', '#ffffff'),
   surface: getCssColor('--surface-elevated', '#ffffff'),
   grid: getCssColor('--grid-line', '#d1d5db'),
   text: getCssColor('--text-primary', '#111827'),

@@ -230,7 +230,7 @@ export function VectorVoyage() {
           viewBox={`0 0 ${VIEW_WIDTH} ${VIEW_HEIGHT}`}
           role="img"
           aria-label={`Bunny hop puzzle: ${level.name}`}
-          className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm"
+          className="block h-auto w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
           style={{ touchAction: 'none', cursor: reached ? 'default' : 'crosshair' }}
           onPointerDown={handleBoardClick}
         >

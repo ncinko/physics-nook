@@ -376,7 +376,7 @@ function HistoryChart({ history, accessor, valueRange, stroke, markerFill }) {
 
   return (
     <svg viewBox={`0 0 ${plotWidth} ${plotHeight}`} className="h-auto w-full">
-      <rect x="0" y="0" width={plotWidth} height={plotHeight} rx="18" fill="color-mix(in srgb, var(--sim-bg) 78%, white)" />
+      <rect x="0" y="0" width={plotWidth} height={plotHeight} rx="18" fill="var(--surface-plot)" />
       <line
         x1={plotPadding}
         x2={plotWidth - plotPadding}
@@ -1082,7 +1082,7 @@ export default function SpringOscillator() {
 
   return (
     <div className="flex h-full min-h-[44rem] w-full flex-col overflow-hidden bg-[var(--sim-bg)] text-[color:var(--text-primary)]">
-      <div className="relative h-[22rem] flex-shrink-0 overflow-hidden border-b border-[var(--grid-line)] bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(15,118,110,0.14),transparent_34%),var(--bg-primary)] md:h-[24rem]">
+      <div className="relative h-[22rem] flex-shrink-0 overflow-hidden border-b border-[var(--grid-line)] bg-[color:var(--bg-primary)] bg-[image:radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_32%),radial-gradient(circle_at_bottom_left,rgba(15,118,110,0.14),transparent_34%)] md:h-[24rem]">
         <div
           className="absolute inset-0 opacity-40"
           style={{

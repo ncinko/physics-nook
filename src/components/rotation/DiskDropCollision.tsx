@@ -88,7 +88,7 @@ export default function DiskDropCollision() {
           cy={cy}
           rx={DISK_RX}
           ry={DISK_RY}
-          fill="var(--sim-bg)"
+          fill="var(--surface-plot)"
           stroke={color}
           strokeWidth="3.5"
         />

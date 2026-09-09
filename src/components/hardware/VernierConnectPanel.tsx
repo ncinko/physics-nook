@@ -1,17 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Cable, CheckCircle2, ClipboardCopy, Loader2, Mouse, TriangleAlert } from 'lucide-react';
+import { Cable, CheckCircle2, Loader2, Mouse, TriangleAlert } from 'lucide-react';
 import { Button } from '../shared/InlineControls';
 import { fixed } from '../../utils/format';
 import type { VernierMotionApi } from './useVernierMotion';
 
 // Connecting a LabQuest Mini and confirming it reads the world correctly.
 //
-// Two things here earn their keep beyond a connect button. The diagnostics
-// dump is the transcript that settled the NGIO framing against real hardware,
-// and it stays because the next protocol surprise will need it too. The
-// calibration check is how a student finds out the readings are wrong before a
-// bad number ends up in a lab report: hold something at a metre and see
-// whether the panel agrees.
+// Beyond the connect button there is only the live reading, which is enough to
+// tell whether the detector is aimed at you: hold still and watch the number.
+// `diagnosticsText()` on the hook still assembles the USB transcript that
+// settled the NGIO framing against real hardware — nothing on the page calls
+// it, but the next protocol surprise will, so the surface it needs is kept.
 
 interface VernierConnectPanelProps {
   device: VernierMotionApi;
@@ -38,50 +36,8 @@ export default function VernierConnectPanel({
   allowPractice = false,
   className = '',
 }: VernierConnectPanelProps) {
-  const [showDiagnostics, setShowDiagnostics] = useState(false);
-  const [diagnostics, setDiagnostics] = useState('');
-  const [copied, setCopied] = useState(false);
-  const [calibrationNote, setCalibrationNote] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
   const { status, latest, sourceId, supportsUsb } = device;
   const connected = status.kind === 'ready' || status.kind === 'streaming';
-
-  const refreshDiagnostics = () => {
-    setDiagnostics(device.diagnosticsText());
-    setShowDiagnostics(true);
-  };
-
-  const copyDiagnostics = async () => {
-    const text = device.diagnosticsText();
-    setDiagnostics(text);
-    try {
-      await navigator.clipboard?.writeText(text);
-      setCopied(true);
-    } catch {
-      // Clipboard permission can be refused; the textarea below is the fallback.
-      setShowDiagnostics(true);
-    }
-  };
-
-  const checkCalibration = () => {
-    if (!latest || latest.quality !== 'ok') {
-      setCalibrationNote('No reading right now — is anything in front of the detector?');
-      return;
-    }
-    const error = latest.distance - 1;
-    setCalibrationNote(
-      Math.abs(error) <= 0.03
-        ? `Reads ${fixed(latest.distance, 3)} m against a 1.00 m target. That is within 3 cm — good.`
-        : `Reads ${fixed(latest.distance, 3)} m against a 1.00 m target, off by ${fixed(Math.abs(error) * 100, 1)} cm. ` +
-            'Check the detector is aimed at the reflector and that the sensitivity switch is on the walking figure.',
-    );
-  };
 
   return (
     <div
@@ -130,67 +86,13 @@ export default function VernierConnectPanel({
       )}
 
       {connected && (
-        <div className="mt-4 border-t border-[var(--grid-line)] pt-3">
-          <p className="text-sm text-[var(--text-primary)]">
-            Live reading:{' '}
-            <span className="font-mono">
-              {latest && latest.quality === 'ok' ? `${fixed(latest.distance, 3)} m` : 'no echo'}
-            </span>
-          </p>
-
-          <div className="mt-2 flex flex-wrap items-center gap-3">
-            <Button variant="secondary" onClick={checkCalibration}>
-              Check against 1.00 m
-            </Button>
-            <span className="text-xs text-[var(--text-muted)]">
-              Hold a book or clipboard exactly one metre from the detector, then press.
-            </span>
-          </div>
-
-          {calibrationNote && (
-            <p className="mt-2 text-sm text-[var(--text-muted)]" role="status">
-              {calibrationNote}
-            </p>
-          )}
-        </div>
+        <p className="mt-3 border-t border-[var(--grid-line)] pt-3 text-sm text-[var(--text-primary)]">
+          Live reading:{' '}
+          <span className="font-mono">
+            {latest && latest.quality === 'ok' ? `${fixed(latest.distance, 3)} m` : 'no echo'}
+          </span>
+        </p>
       )}
-
-      <div className="mt-4 border-t border-[var(--grid-line)] pt-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="text-xs text-[var(--text-muted)] underline"
-            onClick={() => (showDiagnostics ? setShowDiagnostics(false) : refreshDiagnostics())}
-          >
-            {showDiagnostics ? 'Hide diagnostics' : 'Show diagnostics'}
-          </button>
-
-          <button
-            type="button"
-            className="flex items-center gap-1 text-xs text-[var(--text-muted)] underline"
-            onClick={() => void copyDiagnostics()}
-          >
-            <ClipboardCopy aria-hidden="true" className="h-3.5 w-3.5" />
-            {copied ? 'Copied' : 'Copy diagnostics'}
-          </button>
-        </div>
-
-        {status.kind === 'error' && (
-          <p className="mt-2 text-xs text-[var(--text-muted)]">
-            The diagnostics above hold the raw USB traffic — what was sent, what came back, and
-            which step it stopped at.
-          </p>
-        )}
-
-        {showDiagnostics && (
-          <textarea
-            className="mt-2 h-48 w-full resize-y rounded border border-[var(--grid-line)] bg-[var(--sim-bg)] p-2 font-mono text-[11px] leading-snug text-[var(--text-primary)]"
-            readOnly
-            value={diagnostics}
-            aria-label="Vernier device diagnostics"
-          />
-        )}
-      </div>
     </div>
   );
 }

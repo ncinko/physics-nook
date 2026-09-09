@@ -40,6 +40,21 @@ export const kinematicsModule: ModuleMeta = {
       },
     },
     {
+      id: 'kinematics-motion-game',
+      href: '/kinematics/motion-game',
+      title: 'Motion Match',
+      shortTitle: 'Motion Match',
+      description:
+        'Match three target graphs by walking in front of a Vernier motion detector, scored live.',
+      seo: {
+        title: 'Motion Match',
+        description:
+          'Walk the shape of a position or velocity graph in front of a Vernier motion detector and see how close you get.',
+        canonicalPath: '/kinematics/motion-game',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
       id: 'kinematics-2d',
       href: '/kinematics/two-dimensional',
       title: '2D Kinematics',
@@ -67,29 +82,6 @@ export const kinematicsModule: ModuleMeta = {
           'Measure real motion from a phone video. Mark the moving object frame by frame, set a distance scale and frame rate, plot position and velocity, and fit a quadratic to find the acceleration.',
         canonicalPath: '/kinematics/video-analysis',
         image: '/social/physics-nook-card.svg',
-      },
-    },
-    {
-      // Unlisted: needs a Vernier LabQuest and a motion detector, so it is not
-      // something a reader can act on from the lesson flow. Registered here to
-      // satisfy the route audit and to carry `noindex`, but deliberately left
-      // out of `mechanicsPath.pages` in ./index.ts and out of
-      // src/data/interactives.ts, which keeps it off the module hero, the
-      // lesson pager, the interactives catalog, site search, and the sitemap.
-      // Reachable only by typing /kinematics/motion-game.
-      id: 'kinematics-motion-game',
-      href: '/kinematics/motion-game',
-      title: 'Motion Match',
-      shortTitle: 'Motion Match',
-      description:
-        'Match three target graphs by walking in front of a Vernier motion detector, scored live.',
-      seo: {
-        title: 'Motion Match',
-        description:
-          'Walk the shape of a position or velocity graph in front of a Vernier motion detector and see how close you get.',
-        canonicalPath: '/kinematics/motion-game',
-        image: '/social/physics-nook-card.svg',
-        noindex: true,
       },
     },
   ],

@@ -544,7 +544,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
           <VernierConnectPanel device={device} allowPractice={allowPractice} />
           {connected && (
             <div className="mt-4">
-              <Button onClick={() => void beginGame()}>Start the three graphs</Button>
+              <Button onClick={() => void beginGame()}>Match Graphs</Button>
               {isPractice && (
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Simulated walker — scores stay on this device and never reach the shared board.
@@ -749,15 +749,6 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
           <div className="mt-4 flex flex-wrap gap-3">
             <Button onClick={() => void beginGame()}>Play again</Button>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                void device.disconnect();
-                setPhase('setup');
-              }}
-            >
-              Change detector
-            </Button>
           </div>
 
           <div className="mt-6 grid gap-6 sm:grid-cols-2">

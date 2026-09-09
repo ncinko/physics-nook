@@ -122,6 +122,19 @@ KINEMATICS_DB
 
 After creating the database, update `database_id` in `wrangler.toml`. `LEADERBOARD_SALT` must be private and at least 16 characters.
 
+Motion Match (`/kinematics/motion-game`) rides on the same database, binding, and
+salt; its tables come from `migrations/0006_kinematics_motion_game_leaderboard.sql`
+and `0007_kinematics_motion_game_seed.sql`, so applying migrations is the whole of
+its setup. Until they are applied the endpoints answer 503 and the game's board
+renders as "Cloud leaderboard (offline)" while local scores keep working — which
+is also what a reader sees for a practice run, since only a real detector may post.
+
+Check what the remote database is actually running:
+
+```sh
+npx wrangler d1 migrations list physics-nook-kinematics --remote
+```
+
 Optional legacy seeds:
 
 ```sh

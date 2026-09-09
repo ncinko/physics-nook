@@ -187,6 +187,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'motion', 'position'],
   },
   {
+    id: 'motion-match',
+    title: 'Motion Match',
+    description:
+      'Walk the shape of three target graphs in front of a Vernier motion detector and see how close you get, scored live.',
+    href: '/kinematics/motion-game#motion-match',
+    module: 'Mechanics',
+    kind: 'standalone',
+    tags: ['kinematics', 'graphs', 'motion', 'lab', 'hardware'],
+  },
+  {
     id: 'video-analysis-lab',
     title: 'Video Analysis Lab',
     description:

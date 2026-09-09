@@ -29,6 +29,7 @@ import {
   describePhase,
   startSession,
   step,
+  type SessionPhase,
   type SessionState,
 } from '../../src/lib/vernier/ngioSession.ts';
 import type { SourceStatusKind } from '../../src/lib/vernier/sources/types.ts';
@@ -404,6 +405,64 @@ const measurementFrame = (
     bytes: measurementFrame([{ edge: 0, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: later + 10_000 }]),
   });
   assert.equal(orphan.samples.length, 0, 'an unanswered ping emits nothing');
+
+  // A rate change stops measurements, rewrites the period, and starts again.
+  // Poking SET_MEASUREMENT_PERIOD under a running stream is acknowledged and
+  // ignored by the device, which left the detector pinging at whatever rate
+  // the session opened with.
+  const retune = step(again.state, { type: 'set-period', periodSeconds: 0.05 });
+  assert.equal(retune.state.phase, 'retune-stop');
+  assert.equal(retune.state.periodSeconds, 0.05);
+  assert.ok(retune.state.retuning, 'the transport can tell this from a handshake');
+  assert.equal(retune.writes.length, 1);
+  assert.equal(retune.writes[0][4], NGIO_CMD_ID.STOP_MEASUREMENTS);
+
+  const retunePhases: SessionPhase[] = [];
+  const retuneCommands: number[] = [];
+  let retuning: SessionState = retune.state;
+  let retuneWrites = retune.writes;
+
+  for (let guard = 0; guard < 10 && retuning.phase !== 'streaming'; guard += 1) {
+    assert.equal(retuneWrites.length, 1, `phase ${retuning.phase} should write one command`);
+    retuneCommands.push(retuneWrites[0][4]);
+    const result = step(retuning, {
+      type: 'report',
+      bytes: replyTo(retuneWrites[0], [NGIO_STATUS.SUCCESS]),
+    });
+    retuning = result.state;
+    retuneWrites = result.writes;
+    retunePhases.push(retuning.phase);
+  }
+
+  assert.deepEqual(retunePhases, ['set-period', 'set-sampling-mode', 'starting', 'streaming']);
+  assert.deepEqual(retuneCommands, [
+    NGIO_CMD_ID.STOP_MEASUREMENTS,
+    NGIO_CMD_ID.SET_MEASUREMENT_PERIOD,
+    NGIO_CMD_ID.SET_SAMPLING_MODE,
+    NGIO_CMD_ID.START_MEASUREMENTS,
+  ]);
+  assert.equal(retuning.retuning, false, 'the flag clears once measurements resume');
+  assert.equal(retuning.periodSeconds, 0.05);
+  assert.equal(retuning.originTicks, null, 'a restart re-zeroes the capture clock');
+
+  // The period is carried into the command the sequence actually sends.
+  const periodWrite = step(retune.state, {
+    type: 'report',
+    bytes: replyTo(retune.writes[0], [NGIO_STATUS.SUCCESS]),
+  }).writes[0];
+  assert.deepEqual(
+    Array.from(periodWrite.slice(5, 5 + setMeasurementPeriodParams(ALL_CHANNELS, 0.05).length)),
+    setMeasurementPeriodParams(ALL_CHANNELS, 0.05),
+  );
+
+  // A second change while the first is still in flight restarts the sequence
+  // rather than being dropped on a phase that has already sent its period.
+  const again2 = step(retuning, { type: 'set-period', periodSeconds: 1 });
+  assert.equal(again2.state.phase, 'retune-stop');
+  const midFlight = step(again2.state, { type: 'set-period', periodSeconds: 0.25 });
+  assert.equal(midFlight.state.phase, 'retune-stop');
+  assert.equal(midFlight.state.periodSeconds, 0.25);
+  assert.equal(midFlight.writes.length, 1);
 
   const stopped = step(orphan.state, { type: 'stop' });
   assert.equal(stopped.state.phase, 'stopping');

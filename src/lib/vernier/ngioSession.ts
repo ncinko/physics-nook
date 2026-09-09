@@ -44,6 +44,7 @@ export type SessionPhase =
   | 'set-sampling-mode'
   | 'starting'
   | 'streaming'
+  | 'retune-stop'
   | 'stopping'
   | 'stopped'
   | 'failed';
@@ -61,6 +62,12 @@ export interface SessionState {
   sensorName: string;
   /** Count of samples emitted so far. */
   sampleCount: number;
+  /**
+   * True while a rate change walks the stop/set/start sequence, so the
+   * transport can tell it apart from a fresh handshake and leave the reported
+   * status alone.
+   */
+  retuning: boolean;
   /** Ping edge awaiting its echo, in capture-clock ticks. */
   pendingPingTicks: number | null;
   /** Timestamp of the first ping, so sample times start at zero. */
@@ -115,6 +122,7 @@ const createState = (options: SessionOptions = {}): SessionState => ({
   sensorId: 0,
   sensorName: 'Unknown',
   sampleCount: 0,
+  retuning: false,
   pendingPingTicks: null,
   originTicks: null,
   error: null,
@@ -159,6 +167,7 @@ const commandForPhase = (
     }
     case 'starting':
       return { command: NGIO_CMD_ID.START_MEASUREMENTS, params: [] };
+    case 'retune-stop':
     case 'stopping':
       return { command: NGIO_CMD_ID.STOP_MEASUREMENTS, params: [] };
     default:
@@ -215,6 +224,11 @@ export const startSession = (options: SessionOptions = {}): StepResult =>
   enterPhase(createState(options), 'init');
 
 const nextPhaseAfter = (phase: SessionPhase): SessionPhase => {
+  // A retune rejoins the ordered tail: period, sampling mode, start. Re-sending
+  // the sampling mode costs one round trip and keeps the restart identical to
+  // the sequence Graphical Analysis was observed using.
+  if (phase === 'retune-stop') return 'set-period';
+
   const index = PHASE_ORDER.indexOf(phase);
   if (index === -1 || index === PHASE_ORDER.length - 1) return 'streaming';
   return PHASE_ORDER[index + 1];
@@ -334,6 +348,7 @@ const consumeResponse = (state: SessionState, packet: NgioPacket): StepResult =>
         pendingCommand: null,
         retries: 0,
         sampleCount: 0,
+        retuning: false,
         pendingPingTicks: null,
         originTicks: null,
       },
@@ -350,31 +365,29 @@ export const step = (state: SessionState, event: SessionEvent): StepResult => {
     if (state.phase === 'stopped' || state.phase === 'failed' || state.phase === 'idle') {
       return { state, writes: [], samples: [] };
     }
-    return enterPhase(state, 'stopping');
+    // A stop that lands mid-retune abandons it; what follows is a stop, not a
+    // rate change that will come back.
+    return enterPhase({ ...state, retuning: false }, 'stopping');
   }
 
   if (event.type === 'set-period') {
     const periodSeconds = event.periodSeconds;
+    const retuned: SessionState = { ...state, periodSeconds };
 
-    // Outside a running stream there is nothing to retune; the new period is
-    // simply what the next START_MEASUREMENTS will ask for.
-    if (state.phase !== 'streaming') {
-      return { state: { ...state, periodSeconds }, writes: [], samples: [] };
+    // The period register is latched at START_MEASUREMENTS. Writing it under a
+    // running stream is acknowledged and then ignored, which is why the
+    // detector used to ping at whatever rate the session opened with for the
+    // rest of its life — the symptom being an audible click that never
+    // changed, and a velocity graph built from a fraction of the samples it
+    // asked for. So a rate change stops measurements, sets the period, and
+    // starts again.
+    if (state.phase === 'streaming' || state.retuning) {
+      return enterPhase({ ...retuned, retuning: true }, 'retune-stop');
     }
 
-    const rollingCounter = nextRollingCounter(state.rollingCounter);
-
-    return {
-      state: { ...state, periodSeconds, rollingCounter },
-      writes: [
-        encodeCommand({
-          command: NGIO_CMD_ID.SET_MEASUREMENT_PERIOD,
-          rollingCounter,
-          params: setMeasurementPeriodParams(ALL_CHANNELS, periodSeconds),
-        }),
-      ],
-      samples: [],
-    };
+    // Mid-handshake there is nothing to retune; the new period is simply what
+    // this session's own 'set-period' step will ask for.
+    return { state: retuned, writes: [], samples: [] };
   }
 
   if (event.type === 'timeout') {
@@ -426,6 +439,8 @@ export const describePhase = (state: SessionState): string => {
       return 'Configuring the Motion Detector';
     case 'starting':
       return 'Starting measurements';
+    case 'retune-stop':
+      return 'Changing the sample rate';
     case 'streaming':
       return `Streaming from ${state.sensorName}`;
     case 'stopping':

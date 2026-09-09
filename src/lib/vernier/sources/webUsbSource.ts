@@ -233,6 +233,10 @@ export const createWebUsbSource = (): MotionSource => {
     if (session.phase === 'streaming') {
       armWatchdog();
       if (previousPhase !== 'streaming') {
+        // A restart re-zeroes the device's capture clock, so the last accepted
+        // sample is from a different timeline. Carrying it across would make
+        // the first reading of the new rate a dropout on a negative dt.
+        lastGood = null;
         setStatus({
           kind: 'streaming',
           message: describePhase(session),
@@ -250,13 +254,18 @@ export const createWebUsbSource = (): MotionSource => {
       return;
     }
 
-    if (previousPhase !== session.phase) {
-      setStatus({
-        kind: 'connecting',
-        message: describePhase(session),
-        sensorName: session.sensorName,
-      });
-    }
+    if (previousPhase === session.phase) return;
+
+    // A rate change and a stop are both brief detours out of 'streaming'. They
+    // are not a device that is still connecting, and reporting them that way
+    // would blank the reading the page is showing mid-round.
+    if (session.retuning) return;
+
+    setStatus({
+      kind: session.phase === 'stopped' ? 'ready' : 'connecting',
+      message: describePhase(session),
+      sensorName: session.sensorName,
+    });
   };
 
   /**
@@ -415,6 +424,10 @@ export const createWebUsbSource = (): MotionSource => {
       for (const packet of result.writes) {
         await write(packet);
       }
+      // The retune sequence waits on replies like any other command, so it
+      // needs the same watchdog. Without it a device that goes quiet part way
+      // through leaves the stream stopped and nothing ever says so.
+      if (result.writes.length > 0) armWatchdog();
     },
 
     stop: async () => {

@@ -65,7 +65,9 @@ const HOLD_SECONDS = 3;
  * 20 Hz is the sensor manual's optimum and only a recording needs it. Getting
  * on the mark needs enough resolution to feel responsive but no more. Anything
  * else just needs a live reading so the connect panel's calibration check has
- * something to read.
+ * something to read. Once the three rounds are scored nothing reads the
+ * detector at all, so it stops rather than idling — a board being read over is
+ * no place for a metronome.
  */
 const IDLE_PERIOD_SECONDS = 1;
 const AIMING_PERIOD_SECONDS = 0.25;
@@ -292,22 +294,28 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   // --- detector duty cycle -------------------------------------------------
 
-  const streamPeriod =
+  /** Seconds between pings, or null to stop the detector outright. */
+  const streamPeriod: number | null =
     phase === 'countdown' || phase === 'recording'
       ? DEFAULT_PERIOD_SECONDS
       : phase === 'ready' || phase === 'arming'
         ? AIMING_PERIOD_SECONDS
-        : IDLE_PERIOD_SECONDS;
+        : phase === 'finished'
+          ? null
+          : IDLE_PERIOD_SECONDS;
 
   // Destructured because the hook's value object is rebuilt on every sample;
   // depending on `device` here would restart the stream twenty times a second.
-  const { startStream, setStreamPeriod } = device;
+  const { startStream, setStreamPeriod, stopStream } = device;
   const statusKind = device.status.kind;
   const sourceId = device.sourceId;
 
   /** The source we have already opened a stream for, if any. */
   const streamedSourceRef = useRef<string | null>(null);
-  const streamPeriodRef = useRef(streamPeriod);
+  /** The last rate we actually asked for, so a repeat is not a retune. */
+  const streamPeriodRef = useRef(streamPeriod ?? IDLE_PERIOD_SECONDS);
+  /** What the open stream is running at, or null when it is stopped. */
+  const appliedPeriodRef = useRef<number | null>(null);
 
   // The stream starts as soon as a detector connects, not when a game begins:
   // the connect panel's calibration check needs a live reading, and before
@@ -318,22 +326,45 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
     if (decision === 'forget') {
       streamedSourceRef.current = null;
+      appliedPeriodRef.current = null;
       return;
     }
 
     if (decision === 'wait') return;
 
     streamedSourceRef.current = sourceId;
+    appliedPeriodRef.current = streamPeriodRef.current;
     void startStream(streamPeriodRef.current);
   }, [sourceId, statusKind, startStream]);
 
   // Rate changes are their own effect so a status transition cannot trigger
-  // one, and so this stays silent until a stream actually exists.
+  // one, and so this stays silent until a stream actually exists. It compares
+  // against the rate in force rather than firing on every render: a retune
+  // costs a stop/start round trip on the device, so asking for the rate it is
+  // already running at has to be free.
   useEffect(() => {
-    streamPeriodRef.current = streamPeriod;
+    if (streamPeriod !== null) streamPeriodRef.current = streamPeriod;
     if (streamedSourceRef.current === null) return;
+    if (appliedPeriodRef.current === streamPeriod) return;
+
+    if (streamPeriod === null) {
+      appliedPeriodRef.current = null;
+      void stopStream();
+      return;
+    }
+
+    // Leaving the finished board — "play again", or a new game — needs the
+    // session opened again rather than retuned: `decideStream` sees the same
+    // source it already streamed and will not do it for us.
+    if (appliedPeriodRef.current === null) {
+      appliedPeriodRef.current = streamPeriod;
+      void startStream(streamPeriod);
+      return;
+    }
+
+    appliedPeriodRef.current = streamPeriod;
     void setStreamPeriod(streamPeriod);
-  }, [streamPeriod, setStreamPeriod]);
+  }, [streamPeriod, sourceId, statusKind, setStreamPeriod, startStream, stopStream]);
 
   // --- getting on the mark -------------------------------------------------
 

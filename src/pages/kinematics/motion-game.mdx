@@ -6,12 +6,14 @@ canonicalPath: /kinematics/motion-game
 ---
 
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import MotionMatchGame from '../../components/kinematics/MotionMatchGame';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/kinematics/motion-game" />
 
 <div id="page-content"></div>
-
-# Motion Match
 
 Kinematic graphs represent the motion of real-life objects.  To build intuition for concepts like position and velocity, especially in the context of these graphs, try walking in front of an ultrasonic motion detector.
 
@@ -27,9 +29,10 @@ Put the detector at roughly waist height, with plenty of open space in front of 
 <InteractiveAnchor id="motion-match" />
 
 <SimulationBlock
-  width="full"
+  height="tall"
+  highlightFullscreen
   title="Motion Match"
-  description="Connect a detector, then walk each of the three graphs."
+  description="Connect a detector, then walk each of the three graphs. Fullscreen makes the target graph readable from across the room."
 >
   <MotionMatchGame client:only="react" />
 </SimulationBlock>

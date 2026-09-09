@@ -3,16 +3,27 @@ interface Props {
   title?: string;
   description?: string;
   width?: 'wide' | 'full';
+  /** 'tall' for a simulation that needs vertical room at standard width. */
+  height?: 'standard' | 'tall';
   showHeader?: boolean;
   showFullscreen?: boolean;
+  /**
+   * Draws the fullscreen toggle as a solid accent button rather than a quiet
+   * one. For the few simulations where going fullscreen is part of doing the
+   * activity rather than a convenience — Motion Match is read from across a
+   * room — and the control is otherwise easy to miss in the corner.
+   */
+  highlightFullscreen?: boolean;
 }
 
 const {
   title,
   description,
   width = 'wide',
+  height = 'standard',
   showHeader = true,
   showFullscreen = true,
+  highlightFullscreen = false,
 } = Astro.props;
 
 const breakoutClass =
@@ -30,7 +41,12 @@ const breakoutClass =
       <button
         type="button"
         data-simulation-fullscreen-toggle
-        class="absolute top-4 right-4 z-20 rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-theme-text shadow-sm transition-colors hover:border-theme-blue hover:text-theme-blue"
+        class:list={[
+          'absolute top-4 right-4 z-20 rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition-colors',
+          highlightFullscreen
+            ? 'border border-[color:color-mix(in_srgb,var(--accent-blue)_45%,var(--grid-line))] bg-[var(--accent-blue)] text-white shadow-md ring-2 ring-[color:color-mix(in_srgb,var(--accent-blue)_25%,transparent)] hover:brightness-110'
+            : 'border border-theme-grid bg-[var(--surface-elevated)] text-theme-text hover:border-theme-blue hover:text-theme-blue',
+        ]}
         aria-label="Enter fullscreen"
       >
         Fullscreen
@@ -42,7 +58,14 @@ const breakoutClass =
         {description && <p class="mt-1 mb-0 text-sm text-[var(--text-muted)]">{description}</p>}
       </header>
     )}
-    <div class="simulation-content flex-1 min-h-[24rem]">
+    <div
+      class:list={[
+        'simulation-content flex-1',
+        // Written out rather than interpolated: Tailwind scans for literal
+        // class names, and a computed one emits no CSS at all.
+        height === 'tall' ? 'min-h-[34rem]' : 'min-h-[24rem]',
+      ]}
+    >
       <slot />
     </div>
   </div>

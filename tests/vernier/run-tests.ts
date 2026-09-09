@@ -31,6 +31,7 @@ import {
   step,
   type SessionState,
 } from '../../src/lib/vernier/ngioSession.ts';
+import type { SourceStatusKind } from '../../src/lib/vernier/sources/types.ts';
 import {
   MAX_PLAUSIBLE_SPEED,
   conditionSample,
@@ -58,6 +59,7 @@ import {
   isSupportedVernierDevice,
   webUsbFilters,
 } from '../../src/lib/vernier/deviceIds.ts';
+import { decideStream } from '../../src/lib/vernier/streamPolicy.ts';
 import { fitPolynomial } from '../../src/lib/math/leastSquares.ts';
 
 // --- device identity ------------------------------------------------------
@@ -485,6 +487,56 @@ const measurementFrame = (
   assert.equal(noise.state.phase, 'init', 'noise does not derail the handshake');
   assert.equal(noise.writes.length, 0);
 }
+
+// --- when to open a stream -------------------------------------------------
+
+// The regression this guards: a source reports `connecting` for the device
+// picker AND for the NGIO handshake. Treating that as "the stream is gone"
+// re-opened the stream the moment the handshake finished, which restarted the
+// handshake, which reported `connecting` again — the device cycled through
+// "Looking for a sensor on DIG 1" and "Configuring the Motion Detector"
+// forever while the detector clicked away.
+{
+  // The real transition sequence of a WebUSB connect, start to finish.
+  const sequence: SourceStatusKind[] = [
+    'idle',
+    'connecting', // device picker
+    'ready',
+    'connecting', // NGIO handshake
+    'streaming',
+    'streaming',
+  ];
+
+  let streamed: string | null = null;
+  const decisions = sequence.map((kind) => {
+    const decision = decideStream('webusb', kind, streamed);
+    if (decision === 'start') streamed = 'webusb';
+    if (decision === 'forget') streamed = null;
+    return decision;
+  });
+
+  assert.deepEqual(decisions, ['forget', 'wait', 'start', 'wait', 'wait', 'wait']);
+  assert.equal(
+    decisions.filter((decision) => decision === 'start').length,
+    1,
+    'exactly one stream is opened across a whole connect',
+  );
+}
+
+// A handshake that fails stops, rather than reconnecting forever.
+{
+  let streamed: string | null = 'webusb';
+  const failed = decideStream('webusb', 'error', streamed);
+  assert.equal(failed, 'forget');
+  streamed = null;
+  assert.equal(decideStream('webusb', 'error', streamed), 'forget', 'and stays stopped');
+}
+
+// Disconnecting forgets the stream; connecting a different source opens a new
+// one rather than assuming the old one still runs.
+assert.equal(decideStream(null, 'idle', 'webusb'), 'forget');
+assert.equal(decideStream('practice', 'ready', 'webusb'), 'start');
+assert.equal(decideStream('webusb', 'ready', 'webusb'), 'wait');
 
 // --- stream conditioning --------------------------------------------------
 

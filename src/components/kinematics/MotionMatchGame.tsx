@@ -24,6 +24,7 @@ import {
 import { MOTION_DETECTOR_RANGE, type SensorContext } from '../../lib/vernier/sensorIds';
 import { resample, velocityAt, type MotionSample } from '../../lib/vernier/motionStream';
 import { DEFAULT_PERIOD_SECONDS } from '../../lib/vernier/ngioSession';
+import { decideStream } from '../../lib/vernier/streamPolicy';
 import { useVernierMotion } from '../hardware/useVernierMotion';
 import VernierConnectPanel from '../hardware/VernierConnectPanel';
 import TargetPlot, { type TracePoint } from './motionGame/TargetPlot';
@@ -302,27 +303,37 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   // depending on `device` here would restart the stream twenty times a second.
   const { startStream, setStreamPeriod } = device;
   const statusKind = device.status.kind;
-  const streamingRef = useRef(false);
+  const sourceId = device.sourceId;
 
+  /** The source we have already opened a stream for, if any. */
+  const streamedSourceRef = useRef<string | null>(null);
+  const streamPeriodRef = useRef(streamPeriod);
+
+  // The stream starts as soon as a detector connects, not when a game begins:
+  // the connect panel's calibration check needs a live reading, and before
+  // this it had none, which is why it never reported anything. The rule for
+  // when to do that lives in `decideStream`, which is tested.
   useEffect(() => {
-    const live = statusKind === 'ready' || statusKind === 'streaming';
+    const decision = decideStream(sourceId, statusKind, streamedSourceRef.current);
 
-    if (!live) {
-      streamingRef.current = false;
+    if (decision === 'forget') {
+      streamedSourceRef.current = null;
       return;
     }
 
-    // The first stream starts as soon as a detector is connected, not when a
-    // game begins: the connect panel's calibration check needs a live reading,
-    // and before this it had none, which is why it never reported anything.
-    if (!streamingRef.current) {
-      streamingRef.current = true;
-      void startStream(streamPeriod);
-      return;
-    }
+    if (decision === 'wait') return;
 
+    streamedSourceRef.current = sourceId;
+    void startStream(streamPeriodRef.current);
+  }, [sourceId, statusKind, startStream]);
+
+  // Rate changes are their own effect so a status transition cannot trigger
+  // one, and so this stays silent until a stream actually exists.
+  useEffect(() => {
+    streamPeriodRef.current = streamPeriod;
+    if (streamedSourceRef.current === null) return;
     void setStreamPeriod(streamPeriod);
-  }, [statusKind, streamPeriod, startStream, setStreamPeriod]);
+  }, [streamPeriod, setStreamPeriod]);
 
   // --- getting on the mark -------------------------------------------------
 

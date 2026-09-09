@@ -89,8 +89,8 @@ export default function VernierConnectPanel({
     >
       <div className="flex flex-wrap items-center gap-3">
         <Button
-          onClick={() => void device.selectSource('webhid')}
-          disabled={!supportsHid || status.kind === 'connecting'}
+          onClick={() => void device.selectSource('webusb')}
+          disabled={!supportsUsb || status.kind === 'connecting'}
         >
           <Cable aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
           Connect a LabQuest
@@ -122,23 +122,25 @@ export default function VernierConnectPanel({
         <span>{status.message}</span>
       </p>
 
-      {!supportsHid && (
+      {!supportsUsb && (
         <p className="mt-2 text-sm text-[var(--text-muted)]">
-          Reading a LabQuest from a web page needs WebHID, which only Chrome and Edge ship.
-          {supportsUsb && (
-            <>
-              {' '}
-              This browser does have WebUSB;{' '}
-              <button
-                type="button"
-                className="underline"
-                onClick={() => void device.selectSource('webusb')}
-              >
-                try the WebUSB fallback
-              </button>
-              , though on Windows it conflicts with the Vernier drivers.
-            </>
-          )}
+          Reading a LabQuest from a web page needs WebUSB, which Chrome and Edge ship and Firefox
+          and Safari do not. Open this page in Chrome or Edge to connect an interface.
+        </p>
+      )}
+
+      {supportsUsb && status.kind === 'error' && supportsHid && (
+        <p className="mt-2 text-sm text-[var(--text-muted)]">
+          A LabQuest is a vendor-class USB device, so the USB connection above is the one that
+          reaches it. If you are connecting an older Go!Link or Go!Motion instead,{' '}
+          <button
+            type="button"
+            className="underline"
+            onClick={() => void device.selectSource('webhid')}
+          >
+            try the WebHID connection
+          </button>
+          .
         </p>
       )}
 

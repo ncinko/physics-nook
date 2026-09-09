@@ -15,6 +15,7 @@
 
 import {
   DEFAULT_FRAMING,
+  NGIO_DEFAULT_REPORT_LENGTH,
   NGIO_CMD_ID,
   NGIO_CHANNEL_ID,
   NGIO_STATUS,
@@ -52,6 +53,8 @@ export interface SessionState {
   framing: NgioFraming;
   channel: number;
   periodSeconds: number;
+  /** Padding width for outgoing packets; `null` sends them unpadded. */
+  reportLength: number | null;
   rollingCounter: number;
   /** Command we are waiting on a response for, or null while streaming. */
   pendingCommand: number | null;
@@ -87,6 +90,11 @@ export interface SessionOptions {
   framing?: NgioFraming;
   channel?: number;
   periodSeconds?: number;
+  /**
+   * `null` for bulk transports, which carry exactly the bytes written. Leave
+   * unset for HID, whose reports are fixed-size buffers.
+   */
+  reportLength?: number | null;
 }
 
 /**
@@ -103,6 +111,8 @@ const createState = (options: SessionOptions = {}): SessionState => ({
   framing: options.framing ?? DEFAULT_FRAMING,
   channel: options.channel ?? NGIO_CHANNEL_ID.DIGITAL1,
   periodSeconds: options.periodSeconds ?? DEFAULT_PERIOD_SECONDS,
+  reportLength:
+    options.reportLength === undefined ? NGIO_DEFAULT_REPORT_LENGTH : options.reportLength,
   rollingCounter: 0,
   pendingCommand: null,
   retries: 0,
@@ -185,6 +195,7 @@ const enterPhase = (state: SessionState, phase: SessionPhase): StepResult => {
         rollingCounter,
         params: outgoing.params,
         framing: state.framing,
+        reportLength: state.reportLength,
       }),
     ],
     samples: [],

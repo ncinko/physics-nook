@@ -1,11 +1,17 @@
 /**
- * LabQuest Mini over WebHID.
+ * NGIO over WebHID — kept as a fallback, but it will not find a LabQuest.
  *
- * WebHID rather than WebUSB because every Vernier interface enumerates as a
- * USB HID class device, and on Windows a HID device can be claimed from the
- * browser with no driver replacement and no disruption to an existing Logger
- * Pro or Graphical Analysis install. WebUSB would need the device rebound to
- * WinUSB, which breaks those apps.
+ * This was originally the primary path, on the mistaken belief that every
+ * Vernier interface is HID class. It is not: the LabQuest family enumerates as
+ * vendor-specific class 0xFF bound to WinUSB, so `navigator.hid` has nothing
+ * to offer for vendor 0x08F7 and its picker opens empty. `webUsbSource.ts` is
+ * the transport that reaches those devices; see the note in `deviceIds.ts`.
+ *
+ * This file survives because the Go! family (Go!Link, Go!Motion, Go!Temp) IS
+ * HID class, so the transport is the right shape for the day those get their
+ * GoIO protocol implemented, and because on a machine whose LabQuest has
+ * somehow been rebound to a HID driver it still gives the diagnostics panel
+ * something to report.
  *
  * Everything decidable lives in `ngioSession.ts`. This file is the part that
  * cannot be unit tested: opening the device, moving bytes, and running the
@@ -264,7 +270,7 @@ export const createWebHidSource = (): MotionSource => {
 
   return {
     id: 'webhid',
-    label: 'LabQuest over USB',
+    label: 'Vernier interface over WebHID (Go! family)',
     isReal: true,
     isSupported: () => hidApi() !== null,
 
@@ -292,7 +298,9 @@ export const createWebHidSource = (): MotionSource => {
       if (!chosen) {
         setStatus({
           kind: 'idle',
-          message: 'No interface selected.',
+          message:
+            'No interface selected. If the picker was empty, that is expected for a LabQuest — ' +
+            'it is not a HID device. Use the USB connection instead.',
           sensorName: null,
         });
         return;

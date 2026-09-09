@@ -1,25 +1,43 @@
 /**
- * The same NGIO protocol over WebUSB, as a fallback.
+ * LabQuest over WebUSB — the transport that actually reaches the hardware.
  *
- * WebHID is the path that should work: Vernier interfaces are HID class, and
- * a HID device can be claimed from Chrome with no driver changes. This exists
- * for the case where WebHID enumerates the interface but will not exchange
- * reports with it.
+ * The LabQuest family does NOT enumerate as HID. Read from the device tree of
+ * a Windows machine with a LabQuest Mini attached:
  *
- * The catch, and it is a real one: on Windows a device is only reachable
- * through WebUSB if it is bound to WinUSB. A machine with Logger Pro or
- * Graphical Analysis installed has Vernier's own driver bound instead, and
- * rebinding would break those applications. So this path is expected to work
- * on macOS, Linux and ChromeOS, and to fail on a typical Windows classroom
- * machine. The connect panel says so rather than offering it as an equal
- * choice.
+ *   HardwareIds:   USB\VID_08F7&PID_0008&REV_0001
+ *   CompatibleIds: USB\COMPAT_VID_08F7&Class_FF&SubClass_00&Prot_00
+ *   Service:       WINUSB
+ *   Class:         VST_WinUSB  ("Vernier LabQuest Mini")
+ *
+ * Class 0xFF is vendor-specific with bulk endpoints, so `navigator.hid` has
+ * nothing to offer for this vendor ID and its picker opens empty — that is the
+ * whole of the "it will not connect" symptom, and no amount of framing work
+ * fixes it.
+ *
+ * The `WINUSB` service line is the other half. Vernier's driver package binds
+ * the interface to Microsoft's WinUSB, and a WinUSB binding is exactly the
+ * precondition Chrome requires before it will hand a device to WebUSB. So the
+ * installed Vernier software is what *enables* this path rather than what
+ * blocks it, which is why Vernier's own browser build of Graphical Analysis
+ * drives a LabQuest Mini over USB in Chrome.
  *
  * Only the transport differs — the codec and the session state machine are
- * shared with `webHidSource.ts`.
+ * shared with `webHidSource.ts`, which remains for the HID-class Go! family.
  */
 
-import { VERNIER_VENDOR_ID, findVernierDevice, webUsbFilters } from '../deviceIds.ts';
-import { NGIO_DEFAULT_REPORT_LENGTH, type NgioFraming, DEFAULT_FRAMING } from '../ngioPackets.ts';
+import {
+  VERNIER_VENDOR_ID,
+  describeVernierDevice,
+  findVernierDevice,
+  webUsbFilters,
+} from '../deviceIds.ts';
+import {
+  FRAMING_CANDIDATES,
+  NGIO_CMD_ID,
+  encodeCommand,
+  probeFramingResponse,
+  type NgioFraming,
+} from '../ngioPackets.ts';
 import {
   DEFAULT_PERIOD_SECONDS,
   describePhase,
@@ -32,7 +50,7 @@ import { DEFAULT_SENSOR_CONTEXT, findSensor } from '../sensorIds.ts';
 import { createTrafficLog } from '../diagnostics.ts';
 import { createEmitter, type MotionSource, type SourceStatus, type StartOptions } from './types.ts';
 
-// WebUSB is likewise absent from TypeScript's DOM library.
+// WebUSB is absent from TypeScript's DOM library.
 interface UsbEndpoint {
   endpointNumber: number;
   direction: 'in' | 'out';
@@ -45,7 +63,7 @@ interface UsbAlternateInterface {
 
 interface UsbInterface {
   interfaceNumber: number;
-  alternate: UsbAlternateInterface;
+  alternate?: UsbAlternateInterface;
 }
 
 interface UsbConfiguration {
@@ -65,9 +83,11 @@ interface UsbDevice {
   configuration: UsbConfiguration | null;
   open: () => Promise<void>;
   close: () => Promise<void>;
+  reset: () => Promise<void>;
   selectConfiguration: (value: number) => Promise<void>;
   claimInterface: (value: number) => Promise<void>;
   releaseInterface: (value: number) => Promise<void>;
+  clearHalt: (direction: 'in' | 'out', endpointNumber: number) => Promise<void>;
   transferIn: (endpointNumber: number, length: number) => Promise<UsbInTransferResult>;
   transferOut: (endpointNumber: number, data: Uint8Array) => Promise<unknown>;
 }
@@ -82,7 +102,47 @@ const usbApi = (): UsbApi | null => {
   return (navigator as unknown as { usb?: UsbApi }).usb ?? null;
 };
 
+/** How long to wait for a reply before declaring the current step stuck. */
 const RESPONSE_TIMEOUT_MS = 1500;
+
+/** How long each framing candidate gets to prove itself. */
+const FRAMING_PROBE_MS = 300;
+
+/**
+ * Receive buffer for each bulk read, matching the 30000 Vernier's own WebUSB
+ * transport uses.
+ *
+ * This is not padding-paranoia. A bulk `transferIn` shorter than the packet
+ * the device sends fails the transfer outright — WinUSB reports `babble` — so
+ * reading into a 64-byte buffer loses every reply longer than 64 bytes and,
+ * if the status is not inspected, looks exactly like a device that never
+ * answered.
+ */
+const BULK_RECEIVE_BUFSIZE = 30000;
+
+/**
+ * Prefers the interface exposing a bulk pair rather than trusting that the
+ * NGIO endpoints live on interface 0. Falls back to the first interface so a
+ * device with an unexpected layout still reports real endpoint numbers into
+ * the diagnostics instead of failing blind.
+ */
+const pickInterface = (configuration: UsbConfiguration | null): UsbInterface | null => {
+  const interfaces = configuration?.interfaces ?? [];
+  const withBulkPair = interfaces.find((candidate) => {
+    const endpoints = candidate.alternate?.endpoints ?? [];
+    return (
+      endpoints.some((endpoint) => endpoint.direction === 'in' && endpoint.type === 'bulk') &&
+      endpoints.some((endpoint) => endpoint.direction === 'out' && endpoint.type === 'bulk')
+    );
+  });
+  return withBulkPair ?? interfaces[0] ?? null;
+};
+
+const pickEndpoint = (usbInterface: UsbInterface, direction: 'in' | 'out'): UsbEndpoint | null => {
+  const endpoints = usbInterface.alternate?.endpoints ?? [];
+  const matching = endpoints.filter((endpoint) => endpoint.direction === direction);
+  return matching.find((endpoint) => endpoint.type === 'bulk') ?? matching[0] ?? null;
+};
 
 export const createWebUsbSource = (): MotionSource => {
   const samples = createEmitter<MotionSample>();
@@ -93,17 +153,29 @@ export const createWebUsbSource = (): MotionSource => {
   let interfaceNumber = 0;
   let inEndpoint = 0;
   let outEndpoint = 0;
-  let framing: NgioFraming = DEFAULT_FRAMING;
+  let framing: NgioFraming | null = null;
   let session: SessionState | null = null;
   let lastGood: MotionSample | null = null;
   let reading = false;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
-  const notes: string[] = [
-    'WebUSB fallback. On Windows this only works if the interface is bound to WinUSB, which conflicts with Logger Pro and Graphical Analysis.',
-  ];
+  /**
+   * Counted so the diagnostics can distinguish the three ways a probe fails:
+   * writes rejected, writes accepted but device mute, or device answering in a
+   * shape we cannot decode.
+   */
+  let writesAccepted = 0;
+  let framesReceived = 0;
+  /**
+   * While set, inbound frames go here instead of to the session. The framing
+   * probe needs the read loop already running to hear a reply at all.
+   */
+  let probeListener: ((bytes: Uint8Array) => void) | null = null;
+  const notes: string[] = [];
   let status: SourceStatus = {
     kind: usbApi() ? 'idle' : 'unsupported',
-    message: usbApi() ? 'Not connected' : 'This browser has no WebUSB.',
+    message: usbApi()
+      ? 'Not connected'
+      : 'This browser has no WebUSB. Chrome or Edge is required to read a LabQuest.',
     sensorName: null,
   };
 
@@ -121,7 +193,6 @@ export const createWebUsbSource = (): MotionSource => {
 
   const fail = (message: string) => {
     clearWatchdog();
-    reading = false;
     setStatus({ kind: 'error', message, sensorName: session?.sensorName ?? null });
   };
 
@@ -135,13 +206,30 @@ export const createWebUsbSource = (): MotionSource => {
     }, RESPONSE_TIMEOUT_MS);
   };
 
+  /**
+   * Records the outcome, not just the intent. The traffic log is written
+   * before the transfer resolves, so without this a rejected write and a
+   * silent device produce an identical transcript — which is exactly the
+   * ambiguity that made the first round of diagnostics unreadable.
+   */
   const write = async (bytes: Uint8Array) => {
     if (!device) return;
     traffic.push('tx', bytes);
-    await device.transferOut(outEndpoint, bytes);
+    try {
+      const result = await device.transferOut(outEndpoint, bytes);
+      const outcome = (result as { status?: string } | undefined)?.status;
+      if (outcome && outcome !== 'ok') {
+        notes.push(`transferOut on endpoint ${outEndpoint} returned "${outcome}".`);
+      } else {
+        writesAccepted += 1;
+      }
+    } catch (error) {
+      notes.push(`transferOut on endpoint ${outEndpoint} threw: ${String(error)}`);
+      throw error;
+    }
   };
 
-  const handleReport = (bytes: Uint8Array) => {
+  const handleSessionReport = (bytes: Uint8Array) => {
     if (!session) return;
 
     const result = step(session, { type: 'report', bytes });
@@ -187,13 +275,29 @@ export const createWebUsbSource = (): MotionSource => {
     }
   };
 
-  /** Bulk endpoints have no event; the read loop polls until told to stop. */
+  /**
+   * Bulk endpoints have no event to subscribe to; the read loop polls from the
+   * moment the interface is claimed until disconnect, so the framing probe and
+   * the session both see traffic through the same path.
+   */
   const readLoop = async () => {
     while (reading && device) {
       try {
-        const result = await device.transferIn(inEndpoint, NGIO_DEFAULT_REPORT_LENGTH);
+        const result = await device.transferIn(inEndpoint, BULK_RECEIVE_BUFSIZE);
         if (!reading) break;
-        if (result.status !== 'ok' || !result.data) continue;
+
+        // Never swallow a non-ok status. Discarding these silently is what
+        // made a stalled pipe indistinguishable from a mute device.
+        if (result.status === 'stall') {
+          notes.push(`Bulk IN ${inEndpoint} stalled; clearing halt and retrying.`);
+          await device.clearHalt('in', inEndpoint).catch(() => {});
+          continue;
+        }
+        if (result.status !== 'ok') {
+          notes.push(`transferIn on endpoint ${inEndpoint} returned "${result.status}".`);
+          continue;
+        }
+        if (!result.data) continue;
 
         const bytes = new Uint8Array(
           result.data.buffer,
@@ -201,7 +305,10 @@ export const createWebUsbSource = (): MotionSource => {
           result.data.byteLength,
         );
         traffic.push('rx', bytes);
-        handleReport(bytes);
+        framesReceived += 1;
+
+        if (probeListener) probeListener(bytes);
+        else handleSessionReport(bytes);
       } catch (error) {
         if (reading) {
           notes.push(`transferIn threw: ${String(error)}`);
@@ -212,21 +319,71 @@ export const createWebUsbSource = (): MotionSource => {
     }
   };
 
+  /**
+   * Sends GET_STATUS under each candidate framing and keeps the first that
+   * produces a decodable reply. The framing is a hypothesis (see
+   * `ngioPackets.ts`); this settles it against the real device in about a
+   * second rather than leaving it to guesswork.
+   */
+  const probeFraming = async (): Promise<NgioFraming | null> => {
+    for (const candidate of FRAMING_CANDIDATES) {
+      const packet = encodeCommand({
+        command: NGIO_CMD_ID.GET_STATUS,
+        rollingCounter: 0,
+        framing: candidate,
+        reportLength: null,
+      });
+
+      const answered = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          probeListener = null;
+          resolve(false);
+        }, FRAMING_PROBE_MS);
+
+        probeListener = (bytes) => {
+          if (!probeFramingResponse(bytes, candidate)) return;
+          clearTimeout(timer);
+          probeListener = null;
+          resolve(true);
+        };
+
+        void write(packet).catch(() => {
+          // A rejected write just means this candidate is wrong; let the
+          // timeout move on to the next one.
+        });
+      });
+
+      if (answered) {
+        notes.push(
+          `Framing settled empirically: sync 0x${candidate.syncByte.toString(16)}, report ${candidate.reportId}.`,
+        );
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
   return {
     id: 'webusb',
-    label: 'LabQuest over USB (WebUSB fallback)',
+    label: 'LabQuest over USB',
     isReal: true,
     isSupported: () => usbApi() !== null,
 
     connect: async () => {
       const usb = usbApi();
       if (!usb) {
-        setStatus({ kind: 'unsupported', message: 'This browser has no WebUSB.', sensorName: null });
+        setStatus({
+          kind: 'unsupported',
+          message: 'This browser has no WebUSB. Chrome or Edge is required to read a LabQuest.',
+          sensorName: null,
+        });
         return;
       }
 
       setStatus({ kind: 'connecting', message: 'Choose your interface', sensorName: null });
 
+      // Reuse a previously granted device so a reconnect skips the picker.
       const granted = await usb.getDevices().catch(() => [] as UsbDevice[]);
       const remembered = granted.find((candidate) => candidate.vendorId === VERNIER_VENDOR_ID);
       const chosen =
@@ -241,15 +398,27 @@ export const createWebUsbSource = (): MotionSource => {
       const known = findVernierDevice(chosen.productId);
 
       if (!known || known.family !== 'ngio' || !known.collectsData) {
-        fail('That is not an interface this page can read.');
+        fail(
+          `${describeVernierDevice(chosen.vendorId, chosen.productId)} is not an interface this page can read. ` +
+            'Connect a LabQuest Mini, LabQuest 2, or LabQuest 3.',
+        );
         return;
       }
 
       try {
         if (!chosen.opened) await chosen.open();
-        if (!chosen.configuration) await chosen.selectConfiguration(1);
+        await chosen.selectConfiguration(1);
 
-        const usbInterface = chosen.configuration?.interfaces[0];
+        // Vernier's own transport resets every device except the LabQuest 3
+        // before claiming it, and tolerates the reset failing. Windows often
+        // rejects it; a Mini left mid-session by Logger Pro needs it.
+        if (known.productId !== 0x0015) {
+          await chosen.reset().catch((error: unknown) => {
+            notes.push(`device.reset() failed (expected on Windows): ${String(error)}`);
+          });
+        }
+
+        const usbInterface = pickInterface(chosen.configuration);
         if (!usbInterface) {
           fail('The interface exposes no USB interface to claim.');
           return;
@@ -258,18 +427,48 @@ export const createWebUsbSource = (): MotionSource => {
         interfaceNumber = usbInterface.interfaceNumber;
         await chosen.claimInterface(interfaceNumber);
 
-        const endpoints = usbInterface.alternate.endpoints;
-        inEndpoint = endpoints.find((endpoint) => endpoint.direction === 'in')?.endpointNumber ?? 0;
-        outEndpoint = endpoints.find((endpoint) => endpoint.direction === 'out')?.endpointNumber ?? 0;
+        const incoming = pickEndpoint(usbInterface, 'in');
+        const outgoing = pickEndpoint(usbInterface, 'out');
 
-        if (inEndpoint === 0 || outEndpoint === 0) {
+        if (!incoming || !outgoing) {
           fail('Could not find the USB endpoints to talk to the interface.');
           return;
         }
+
+        inEndpoint = incoming.endpointNumber;
+        outEndpoint = outgoing.endpointNumber;
+        notes.push(
+          `Claimed interface ${interfaceNumber}; ${incoming.type} IN ${inEndpoint}, ${outgoing.type} OUT ${outEndpoint}.`,
+        );
       } catch (error) {
         notes.push(`claim failed: ${String(error)}`);
         fail(
-          'Windows would not hand the interface to the browser over WebUSB. This is expected when Vernier software is installed — use the WebHID connection instead.',
+          'The browser could not claim the interface. Close Logger Pro, Graphical Analysis, or ' +
+            'any other tab holding the LabQuest, then try again.',
+        );
+        return;
+      }
+
+      reading = true;
+      void readLoop();
+
+      setStatus({
+        kind: 'connecting',
+        message: 'Checking how the interface talks',
+        sensorName: null,
+      });
+
+      framing = await probeFraming();
+
+      if (!framing) {
+        fail(
+          'The interface is connected but did not answer. Copy the diagnostics below and send them on — ' +
+            'this is the protocol detail that needs a real device to pin down.',
+        );
+        notes.push(
+          `No framing candidate produced a decodable reply. Tried: ${FRAMING_CANDIDATES.map(
+            (candidate) => `0x${candidate.syncByte.toString(16)}/report ${candidate.reportId}`,
+          ).join(', ')}.`,
         );
         return;
       }
@@ -278,16 +477,13 @@ export const createWebUsbSource = (): MotionSource => {
     },
 
     start: async ({ periodSeconds = DEFAULT_PERIOD_SECONDS }: StartOptions = {}) => {
-      if (!device) {
+      if (!device || !framing) {
         fail('Connect the interface first.');
         return;
       }
 
       lastGood = null;
-      reading = true;
-      void readLoop();
-
-      const opened = startSession({ framing, periodSeconds });
+      const opened = startSession({ framing, periodSeconds, reportLength: null });
       session = opened.state;
       setStatus({ kind: 'connecting', message: describePhase(session), sensorName: null });
 
@@ -299,26 +495,27 @@ export const createWebUsbSource = (): MotionSource => {
 
     stop: async () => {
       clearWatchdog();
-      if (session) {
-        const result = step(session, { type: 'stop' });
-        session = result.state;
-        for (const packet of result.writes) {
-          await write(packet);
-        }
+      if (!session) return;
+
+      const result = step(session, { type: 'stop' });
+      session = result.state;
+      for (const packet of result.writes) {
+        await write(packet);
       }
-      reading = false;
-      setStatus({ kind: 'ready', message: 'Stopped', sensorName: session?.sensorName ?? null });
+      setStatus({ kind: 'ready', message: 'Stopped', sensorName: session.sensorName });
     },
 
     disconnect: async () => {
       clearWatchdog();
       reading = false;
+      probeListener = null;
       if (device?.opened) {
         await device.releaseInterface(interfaceNumber).catch(() => {});
         await device.close().catch(() => {});
       }
       device = null;
       session = null;
+      framing = null;
       lastGood = null;
       samples.clear();
       setStatus({ kind: 'idle', message: 'Disconnected', sensorName: null });
@@ -330,7 +527,7 @@ export const createWebUsbSource = (): MotionSource => {
 
     diagnostics: () => ({
       sourceId: 'webusb',
-      sourceLabel: 'LabQuest over USB (WebUSB fallback)',
+      sourceLabel: 'LabQuest over USB (WebUSB)',
       deviceName: device?.productName ?? null,
       vendorId: device?.vendorId ?? null,
       productId: device?.productId ?? null,
@@ -341,7 +538,10 @@ export const createWebUsbSource = (): MotionSource => {
       sensorName: session?.sensorName ?? null,
       error: status.kind === 'error' ? status.message : (session?.error ?? null),
       traffic: traffic.entries(),
-      notes,
+      notes: [
+        ...notes,
+        `Writes accepted by the USB stack: ${writesAccepted}. Frames received: ${framesReceived}.`,
+      ],
     }),
   };
 };

@@ -1,20 +1,22 @@
 /**
  * USB identities for Vernier interfaces.
  *
- * Every Vernier interface shares vendor ID 0x08F7 and enumerates as a USB HID
- * class device. That HID detail is what makes WebHID the right transport: on
- * Windows a HID device needs no driver replacement and claiming it does not
- * disturb an existing Logger Pro or Graphical Analysis install, whereas WebUSB
- * would need the device rebound to WinUSB. Vernier's own browser build of
- * Graphical Analysis drives a LabQuest Mini over USB in Chrome, so the path is
- * known to work; `webUsbFilters` exists only as a fallback.
+ * Every Vernier interface shares vendor ID 0x08F7, but they do NOT all share a
+ * USB device class, and that difference decides the transport:
  *
- * Two protocol families hide behind the one vendor ID:
- *   - `ngio`  the LabQuest family (LabQuest Mini, LabQuest 2/3, Stream)
- *   - `goio`  the older Go! devices (Go!Link, Go!Motion, Go!Temp)
- * They do not speak the same wire protocol. Only `ngio` is implemented here;
- * `goio` entries are listed so an attached Go! device produces "recognised but
- * unsupported" rather than a blank device picker.
+ *   - `ngio`  the LabQuest family (LabQuest Mini, LabQuest 2/3, Stream).
+ *     Vendor-specific class 0xFF with bulk endpoints, bound to WinUSB by
+ *     Vernier's driver package. WebHID cannot see these at all — its picker
+ *     opens empty. WebUSB is the transport, and the WinUSB binding is what
+ *     makes it work, which is how Vernier's own browser build of Graphical
+ *     Analysis drives a LabQuest Mini in Chrome.
+ *
+ *   - `goio`  the older Go! devices (Go!Link, Go!Motion, Go!Temp). These are
+ *     genuine HID-class devices, so WebHID is the right transport for them.
+ *
+ * They do not speak the same wire protocol either. Only `ngio` is implemented
+ * here; `goio` entries are listed so an attached Go! device produces
+ * "recognised but unsupported" rather than a blank device picker.
  *
  * Product IDs come from Vernier Technical Information Library article 4289.
  */
@@ -75,10 +77,13 @@ export const describeVernierDevice = (vendorId: number, productId: number): stri
 };
 
 /**
- * Filters for `navigator.hid.requestDevice`. Deliberately vendor-wide rather
- * than per-product: an unrecognised Vernier interface should still reach the
- * picker so the diagnostics panel can report what it is, instead of the user
- * seeing an empty dialog and concluding the cable is broken.
+ * Filters for the device pickers. Deliberately vendor-wide rather than
+ * per-product: an unrecognised Vernier interface should still reach the picker
+ * so the diagnostics panel can report what it is, instead of the user seeing
+ * an empty dialog and concluding the cable is broken.
+ *
+ * Note that `webHidFilters` will match nothing for a LabQuest — those are not
+ * HID devices. It is here for the Go! family.
  */
 export const webHidFilters = () => [{ vendorId: VERNIER_VENDOR_ID }];
 

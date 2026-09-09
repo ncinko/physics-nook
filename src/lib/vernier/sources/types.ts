@@ -2,7 +2,7 @@
  * The adapter every motion source implements.
  *
  * The point of the interface is that the game never learns which one it got.
- * A LabQuest Mini over WebHID, the same interface over WebUSB, and the
+ * A LabQuest Mini over WebUSB, a Go! device over WebHID, and the
  * keyboard-driven practice walker all deliver the same `MotionSample` stream,
  * so adding a future Vernier activity means writing a source and a sensor
  * definition, not touching the game.

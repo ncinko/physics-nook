@@ -145,10 +145,17 @@ export interface EncodeCommandOptions {
   params?: readonly number[];
   framing?: NgioFraming;
   /**
-   * Output reports are fixed length; the device ignores trailing padding.
-   * Defaults to the 64-byte full-speed HID report Vernier interfaces use.
+   * Pad the packet out to this many bytes, or `null` to send it at its natural
+   * length.
+   *
+   * The distinction is not cosmetic. A HID output report is a fixed-size
+   * buffer, so the 64-byte default is required there. A bulk endpoint carries
+   * exactly the bytes handed to it, and Vernier's own WebUSB transport writes
+   * the packet unpadded and asserts `bytesWritten === buffer.byteLength`.
+   * Padding a 5-byte command to 64 on a bulk pipe sends 59 trailing zero bytes
+   * the device never asked for.
    */
-  reportLength?: number;
+  reportLength?: number | null;
 }
 
 /**
@@ -165,6 +172,10 @@ export const encodeCommand = ({
   const bodyLength = params.length + 3; // command + counter + params + checksum
   const head = [framing.syncByte, bodyLength, command, rollingCounter, ...params];
   const packet = [...head, ngioChecksum(head)];
+
+  if (reportLength === null) {
+    return Uint8Array.from(packet);
+  }
 
   if (packet.length > reportLength) {
     throw new Error(

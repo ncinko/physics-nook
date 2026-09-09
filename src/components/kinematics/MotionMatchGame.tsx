@@ -35,7 +35,7 @@ import TargetPlot, { type TracePoint } from './motionGame/TargetPlot';
 // refresh, and a backgrounded tab throttles rAF to nothing — which would
 // silently truncate a round mid-walk.
 
-type Phase = 'setup' | 'ready' | 'countdown' | 'recording' | 'review' | 'finished';
+type Phase = 'setup' | 'ready' | 'arming' | 'countdown' | 'recording' | 'review' | 'finished';
 
 interface RoundResult {
   samples: MotionSample[];
@@ -46,6 +46,28 @@ interface RoundResult {
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 100;
 const ON_MARK_TOLERANCE = 0.1;
+
+/**
+ * How long you must stand on the mark before the countdown starts on its own.
+ *
+ * Replaces a "start the round" button, which asked you to be in position and
+ * within reach of the keyboard at the same time — the detector is across the
+ * room from the screen, so those are different places.
+ */
+const HOLD_SECONDS = 3;
+
+/**
+ * Sample periods, loudest to quietest. The detector's ping is audible, so the
+ * rate is not only a data question: pinging 20 times a second through a review
+ * screen or a name entry box is unpleasant in a classroom.
+ *
+ * 20 Hz is the sensor manual's optimum and only a recording needs it. Getting
+ * on the mark needs enough resolution to feel responsive but no more. Anything
+ * else just needs a live reading so the connect panel's calibration check has
+ * something to read.
+ */
+const IDLE_PERIOD_SECONDS = 1;
+const AIMING_PERIOD_SECONDS = 0.25;
 
 const LOCAL_LIMIT = MOTION_GAME_DEFAULTS.leaderboardLimit;
 
@@ -112,6 +134,11 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const graph = graphs[roundIndex];
   const isPractice = device.sourceId === 'practice';
   const connected = device.status.kind === 'ready' || device.status.kind === 'streaming';
+
+  const liveDistance =
+    device.latest && device.latest.quality === 'ok' ? device.latest.distance : null;
+  const onMark =
+    liveDistance !== null && Math.abs(liveDistance - graph.startMeters) <= ON_MARK_TOLERANCE;
 
   // --- local leaderboard ---------------------------------------------------
 
@@ -262,6 +289,83 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     return () => clearInterval(timer);
   }, [phase, finishRound]);
 
+  // --- detector duty cycle -------------------------------------------------
+
+  const streamPeriod =
+    phase === 'countdown' || phase === 'recording'
+      ? DEFAULT_PERIOD_SECONDS
+      : phase === 'ready' || phase === 'arming'
+        ? AIMING_PERIOD_SECONDS
+        : IDLE_PERIOD_SECONDS;
+
+  // Destructured because the hook's value object is rebuilt on every sample;
+  // depending on `device` here would restart the stream twenty times a second.
+  const { startStream, setStreamPeriod } = device;
+  const statusKind = device.status.kind;
+  const streamingRef = useRef(false);
+
+  useEffect(() => {
+    const live = statusKind === 'ready' || statusKind === 'streaming';
+
+    if (!live) {
+      streamingRef.current = false;
+      return;
+    }
+
+    // The first stream starts as soon as a detector is connected, not when a
+    // game begins: the connect panel's calibration check needs a live reading,
+    // and before this it had none, which is why it never reported anything.
+    if (!streamingRef.current) {
+      streamingRef.current = true;
+      void startStream(streamPeriod);
+      return;
+    }
+
+    void setStreamPeriod(streamPeriod);
+  }, [statusKind, streamPeriod, startStream, setStreamPeriod]);
+
+  // --- getting on the mark -------------------------------------------------
+
+  const [holdRemaining, setHoldRemaining] = useState(HOLD_SECONDS);
+  const onMarkRef = useRef(false);
+
+  useEffect(() => {
+    onMarkRef.current = onMark;
+  }, [onMark]);
+
+  const startCountdown = useCallback(() => {
+    wallStartRef.current = Date.now();
+    setCountdown(COUNTDOWN_SECONDS);
+    setPhase('countdown');
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'arming') {
+      setHoldRemaining(HOLD_SECONDS);
+      return undefined;
+    }
+
+    // Held time is measured from a wall-clock mark rather than accumulated per
+    // tick, so a throttled tab cannot make the hold appear to pass early.
+    let heldSince: number | null = null;
+
+    const timer = setInterval(() => {
+      if (!onMarkRef.current) {
+        heldSince = null;
+        setHoldRemaining(HOLD_SECONDS);
+        return;
+      }
+
+      if (heldSince === null) heldSince = Date.now();
+      const remaining = HOLD_SECONDS - (Date.now() - heldSince) / 1000;
+      setHoldRemaining(Math.max(0, remaining));
+
+      if (remaining <= 0) startCountdown();
+    }, TICK_MS);
+
+    return () => clearInterval(timer);
+  }, [phase, startCountdown]);
+
   // --- round control -------------------------------------------------------
 
   const beginGame = useCallback(async () => {
@@ -280,13 +384,11 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     } else {
       await createServerRun();
     }
-    await device.startStream(DEFAULT_PERIOD_SECONDS);
-  }, [createServerRun, device, isPractice]);
+  }, [createServerRun, isPractice]);
 
-  const startCountdown = useCallback(() => {
-    wallStartRef.current = Date.now();
-    setCountdown(COUNTDOWN_SECONDS);
-    setPhase('countdown');
+  const armRound = useCallback(() => {
+    setLiveTrace([]);
+    setPhase('arming');
   }, []);
 
   const retryRound = useCallback(() => {
@@ -296,14 +398,15 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   const nextRound = useCallback(() => {
     if (roundIndex >= MOTION_GRAPH_COUNT - 1) {
-      void device.stopStream();
+      // The stream is not stopped here; it drops to the idle rate, which keeps
+      // the connect panel's live reading and calibration check working.
       setPhase('finished');
       return;
     }
     setRoundIndex(roundIndex + 1);
     setLiveTrace([]);
     setPhase('ready');
-  }, [device, roundIndex]);
+  }, [roundIndex]);
 
   // --- submission ----------------------------------------------------------
 
@@ -392,11 +495,6 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     }));
   }, [liveTrace, graph.quantity]);
 
-  const liveDistance =
-    device.latest && device.latest.quality === 'ok' ? device.latest.distance : null;
-  const onMark =
-    liveDistance !== null && Math.abs(liveDistance - graph.startMeters) <= ON_MARK_TOLERANCE;
-
   return (
     <div className={`not-prose px-5 py-4 ${className}`.trim()}>
       {phase === 'setup' && (
@@ -445,25 +543,51 @@ export default function MotionMatchGame({ className = '' }: { className?: string
                   {phase === 'ready' && (
                     <>
                       <p className="text-sm text-[var(--text-primary)]">
-                        Stand {fixed(graph.startMeters, 2)} m from the detector.{' '}
+                        Stand {fixed(graph.startMeters, 2)} m from the detector. The round starts on
+                        its own once you have held that spot for {HOLD_SECONDS} seconds.
+                      </p>
+                      <Button className="mt-3 px-6 py-2.5 text-base" onClick={armRound}>
+                        Begin the round
+                      </Button>
+                    </>
+                  )}
+
+                  {phase === 'arming' && (
+                    <>
+                      <p className="text-sm text-[var(--text-primary)]">
+                        Stand {fixed(graph.startMeters, 2)} m from the detector.
+                      </p>
+
+                      <p className="mt-2 text-sm" role="status">
                         {liveDistance === null ? (
-                          <span className="text-[var(--text-muted)]">No echo yet.</span>
+                          <span className="text-[var(--text-muted)]">
+                            No echo yet — is anything in front of the detector?
+                          </span>
+                        ) : onMark ? (
+                          <span className="text-[var(--accent-green)]">
+                            Hold it — starting in {Math.ceil(holdRemaining)}…
+                          </span>
                         ) : (
-                          <span
-                            className={
-                              onMark ? 'text-[var(--accent-green)]' : 'text-[var(--text-muted)]'
-                            }
-                          >
-                            You are at {fixed(liveDistance, 2)} m.
+                          <span className="text-[var(--text-muted)]">
+                            You are at {fixed(liveDistance, 2)} m. Move onto the mark.
                           </span>
                         )}
                       </p>
-                      <Button
-                        className="mt-3 px-6 py-2.5 text-base"
-                        onClick={startCountdown}
-                        disabled={!onMark}
+
+                      <div
+                        aria-hidden="true"
+                        className="mt-3 h-1.5 w-full overflow-hidden rounded bg-[var(--grid-line)]"
                       >
-                        {onMark ? 'Start the round' : 'Move onto the mark'}
+                        <div
+                          className="h-full rounded bg-[var(--accent-green)]"
+                          style={{
+                            width: `${((HOLD_SECONDS - holdRemaining) / HOLD_SECONDS) * 100}%`,
+                          }}
+                        />
+                      </div>
+
+                      <Button variant="secondary" className="mt-3" onClick={retryRound}>
+                        Cancel
                       </Button>
                     </>
                   )}
@@ -500,7 +624,11 @@ export default function MotionMatchGame({ className = '' }: { className?: string
             )}
           </div>
 
-          {isPractice && (phase === 'ready' || phase === 'countdown' || phase === 'recording') && (
+          {isPractice &&
+            (phase === 'ready' ||
+              phase === 'arming' ||
+              phase === 'countdown' ||
+              phase === 'recording') && (
             <PracticeStrip device={device} />
           )}
 

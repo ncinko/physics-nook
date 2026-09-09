@@ -21,8 +21,8 @@
  * blocks it, which is why Vernier's own browser build of Graphical Analysis
  * drives a LabQuest Mini over USB in Chrome.
  *
- * Only the transport differs — the codec and the session state machine are
- * shared with `webHidSource.ts`, which remains for the HID-class Go! family.
+ * The framing this speaks was measured from Graphical Analysis driving this
+ * same hardware; see the provenance note in `ngioPackets.ts`.
  */
 
 import {
@@ -31,13 +31,6 @@ import {
   findVernierDevice,
   webUsbFilters,
 } from '../deviceIds.ts';
-import {
-  FRAMING_CANDIDATES,
-  NGIO_CMD_ID,
-  encodeCommand,
-  probeFramingResponse,
-  type NgioFraming,
-} from '../ngioPackets.ts';
 import {
   DEFAULT_PERIOD_SECONDS,
   describePhase,
@@ -105,9 +98,6 @@ const usbApi = (): UsbApi | null => {
 /** How long to wait for a reply before declaring the current step stuck. */
 const RESPONSE_TIMEOUT_MS = 1500;
 
-/** How long each framing candidate gets to prove itself. */
-const FRAMING_PROBE_MS = 300;
-
 /**
  * Receive buffer for each bulk read, matching the 30000 Vernier's own WebUSB
  * transport uses.
@@ -153,7 +143,6 @@ export const createWebUsbSource = (): MotionSource => {
   let interfaceNumber = 0;
   let inEndpoint = 0;
   let outEndpoint = 0;
-  let framing: NgioFraming | null = null;
   let session: SessionState | null = null;
   let lastGood: MotionSample | null = null;
   let reading = false;
@@ -165,11 +154,6 @@ export const createWebUsbSource = (): MotionSource => {
    */
   let writesAccepted = 0;
   let framesReceived = 0;
-  /**
-   * While set, inbound frames go here instead of to the session. The framing
-   * probe needs the read loop already running to hear a reply at all.
-   */
-  let probeListener: ((bytes: Uint8Array) => void) | null = null;
   const notes: string[] = [];
   let status: SourceStatus = {
     kind: usbApi() ? 'idle' : 'unsupported',
@@ -277,8 +261,7 @@ export const createWebUsbSource = (): MotionSource => {
 
   /**
    * Bulk endpoints have no event to subscribe to; the read loop polls from the
-   * moment the interface is claimed until disconnect, so the framing probe and
-   * the session both see traffic through the same path.
+   * moment the interface is claimed until disconnect.
    */
   const readLoop = async () => {
     while (reading && device) {
@@ -306,9 +289,7 @@ export const createWebUsbSource = (): MotionSource => {
         );
         traffic.push('rx', bytes);
         framesReceived += 1;
-
-        if (probeListener) probeListener(bytes);
-        else handleSessionReport(bytes);
+        handleSessionReport(bytes);
       } catch (error) {
         if (reading) {
           notes.push(`transferIn threw: ${String(error)}`);
@@ -317,51 +298,6 @@ export const createWebUsbSource = (): MotionSource => {
         break;
       }
     }
-  };
-
-  /**
-   * Sends GET_STATUS under each candidate framing and keeps the first that
-   * produces a decodable reply. The framing is a hypothesis (see
-   * `ngioPackets.ts`); this settles it against the real device in about a
-   * second rather than leaving it to guesswork.
-   */
-  const probeFraming = async (): Promise<NgioFraming | null> => {
-    for (const candidate of FRAMING_CANDIDATES) {
-      const packet = encodeCommand({
-        command: NGIO_CMD_ID.GET_STATUS,
-        rollingCounter: 0,
-        framing: candidate,
-        reportLength: null,
-      });
-
-      const answered = await new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => {
-          probeListener = null;
-          resolve(false);
-        }, FRAMING_PROBE_MS);
-
-        probeListener = (bytes) => {
-          if (!probeFramingResponse(bytes, candidate)) return;
-          clearTimeout(timer);
-          probeListener = null;
-          resolve(true);
-        };
-
-        void write(packet).catch(() => {
-          // A rejected write just means this candidate is wrong; let the
-          // timeout move on to the next one.
-        });
-      });
-
-      if (answered) {
-        notes.push(
-          `Framing settled empirically: sync 0x${candidate.syncByte.toString(16)}, report ${candidate.reportId}.`,
-        );
-        return candidate;
-      }
-    }
-
-    return null;
   };
 
   return {
@@ -452,38 +388,17 @@ export const createWebUsbSource = (): MotionSource => {
       reading = true;
       void readLoop();
 
-      setStatus({
-        kind: 'connecting',
-        message: 'Checking how the interface talks',
-        sensorName: null,
-      });
-
-      framing = await probeFraming();
-
-      if (!framing) {
-        fail(
-          'The interface is connected but did not answer. Copy the diagnostics below and send them on — ' +
-            'this is the protocol detail that needs a real device to pin down.',
-        );
-        notes.push(
-          `No framing candidate produced a decodable reply. Tried: ${FRAMING_CANDIDATES.map(
-            (candidate) => `0x${candidate.syncByte.toString(16)}/report ${candidate.reportId}`,
-          ).join(', ')}.`,
-        );
-        return;
-      }
-
       setStatus({ kind: 'ready', message: 'Interface ready', sensorName: null });
     },
 
     start: async ({ periodSeconds = DEFAULT_PERIOD_SECONDS }: StartOptions = {}) => {
-      if (!device || !framing) {
+      if (!device) {
         fail('Connect the interface first.');
         return;
       }
 
       lastGood = null;
-      const opened = startSession({ framing, periodSeconds, reportLength: null });
+      const opened = startSession({ periodSeconds });
       session = opened.state;
       setStatus({ kind: 'connecting', message: describePhase(session), sensorName: null });
 
@@ -491,6 +406,15 @@ export const createWebUsbSource = (): MotionSource => {
         await write(packet);
       }
       armWatchdog();
+    },
+
+    setPeriod: async (periodSeconds: number) => {
+      if (!session) return;
+      const result = step(session, { type: 'set-period', periodSeconds });
+      session = result.state;
+      for (const packet of result.writes) {
+        await write(packet);
+      }
     },
 
     stop: async () => {
@@ -508,14 +432,12 @@ export const createWebUsbSource = (): MotionSource => {
     disconnect: async () => {
       clearWatchdog();
       reading = false;
-      probeListener = null;
       if (device?.opened) {
         await device.releaseInterface(interfaceNumber).catch(() => {});
         await device.close().catch(() => {});
       }
       device = null;
       session = null;
-      framing = null;
       lastGood = null;
       samples.clear();
       setStatus({ kind: 'idle', message: 'Disconnected', sensorName: null });
@@ -531,8 +453,6 @@ export const createWebUsbSource = (): MotionSource => {
       deviceName: device?.productName ?? null,
       vendorId: device?.vendorId ?? null,
       productId: device?.productId ?? null,
-      collections: [],
-      framing,
       phase: session ? session.phase : status.kind,
       sensorId: session?.sensorId ?? null,
       sensorName: session?.sensorName ?? null,

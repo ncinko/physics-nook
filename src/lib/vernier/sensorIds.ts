@@ -10,7 +10,7 @@
  * unit conversion, and nothing in the transport or session layers.
  */
 
-import { NGIO_CHANNEL_ID, NGIO_SAMPLING_MODE } from './ngioPackets.ts';
+import { NGIO_CHANNEL_ID, NGIO_EDGE_TICK_SECONDS, NGIO_SAMPLING_MODE } from './ngioPackets.ts';
 
 export type SensorKind = 'motion' | 'analog' | 'digital-count' | 'unsupported';
 
@@ -26,7 +26,7 @@ export interface VernierSensor {
   samplingMode: number;
   /**
    * Raw device counts to physical units. For the sonar the raw value is the
-   * echo round-trip time in microseconds (NGIO ticks), so distance is half the
+   * ping-to-echo round trip in capture-clock ticks, so distance is half the
    * round trip times the speed of sound.
    */
   toPhysical: (raw: number, context: SensorContext) => number;
@@ -59,7 +59,7 @@ export const MOTION_DETECTOR_SENSOR_IDS = [2, 69] as const;
 export const MOTION_DETECTOR_RANGE = { minMeters: 0.15, maxMeters: 6.0 } as const;
 
 const motionToMeters = (raw: number, context: SensorContext): number =>
-  (raw * 1e-6 * speedOfSound(context.airTemperatureC)) / 2;
+  (raw * NGIO_EDGE_TICK_SECONDS * speedOfSound(context.airTemperatureC)) / 2;
 
 export const VERNIER_SENSORS: readonly VernierSensor[] = [
   {

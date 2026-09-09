@@ -13,7 +13,6 @@ import { formatDiagnostics } from '../../lib/vernier/diagnostics';
 import type { MotionSample } from '../../lib/vernier/motionStream';
 import { DEFAULT_PERIOD_SECONDS } from '../../lib/vernier/ngioSession';
 import { createPracticeSource, type PracticeSource } from '../../lib/vernier/sources/practiceSource';
-import { createWebHidSource } from '../../lib/vernier/sources/webHidSource';
 import { createWebUsbSource } from '../../lib/vernier/sources/webUsbSource';
 import type {
   MotionSource,
@@ -33,12 +32,12 @@ export interface VernierMotionApi {
   isRealSource: boolean;
   status: SourceStatus;
   latest: MotionSample | null;
-  supportsHid: boolean;
   supportsUsb: boolean;
   practice: PracticeSource | null;
   selectSource: (id: MotionSourceId) => Promise<void>;
   disconnect: () => Promise<void>;
   startStream: (periodSeconds?: number) => Promise<void>;
+  setStreamPeriod: (periodSeconds: number) => Promise<void>;
   stopStream: () => Promise<void>;
   /** Registers a listener that runs on every sample, outside React state. */
   subscribe: (listener: (sample: MotionSample) => void) => () => void;
@@ -56,12 +55,9 @@ export const useVernierMotion = (): VernierMotionApi => {
 
   // Feature detection runs once, in an effect, so the island renders the same
   // markup on the server and on first paint.
-  const [support, setSupport] = useState({ hid: false, usb: false });
+  const [support, setSupport] = useState({ usb: false });
   useEffect(() => {
-    setSupport({
-      hid: typeof navigator !== 'undefined' && 'hid' in navigator,
-      usb: typeof navigator !== 'undefined' && 'usb' in navigator,
-    });
+    setSupport({ usb: typeof navigator !== 'undefined' && 'usb' in navigator });
   }, []);
 
   const practiceRef = useRef<PracticeSource | null>(null);
@@ -84,11 +80,7 @@ export const useVernierMotion = (): VernierMotionApi => {
       await teardown();
 
       const source: MotionSource =
-        id === 'practice'
-          ? createPracticeSource()
-          : id === 'webusb'
-            ? createWebUsbSource()
-            : createWebHidSource();
+        id === 'practice' ? createPracticeSource() : createWebUsbSource();
 
       sourceRef.current = source;
       if (id === 'practice') practiceRef.current = source as PracticeSource;
@@ -122,6 +114,10 @@ export const useVernierMotion = (): VernierMotionApi => {
     await sourceRef.current?.start({ periodSeconds });
   }, []);
 
+  const setStreamPeriod = useCallback(async (periodSeconds: number) => {
+    await sourceRef.current?.setPeriod(periodSeconds);
+  }, []);
+
   const stopStream = useCallback(async () => {
     await sourceRef.current?.stop();
   }, []);
@@ -148,12 +144,12 @@ export const useVernierMotion = (): VernierMotionApi => {
       isRealSource: sourceRef.current?.isReal ?? false,
       status,
       latest,
-      supportsHid: support.hid,
       supportsUsb: support.usb,
       practice: practiceRef.current,
       selectSource,
       disconnect,
       startStream,
+      setStreamPeriod,
       stopStream,
       subscribe,
       diagnosticsText,
@@ -162,11 +158,11 @@ export const useVernierMotion = (): VernierMotionApi => {
       sourceId,
       status,
       latest,
-      support.hid,
       support.usb,
       selectSource,
       disconnect,
       startStream,
+      setStreamPeriod,
       stopStream,
       subscribe,
       diagnosticsText,

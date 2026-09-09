@@ -7,23 +7,22 @@
  * protocol be unit tested against a recorded byte transcript in `tests/vernier`
  * with no hardware attached.
  *
- * PROVENANCE — this matters when something does not work:
+ * PROVENANCE — all of this is now measured, none of it is guessed.
  *
- *   Authoritative. Command IDs, channel IDs, sampling modes, status codes, the
- *   parameter struct layouts, and "a tick is one microsecond" are transcribed
- *   from Vernier's published NGIO SDK headers (NGIOSourceCmds.h,
- *   NGIO_lib_interface.h). These are facts.
+ *   Command IDs, channel IDs, sampling modes, status codes and the parameter
+ *   struct layouts are transcribed from Vernier's published NGIO SDK headers
+ *   (NGIOSourceCmds.h, NGIO_lib_interface.h).
  *
- *   Hypothesis. The outer framing — sync byte, length placement, checksum
- *   convention — is NOT in the public headers; it lives inside Vernier's
- *   closed library. What is below is the conventional Vernier framing, and it
- *   is deliberately parameterised by `NgioFraming` rather than hardcoded, with
- *   `FRAMING_CANDIDATES` and `probeFramingResponse` provided so the connect
- *   panel can settle the question empirically against a real device in a few
- *   seconds instead of anyone guessing twice.
+ *   The framing below — lock bytes, field order, length basis, checksum rule
+ *   and the counter direction — was captured from a LabQuest Mini talking to
+ *   Vernier's own Graphical Analysis over WebUSB, by hooking
+ *   `USBDevice.prototype.transferOut`/`transferIn`. Every claim here was
+ *   verified against that transcript; the fixtures in `tests/vernier` are real
+ *   frames from it.
  *
- * If the handshake fails, the framing is the first thing to suspect, and the
- * diagnostics dump is the tool for it.
+ *   An earlier version of this file guessed the framing (sync byte 0x88, body
+ *   length, two's-complement checksum, ascending counter). Every one of those
+ *   guesses was wrong, which is why the device answered nothing at all.
  */
 
 /** Transcribed from NGIOSourceCmds.h. */
@@ -98,159 +97,202 @@ export const describeNgioStatus = (status: number): string => {
   }
 };
 
-/** "For NGI, a tick is one microsecond." — NGIOSourceCmds.h */
+/**
+ * Unit of the SET_MEASUREMENT_PERIOD register. "For NGI, a tick is one
+ * microsecond." — NGIOSourceCmds.h, confirmed by the capture: Graphical
+ * Analysis wrote 500000 and measurement blobs then arrived every 0.500 s.
+ */
 export const NGIO_TICK_SECONDS = 1e-6;
+
+/**
+ * Unit of the edge timestamps inside a measurement blob — a different clock
+ * from the period register, which is a trap worth stating plainly.
+ *
+ * Measured: consecutive blobs 0.500 s apart on the host clock carried ping
+ * timestamps exactly 2,500,000 apart, giving 0.2 µs per tick (5 MHz). Using
+ * the period's 1 µs here would report every distance five times too large.
+ */
+export const NGIO_EDGE_TICK_SECONDS = 0.2e-6;
 
 export const measurementPeriodTicks = (periodSeconds: number): number =>
   Math.max(1, Math.round(periodSeconds / NGIO_TICK_SECONDS));
 
-// --- framing (hypothesis; see the provenance note above) ------------------
-
-export interface NgioFraming {
-  /** Leading sync/lock byte that marks the start of a message. */
-  syncByte: number;
-  /**
-   * HID output report ID. Vernier interfaces use a single unnumbered report,
-   * which WebHID addresses as report 0.
-   */
-  reportId: number;
-}
-
-export const DEFAULT_FRAMING: NgioFraming = { syncByte: 0x88, reportId: 0 };
+// --- framing (measured) ---------------------------------------------------
 
 /**
- * Tried in order by the connect panel's framing probe. 0x88 is the NGIO lock
- * byte; 0x55 is the GoIO-family value and is worth a second attempt because
- * the LabQuest Mini shares a silicon lineage with that line. The report-ID
- * variants cover platforms where WebHID does not strip a leading report byte.
+ * Leading byte identifying what a packet is. Commands go out under
+ * `COMMAND`; the device answers with `RESPONSE`, streams measurements under
+ * `MEASUREMENT`, and used `RESPONSE_INIT` for the reply to INIT.
  */
-export const FRAMING_CANDIDATES: readonly NgioFraming[] = [
-  { syncByte: 0x88, reportId: 0 },
-  { syncByte: 0x55, reportId: 0 },
-  { syncByte: 0x88, reportId: 1 },
-  { syncByte: 0x55, reportId: 1 },
+export const NGIO_LOCK = {
+  COMMAND: 0x58,
+  RESPONSE: 0x98,
+  RESPONSE_INIT: 0xb8,
+  MEASUREMENT: 0x20,
+} as const;
+
+/**
+ * Fixed 20-byte payload Graphical Analysis sends with INIT. Its meaning is
+ * opaque, but a LabQuest Mini answers this and we have no evidence it answers
+ * a bare INIT, so it is replayed verbatim.
+ */
+export const NGIO_INIT_PAYLOAD: readonly number[] = [
+  0xa5, 0x4a, 0x06, 0x49, 0x07, 0x48, 0x08, 0x47, 0x09, 0x46, 0x0a, 0x45, 0x0b, 0x44, 0x0c, 0x43,
+  0x0d, 0x42, 0x0e, 0x41,
 ];
 
-/** Two's-complement checksum: every byte of the message sums to 0 mod 256. */
+/** Bytes before the command byte: lock, length, counter, checksum. */
+const HEADER_LENGTH = 4;
+
+/** A response adds the command and the echoed request counter. */
+const RESPONSE_MIN_LENGTH = HEADER_LENGTH + 2;
+
+/**
+ * Plain sum of every byte except the checksum itself, mod 256.
+ *
+ * Note this is an ordinary sum, not the two's-complement "everything sums to
+ * zero" convention used elsewhere by Vernier. Verified against every frame in
+ * the capture.
+ */
 export const ngioChecksum = (bytes: readonly number[]): number =>
-  (256 - (bytes.reduce((sum, byte) => sum + byte, 0) % 256)) % 256;
+  bytes.reduce((sum, byte) => sum + byte, 0) % 256;
 
-export const nextRollingCounter = (counter: number): number => (counter + 1) % 256;
+/** First counter value a session sends. Counters descend from here. */
+export const NGIO_FIRST_ROLLING_COUNTER = 0xff;
 
-export const NGIO_DEFAULT_REPORT_LENGTH = 64;
+/** Counters descend. Measured: ff, fe, fd, fc … across the whole transcript. */
+export const nextRollingCounter = (counter: number): number => (counter + 255) % 256;
 
 export interface EncodeCommandOptions {
   command: number;
   rollingCounter: number;
   params?: readonly number[];
-  framing?: NgioFraming;
-  /**
-   * Pad the packet out to this many bytes, or `null` to send it at its natural
-   * length.
-   *
-   * The distinction is not cosmetic. A HID output report is a fixed-size
-   * buffer, so the 64-byte default is required there. A bulk endpoint carries
-   * exactly the bytes handed to it, and Vernier's own WebUSB transport writes
-   * the packet unpadded and asserts `bytesWritten === buffer.byteLength`.
-   * Padding a 5-byte command to 64 on a bulk pipe sends 59 trailing zero bytes
-   * the device never asked for.
-   */
-  reportLength?: number | null;
 }
 
 /**
- * Layout: [sync, bodyLength, command, rollingCounter, ...params, checksum]
- * where bodyLength counts everything after itself, checksum included.
+ * Layout: [0x58, totalLength, rollingCounter, checksum, command, ...params]
+ * where `totalLength` counts the whole packet, checksum byte included.
+ *
+ * Nothing is padded. A bulk endpoint carries exactly the bytes handed to it,
+ * and Vernier's transport asserts `bytesWritten === buffer.byteLength`.
  */
 export const encodeCommand = ({
   command,
   rollingCounter,
   params = [],
-  framing = DEFAULT_FRAMING,
-  reportLength = NGIO_DEFAULT_REPORT_LENGTH,
 }: EncodeCommandOptions): Uint8Array => {
-  const bodyLength = params.length + 3; // command + counter + params + checksum
-  const head = [framing.syncByte, bodyLength, command, rollingCounter, ...params];
-  const packet = [...head, ngioChecksum(head)];
+  const totalLength = HEADER_LENGTH + 1 + params.length;
 
-  if (reportLength === null) {
-    return Uint8Array.from(packet);
-  }
-
-  if (packet.length > reportLength) {
+  if (totalLength > 0xff) {
     throw new Error(
-      `NGIO command 0x${command.toString(16)} needs ${packet.length} bytes, over the ${reportLength}-byte report.`,
+      `NGIO command 0x${command.toString(16)} needs ${totalLength} bytes, over the 255-byte packet limit.`,
     );
   }
 
-  const report = new Uint8Array(reportLength);
-  report.set(packet);
-  return report;
+  const checksum = ngioChecksum([
+    NGIO_LOCK.COMMAND,
+    totalLength,
+    rollingCounter,
+    command,
+    ...params,
+  ]);
+
+  return Uint8Array.from([
+    NGIO_LOCK.COMMAND,
+    totalLength,
+    rollingCounter,
+    checksum,
+    command,
+    ...params,
+  ]);
 };
 
-export type NgioResponse =
-  | {
-      ok: true;
-      command: number;
-      rollingCounter: number;
-      status: number;
-      payload: Uint8Array;
+export interface NgioResponsePacket {
+  kind: 'response';
+  command: number;
+  /** Rolling counter of the command this answers, echoed back. */
+  requestCounter: number;
+  payload: Uint8Array;
+}
+
+/**
+ * Status of a simple acknowledgement, or null when the reply carries data.
+ *
+ * There is deliberately no status field on `NgioResponsePacket`. The capture
+ * shows byte 6 is the first payload byte, not a status: GET_SENSOR_ID puts the
+ * sensor ID there (2 for a Motion Detector) and GET_MEASUREMENT_PERIOD puts
+ * the channel there. Commands that only need to acknowledge answer with a
+ * single zero byte, so a one-byte payload — and only a one-byte payload — can
+ * be read as a status code.
+ */
+export const acknowledgementStatus = (payload: Uint8Array): number | null =>
+  payload.length === 1 ? payload[0] : null;
+
+export interface NgioMeasurementPacket {
+  kind: 'measurement';
+  counter: number;
+  payload: Uint8Array;
+}
+
+export type NgioPacket = NgioResponsePacket | NgioMeasurementPacket;
+
+const isResponseLock = (lock: number): boolean =>
+  lock === NGIO_LOCK.RESPONSE || lock === NGIO_LOCK.RESPONSE_INIT;
+
+/**
+ * Pulls every well-formed packet out of one inbound buffer.
+ *
+ * Scanning rather than assuming one packet per read, for two measured reasons.
+ * A single bulk transfer can carry several packets back to back — the 34-byte
+ * reads in the capture are a 20-byte measurement blob immediately followed by
+ * a 14-byte command response. And the device precedes each payload with an
+ * 8-byte length header (`<uint32 LE length> 07 48 08 47`) delivered as its own
+ * transfer; rather than track that as protocol state, the scanner simply finds
+ * no valid lock byte and checksum there and skips it.
+ *
+ * Validation is lock byte + plausible length + checksum, which is strong
+ * enough that skipping a byte and retrying cannot resynchronise onto garbage.
+ */
+export const parseNgioPackets = (buffer: Uint8Array): NgioPacket[] => {
+  const packets: NgioPacket[] = [];
+  let offset = 0;
+
+  while (offset + HEADER_LENGTH <= buffer.length) {
+    const lock = buffer[offset];
+    const length = buffer[offset + 1];
+    const response = isResponseLock(lock);
+    const measurement = lock === NGIO_LOCK.MEASUREMENT;
+    const minimum = response ? RESPONSE_MIN_LENGTH : HEADER_LENGTH;
+
+    if ((!response && !measurement) || length < minimum || offset + length > buffer.length) {
+      offset += 1;
+      continue;
     }
-  | { ok: false; reason: 'empty' | 'bad-sync' | 'truncated' | 'bad-checksum'; bytes: Uint8Array };
 
-/**
- * Decodes one response message. Tolerates the trailing zero padding every HID
- * input report carries, and tolerates a leading report ID byte, because
- * whether WebHID strips that varies by platform.
- */
-export const decodeResponse = (
-  raw: Uint8Array,
-  framing: NgioFraming = DEFAULT_FRAMING,
-): NgioResponse => {
-  const bytes =
-    raw.length > 1 && raw[0] !== framing.syncByte && raw[1] === framing.syncByte
-      ? raw.subarray(1)
-      : raw;
+    const frame = buffer.subarray(offset, offset + length);
+    const expected = ngioChecksum([...frame.subarray(0, 3), ...frame.subarray(4)]);
 
-  if (bytes.length === 0) {
-    return { ok: false, reason: 'empty', bytes: raw };
+    if (expected !== frame[3]) {
+      offset += 1;
+      continue;
+    }
+
+    if (response) {
+      packets.push({
+        kind: 'response',
+        command: frame[4],
+        requestCounter: frame[5],
+        payload: frame.subarray(6),
+      });
+    } else {
+      packets.push({ kind: 'measurement', counter: frame[2], payload: frame.subarray(HEADER_LENGTH) });
+    }
+
+    offset += length;
   }
 
-  if (bytes[0] !== framing.syncByte) {
-    return { ok: false, reason: 'bad-sync', bytes: raw };
-  }
-
-  const bodyLength = bytes[1];
-  const total = bodyLength + 2;
-
-  if (bodyLength < 3 || bytes.length < total) {
-    return { ok: false, reason: 'truncated', bytes: raw };
-  }
-
-  const message = Array.from(bytes.subarray(0, total));
-
-  if (message.reduce((sum, byte) => sum + byte, 0) % 256 !== 0) {
-    return { ok: false, reason: 'bad-checksum', bytes: raw };
-  }
-
-  return {
-    ok: true,
-    command: bytes[2],
-    rollingCounter: bytes[3],
-    status: bytes[4],
-    // Byte 4 is the status; the last byte of the message is the checksum.
-    payload: bytes.subarray(5, total - 1),
-  };
+  return packets;
 };
-
-/**
- * True when `raw` looks like a well-formed NGIO response under `framing`. The
- * connect panel sends GET_STATUS under each candidate framing and keeps the
- * one this accepts, which turns "which sync byte?" from a guess into a
- * measurement.
- */
-export const probeFramingResponse = (raw: Uint8Array, framing: NgioFraming): boolean =>
-  decodeResponse(raw, framing).ok;
 
 // --- parameter builders (layouts from NGIOSourceCmds.h) -------------------
 
@@ -270,7 +312,14 @@ export const readUint32LE = (bytes: Uint8Array, offset = 0): number =>
 
 export const readInt32LE = (bytes: Uint8Array, offset = 0): number => readUint32LE(bytes, offset) | 0;
 
-/** NGIOSetMeasurementPeriodParams: channel, 4-byte run ID, 4-byte period. */
+/**
+ * NGIOSetMeasurementPeriodParams: channel, 4-byte run ID, 4-byte period.
+ *
+ * Graphical Analysis addresses this to channel 0xff — every channel at once —
+ * rather than to the sensor's own channel, so we do the same.
+ */
+export const ALL_CHANNELS = 0xff;
+
 export const setMeasurementPeriodParams = (
   channel: number,
   periodSeconds: number,
@@ -294,44 +343,52 @@ export const setSamplingModeParams = (channel: number, samplingMode: number): nu
 export const setChannelEnableMaskParams = (channels: readonly number[]): number[] =>
   uint32LE(channels.reduce((mask, channel) => mask | (1 << channel), 0));
 
-/** Parses NGIOGetSensorIdCmdResponsePayload. */
+/**
+ * Parses NGIOGetSensorIdCmdResponsePayload. The measured reply carries two
+ * little-endian uint32s — the sensor ID and a presence flag — and the ID is
+ * the first. A Motion Detector on DIG1 reports 2.
+ */
 export const parseSensorIdPayload = (payload: Uint8Array): number =>
   payload.length >= 4 ? readUint32LE(payload) : 0;
 
 /**
- * Real-time measurement reports arrive unsolicited once START_MEASUREMENTS is
- * accepted, rather than as a reply to anything. They carry a channel byte, a
- * count, then that many little-endian int32 raw values — for the sonar, echo
- * round-trip times in microseconds.
+ * One timestamped edge from a measurement blob.
+ *
+ * In PERIODIC_MOTION_DETECT the sonar reports two edges per sample: `edge` 0
+ * is the outgoing ping and 1 the returning echo, both on the sensor's channel.
+ * The round trip is the difference of their timestamps.
  */
-export interface NgioMeasurementReport {
+export interface NgioEdgeEvent {
+  edge: number;
   channel: number;
-  values: number[];
+  /** Capture-clock ticks; see `NGIO_EDGE_TICK_SECONDS`. */
+  ticks: number;
 }
 
-export const decodeMeasurementReport = (
-  raw: Uint8Array,
-  framing: NgioFraming = DEFAULT_FRAMING,
-): NgioMeasurementReport | null => {
-  const decoded = decodeResponse(raw, framing);
-  if (!decoded.ok || decoded.command !== NGIO_CMD_ID.GET_STATUS) {
-    return null;
-  }
+/**
+ * Decodes a measurement blob payload.
+ *
+ * Layout: [flag, 0, 0, count, ...count × [edge, channel, uint32 LE ticks]].
+ * Measured against `01 00 00 02 | 00 05 e2 5b 52 02 | 01 05 72 6f 52 02`,
+ * whose declared count of 2 exactly consumes the payload.
+ */
+export const decodeMeasurementPayload = (payload: Uint8Array): NgioEdgeEvent[] => {
+  if (payload.length < HEADER_LENGTH) return [];
 
-  const { payload } = decoded;
-  if (payload.length < 2) return null;
-
-  const channel = payload[0];
-  const count = payload[1];
-  const values: number[] = [];
+  const count = payload[3];
+  const events: NgioEdgeEvent[] = [];
 
   for (let index = 0; index < count; index += 1) {
-    const offset = 2 + index * 4;
-    if (offset + 4 > payload.length) break;
-    values.push(readInt32LE(payload, offset));
+    const offset = HEADER_LENGTH + index * 6;
+    if (offset + 6 > payload.length) break;
+    events.push({
+      edge: payload[offset],
+      channel: payload[offset + 1],
+      ticks: readUint32LE(payload, offset + 2),
+    });
   }
 
-  return values.length > 0 ? { channel, values } : null;
+  return events;
 };
 
 export const toHex = (bytes: Uint8Array | readonly number[]): string =>

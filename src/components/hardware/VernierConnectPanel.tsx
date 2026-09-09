@@ -7,11 +7,11 @@ import type { VernierMotionApi } from './useVernierMotion';
 // Connecting a LabQuest Mini and confirming it reads the world correctly.
 //
 // Two things here earn their keep beyond a connect button. The diagnostics
-// dump is how the NGIO framing gets settled against real hardware — without a
-// device in hand it is a hypothesis, and a transcript is what turns it into a
-// fact. The calibration check is how a student finds out the readings are
-// wrong before a bad number ends up in a lab report: hold something at a metre
-// and see whether the panel agrees.
+// dump is the transcript that settled the NGIO framing against real hardware,
+// and it stays because the next protocol surprise will need it too. The
+// calibration check is how a student finds out the readings are wrong before a
+// bad number ends up in a lab report: hold something at a metre and see
+// whether the panel agrees.
 
 interface VernierConnectPanelProps {
   device: VernierMotionApi;
@@ -49,7 +49,7 @@ export default function VernierConnectPanel({
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const { status, latest, sourceId, supportsHid, supportsUsb } = device;
+  const { status, latest, sourceId, supportsUsb } = device;
   const connected = status.kind === 'ready' || status.kind === 'streaming';
 
   const refreshDiagnostics = () => {
@@ -129,21 +129,6 @@ export default function VernierConnectPanel({
         </p>
       )}
 
-      {supportsUsb && status.kind === 'error' && supportsHid && (
-        <p className="mt-2 text-sm text-[var(--text-muted)]">
-          A LabQuest is a vendor-class USB device, so the USB connection above is the one that
-          reaches it. If you are connecting an older Go!Link or Go!Motion instead,{' '}
-          <button
-            type="button"
-            className="underline"
-            onClick={() => void device.selectSource('webhid')}
-          >
-            try the WebHID connection
-          </button>
-          .
-        </p>
-      )}
-
       {connected && (
         <div className="mt-4 border-t border-[var(--grid-line)] pt-3">
           <p className="text-sm text-[var(--text-primary)]">
@@ -192,8 +177,8 @@ export default function VernierConnectPanel({
 
         {status.kind === 'error' && (
           <p className="mt-2 text-xs text-[var(--text-muted)]">
-            If the interface connected but never answered, the diagnostics above hold the raw USB
-            traffic. That transcript is what pins down the last undocumented piece of the protocol.
+            The diagnostics above hold the raw USB traffic — what was sent, what came back, and
+            which step it stopped at.
           </p>
         )}
 

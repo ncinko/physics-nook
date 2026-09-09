@@ -1,21 +1,23 @@
 import assert from 'node:assert/strict';
 import {
-  DEFAULT_FRAMING,
-  FRAMING_CANDIDATES,
+  ALL_CHANNELS,
   NGIO_CHANNEL_ID,
   NGIO_CMD_ID,
+  NGIO_EDGE_TICK_SECONDS,
+  NGIO_FIRST_ROLLING_COUNTER,
+  NGIO_INIT_PAYLOAD,
+  NGIO_LOCK,
   NGIO_SAMPLING_MODE,
   NGIO_STATUS,
   NGIO_TICK_SECONDS,
-  decodeMeasurementReport,
-  decodeResponse,
+  acknowledgementStatus,
+  decodeMeasurementPayload,
   encodeCommand,
-  getSensorIdParams,
   measurementPeriodTicks,
   ngioChecksum,
   nextRollingCounter,
+  parseNgioPackets,
   parseSensorIdPayload,
-  probeFramingResponse,
   readInt32LE,
   setChannelEnableMaskParams,
   setMeasurementPeriodParams,
@@ -54,7 +56,7 @@ import {
   describeVernierDevice,
   findVernierDevice,
   isSupportedVernierDevice,
-  webHidFilters,
+  webUsbFilters,
 } from '../../src/lib/vernier/deviceIds.ts';
 import { fitPolynomial } from '../../src/lib/math/leastSquares.ts';
 
@@ -72,7 +74,7 @@ assert.equal(
 );
 assert.equal(isSupportedVernierDevice(0x1234, 0x0008), false, 'vendor ID must match');
 assert.match(describeVernierDevice(0x08f7, 0x9999), /Unknown Vernier device \(0x9999\)/);
-assert.deepEqual(webHidFilters(), [{ vendorId: 0x08f7 }]);
+assert.deepEqual(webUsbFilters(), [{ vendorId: 0x08f7 }]);
 
 // --- sensor identity and unit conversion ----------------------------------
 
@@ -87,13 +89,14 @@ assert.equal(findSensor(69)?.samplingMode, NGIO_SAMPLING_MODE.PERIODIC_MOTION_DE
 assert.ok(Math.abs(speedOfSound(20) - 343.2) < 0.5, 'speed of sound at 20 C');
 assert.ok(speedOfSound(30) > speedOfSound(10), 'warmer air carries sound faster');
 
-// A 1 m target is a 5.83 ms round trip at 20 C.
+// A 1 m target is a 5.83 ms round trip at 20 C, which is 29150 ticks of the
+// 5 MHz capture clock.
 {
   const sensor = findSensor(69);
   assert.ok(sensor);
-  const roundTripMicroseconds = (2 * 1.0 * 1e6) / speedOfSound(20);
-  const meters = sensor.toPhysical(roundTripMicroseconds, { airTemperatureC: 20 });
-  assert.ok(Math.abs(meters - 1.0) < 1e-6, `1 m round trip should read 1 m, got ${meters}`);
+  const roundTripTicks = 2.0 / speedOfSound(20) / NGIO_EDGE_TICK_SECONDS;
+  const meters = sensor.toPhysical(roundTripTicks, { airTemperatureC: 20 });
+  assert.ok(Math.abs(meters - 1.0) < 1e-9, `1 m round trip should read 1 m, got ${meters}`);
 }
 
 assert.equal(isPlausibleDistance(2), true);
@@ -102,114 +105,228 @@ assert.equal(isPlausibleDistance(9), false, 'beyond the detector range');
 assert.equal(MOTION_DETECTOR_RANGE.minMeters, 0.15);
 
 // --- packet codec ---------------------------------------------------------
+//
+// The fixtures below are real frames, captured from a LabQuest Mini talking to
+// Vernier's Graphical Analysis over WebUSB. Asserting against them is what
+// keeps this codec honest: the previous version of this protocol layer passed
+// a full suite of self-consistent tests while being wrong in every field.
 
 assert.equal(NGIO_TICK_SECONDS, 1e-6);
+assert.equal(NGIO_EDGE_TICK_SECONDS, 0.2e-6);
 assert.equal(measurementPeriodTicks(0.05), 50_000, '20 Hz is 50000 one-microsecond ticks');
 assert.equal(measurementPeriodTicks(0), 1, 'period never encodes as zero ticks');
 
-assert.equal(ngioChecksum([0x88, 0x03, 0x10]), (256 - 0x9b) % 256);
-assert.equal(
-  ([0x88, 0x03, 0x10, ngioChecksum([0x88, 0x03, 0x10])] as number[]).reduce((a, b) => a + b, 0) %
-    256,
-  0,
-  'checksummed message sums to zero mod 256',
-);
-assert.equal(ngioChecksum([0x00]), 0, 'an all-zero message needs no correction');
+// The checksum is a plain sum of the other bytes, not a two's complement.
+assert.equal(ngioChecksum([0x58, 0x05, 0xfd, 0x10]), 0x6a, 'captured GET_STATUS command');
+assert.equal(ngioChecksum([0x58, 0x08, 0xfe, 0x1d, 0x00, 0x80, 0x10]), 0x0b, 'captured SET_LED');
+assert.equal(ngioChecksum([0x98, 0x07, 0x01, 0x1d, 0xfe, 0x00]), 0xbb, 'captured response');
 
-assert.equal(nextRollingCounter(255), 0, 'rolling counter wraps at a byte');
+// Counters descend from 0xff.
+assert.equal(NGIO_FIRST_ROLLING_COUNTER, 0xff);
+assert.equal(nextRollingCounter(0x00), 0xff, 'a fresh session opens on 0xff');
+assert.equal(nextRollingCounter(0xff), 0xfe);
+assert.equal(nextRollingCounter(0x01), 0x00, 'and wraps at a byte');
 
 {
-  const report = encodeCommand({ command: NGIO_CMD_ID.INIT, rollingCounter: 7 });
-  assert.equal(report.length, 64, 'output reports are fixed length');
-  assert.equal(report[0], DEFAULT_FRAMING.syncByte);
-  assert.equal(report[1], 3, 'body length counts command, counter and checksum');
-  assert.equal(report[2], NGIO_CMD_ID.INIT);
-  assert.equal(report[3], 7);
-  assert.equal(report.slice(0, 5).reduce((a, b) => a + b, 0) % 256, 0);
-  assert.equal(report[10], 0, 'unused report bytes are zero padding');
+  // Byte for byte against the captured GET_STATUS command.
+  const packet = encodeCommand({ command: NGIO_CMD_ID.GET_STATUS, rollingCounter: 0xfd });
+  assert.deepEqual(Array.from(packet), [0x58, 0x05, 0xfd, 0x6a, 0x10], toHex(packet));
+  assert.equal(packet.length, 5, 'bulk packets carry no padding');
 }
 
 {
-  // Round trip: encode a command, hand the same bytes back as a response.
-  const params = getSensorIdParams(NGIO_CHANNEL_ID.DIGITAL1);
-  const report = encodeCommand({
-    command: NGIO_CMD_ID.GET_SENSOR_ID,
-    rollingCounter: 1,
-    params,
+  // ... the captured channel-enable mask for DIG 1 ...
+  const packet = encodeCommand({
+    command: NGIO_CMD_ID.SET_SENSOR_CHANNEL_ENABLE_MASK,
+    rollingCounter: 0xf6,
+    params: setChannelEnableMaskParams([NGIO_CHANNEL_ID.DIGITAL1]),
   });
-  const decoded = decodeResponse(report);
-  assert.ok(decoded.ok, `expected a decodable message, got ${toHex(report.slice(0, 8))}`);
-  assert.equal(decoded.command, NGIO_CMD_ID.GET_SENSOR_ID);
-  assert.equal(decoded.rollingCounter, 1);
-  assert.equal(decoded.status, NGIO_CHANNEL_ID.DIGITAL1, 'first param byte lands in the status slot');
+  assert.deepEqual(
+    Array.from(packet),
+    [0x58, 0x09, 0xf6, 0xa3, 0x2c, 0x20, 0x00, 0x00, 0x00],
+    toHex(packet),
+  );
 }
 
-// Rejections, one per failure mode.
-assert.equal(decodeResponse(new Uint8Array(0)).ok, false);
-assert.equal((decodeResponse(new Uint8Array(0)) as { reason: string }).reason, 'empty');
-assert.equal(
-  (decodeResponse(Uint8Array.from([0x11, 0x22, 0x33, 0x44, 0x55])) as { reason: string }).reason,
-  'bad-sync',
-);
-assert.equal(
-  (decodeResponse(Uint8Array.from([0x88, 0x40, 0x10, 0x01])) as { reason: string }).reason,
-  'truncated',
-);
-assert.equal(
-  (decodeResponse(Uint8Array.from([0x88, 0x03, 0x10, 0x01, 0x00])) as { reason: string }).reason,
-  'bad-checksum',
-);
-
 {
-  // A leading report ID byte must not break decoding.
-  const report = encodeCommand({ command: NGIO_CMD_ID.GET_STATUS, rollingCounter: 3 });
-  const withReportId = Uint8Array.from([0x00, ...report]);
-  assert.equal(decodeResponse(withReportId).ok, true, 'leading report ID is tolerated');
-}
-
-// The framing probe must accept the right candidate and reject the others.
-{
-  const report = encodeCommand({
-    command: NGIO_CMD_ID.GET_STATUS,
-    rollingCounter: 0,
-    framing: { syncByte: 0x55, reportId: 0 },
+  // ... the captured measurement period, addressed to every channel at once ...
+  const packet = encodeCommand({
+    command: NGIO_CMD_ID.SET_MEASUREMENT_PERIOD,
+    rollingCounter: 0xf5,
+    params: setMeasurementPeriodParams(ALL_CHANNELS, 0.5),
   });
-  assert.equal(probeFramingResponse(report, { syncByte: 0x55, reportId: 0 }), true);
-  assert.equal(probeFramingResponse(report, { syncByte: 0x88, reportId: 0 }), false);
-  assert.ok(FRAMING_CANDIDATES.length >= 2, 'more than one framing hypothesis is on offer');
+  assert.deepEqual(
+    Array.from(packet),
+    [0x58, 0x0e, 0xf5, 0x3d, 0x1b, 0xff, 0, 0, 0, 0, 0x20, 0xa1, 0x07, 0x00],
+    toHex(packet),
+  );
+}
+
+{
+  // ... the captured sampling mode ...
+  const packet = encodeCommand({
+    command: NGIO_CMD_ID.SET_SAMPLING_MODE,
+    rollingCounter: 0xf0,
+    params: setSamplingModeParams(
+      NGIO_CHANNEL_ID.DIGITAL1,
+      NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT,
+    ),
+  });
+  assert.deepEqual(Array.from(packet), [0x58, 0x07, 0xf0, 0x80, 0x29, 0x05, 0x03], toHex(packet));
+}
+
+{
+  // ... and INIT with its fixed 20-byte payload.
+  const packet = encodeCommand({
+    command: NGIO_CMD_ID.INIT,
+    rollingCounter: 0xff,
+    params: NGIO_INIT_PAYLOAD,
+  });
+  assert.equal(NGIO_INIT_PAYLOAD.length, 20);
+  assert.equal(packet.length, 0x19, 'captured INIT was 25 bytes');
+  assert.equal(packet[1], 0x19, 'length counts the whole packet, checksum included');
+  assert.equal(packet[3], 0x40, 'captured INIT checksum');
+}
+
+{
+  // A command response, decoded into its measured field positions.
+  const packets = parseNgioPackets(Uint8Array.from([0x98, 0x07, 0x01, 0xbb, 0x1d, 0xfe, 0x00]));
+  assert.equal(packets.length, 1);
+  const packet = packets[0];
+  assert.ok(packet.kind === 'response');
+  assert.equal(packet.command, NGIO_CMD_ID.SET_LED_STATE);
+  assert.equal(packet.requestCounter, 0xfe, 'the reply echoes the command counter');
+  assert.equal(acknowledgementStatus(packet.payload), NGIO_STATUS.SUCCESS);
+}
+
+{
+  // GET_SENSOR_ID on DIG 1. Byte 6 is the sensor ID, not a status: an empty
+  // channel and a Motion Detector differ only there.
+  const empty = parseNgioPackets(
+    Uint8Array.from([0x98, 0x0e, 0x04, 0xcd, 0x28, 0xfb, 0, 0, 0, 0, 0, 0, 0, 0]),
+  )[0];
+  assert.ok(empty && empty.kind === 'response');
+  assert.equal(parseSensorIdPayload(empty.payload), 0, 'nothing plugged in');
+  assert.equal(acknowledgementStatus(empty.payload), null, 'an 8-byte payload is data, not status');
+
+  const detector = parseNgioPackets(
+    Uint8Array.from([0x98, 0x0e, 0x07, 0xd0, 0x28, 0xf8, 0x02, 0, 0, 0, 0x01, 0, 0, 0]),
+  )[0];
+  assert.ok(detector && detector.kind === 'response');
+  assert.equal(parseSensorIdPayload(detector.payload), 2, 'a Motion Detector reports ID 2');
+  assert.equal(isMotionSensor(parseSensorIdPayload(detector.payload)), true);
+}
+
+{
+  // The device's 8-byte length header carries no lock byte, so the scanner
+  // walks past it rather than modelling it as protocol state.
+  const header = [0x07, 0x00, 0x00, 0x00, 0x07, 0x48, 0x08, 0x47];
+  const response = [0x98, 0x07, 0x01, 0xbb, 0x1d, 0xfe, 0x00];
+  const packets = parseNgioPackets(Uint8Array.from([...header, ...response]));
+  assert.equal(packets.length, 1, 'the length header is skipped, the response is found');
+  assert.ok(packets[0].kind === 'response');
+  assert.equal(packets[0].command, NGIO_CMD_ID.SET_LED_STATE);
+}
+
+{
+  // One bulk transfer can carry several packets back to back; the capture's
+  // 34-byte reads were a measurement blob followed by a command response.
+  const blob = [
+    0x20, 0x14, 0x01, 0x09, 0x01, 0x00, 0x00, 0x02, 0x00, 0x05, 0xe2, 0x5b, 0x52, 0x02, 0x01, 0x05,
+    0x72, 0x6f, 0x52, 0x02,
+  ];
+  const response = [0x98, 0x07, 0x01, 0xbb, 0x1d, 0xfe, 0x00];
+  const packets = parseNgioPackets(Uint8Array.from([...blob, ...response]));
+  assert.equal(packets.length, 2, 'both packets are recovered from one buffer');
+  assert.equal(packets[0].kind, 'measurement');
+  assert.equal(packets[1].kind, 'response');
+}
+
+{
+  // Garbage never resynchronises onto a false packet.
+  assert.deepEqual(parseNgioPackets(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])), []);
+  assert.deepEqual(parseNgioPackets(new Uint8Array(0)), []);
+  // A valid frame with one byte corrupted fails the checksum and is dropped.
+  assert.deepEqual(parseNgioPackets(Uint8Array.from([0x98, 0x07, 0x01, 0xbb, 0x1d, 0xfe, 0x01])), []);
+}
+
+{
+  // A real measurement blob: ping and echo edges on DIG 1.
+  const blob = Uint8Array.from([
+    0x20, 0x14, 0x01, 0x09, 0x01, 0x00, 0x00, 0x02, 0x00, 0x05, 0xe2, 0x5b, 0x52, 0x02, 0x01, 0x05,
+    0x72, 0x6f, 0x52, 0x02,
+  ]);
+  const packet = parseNgioPackets(blob)[0];
+  assert.ok(packet && packet.kind === 'measurement');
+
+  const events = decodeMeasurementPayload(packet.payload);
+  assert.equal(events.length, 2, 'the declared count matches the payload exactly');
+  assert.deepEqual(
+    events.map((event) => event.edge),
+    [0, 1],
+    'edge 0 is the ping, edge 1 the echo',
+  );
+  assert.equal(events[0].channel, NGIO_CHANNEL_ID.DIGITAL1);
+  assert.equal(events[1].ticks - events[0].ticks, 5008, 'captured round trip in ticks');
+
+  const sensor = findSensor(2);
+  assert.ok(sensor);
+  const meters = sensor.toPhysical(events[1].ticks - events[0].ticks, { airTemperatureC: 20 });
+  assert.ok(meters > 0.15 && meters < 0.2, `captured frame should read about 0.17 m, got ${meters}`);
 }
 
 // Parameter builders match the SDK struct layouts.
 assert.deepEqual(setSamplingModeParams(NGIO_CHANNEL_ID.DIGITAL1, 3), [5, 3]);
-assert.deepEqual(
-  setMeasurementPeriodParams(NGIO_CHANNEL_ID.DIGITAL1, 0.05),
-  [5, 0, 0, 0, 0, 0x50, 0xc3, 0x00, 0x00],
-  '50000 ticks little-endian after a zero run ID',
-);
-assert.deepEqual(
-  setChannelEnableMaskParams([NGIO_CHANNEL_ID.DIGITAL1]),
-  [0x20, 0, 0, 0],
-  'DIGITAL1 is bit 5',
-);
+assert.deepEqual(setChannelEnableMaskParams([NGIO_CHANNEL_ID.DIGITAL1]), [0x20, 0, 0, 0]);
+assert.deepEqual(setMeasurementPeriodParams(ALL_CHANNELS, 0.5), [
+  0xff, 0, 0, 0, 0, 0x20, 0xa1, 0x07, 0x00,
+]);
 assert.equal(parseSensorIdPayload(Uint8Array.from([69, 0, 0, 0])), 69);
 assert.equal(parseSensorIdPayload(Uint8Array.from([1, 2])), 0, 'a short payload means no sensor');
 assert.equal(readInt32LE(Uint8Array.from([0xff, 0xff, 0xff, 0xff])), -1);
 
 // --- session state machine ------------------------------------------------
 
-/** Builds the reply the device would send for the command just written. */
-const replyTo = (
-  written: Uint8Array,
-  status: number = NGIO_STATUS.SUCCESS,
-  payload: number[] = [],
+/** Builds the response frame the device would send for a given command. */
+const responseFrame = (command: number, requestCounter: number, payload: number[]): Uint8Array => {
+  const length = 6 + payload.length;
+  const head = [NGIO_LOCK.RESPONSE, length, 0x01, command, requestCounter, ...payload];
+  return Uint8Array.from([
+    NGIO_LOCK.RESPONSE,
+    length,
+    0x01,
+    ngioChecksum(head),
+    command,
+    requestCounter,
+    ...payload,
+  ]);
+};
+
+/** Answers whatever command was just written. */
+const replyTo = (written: Uint8Array, payload: number[] = [NGIO_STATUS.SUCCESS]): Uint8Array =>
+  responseFrame(written[4], written[2], payload);
+
+/** Builds a measurement blob from ping/echo edges. */
+const measurementFrame = (
+  events: { edge: number; channel: number; ticks: number }[],
 ): Uint8Array => {
-  const decoded = decodeResponse(written);
-  assert.ok(decoded.ok, 'test helper needs a decodable command');
-  return encodeCommand({
-    command: decoded.command,
-    rollingCounter: decoded.rollingCounter,
-    params: [status, ...payload],
-  });
+  const body = [
+    0x01,
+    0x00,
+    0x00,
+    events.length,
+    ...events.flatMap((event) => [
+      event.edge,
+      event.channel,
+      event.ticks & 0xff,
+      (event.ticks >>> 8) & 0xff,
+      (event.ticks >>> 16) & 0xff,
+      (event.ticks >>> 24) & 0xff,
+    ]),
+  ];
+  const length = 4 + body.length;
+  const head = [NGIO_LOCK.MEASUREMENT, length, 0x00, ...body];
+  return Uint8Array.from([NGIO_LOCK.MEASUREMENT, length, 0x00, ngioChecksum(head), ...body]);
 };
 
 {
@@ -217,7 +334,8 @@ const replyTo = (
   assert.equal(opened.state.phase, 'init');
   assert.equal(opened.writes.length, 1);
   assert.equal(opened.state.periodSeconds, DEFAULT_PERIOD_SECONDS);
-  assert.equal(decodeResponse(opened.writes[0]).ok && true, true);
+  assert.equal(opened.writes[0][2], NGIO_FIRST_ROLLING_COUNTER, 'first command uses 0xff');
+  assert.equal(opened.writes[0][4], NGIO_CMD_ID.INIT);
 
   // Drive the full handshake, answering success to everything and reporting a
   // Motion Detector 2 on DIG 1.
@@ -227,8 +345,9 @@ const replyTo = (
 
   for (let guard = 0; guard < 20 && state.phase !== 'streaming'; guard += 1) {
     assert.equal(writes.length, 1, `phase ${state.phase} should write one command`);
-    const payload = state.phase === 'identify-sensor' ? [69, 0, 0, 0] : [];
-    const result = step(state, { type: 'report', bytes: replyTo(writes[0], NGIO_STATUS.SUCCESS, payload) });
+    const payload =
+      state.phase === 'identify-sensor' ? [69, 0, 0, 0, 1, 0, 0, 0] : [NGIO_STATUS.SUCCESS];
+    const result = step(state, { type: 'report', bytes: replyTo(writes[0], payload) });
     state = result.state;
     writes = result.writes;
     seen.push(state.phase);
@@ -237,11 +356,10 @@ const replyTo = (
   assert.equal(state.phase, 'streaming', `handshake stalled at ${state.phase}: ${state.error ?? ''}`);
   assert.deepEqual(seen, [
     'init',
-    'clear-errors',
     'identify-sensor',
-    'set-sampling-mode',
     'enable-channel',
     'set-period',
+    'set-sampling-mode',
     'starting',
     'streaming',
   ]);
@@ -249,35 +367,43 @@ const replyTo = (
   assert.equal(state.sensorName, 'Motion Detector 2');
   assert.match(describePhase(state), /Streaming from Motion Detector 2/);
 
-  // Measurements arrive unsolicited, timestamped off the device clock rather
-  // than off arrival time.
-  const rawFor = (meters: number) => Math.round((2 * meters * 1e6) / speedOfSound(20));
-  const measurement = encodeCommand({
-    command: NGIO_CMD_ID.GET_STATUS,
-    rollingCounter: 0,
-    params: [
-      NGIO_STATUS.SUCCESS,
-      NGIO_CHANNEL_ID.DIGITAL1,
-      2,
-      ...[rawFor(1.0), rawFor(1.1)].flatMap((raw) => [
-        raw & 0xff,
-        (raw >>> 8) & 0xff,
-        (raw >>> 16) & 0xff,
-        (raw >>> 24) & 0xff,
-      ]),
-    ],
+  // Measurements arrive unsolicited, timestamped off the device's own capture
+  // clock rather than off arrival time.
+  const ticksFor = (meters: number) =>
+    Math.round((2 * meters) / speedOfSound(20) / NGIO_EDGE_TICK_SECONDS);
+  const origin = 1_000_000;
+  const streamed = step(state, {
+    type: 'report',
+    bytes: measurementFrame([
+      { edge: 0, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: origin },
+      { edge: 1, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: origin + ticksFor(1.0) },
+    ]),
   });
 
-  const streamed = step(state, { type: 'report', bytes: measurement });
-  assert.equal(streamed.samples.length, 2, 'both values in the report become samples');
-  assert.equal(streamed.samples[0].t, 0);
-  assert.ok(
-    Math.abs(streamed.samples[1].t - DEFAULT_PERIOD_SECONDS) < 1e-9,
-    'sample clock advances by exactly one period',
-  );
-  assert.equal(streamed.state.sampleCount, 2);
+  assert.equal(streamed.samples.length, 1, 'a ping/echo pair is one sample');
+  assert.equal(streamed.samples[0].t, 0, 'the first ping is time zero');
+  assert.equal(streamed.samples[0].raw, ticksFor(1.0));
+  assert.equal(streamed.state.sampleCount, 1);
 
-  const stopped = step(streamed.state, { type: 'stop' });
+  // A second pair, a quarter second later on the device clock.
+  const later = origin + 0.25 / NGIO_EDGE_TICK_SECONDS;
+  const again = step(streamed.state, {
+    type: 'report',
+    bytes: measurementFrame([
+      { edge: 0, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: later },
+      { edge: 1, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: later + ticksFor(1.1) },
+    ]),
+  });
+  assert.ok(Math.abs(again.samples[0].t - 0.25) < 1e-9, 'sample time comes from the device clock');
+
+  // A ping with no echo must not pair with the next ping.
+  const orphan = step(again.state, {
+    type: 'report',
+    bytes: measurementFrame([{ edge: 0, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: later + 10_000 }]),
+  });
+  assert.equal(orphan.samples.length, 0, 'an unanswered ping emits nothing');
+
+  const stopped = step(orphan.state, { type: 'stop' });
   assert.equal(stopped.state.phase, 'stopping');
   assert.equal(stopped.writes.length, 1);
   const confirmed = step(stopped.state, { type: 'report', bytes: replyTo(stopped.writes[0]) });
@@ -289,7 +415,7 @@ const replyTo = (
   const opened = startSession();
   const busy = step(opened.state, {
     type: 'report',
-    bytes: replyTo(opened.writes[0], NGIO_STATUS.NOT_READY_FOR_NEW_CMD),
+    bytes: replyTo(opened.writes[0], [NGIO_STATUS.NOT_READY_FOR_NEW_CMD]),
   });
   assert.equal(busy.state.phase, 'init', 'stays on the same phase');
   assert.equal(busy.state.retries, 1);
@@ -301,7 +427,7 @@ const replyTo = (
   const opened = startSession();
   const rejected = step(opened.state, {
     type: 'report',
-    bytes: replyTo(opened.writes[0], NGIO_STATUS.CMD_NOT_SUPPORTED),
+    bytes: replyTo(opened.writes[0], [NGIO_STATUS.CMD_NOT_SUPPORTED]),
   });
   assert.equal(rejected.state.phase, 'failed');
   assert.match(rejected.state.error ?? '', /init/);
@@ -309,38 +435,47 @@ const replyTo = (
 }
 
 {
+  // A reply to a different command does not advance the handshake. The device
+  // volunteers sensor-ID notifications while streaming.
+  const opened = startSession();
+  const stray = step(opened.state, {
+    type: 'report',
+    bytes: responseFrame(NGIO_CMD_ID.GET_SENSOR_ID, 0x10, [2, 0, 0, 0, 1, 0, 0, 0]),
+  });
+  assert.equal(stray.state.phase, 'init', 'an unrelated reply is ignored');
+  assert.equal(stray.writes.length, 0);
+}
+
+{
   // No sensor, and the wrong sensor, produce distinguishable guidance.
   const opened = startSession();
-  let state = opened.state;
-  let writes = opened.writes;
-  for (let guard = 0; guard < 4 && state.phase !== 'identify-sensor'; guard += 1) {
-    const result = step(state, { type: 'report', bytes: replyTo(writes[0]) });
-    state = result.state;
-    writes = result.writes;
-  }
-  assert.equal(state.phase, 'identify-sensor');
-
-  const empty = step(state, {
+  const identified = step(opened.state, {
     type: 'report',
-    bytes: replyTo(writes[0], NGIO_STATUS.SUCCESS, [0, 0, 0, 0]),
+    bytes: replyTo(opened.writes[0]),
+  });
+  assert.equal(identified.state.phase, 'identify-sensor');
+
+  const empty = step(identified.state, {
+    type: 'report',
+    bytes: replyTo(identified.writes[0], [0, 0, 0, 0, 0, 0, 0, 0]),
   });
   assert.equal(empty.state.phase, 'failed');
   assert.match(empty.state.error ?? '', /DIG 1/);
 
-  const wrong = step(state, {
+  const wrong = step(identified.state, {
     type: 'report',
-    bytes: replyTo(writes[0], NGIO_STATUS.SUCCESS, [13, 0, 0, 0]),
+    bytes: replyTo(identified.writes[0], [13, 0, 0, 0, 1, 0, 0, 0]),
   });
   assert.equal(wrong.state.phase, 'failed');
   assert.match(wrong.state.error ?? '', /not a Motion Detector/);
 }
 
 {
-  // Silence during the handshake points at the framing hypothesis.
+  // Silence during the handshake names the step that stalled.
   const opened = startSession();
   const timedOut = step(opened.state, { type: 'timeout' });
   assert.equal(timedOut.state.phase, 'failed');
-  assert.match(timedOut.state.error ?? '', /framing/);
+  assert.match(timedOut.state.error ?? '', /init/);
 }
 
 {
@@ -349,17 +484,6 @@ const replyTo = (
   const noise = step(opened.state, { type: 'report', bytes: Uint8Array.from([1, 2, 3, 4]) });
   assert.equal(noise.state.phase, 'init', 'noise does not derail the handshake');
   assert.equal(noise.writes.length, 0);
-}
-
-{
-  const measurement = decodeMeasurementReport(
-    encodeCommand({
-      command: NGIO_CMD_ID.GET_SENSOR_ID,
-      rollingCounter: 0,
-      params: [NGIO_STATUS.SUCCESS, NGIO_CHANNEL_ID.DIGITAL1, 1, 1, 0, 0, 0],
-    }),
-  );
-  assert.equal(measurement, null, 'only status reports carry measurements');
 }
 
 // --- stream conditioning --------------------------------------------------

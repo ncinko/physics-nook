@@ -1,18 +1,17 @@
 /**
  * The diagnostics dump.
  *
- * This exists because the NGIO framing is a hypothesis (see `ngioPackets.ts`)
- * and there is no way to settle it without a device on the other end of the
- * cable. When a connection fails, this turns "it did not work" into a transcript
+ * When a connection fails, this turns "it did not work" into a transcript
  * someone can read: what enumerated, what was sent, what came back, and at
- * which step it stopped.
+ * which step it stopped. It is what turned the NGIO framing from a guess into
+ * a measurement, and it stays because the next unknown will need it too.
  *
  * Pure formatting over plain data, so it is testable and so the panel that
  * renders it stays dumb.
  */
 
 import { describeVernierDevice } from './deviceIds.ts';
-import { toHex, type NgioFraming } from './ngioPackets.ts';
+import { toHex } from './ngioPackets.ts';
 
 export type TrafficDirection = 'tx' | 'rx';
 
@@ -50,21 +49,12 @@ export const createTrafficLog = (limit = 60, now: () => number = () => Date.now(
   };
 };
 
-export interface HidCollectionSummary {
-  usagePage: number;
-  usage: number;
-  inputReportBytes: number | null;
-  outputReportBytes: number | null;
-}
-
 export interface DiagnosticsSnapshot {
   sourceId: string;
   sourceLabel: string;
   deviceName: string | null;
   vendorId: number | null;
   productId: number | null;
-  collections: HidCollectionSummary[];
-  framing: NgioFraming | null;
   phase: string;
   sensorId: number | null;
   sensorName: string | null;
@@ -106,13 +96,6 @@ export const formatDiagnostics = (snapshot: DiagnosticsSnapshot): string => {
     lines.push(`Known as: ${describeVernierDevice(snapshot.vendorId, snapshot.productId)}`);
   }
 
-  lines.push(
-    `Framing:  ${
-      snapshot.framing
-        ? `sync 0x${snapshot.framing.syncByte.toString(16)}, report ${snapshot.framing.reportId}`
-        : 'not established'
-    }`,
-  );
   lines.push(`Phase:    ${snapshot.phase}`);
   lines.push(
     `Sensor:   ${snapshot.sensorName ?? 'unknown'}${
@@ -122,17 +105,6 @@ export const formatDiagnostics = (snapshot: DiagnosticsSnapshot): string => {
 
   if (snapshot.error) {
     lines.push(`Error:    ${snapshot.error}`);
-  }
-
-  if (snapshot.collections.length > 0) {
-    lines.push('');
-    lines.push('HID collections');
-    snapshot.collections.forEach((collection, index) => {
-      lines.push(
-        `  [${index}] usagePage ${hex4(collection.usagePage)} usage ${hex4(collection.usage)} ` +
-          `in ${collection.inputReportBytes ?? '?'}B out ${collection.outputReportBytes ?? '?'}B`,
-      );
-    });
   }
 
   if (snapshot.traffic.length > 0) {

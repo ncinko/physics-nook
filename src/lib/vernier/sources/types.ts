@@ -2,16 +2,15 @@
  * The adapter every motion source implements.
  *
  * The point of the interface is that the game never learns which one it got.
- * A LabQuest Mini over WebUSB, a Go! device over WebHID, and the
- * keyboard-driven practice walker all deliver the same `MotionSample` stream,
- * so adding a future Vernier activity means writing a source and a sensor
- * definition, not touching the game.
+ * A LabQuest Mini over WebUSB and the keyboard-driven practice walker both
+ * deliver the same `MotionSample` stream, so adding a future Vernier activity
+ * means writing a source and a sensor definition, not touching the game.
  */
 
 import type { MotionSample } from '../motionStream.ts';
 import type { DiagnosticsSnapshot } from '../diagnostics.ts';
 
-export type MotionSourceId = 'webhid' | 'webusb' | 'practice';
+export type MotionSourceId = 'webusb' | 'practice';
 
 export type SourceStatusKind =
   | 'unsupported'
@@ -42,9 +41,15 @@ export interface MotionSource {
   readonly isReal: boolean;
   /** False when the browser lacks the API this source needs. */
   isSupported: () => boolean;
-  /** Must be called from a user gesture — both WebHID and WebUSB require it. */
+  /** Must be called from a user gesture — WebUSB requires it. */
   connect: () => Promise<void>;
   start: (options?: StartOptions) => Promise<void>;
+  /**
+   * Retunes the sample rate on a running stream. Separate from `start` so the
+   * game can idle the detector at one ping a second between rounds without
+   * tearing the session down and re-running the whole handshake.
+   */
+  setPeriod: (periodSeconds: number) => Promise<void>;
   stop: () => Promise<void>;
   disconnect: () => Promise<void>;
   subscribe: (listener: (sample: MotionSample) => void) => () => void;

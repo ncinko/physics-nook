@@ -96,6 +96,7 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
   let target = state.position;
   let timer: ReturnType<typeof setInterval> | null = null;
   let elapsed = 0;
+  let periodSeconds = 0.05;
   let status: SourceStatus = {
     kind: 'idle',
     message: 'Practice mode — no detector needed',
@@ -114,6 +115,30 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
     }
   };
 
+  /**
+   * setInterval rather than requestAnimationFrame: the sample clock should
+   * follow the requested period, not the display refresh, and a background tab
+   * throttling rAF to zero would silently stop a recording. Restarting it is
+   * how the period changes without resetting the run's elapsed clock.
+   */
+  const runTimer = () => {
+    stopTimer();
+    timer = setInterval(() => {
+      state = stepWalker(state, target, periodSeconds, walkerOptions);
+
+      const dropped = random() < walkerOptions.dropoutRate;
+      const noise = (random() - 0.5) * 2 * walkerOptions.noiseMeters;
+
+      samples.emit({
+        t: elapsed,
+        distance: dropped ? 0 : state.position + noise,
+        quality: dropped ? 'dropout' : 'ok',
+      });
+
+      elapsed += periodSeconds;
+    }, periodSeconds * 1000);
+  };
+
   return {
     id: 'practice',
     label: 'Practice mode (no detector)',
@@ -128,29 +153,17 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
       });
     },
 
-    start: async ({ periodSeconds = 0.05 }: StartOptions = {}) => {
-      stopTimer();
+    start: async (options: StartOptions = {}) => {
       elapsed = 0;
-
-      // setInterval rather than requestAnimationFrame: the sample clock should
-      // follow the requested period, not the display refresh, and a background
-      // tab throttling rAF to zero would silently stop a recording.
-      timer = setInterval(() => {
-        state = stepWalker(state, target, periodSeconds, walkerOptions);
-
-        const dropped = random() < walkerOptions.dropoutRate;
-        const noise = (random() - 0.5) * 2 * walkerOptions.noiseMeters;
-
-        samples.emit({
-          t: elapsed,
-          distance: dropped ? 0 : state.position + noise,
-          quality: dropped ? 'dropout' : 'ok',
-        });
-
-        elapsed += periodSeconds;
-      }, periodSeconds * 1000);
-
+      periodSeconds = options.periodSeconds ?? 0.05;
+      runTimer();
       setStatus({ kind: 'streaming', message: 'Practice mode running', sensorName: 'Virtual walker' });
+    },
+
+    setPeriod: async (next: number) => {
+      periodSeconds = next;
+      // Only retune a run already in progress; `start` reads the new value.
+      if (timer !== null) runTimer();
     },
 
     stop: async () => {
@@ -184,7 +197,6 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
       deviceName: 'Virtual walker',
       vendorId: null,
       productId: null,
-      collections: [],
       framing: null,
       phase: status.kind,
       sensorId: null,

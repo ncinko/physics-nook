@@ -6,30 +6,31 @@
  * samples that fell out. The transport hook does the writing; this module owns
  * every decision about ordering, retries, and failure.
  *
- * The reason for that shape is practical rather than architectural purity:
- * this is the layer most likely to need correction once a real LabQuest Mini
- * is on the other end of the cable. Keeping it pure means a correction is a
- * test case fed a recorded byte transcript, not a debugging session with a
- * device plugged in.
+ * The command order mirrors what Graphical Analysis was observed doing against
+ * a LabQuest Mini: INIT, identify the sensor, enable its channel, set the
+ * period, set the sampling mode, start. Deviating from a sequence known to
+ * work on real hardware is not worth the tidiness.
  */
 
 import {
-  DEFAULT_FRAMING,
-  NGIO_DEFAULT_REPORT_LENGTH,
+  ALL_CHANNELS,
   NGIO_CMD_ID,
   NGIO_CHANNEL_ID,
+  NGIO_EDGE_TICK_SECONDS,
+  NGIO_INIT_PAYLOAD,
   NGIO_STATUS,
-  decodeMeasurementReport,
-  decodeResponse,
+  acknowledgementStatus,
   describeNgioStatus,
   encodeCommand,
   getSensorIdParams,
   nextRollingCounter,
+  parseNgioPackets,
   parseSensorIdPayload,
+  decodeMeasurementPayload,
   setChannelEnableMaskParams,
   setMeasurementPeriodParams,
   setSamplingModeParams,
-  type NgioFraming,
+  type NgioPacket,
 } from './ngioPackets.ts';
 import { NGIO_SAMPLING_MODE } from './ngioPackets.ts';
 import { findSensor, isMotionSensor } from './sensorIds.ts';
@@ -37,11 +38,10 @@ import { findSensor, isMotionSensor } from './sensorIds.ts';
 export type SessionPhase =
   | 'idle'
   | 'init'
-  | 'clear-errors'
   | 'identify-sensor'
-  | 'set-sampling-mode'
   | 'enable-channel'
   | 'set-period'
+  | 'set-sampling-mode'
   | 'starting'
   | 'streaming'
   | 'stopping'
@@ -50,11 +50,8 @@ export type SessionPhase =
 
 export interface SessionState {
   phase: SessionPhase;
-  framing: NgioFraming;
   channel: number;
   periodSeconds: number;
-  /** Padding width for outgoing packets; `null` sends them unpadded. */
-  reportLength: number | null;
   rollingCounter: number;
   /** Command we are waiting on a response for, or null while streaming. */
   pendingCommand: number | null;
@@ -62,21 +59,25 @@ export interface SessionState {
   retries: number;
   sensorId: number;
   sensorName: string;
-  /** Count of samples emitted so far; drives the sample clock. */
+  /** Count of samples emitted so far. */
   sampleCount: number;
+  /** Ping edge awaiting its echo, in capture-clock ticks. */
+  pendingPingTicks: number | null;
+  /** Timestamp of the first ping, so sample times start at zero. */
+  originTicks: number | null;
   error: string | null;
 }
 
 export interface RawSample {
-  /** Seconds since streaming started. */
+  /** Seconds since streaming started, from the device's own capture clock. */
   t: number;
-  /** Device counts, before any unit conversion. */
+  /** Sonar round-trip time in capture-clock ticks. */
   raw: number;
 }
 
 export interface StepResult {
   state: SessionState;
-  /** Reports to write to the device, in order. */
+  /** Packets to write to the device, in order. */
   writes: Uint8Array[];
   samples: RawSample[];
 }
@@ -84,17 +85,13 @@ export interface StepResult {
 export type SessionEvent =
   | { type: 'report'; bytes: Uint8Array }
   | { type: 'stop' }
-  | { type: 'timeout' };
+  | { type: 'timeout' }
+  /** Change the sample rate without tearing the session down. */
+  | { type: 'set-period'; periodSeconds: number };
 
 export interface SessionOptions {
-  framing?: NgioFraming;
   channel?: number;
   periodSeconds?: number;
-  /**
-   * `null` for bulk transports, which carry exactly the bytes written. Leave
-   * unset for HID, whose reports are fixed-size buffers.
-   */
-  reportLength?: number | null;
 }
 
 /**
@@ -108,50 +105,40 @@ const MAX_BUSY_RETRIES = 20;
 
 const createState = (options: SessionOptions = {}): SessionState => ({
   phase: 'idle',
-  framing: options.framing ?? DEFAULT_FRAMING,
   channel: options.channel ?? NGIO_CHANNEL_ID.DIGITAL1,
   periodSeconds: options.periodSeconds ?? DEFAULT_PERIOD_SECONDS,
-  reportLength:
-    options.reportLength === undefined ? NGIO_DEFAULT_REPORT_LENGTH : options.reportLength,
+  // The first command sent takes nextRollingCounter(0) === 0xff, which is
+  // where the captured session starts.
   rollingCounter: 0,
   pendingCommand: null,
   retries: 0,
   sensorId: 0,
   sensorName: 'Unknown',
   sampleCount: 0,
+  pendingPingTicks: null,
+  originTicks: null,
   error: null,
 });
 
 /** Ordered list of the phases that each send exactly one command. */
 const PHASE_ORDER: SessionPhase[] = [
   'init',
-  'clear-errors',
   'identify-sensor',
-  'set-sampling-mode',
   'enable-channel',
   'set-period',
+  'set-sampling-mode',
   'starting',
 ];
 
 const commandForPhase = (
   phase: SessionPhase,
   state: SessionState,
-): { command: number; params: number[] } | null => {
+): { command: number; params: readonly number[] } | null => {
   switch (phase) {
     case 'init':
-      return { command: NGIO_CMD_ID.INIT, params: [] };
-    case 'clear-errors':
-      return { command: NGIO_CMD_ID.CLEAR_ERROR_FLAGS, params: [] };
+      return { command: NGIO_CMD_ID.INIT, params: NGIO_INIT_PAYLOAD };
     case 'identify-sensor':
       return { command: NGIO_CMD_ID.GET_SENSOR_ID, params: getSensorIdParams(state.channel) };
-    case 'set-sampling-mode': {
-      const sensor = findSensor(state.sensorId);
-      const mode = sensor ? sensor.samplingMode : NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT;
-      return {
-        command: NGIO_CMD_ID.SET_SAMPLING_MODE,
-        params: setSamplingModeParams(state.channel, mode),
-      };
-    }
     case 'enable-channel':
       return {
         command: NGIO_CMD_ID.SET_SENSOR_CHANNEL_ENABLE_MASK,
@@ -160,8 +147,16 @@ const commandForPhase = (
     case 'set-period':
       return {
         command: NGIO_CMD_ID.SET_MEASUREMENT_PERIOD,
-        params: setMeasurementPeriodParams(state.channel, state.periodSeconds),
+        params: setMeasurementPeriodParams(ALL_CHANNELS, state.periodSeconds),
       };
+    case 'set-sampling-mode': {
+      const sensor = findSensor(state.sensorId);
+      const mode = sensor ? sensor.samplingMode : NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT;
+      return {
+        command: NGIO_CMD_ID.SET_SAMPLING_MODE,
+        params: setSamplingModeParams(state.channel, mode),
+      };
+    }
     case 'starting':
       return { command: NGIO_CMD_ID.START_MEASUREMENTS, params: [] };
     case 'stopping':
@@ -194,8 +189,6 @@ const enterPhase = (state: SessionState, phase: SessionPhase): StepResult => {
         command: outgoing.command,
         rollingCounter,
         params: outgoing.params,
-        framing: state.framing,
-        reportLength: state.reportLength,
       }),
     ],
     samples: [],
@@ -227,64 +220,76 @@ const nextPhaseAfter = (phase: SessionPhase): SessionPhase => {
   return PHASE_ORDER[index + 1];
 };
 
-export const step = (state: SessionState, event: SessionEvent): StepResult => {
-  if (event.type === 'stop') {
-    if (state.phase === 'stopped' || state.phase === 'failed' || state.phase === 'idle') {
-      return { state, writes: [], samples: [] };
+/**
+ * Turns the sonar's ping/echo edge pairs into round-trip samples.
+ *
+ * The detector reports edge 0 when the pulse leaves and edge 1 when it comes
+ * back. A ping with no echo — nothing in range — leaves the pending ping to be
+ * replaced by the next one rather than pairing across samples, which would
+ * invent a reading from two different pulses.
+ */
+const consumeMeasurement = (state: SessionState, packet: NgioPacket): StepResult => {
+  if (packet.kind !== 'measurement') return { state, writes: [], samples: [] };
+
+  const samples: RawSample[] = [];
+  let current = state;
+
+  for (const event of decodeMeasurementPayload(packet.payload)) {
+    if (event.channel !== current.channel) continue;
+
+    if (event.edge === 0) {
+      current = { ...current, pendingPingTicks: event.ticks };
+      continue;
     }
-    return enterPhase(state, 'stopping');
+
+    if (event.edge === 1 && current.pendingPingTicks !== null) {
+      const ping = current.pendingPingTicks;
+      const origin = current.originTicks ?? ping;
+      samples.push({
+        t: (ping - origin) * NGIO_EDGE_TICK_SECONDS,
+        raw: event.ticks - ping,
+      });
+      current = {
+        ...current,
+        originTicks: origin,
+        pendingPingTicks: null,
+        sampleCount: current.sampleCount + 1,
+      };
+    }
   }
 
-  if (event.type === 'timeout') {
-    if (state.phase === 'streaming') {
-      // Silence while streaming is a stalled sensor, not a protocol error.
-      return fail(state, 'The interface stopped sending measurements.');
-    }
-    return fail(state, `No response to the ${state.phase} command. Check the framing hypothesis.`);
-  }
+  return { state: current, writes: [], samples };
+};
 
+const consumeResponse = (state: SessionState, packet: NgioPacket): StepResult => {
+  if (packet.kind !== 'response') return { state, writes: [], samples: [] };
+
+  // A streaming session still exchanges commands — the capture shows
+  // Graphical Analysis polling GET_SENSOR_ID throughout a run, and we change
+  // the sample rate mid-stream. None of those replies may touch the phase or
+  // the sample clock, which resetting `originTicks` here would silently do.
   if (state.phase === 'streaming') {
-    const report = decodeMeasurementReport(event.bytes, state.framing);
-    if (!report || report.channel !== state.channel) {
-      return { state, writes: [], samples: [] };
-    }
-
-    // Timestamps come from the sample index times the requested period, not
-    // from report arrival time. The device samples on its own clock; USB
-    // delivery jitters by milliseconds and would smear every derivative taken
-    // downstream.
-    const samples = report.values.map((raw, index) => ({
-      t: (state.sampleCount + index) * state.periodSeconds,
-      raw,
-    }));
-
-    return {
-      state: { ...state, sampleCount: state.sampleCount + samples.length },
-      writes: [],
-      samples,
-    };
-  }
-
-  const decoded = decodeResponse(event.bytes, state.framing);
-
-  if (!decoded.ok) {
-    // Malformed traffic during the handshake is normal noise from a device
-    // still flushing an earlier session; only a timeout is fatal.
     return { state, writes: [], samples: [] };
   }
 
-  if (state.pendingCommand !== null && decoded.command !== state.pendingCommand) {
+  // Ignore anything that is not the reply we are waiting on. The device also
+  // volunteers sensor-ID notifications, which would otherwise advance the
+  // handshake a step early.
+  if (state.pendingCommand !== null && packet.command !== state.pendingCommand) {
     return { state, writes: [], samples: [] };
   }
 
-  if (decoded.status === NGIO_STATUS.NOT_READY_FOR_NEW_CMD) {
+  // Only a one-byte payload is a status code; a query's reply is data.
+  const status = acknowledgementStatus(packet.payload);
+
+  if (status === NGIO_STATUS.NOT_READY_FOR_NEW_CMD) {
     return retryPhase(state);
   }
 
-  if (decoded.status !== NGIO_STATUS.SUCCESS) {
+  if (status !== null && status !== NGIO_STATUS.SUCCESS) {
     return fail(
       state,
-      `The interface rejected the ${state.phase} command: ${describeNgioStatus(decoded.status)}.`,
+      `The interface rejected the ${state.phase} command: ${describeNgioStatus(status)}.`,
     );
   }
 
@@ -293,7 +298,7 @@ export const step = (state: SessionState, event: SessionEvent): StepResult => {
   }
 
   if (state.phase === 'identify-sensor') {
-    const sensorId = parseSensorIdPayload(decoded.payload);
+    const sensorId = parseSensorIdPayload(packet.payload);
 
     if (sensorId === 0) {
       return fail(
@@ -323,7 +328,15 @@ export const step = (state: SessionState, event: SessionEvent): StepResult => {
 
   if (nextPhase === 'streaming') {
     return {
-      state: { ...state, phase: 'streaming', pendingCommand: null, retries: 0, sampleCount: 0 },
+      state: {
+        ...state,
+        phase: 'streaming',
+        pendingCommand: null,
+        retries: 0,
+        sampleCount: 0,
+        pendingPingTicks: null,
+        originTicks: null,
+      },
       writes: [],
       samples: [],
     };
@@ -332,19 +345,84 @@ export const step = (state: SessionState, event: SessionEvent): StepResult => {
   return enterPhase(state, nextPhase);
 };
 
+export const step = (state: SessionState, event: SessionEvent): StepResult => {
+  if (event.type === 'stop') {
+    if (state.phase === 'stopped' || state.phase === 'failed' || state.phase === 'idle') {
+      return { state, writes: [], samples: [] };
+    }
+    return enterPhase(state, 'stopping');
+  }
+
+  if (event.type === 'set-period') {
+    const periodSeconds = event.periodSeconds;
+
+    // Outside a running stream there is nothing to retune; the new period is
+    // simply what the next START_MEASUREMENTS will ask for.
+    if (state.phase !== 'streaming') {
+      return { state: { ...state, periodSeconds }, writes: [], samples: [] };
+    }
+
+    const rollingCounter = nextRollingCounter(state.rollingCounter);
+
+    return {
+      state: { ...state, periodSeconds, rollingCounter },
+      writes: [
+        encodeCommand({
+          command: NGIO_CMD_ID.SET_MEASUREMENT_PERIOD,
+          rollingCounter,
+          params: setMeasurementPeriodParams(ALL_CHANNELS, periodSeconds),
+        }),
+      ],
+      samples: [],
+    };
+  }
+
+  if (event.type === 'timeout') {
+    if (state.phase === 'streaming') {
+      // Silence while streaming is a stalled sensor, not a protocol error.
+      return fail(state, 'The interface stopped sending measurements.');
+    }
+    return fail(state, `No response to the ${state.phase} command.`);
+  }
+
+  // One bulk transfer can carry several packets, and the device's 8-byte
+  // length headers are skipped by the parser rather than modelled here.
+  const packets = parseNgioPackets(event.bytes);
+
+  let current = state;
+  const writes: Uint8Array[] = [];
+  const samples: RawSample[] = [];
+
+  for (const packet of packets) {
+    if (current.phase === 'failed') break;
+
+    const result =
+      packet.kind === 'measurement'
+        ? current.phase === 'streaming'
+          ? consumeMeasurement(current, packet)
+          : { state: current, writes: [], samples: [] }
+        : consumeResponse(current, packet);
+
+    current = result.state;
+    writes.push(...result.writes);
+    samples.push(...result.samples);
+  }
+
+  return { state: current, writes, samples };
+};
+
 /** One-line status for the connect panel. */
 export const describePhase = (state: SessionState): string => {
   switch (state.phase) {
     case 'idle':
       return 'Not connected';
     case 'init':
-    case 'clear-errors':
       return 'Waking the interface';
     case 'identify-sensor':
       return 'Looking for a sensor on DIG 1';
-    case 'set-sampling-mode':
     case 'enable-channel':
     case 'set-period':
+    case 'set-sampling-mode':
       return 'Configuring the Motion Detector';
     case 'starting':
       return 'Starting measurements';

@@ -462,6 +462,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['sound', 'synthesis', 'harmonics'],
   },
   {
+    id: 'aurora',
+    title: 'Aurora',
+    description:
+      'Precipitating electrons light dipole field lines; a spectrometer and altitude probe show why the 630 nm red line only survives above 275 km.',
+    href: '/aurora#aurora-scene',
+    module: 'Featured',
+    kind: 'standalone',
+    tags: ['aurora', 'magnetosphere', 'spectra', 'quenching'],
+  },
+  {
     id: 'fire-spectrometer',
     title: 'Fire Spectrometer',
     description: 'Probe firelight, embers, moonlight, stars, neon, and fireflies with an in-scene spectrometer.',

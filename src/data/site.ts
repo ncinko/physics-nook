@@ -46,6 +46,13 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
   },
   {
+    title: 'Aurora',
+    description:
+      'Watch auroral curtains form along dipole field lines, and use an in-scene spectrometer and altitude probe to see why collisional quenching puts red above green.',
+    canonicalPath: '/aurora',
+    image: '/social/physics-nook-card.svg',
+  },
+  {
     title: 'Solar System Explorer',
     description:
       'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',

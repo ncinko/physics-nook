@@ -1,0 +1,153 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SimulationBlock from '../components/layout/SimulationBlock.astro';
+import InteractiveAnchor from '../components/interactive/InteractiveAnchor.astro';
+import AuroraScene from '../components/astronomy/AuroraScene';
+---
+
+<BaseLayout>
+  <div class="mx-auto max-w-4xl px-4 pt-10 md:px-6">
+    <h1 class="text-4xl font-semibold tracking-tight text-[var(--text-primary)]">
+      Aurora
+    </h1>
+    <p class="mt-3 text-base leading-7 text-[var(--text-muted)]">
+      Electrons from the magnetotail spiral down Earth's field lines and slam
+      into the upper atmosphere. What colour the sky turns is decided by a race:
+      an excited atom either radiates, or it gets hit by something first.
+    </p>
+  </div>
+
+  <InteractiveAnchor id="aurora-scene" />
+
+  <SimulationBlock
+    width="full"
+    title="Aurora and magnetosphere"
+    description="Drag the controls to change the precipitating electron energy, then open the spectrometer and the altitude probe."
+  >
+    <AuroraScene client:only="react" />
+  </SimulationBlock>
+
+  <div class="mx-auto max-w-3xl px-4 pb-16 md:px-6">
+    <article class="prose prose-theme">
+      <h2>Why the aurora has an altitude</h2>
+
+      <p>
+        A curtain is not a sheet of glowing gas hanging in the sky. It is a
+        bundle of magnetic field lines, lit along their length wherever
+        precipitating electrons are still depositing energy. You see the
+        draped-fabric shape because you are looking at that bundle edge-on, and
+        the rays run vertically because the field does.
+      </p>
+
+      <p>
+        Even the lean is not a free parameter. Climbing a dipole field line
+        moves you equatorward as well as upward, and at auroral latitudes that
+        works out to about 12° from vertical — the same number you get from the
+        magnetic dip angle, <code>tan I = 2 tan λ</code>.
+      </p>
+
+      <h2>Only a sliver of particles ever arrives</h2>
+
+      <p>
+        A particle spiralling along a field line conserves its first adiabatic
+        invariant, <code>μ = mv⊥²/2B</code>. As it moves poleward the field
+        strengthens, so its perpendicular velocity has to grow; since a static
+        magnetic field does no work, the parallel velocity falls to zero and the
+        particle turns around. That turning point is the mirror point, and most
+        particles bounce between conjugate mirror points indefinitely.
+      </p>
+
+      <p>
+        The ones that light up the sky are the exception. If a particle's
+        equatorial pitch angle is small enough, its mirror point would fall
+        below the atmosphere — it hits the air before it can turn around. That
+        set is the <strong>loss cone</strong>, and at L = 6 it is under three
+        degrees wide. Almost everything stays trapped; the aurora is powered by
+        the narrow remainder.
+      </p>
+
+      <p>
+        The latitude of the whole display follows from the same geometry.
+        A dipole field line obeys <code>r = L R⊕ cos²λ</code>, so setting
+        <code>r = R⊕</code> gives <code>λ = arccos(1/√L)</code>. Magnetotail
+        field lines at L ≈ 6–10 come down at 66°–72°. The auroral oval is not an
+        input to the model — it is a consequence of it.
+      </p>
+
+      <h2>The race that sets the colour</h2>
+
+      <p>
+        An atom kicked into an excited state has two possible fates. It can
+        radiate, at a rate given by the Einstein coefficient <em>A</em>, or it
+        can be collisionally deactivated at a rate <code>Σ nᵢkᵢ</code> that
+        depends on how much gas is around. The fraction that actually emits is
+        the Stern–Volmer expression <code>A / (A + Σ nᵢkᵢ)</code>.
+      </p>
+
+      <p>
+        Three lines dominate, and their radiative rates span ten orders of
+        magnitude:
+      </p>
+
+      <ul>
+        <li>
+          <strong>427.8 nm, N₂⁺</strong> — an allowed transition with a lifetime
+          near 60 ns. Nothing can quench it; it tracks ionisation directly and
+          appears wherever the electrons stop.
+        </li>
+        <li>
+          <strong>557.7 nm, O(¹S)</strong> — the familiar auroral green, with a
+          0.7 s lifetime. It survives down to about 110 km before collisions win.
+        </li>
+        <li>
+          <strong>630.0 nm, O(¹D)</strong> — a forbidden transition with a
+          <em>110 second</em> lifetime. Below roughly 275 km it is collisionally
+          destroyed long before it can radiate.
+        </li>
+      </ul>
+
+      <p>
+        That last number is the whole explanation for the colour layering people
+        photograph. Red does not sit above green because something different
+        excites it up there. It sits above green because it is the only altitude
+        quiet enough to let a 110-second transition finish.
+      </p>
+
+      <h2>Why the energy slider changes the colour</h2>
+
+      <p>
+        Harder electrons carry more energy and burn through more atmosphere
+        before stopping, so they deposit lower down. Soft precipitation around
+        0.5 keV stops near 250 km, in air thin enough for red to survive. Hard
+        precipitation at 20 keV drives through to 95 km, where red is long dead,
+        green is being quenched, and the unquenchable N₂⁺ band takes over — the
+        blue-violet lower borders seen in bright displays.
+      </p>
+
+      <p>
+        The colours on screen are not chosen. The model computes an emission
+        rate for each line at each altitude, converts those to CIE XYZ through
+        the colour-matching functions, and then to sRGB. Change the energy and
+        the colour follows, because the physics underneath it moved.
+      </p>
+
+      <h2>What is simplified</h2>
+
+      <p>
+        Two things here are honest stand-ins rather than derived results. The
+        folding of the curtains is a travelling perturbation chosen to look
+        right; real folds come from a shear instability this model does not
+        solve. And the relative production rates of the three excited states are
+        a single lumped branching factor rather than a sum over excitation
+        cross-sections, which is what lets soft precipitation go red-dominant
+        without modelling each channel separately.
+      </p>
+
+      <p>
+        The atmosphere is a log-interpolated table of quiet mid-latitude
+        densities, good to roughly a factor of two between 80 and 500 km, and
+        the electron range uses the Rees (1963) parameterisation.
+      </p>
+    </article>
+  </div>
+</BaseLayout>

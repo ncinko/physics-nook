@@ -2,9 +2,10 @@
  * What to do with a connected detector.
  *
  * Follows the mode-row pattern the Video Analysis lab already uses: a row of
- * toggle buttons, the selected one's hint underneath, and any settings that
- * belong to that choice below that. Nothing starts until the start button is
- * pressed, so reading the hints costs nothing.
+ * toggle buttons, with any settings belonging to the selected one below. The
+ * three names say what they do, so there is no explanatory line under them —
+ * a caption that only restates its button is noise on a screen someone is
+ * about to walk away from. Nothing starts until the start button is pressed.
  */
 
 import { Button } from '../../shared/InlineControls';
@@ -12,22 +13,10 @@ import type { PracticeQuantity } from '../../../lib/kinematics/motionSession';
 
 export type ActivityChoice = 'match' | 'practice' | 'calibrate';
 
-const CHOICES: Array<{ value: ActivityChoice; label: string; hint: string }> = [
-  {
-    value: 'match',
-    label: 'Match graphs',
-    hint: 'Three graphs, one retry each. Your best walk on each counts, and the total can go on the leaderboard.',
-  },
-  {
-    value: 'practice',
-    label: 'Practice',
-    hint: 'One graph at a time, walked as often as you like. Nothing is scored or posted.',
-  },
-  {
-    value: 'calibrate',
-    label: 'Calibrate',
-    hint: 'Check the detector against a tape measure and correct it if the two disagree.',
-  },
+const CHOICES: Array<{ value: ActivityChoice; label: string }> = [
+  { value: 'match', label: 'Match graphs' },
+  { value: 'practice', label: 'Practice' },
+  { value: 'calibrate', label: 'Calibrate' },
 ];
 
 const QUANTITIES: Array<{ value: PracticeQuantity; label: string }> = [
@@ -38,7 +27,7 @@ const QUANTITIES: Array<{ value: PracticeQuantity; label: string }> = [
 
 const START_LABEL: Record<ActivityChoice, string> = {
   match: 'Start the game',
-  practice: 'Start practising',
+  practice: 'Start practicing',
   calibrate: 'Open calibration',
 };
 
@@ -60,7 +49,6 @@ export default function ActivityChooser({
   canCalibrate,
   onStart,
 }: ActivityChooserProps) {
-  const hint = CHOICES.find((entry) => entry.value === choice)?.hint ?? '';
   const calibrateBlocked = choice === 'calibrate' && !canCalibrate;
 
   return (
@@ -85,14 +73,12 @@ export default function ActivityChooser({
         </div>
       </div>
 
-      <p className="text-sm text-[var(--text-muted)]">{hint}</p>
-
       {choice === 'practice' && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-muted)]">
             Graphs
           </span>
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Which graphs to practise">
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Which graphs to practice">
             {QUANTITIES.map((entry) => (
               <Button
                 key={entry.value}

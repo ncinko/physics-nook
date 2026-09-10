@@ -17,12 +17,19 @@
  * other distances after calibrating at one; adding an offset term later means
  * widening `SensorContext` and this module, and nothing else.
  *
+ * There is no ceiling on the correction. A detector that needs a large one is
+ * usually reading something other than what was measured — an echo off a wall,
+ * or a distance entered in different units — but refusing the number would only
+ * substitute this module's guess about the room for the reading of whoever is
+ * standing in it, and they can see the result and try again. Whatever they set
+ * is shown, in plain terms, wherever the detector is in use.
+ *
  * The scale is never transmitted. The scoring endpoint rescores the submitted
  * distances and range-checks them, and a client-side number it can only trust
- * or reject on adds nothing. Nor does it need to: within the band below the
- * scale is a single global multiplier on a target spanning 0.6-2.3 m, so a
- * dishonest value that flatters one leg penalises another. At 2 m, 15% is 30 cm
- * against a `SCORING_ZERO_AT.position` of 0.4 — a large loss, not a gift.
+ * or reject on adds nothing. Nor does it need to: the scale is a single global
+ * multiplier on a target spanning 0.6-2.3 m, so a dishonest value that flatters
+ * one leg penalises another — at 2 m, 15% is 30 cm against a
+ * `SCORING_ZERO_AT.position` of 0.4, a large loss rather than a gift.
  *
  * One consequence worth naming: the range gate now sees corrected metres, so a
  * genuine 0.15 m reading at a scale of 0.9 reads 0.135 and is classed a
@@ -37,39 +44,21 @@ export const CALIBRATION_STORAGE_KEY = 'physics-nook-motion-detector-calibration
 /** The detector trusted as it reads. */
 export const NEUTRAL_SCALE = 1;
 
-/**
- * How far a one-point correction is allowed to move the reading.
- *
- * The speed-of-sound temperature term moves about 2% across a plausible room
- * and the sensor's own accuracy is similar, so a few percent is an instrument
- * that needs correcting. A demand for more than this is usually a different
- * fault wearing the same clothes — an echo off a wall or a chair, the wrong
- * object measured, or a true distance entered in feet — and correcting it would
- * bake that mistake into every reading afterwards.
- */
-export const CALIBRATION_BAND = { min: 0.85, max: 1.15 } as const;
-
 /** Readings averaged before a scale is computed, and the fewest that will do. */
 export const CALIBRATION_SAMPLE_COUNT = 12;
 export const MIN_CALIBRATION_SAMPLES = 5;
 
-export type CalibrationReason = 'ok' | 'out-of-band' | 'no-reading' | 'invalid-true-distance';
+export type CalibrationReason = 'ok' | 'no-reading' | 'invalid-true-distance';
 
 export interface CalibrationOutcome {
   ok: boolean;
-  /**
-   * The scale to adopt. On failure this is the scale already in force, never a
-   * clamped guess: a clamped value is wrong but plausible-looking, and it would
-   * leave a detector reading well off with nothing on screen to show it.
-   */
+  /** The scale to adopt. On failure, the scale already in force. */
   scale: number;
-  /** The composed ratio before the band was checked, so a message can quote it. */
-  proposed: number;
   reason: CalibrationReason;
 }
 
-export const isScaleInBand = (scale: number): boolean =>
-  Number.isFinite(scale) && scale >= CALIBRATION_BAND.min && scale <= CALIBRATION_BAND.max;
+/** A scale has to be a real positive multiplier; how large is not our business. */
+export const isUsableScale = (scale: number): boolean => Number.isFinite(scale) && scale > 0;
 
 /**
  * Solves for the scale that would have made `measuredMeters` read `trueMeters`.
@@ -91,21 +80,17 @@ export const computeScale = (
   trueMeters: number,
   currentScale: number = NEUTRAL_SCALE,
 ): CalibrationOutcome => {
-  const inForce = Number.isFinite(currentScale) && currentScale > 0 ? currentScale : NEUTRAL_SCALE;
-  const reject = (reason: CalibrationReason, proposed = inForce): CalibrationOutcome => ({
+  const inForce = isUsableScale(currentScale) ? currentScale : NEUTRAL_SCALE;
+  const reject = (reason: CalibrationReason): CalibrationOutcome => ({
     ok: false,
     scale: inForce,
-    proposed,
     reason,
   });
 
   if (!Number.isFinite(measuredMeters) || measuredMeters <= 0) return reject('no-reading');
   if (!Number.isFinite(trueMeters) || trueMeters <= 0) return reject('invalid-true-distance');
 
-  const proposed = inForce * (trueMeters / measuredMeters);
-  if (!isScaleInBand(proposed)) return reject('out-of-band', proposed);
-
-  return { ok: true, scale: proposed, proposed, reason: 'ok' };
+  return { ok: true, scale: inForce * (trueMeters / measuredMeters), reason: 'ok' };
 };
 
 /**
@@ -129,14 +114,14 @@ export const averageDistance = (
 export const serializeScale = (scale: number): string => scale.toFixed(6);
 
 /**
- * Reads a stored scale back, refusing anything outside the band. A poisoned or
- * stale value is worth less than no calibration at all, and silently reading
- * the detector 30% wrong is the failure this whole module exists to prevent.
+ * Reads a stored scale back. Only garbage is refused — anything that is not a
+ * positive finite number could not have come from a calibration, and applying
+ * it would leave the detector reading zero, or nothing at all.
  */
 export const readStoredScale = (raw: string | null): number => {
   if (raw === null) return NEUTRAL_SCALE;
   const parsed = Number.parseFloat(raw);
-  return isScaleInBand(parsed) ? parsed : NEUTRAL_SCALE;
+  return isUsableScale(parsed) ? parsed : NEUTRAL_SCALE;
 };
 
 /** Plain English for a factor, since 1.043 says nothing to a reader. */

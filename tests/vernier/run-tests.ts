@@ -62,12 +62,11 @@ import {
 } from '../../src/lib/vernier/deviceIds.ts';
 import { decideStream } from '../../src/lib/vernier/streamPolicy.ts';
 import {
-  CALIBRATION_BAND,
   MIN_CALIBRATION_SAMPLES,
   NEUTRAL_SCALE,
   averageDistance,
   computeScale,
-  isScaleInBand,
+  isUsableScale,
   readStoredScale,
   serializeScale,
 } from '../../src/lib/vernier/calibration.ts';
@@ -800,13 +799,13 @@ assert.equal(
 }
 
 {
-  // Out of band is refused, not clamped. A clamped scale is wrong but
-  // plausible-looking, which is worse than no correction at all.
+  // Large corrections are honoured, not second-guessed. Whoever is standing in
+  // the room can see what a correction did and try again; refusing it would
+  // just substitute a guess about the room for their reading of it.
   const outcome = computeScale(1.0, 2.0, 1.02);
-  assert.equal(outcome.ok, false);
-  assert.equal(outcome.reason, 'out-of-band');
-  assert.equal(outcome.scale, 1.02, 'the scale in force survives a refusal');
-  assert.ok(outcome.proposed > CALIBRATION_BAND.max, 'the refused ratio is reported unclamped');
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.reason, 'ok');
+  assert.ok(Math.abs(outcome.scale - 2.04) < 1e-12);
 }
 
 {
@@ -826,18 +825,22 @@ assert.equal(
   }
 }
 
-assert.equal(isScaleInBand(1), true);
-assert.equal(isScaleInBand(CALIBRATION_BAND.max + 0.01), false);
-assert.equal(isScaleInBand(Number.NaN), false);
+assert.equal(isUsableScale(1), true);
+assert.equal(isUsableScale(3.4), true, 'nothing caps a correction');
+assert.equal(isUsableScale(0), false);
+assert.equal(isUsableScale(-1), false);
+assert.equal(isUsableScale(Number.NaN), false);
 
 {
-  // Stored values are re-checked on the way in. A poisoned or stale entry is
-  // worth less than no calibration, because a silently mis-scaled detector is
-  // the exact failure this module exists to prevent.
+  // Only garbage is refused on the way in: a value that is not a positive
+  // finite number could not have come from a calibration, and applying it would
+  // leave the detector reading zero or nothing at all.
   assert.equal(readStoredScale(null), NEUTRAL_SCALE);
   assert.equal(readStoredScale('abc'), NEUTRAL_SCALE);
-  assert.equal(readStoredScale('5'), NEUTRAL_SCALE);
   assert.equal(readStoredScale(''), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('0'), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('-2'), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('5'), 5, 'a big correction survives a reload');
   assert.ok(Math.abs(readStoredScale('1.0234') - 1.0234) < 1e-12);
   assert.ok(Math.abs(readStoredScale(serializeScale(1.0234)) - 1.0234) < 1e-6);
 }

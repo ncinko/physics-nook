@@ -15,7 +15,6 @@ import { useEffect, useState } from 'react';
 import { Button } from '../../shared/InlineControls';
 import { fixed } from '../../../utils/format';
 import {
-  CALIBRATION_BAND,
   CALIBRATION_SAMPLE_COUNT,
   MIN_CALIBRATION_SAMPLES,
   averageDistance,
@@ -38,10 +37,6 @@ const message = (outcome: CalibrationOutcome): string => {
       return 'No steady reading yet. Make sure the detector can see the object, then wait a moment.';
     case 'invalid-true-distance':
       return 'Enter the measured distance in metres, as a positive number.';
-    case 'out-of-band': {
-      const percent = Math.abs(outcome.proposed - 1) * 100;
-      return `That would be a ${percent.toFixed(0)}% correction, which is more than a detector is ever out by. It is usually an echo off something else in the room, or a distance entered in different units. Nothing was changed.`;
-    }
   }
 };
 
@@ -154,11 +149,6 @@ export default function CalibratePanel({ device, calibration, onBack }: Calibrat
         Scale in force:{' '}
         <span className="font-mono tabular-nums">{fixed(calibration.scale, 3)}</span>{' '}
         <span className="text-[var(--text-muted)]">{describeScale(calibration.scale)}</span>
-      </p>
-      <p className="mt-1 max-w-prose text-xs text-[var(--text-muted)]">
-        Corrections beyond {Math.round((1 - CALIBRATION_BAND.min) * 100)}% are refused — a detector
-        that far out is reading something other than what you measured. The scale is remembered in
-        this browser, not on the detector.
       </p>
 
       <div className="mt-4">

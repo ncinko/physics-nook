@@ -24,11 +24,11 @@ const TONE_CLASS: Record<ReadingTone, string> = {
 };
 
 /**
- * The ceiling is deliberately high. Fullscreen on a projector is the case this
- * whole component exists for, and capping the number at a comfortable
- * on-page size would waste the room that mode buys.
+ * Big enough to read from the detector, and no bigger. The ceiling is what
+ * stops a fullscreen projector turning a two-digit distance into wall art;
+ * past a point the extra size buys no legibility and only crowds the card.
  */
-export const BIG_READING_SIZE = 'text-[clamp(1.75rem,9cqw,7rem)]';
+export const BIG_READING_SIZE = 'text-[clamp(1.5rem,5.5cqw,4rem)]';
 
 interface BigReadingProps {
   /** Small caption above the number. Omit for a bare figure. */
@@ -52,8 +52,12 @@ export default function BigReading({
           {label}
         </p>
       )}
+      {/* `whitespace-nowrap`: the unit belongs to the number. Letting "m" wrap
+          onto its own line reads as a second value for the half-second before
+          the eye resolves it, which is exactly the wrong thing to do to someone
+          reading this from across a room. */}
       <p
-        className={`${BIG_READING_SIZE} font-semibold leading-none tabular-nums ${
+        className={`${BIG_READING_SIZE} font-semibold leading-none whitespace-nowrap tabular-nums ${
           value === null ? TONE_CLASS.muted : TONE_CLASS[tone]
         }`}
       >

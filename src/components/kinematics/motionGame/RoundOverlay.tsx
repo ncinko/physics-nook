@@ -145,7 +145,7 @@ export default function RoundOverlay({
         {phase === 'review' && score !== null && (
           <>
             <p
-              className={`${BIG_READING_SIZE} font-semibold leading-none tabular-nums text-[var(--text-primary)]`}
+              className={`${BIG_READING_SIZE} font-semibold leading-none whitespace-nowrap tabular-nums text-[var(--text-primary)]`}
             >
               {score}
               <span className="text-[clamp(0.85rem,3cqw,1.5rem)] text-[var(--text-muted)]">

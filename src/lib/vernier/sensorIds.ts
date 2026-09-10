@@ -35,9 +35,18 @@ export interface VernierSensor {
 export interface SensorContext {
   /** Ambient air temperature in Celsius. */
   airTemperatureC: number;
+  /**
+   * One-point installation correction, applied after the physics. 1 means the
+   * detector is trusted as it reads. The calibrate screen sets it when the
+   * number on screen does not match a tape measure; see `lib/vernier/calibration`.
+   *
+   * Required rather than optional on purpose: an optional field defaulted with
+   * `?? 1` at each use is how a default quietly goes missing.
+   */
+  distanceScale: number;
 }
 
-export const DEFAULT_SENSOR_CONTEXT: SensorContext = { airTemperatureC: 20 };
+export const DEFAULT_SENSOR_CONTEXT: SensorContext = { airTemperatureC: 20, distanceScale: 1 };
 
 /**
  * Speed of sound in dry air. The temperature term matters more than it looks:
@@ -59,7 +68,8 @@ export const MOTION_DETECTOR_SENSOR_IDS = [2, 69] as const;
 export const MOTION_DETECTOR_RANGE = { minMeters: 0.15, maxMeters: 6.0 } as const;
 
 const motionToMeters = (raw: number, context: SensorContext): number =>
-  (raw * NGIO_EDGE_TICK_SECONDS * speedOfSound(context.airTemperatureC)) / 2;
+  ((raw * NGIO_EDGE_TICK_SECONDS * speedOfSound(context.airTemperatureC)) / 2) *
+  context.distanceScale;
 
 export const VERNIER_SENSORS: readonly VernierSensor[] = [
   {

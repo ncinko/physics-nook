@@ -112,7 +112,7 @@ export function ModeControls({
               type="button"
               variant={entry.value === mode ? 'primary' : 'secondary'}
               aria-pressed={entry.value === mode}
-              className="px-4 py-2 text-base"
+              className="px-4 py-2"
               data-tour={`mode-${entry.value}`}
               onClick={() => onModeChange(entry.value)}
             >

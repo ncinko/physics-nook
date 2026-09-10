@@ -12,13 +12,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatDiagnostics } from '../../lib/vernier/diagnostics';
 import type { MotionSample } from '../../lib/vernier/motionStream';
 import { DEFAULT_PERIOD_SECONDS } from '../../lib/vernier/ngioSession';
-import { createPracticeSource, type PracticeSource } from '../../lib/vernier/sources/practiceSource';
+import { createSimulatedSource, type SimulatedSource } from '../../lib/vernier/sources/simulatedSource';
 import { createWebUsbSource } from '../../lib/vernier/sources/webUsbSource';
 import type {
   MotionSource,
   MotionSourceId,
   SourceStatus,
 } from '../../lib/vernier/sources/types';
+import type { SensorContext } from '../../lib/vernier/sensorIds';
 
 const IDLE_STATUS: SourceStatus = {
   kind: 'idle',
@@ -33,12 +34,14 @@ export interface VernierMotionApi {
   status: SourceStatus;
   latest: MotionSample | null;
   supportsUsb: boolean;
-  practice: PracticeSource | null;
+  simulated: SimulatedSource | null;
   selectSource: (id: MotionSourceId) => Promise<void>;
   disconnect: () => Promise<void>;
   startStream: (periodSeconds?: number) => Promise<void>;
   setStreamPeriod: (periodSeconds: number) => Promise<void>;
   stopStream: () => Promise<void>;
+  /** Pushes instrument context (air temperature, distance scale) to the source. */
+  setSensorContext: (context: SensorContext) => void;
   /** Registers a listener that runs on every sample, outside React state. */
   subscribe: (listener: (sample: MotionSample) => void) => () => void;
   diagnosticsText: () => string;
@@ -60,7 +63,7 @@ export const useVernierMotion = (): VernierMotionApi => {
     setSupport({ usb: typeof navigator !== 'undefined' && 'usb' in navigator });
   }, []);
 
-  const practiceRef = useRef<PracticeSource | null>(null);
+  const simulatedRef = useRef<SimulatedSource | null>(null);
 
   const teardown = useCallback(async () => {
     unsubscribeRef.current.forEach((unsubscribe) => unsubscribe());
@@ -68,7 +71,7 @@ export const useVernierMotion = (): VernierMotionApi => {
 
     const current = sourceRef.current;
     sourceRef.current = null;
-    practiceRef.current = null;
+    simulatedRef.current = null;
 
     if (current) {
       await current.disconnect().catch(() => {});
@@ -80,10 +83,10 @@ export const useVernierMotion = (): VernierMotionApi => {
       await teardown();
 
       const source: MotionSource =
-        id === 'practice' ? createPracticeSource() : createWebUsbSource();
+        id === 'simulated' ? createSimulatedSource() : createWebUsbSource();
 
       sourceRef.current = source;
-      if (id === 'practice') practiceRef.current = source as PracticeSource;
+      if (id === 'simulated') simulatedRef.current = source as SimulatedSource;
       setSourceId(id);
       setLatest(null);
 
@@ -122,6 +125,10 @@ export const useVernierMotion = (): VernierMotionApi => {
     await sourceRef.current?.stop();
   }, []);
 
+  const setSensorContext = useCallback((context: SensorContext) => {
+    sourceRef.current?.setSensorContext(context);
+  }, []);
+
   const subscribe = useCallback((listener: (sample: MotionSample) => void) => {
     listenersRef.current.push(listener);
     return () => {
@@ -145,12 +152,13 @@ export const useVernierMotion = (): VernierMotionApi => {
       status,
       latest,
       supportsUsb: support.usb,
-      practice: practiceRef.current,
+      simulated: simulatedRef.current,
       selectSource,
       disconnect,
       startStream,
       setStreamPeriod,
       stopStream,
+      setSensorContext,
       subscribe,
       diagnosticsText,
     }),
@@ -164,6 +172,7 @@ export const useVernierMotion = (): VernierMotionApi => {
       startStream,
       setStreamPeriod,
       stopStream,
+      setSensorContext,
       subscribe,
       diagnosticsText,
     ],

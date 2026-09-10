@@ -39,7 +39,7 @@ import {
   type SessionState,
 } from '../ngioSession.ts';
 import { conditionSample, type MotionSample } from '../motionStream.ts';
-import { DEFAULT_SENSOR_CONTEXT, findSensor } from '../sensorIds.ts';
+import { DEFAULT_SENSOR_CONTEXT, findSensor, type SensorContext } from '../sensorIds.ts';
 import { createTrafficLog } from '../diagnostics.ts';
 import { createEmitter, type MotionSource, type SourceStatus, type StartOptions } from './types.ts';
 
@@ -145,6 +145,12 @@ export const createWebUsbSource = (): MotionSource => {
   let outEndpoint = 0;
   let session: SessionState | null = null;
   let lastGood: MotionSample | null = null;
+  /**
+   * The instrument context every raw tick is converted through. Mutable so the
+   * calibrate screen can change the scale mid-session; the next sample picks it
+   * up and no stream is disturbed.
+   */
+  let sensorContext: SensorContext = DEFAULT_SENSOR_CONTEXT;
   let reading = false;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -246,7 +252,11 @@ export const createWebUsbSource = (): MotionSource => {
 
       const sensor = findSensor(session.sensorId);
       result.samples.forEach((raw) => {
-        const distance = sensor ? sensor.toPhysical(raw.raw, DEFAULT_SENSOR_CONTEXT) : Number.NaN;
+        // The one place raw ticks become metres, and therefore the one place
+        // the calibration scale is applied. Everything downstream — the
+        // plausibility gate below, the recorded buffer, derived velocity,
+        // scoring, the submitted samples — sees corrected metres for free.
+        const distance = sensor ? sensor.toPhysical(raw.raw, sensorContext) : Number.NaN;
         const sample = conditionSample(lastGood, { t: raw.t, distance });
         if (sample.quality === 'ok') lastGood = sample;
         samples.emit(sample);
@@ -455,6 +465,10 @@ export const createWebUsbSource = (): MotionSource => {
       samples.clear();
       setStatus({ kind: 'idle', message: 'Disconnected', sensorName: null });
       statuses.clear();
+    },
+
+    setSensorContext: (next: SensorContext) => {
+      sensorContext = next;
     },
 
     subscribe: samples.subscribe,

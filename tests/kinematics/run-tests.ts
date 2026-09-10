@@ -1857,4 +1857,105 @@ console.log('Video analysis tests passed.');
   assert.equal(ranked[1].score, 280, 'and each player keeps their best run');
 }
 
+// --- Motion Match: what Practice changes, and what must never change -------
+{
+  const { MOTION_GRAPH_COUNT, generateMotionGraphs } = await import(
+    '../../src/lib/kinematics/motionGame.ts'
+  );
+  const {
+    canRetryRound,
+    mergeAttempt,
+    nextRoundAction,
+    pickPracticeGraphIndex,
+    practiceGraph,
+  } = await import('../../src/lib/kinematics/motionSession.ts');
+
+  // --- the browser/endpoint contract ---------------------------------------
+  //
+  // The scoring endpoint rebuilds the targets from the seed alone, so the
+  // generator's output is a wire format in everything but name. The property
+  // tests above assert that generated targets are *walkable*; this asserts they
+  // are the *same*, which is what a submission's rescoring depends on. Practice
+  // takes one graph out of this triple rather than calling a generator of its
+  // own precisely so this stays true.
+  const GOLDEN: Array<[number, Array<[string, number, number, number]>]> = [
+    [0, [['position-linear', 0.91, 0.91, 5], ['position-curved', 0.69, 0.69, 3], ['velocity-steps', 0, 0.85, 13]]],
+    [1, [['position-linear', 0.81, 0.81, 7], ['position-curved', 0.74, 0.74, 3], ['velocity-steps', 0, 0.71, 13]]],
+    [7, [['position-linear', 0.83, 0.83, 5], ['position-curved', 0.69, 0.69, 3], ['velocity-steps', 0, 0.81, 9]]],
+    [12345, [['position-linear', 1.1, 1.1, 7], ['position-curved', 0.82, 0.82, 3], ['velocity-steps', 0, 0.91, 13]]],
+  ];
+
+  for (const [seed, expected] of GOLDEN) {
+    const built = generateMotionGraphs(seed);
+    assert.equal(built.length, expected.length);
+    built.forEach((graph, index) => {
+      const [id, startValue, startMeters, segments] = expected[index];
+      assert.equal(graph.id, id, `seed ${seed} graph ${index} id`);
+      assert.ok(Math.abs(graph.startValue - startValue) < 1e-9, `seed ${seed} graph ${index} startValue`);
+      assert.ok(Math.abs(graph.startMeters - startMeters) < 1e-9, `seed ${seed} graph ${index} startMeters`);
+      assert.equal(graph.segments.length, segments, `seed ${seed} graph ${index} segment count`);
+    });
+  }
+
+  // --- which graph a practice round walks ----------------------------------
+  const SEEDS = 400;
+  const seen = new Set<number>();
+  for (let seed = 0; seed < SEEDS; seed += 1) {
+    const position = pickPracticeGraphIndex('position', seed);
+    assert.ok(position === 0 || position === 1, `position practice never rolls the velocity graph (seed ${seed})`);
+    assert.equal(pickPracticeGraphIndex('velocity', seed), 2);
+
+    const mixed = pickPracticeGraphIndex('mixed', seed);
+    assert.ok(mixed >= 0 && mixed < MOTION_GRAPH_COUNT);
+    seen.add(mixed);
+  }
+  assert.equal(seen.size, MOTION_GRAPH_COUNT, 'mixed practice reaches every generator');
+
+  for (let seed = 0; seed < 50; seed += 1) {
+    assert.equal(practiceGraph('position', seed).quantity, 'position');
+    assert.equal(practiceGraph('velocity', seed).quantity, 'velocity');
+    assert.equal(
+      practiceGraph('mixed', seed).id,
+      practiceGraph('mixed', seed).id,
+      'the same request and seed produce the same graph',
+    );
+  }
+
+  // --- what an attempt does to the round it lands in ------------------------
+  const attemptOf = (score: number) => ({ samples: [], score });
+
+  {
+    // A match keeps the better walk and spends the retry either way.
+    const first = mergeAttempt(null, attemptOf(70), 'match');
+    assert.equal(first.score, 70);
+    assert.equal(first.retried, false);
+
+    const worse = mergeAttempt(first, attemptOf(40), 'match');
+    assert.equal(worse.score, 70, 'the better attempt survives');
+    assert.equal(worse.retried, true, 'and the retry is spent');
+
+    const better = mergeAttempt(first, attemptOf(90), 'match');
+    assert.equal(better.score, 90);
+    assert.equal(better.retried, true);
+
+    assert.equal(canRetryRound(first, 'match'), true);
+    assert.equal(canRetryRound(worse, 'match'), false, 'one retry per graph');
+  }
+
+  {
+    // Practice shows the walk you just did and never runs out of retries.
+    const first = mergeAttempt(null, attemptOf(70), 'practice');
+    const second = mergeAttempt(first, attemptOf(40), 'practice');
+    assert.equal(second.score, 40, 'the latest attempt is the one on screen');
+    assert.equal(second.retried, false);
+    assert.equal(canRetryRound(second, 'practice'), true);
+  }
+
+  // --- what the button under a reviewed round does --------------------------
+  assert.equal(nextRoundAction('match', 0, 3), 'advance');
+  assert.equal(nextRoundAction('match', 1, 3), 'advance');
+  assert.equal(nextRoundAction('match', 2, 3), 'finish');
+  assert.equal(nextRoundAction('practice', 0, 1), 'reroll');
+}
+
 console.log('Motion Match tests passed.');

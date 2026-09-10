@@ -61,6 +61,16 @@ import {
   webUsbFilters,
 } from '../../src/lib/vernier/deviceIds.ts';
 import { decideStream } from '../../src/lib/vernier/streamPolicy.ts';
+import {
+  CALIBRATION_BAND,
+  MIN_CALIBRATION_SAMPLES,
+  NEUTRAL_SCALE,
+  averageDistance,
+  computeScale,
+  isScaleInBand,
+  readStoredScale,
+  serializeScale,
+} from '../../src/lib/vernier/calibration.ts';
 import { fitPolynomial } from '../../src/lib/math/leastSquares.ts';
 
 // --- device identity ------------------------------------------------------
@@ -98,7 +108,7 @@ assert.ok(speedOfSound(30) > speedOfSound(10), 'warmer air carries sound faster'
   const sensor = findSensor(69);
   assert.ok(sensor);
   const roundTripTicks = 2.0 / speedOfSound(20) / NGIO_EDGE_TICK_SECONDS;
-  const meters = sensor.toPhysical(roundTripTicks, { airTemperatureC: 20 });
+  const meters = sensor.toPhysical(roundTripTicks, { airTemperatureC: 20, distanceScale: 1 });
   assert.ok(Math.abs(meters - 1.0) < 1e-9, `1 m round trip should read 1 m, got ${meters}`);
 }
 
@@ -274,7 +284,7 @@ assert.equal(nextRollingCounter(0x01), 0x00, 'and wraps at a byte');
 
   const sensor = findSensor(2);
   assert.ok(sensor);
-  const meters = sensor.toPhysical(events[1].ticks - events[0].ticks, { airTemperatureC: 20 });
+  const meters = sensor.toPhysical(events[1].ticks - events[0].ticks, { airTemperatureC: 20, distanceScale: 1 });
   assert.ok(meters > 0.15 && meters < 0.2, `captured frame should read about 0.17 m, got ${meters}`);
 }
 
@@ -594,7 +604,7 @@ const measurementFrame = (
 // Disconnecting forgets the stream; connecting a different source opens a new
 // one rather than assuming the old one still runs.
 assert.equal(decideStream(null, 'idle', 'webusb'), 'forget');
-assert.equal(decideStream('practice', 'ready', 'webusb'), 'start');
+assert.equal(decideStream('simulated', 'ready', 'webusb'), 'start');
 assert.equal(decideStream('webusb', 'ready', 'webusb'), 'wait');
 
 // --- stream conditioning --------------------------------------------------
@@ -756,6 +766,115 @@ assert.equal(
     jitterRms(quantised) > 1e-5,
     `millimetre quantisation alone clears the forgery floor (${jitterRms(quantised)})`,
   );
+}
+
+// --- detector calibration -------------------------------------------------
+
+{
+  // The straightforward case: the detector reads short, so readings are stretched.
+  const outcome = computeScale(1.9, 2.0);
+  assert.equal(outcome.ok, true);
+  assert.equal(outcome.reason, 'ok');
+  assert.ok(Math.abs(outcome.scale - 2.0 / 1.9) < 1e-12);
+}
+
+{
+  // The composition invariant, and the reason `currentScale` is a parameter.
+  //
+  // With the detector's own error factor `e` the screen shows e * T * scale, so
+  // solving against what is *displayed* has to divide the scale already in
+  // force back out. If it does not, a second calibration silently undoes the
+  // first — and the number it lands on drifts every time you recalibrate.
+  const trueDistance = 2.0;
+  for (const e of [0.96, 1.0, 1.04]) {
+    for (const inForce of [1, 0.95, 1.05]) {
+      const displayed = e * trueDistance * inForce;
+      const outcome = computeScale(displayed, trueDistance, inForce);
+      assert.equal(outcome.ok, true, `e=${e} scale=${inForce} should be correctable`);
+      assert.ok(
+        Math.abs(outcome.scale - 1 / e) < 1e-12,
+        `recalibrating against a consistent world lands on 1/e regardless of the scale in force (e=${e}, in force=${inForce}, got ${outcome.scale})`,
+      );
+    }
+  }
+}
+
+{
+  // Out of band is refused, not clamped. A clamped scale is wrong but
+  // plausible-looking, which is worse than no correction at all.
+  const outcome = computeScale(1.0, 2.0, 1.02);
+  assert.equal(outcome.ok, false);
+  assert.equal(outcome.reason, 'out-of-band');
+  assert.equal(outcome.scale, 1.02, 'the scale in force survives a refusal');
+  assert.ok(outcome.proposed > CALIBRATION_BAND.max, 'the refused ratio is reported unclamped');
+}
+
+{
+  // Nothing to measure against, and nothing measured.
+  for (const measured of [0, Number.NaN, -1.5]) {
+    const outcome = computeScale(measured, 2.0, 1.03);
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'no-reading');
+    assert.equal(outcome.scale, 1.03);
+  }
+
+  for (const entered of [0, -2, Number.NaN]) {
+    const outcome = computeScale(1.98, entered, 1.03);
+    assert.equal(outcome.ok, false);
+    assert.equal(outcome.reason, 'invalid-true-distance');
+    assert.equal(outcome.scale, 1.03);
+  }
+}
+
+assert.equal(isScaleInBand(1), true);
+assert.equal(isScaleInBand(CALIBRATION_BAND.max + 0.01), false);
+assert.equal(isScaleInBand(Number.NaN), false);
+
+{
+  // Stored values are re-checked on the way in. A poisoned or stale entry is
+  // worth less than no calibration, because a silently mis-scaled detector is
+  // the exact failure this module exists to prevent.
+  assert.equal(readStoredScale(null), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('abc'), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('5'), NEUTRAL_SCALE);
+  assert.equal(readStoredScale(''), NEUTRAL_SCALE);
+  assert.ok(Math.abs(readStoredScale('1.0234') - 1.0234) < 1e-12);
+  assert.ok(Math.abs(readStoredScale(serializeScale(1.0234)) - 1.0234) < 1e-6);
+}
+
+{
+  // Averaging skips dropouts and refuses to answer on too little data: one ping
+  // is noise, not a measurement.
+  const ok = (distance: number): MotionSample => ({ t: 0, distance, quality: 'ok' });
+  const dropped: MotionSample = { t: 0, distance: 0, quality: 'dropout' };
+
+  assert.equal(averageDistance([]), null);
+  assert.equal(averageDistance(Array.from({ length: MIN_CALIBRATION_SAMPLES - 1 }, () => ok(2))), null);
+
+  const mixed = [ok(2), dropped, ok(2.2), dropped, ok(1.8), ok(2), ok(2)];
+  const mean = averageDistance(mixed);
+  assert.ok(mean !== null && Math.abs(mean - 2.0) < 1e-12, 'dropouts contribute nothing');
+
+  // The window is the most recent readings, not the first ones.
+  const drifting = Array.from({ length: 20 }, (_, index) => ok(index));
+  const recent = averageDistance(drifting, 6);
+  assert.ok(recent !== null && Math.abs(recent - 16.5) < 1e-12);
+}
+
+{
+  // The seam itself: the scale rides on the sensor conversion, so a corrected
+  // metre is what every downstream stage — including the plausibility gate —
+  // ever sees.
+  const sensor = findSensor(2);
+  assert.ok(sensor);
+  const ticks = 20000;
+  const plain = sensor.toPhysical(ticks, { airTemperatureC: 20, distanceScale: 1 });
+  const scaled = sensor.toPhysical(ticks, { airTemperatureC: 20, distanceScale: 1.05 });
+  assert.ok(Math.abs(scaled - plain * 1.05) < 1e-12);
+
+  // A reading at the top of the detector's range, stretched, leaves it.
+  const conditioned = conditionSample(null, { t: 0, distance: 5.8 * 1.05 });
+  assert.equal(conditioned.quality, 'dropout');
 }
 
 console.log('vernier device layer tests passed');

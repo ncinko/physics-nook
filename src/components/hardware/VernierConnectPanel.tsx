@@ -16,9 +16,18 @@ interface VernierConnectPanelProps {
   /**
    * Offers the simulated walker as a source. Off for readers: the activity is
    * about walking in front of a detector, and a mouse-driven run is a different
-   * exercise wearing the same clothes. See `isPracticeEnabled`.
+   * exercise wearing the same clothes. See `isSimulatedWalkerEnabled`.
    */
-  allowPractice?: boolean;
+  allowSimulated?: boolean;
+  /**
+   * The one-point distance scale in force, if any. Surfaced here rather than
+   * left on the calibrate screen because the calibration is stored per browser,
+   * not per detector — WebUSB offers no serial to key it to — so a shared
+   * classroom machine could otherwise carry a stale correction into next period
+   * with nothing on screen to say so.
+   */
+  distanceScale?: number;
+  onResetCalibration?: () => void;
   className?: string;
 }
 
@@ -33,7 +42,9 @@ const STATUS_TONE: Record<string, string> = {
 
 export default function VernierConnectPanel({
   device,
-  allowPractice = false,
+  allowSimulated = false,
+  distanceScale = 1,
+  onResetCalibration,
   className = '',
 }: VernierConnectPanelProps) {
   const { status, latest, sourceId, supportsUsb } = device;
@@ -52,8 +63,8 @@ export default function VernierConnectPanel({
           Connect a LabQuest
         </Button>
 
-        {allowPractice && (
-          <Button variant="secondary" onClick={() => void device.selectSource('practice')}>
+        {allowSimulated && (
+          <Button variant="secondary" onClick={() => void device.selectSource('simulated')}>
             <Mouse aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
             Simulated walker
           </Button>
@@ -86,12 +97,30 @@ export default function VernierConnectPanel({
       )}
 
       {connected && (
-        <p className="mt-3 border-t border-[var(--grid-line)] pt-3 text-sm text-[var(--text-primary)]">
-          Live reading:{' '}
-          <span className="font-mono">
-            {latest && latest.quality === 'ok' ? `${fixed(latest.distance, 3)} m` : 'no echo'}
-          </span>
-        </p>
+        <div className="mt-3 border-t border-[var(--grid-line)] pt-3">
+          <p className="text-sm text-[var(--text-primary)]">
+            Live reading:{' '}
+            <span className="font-mono tabular-nums">
+              {latest && latest.quality === 'ok' ? `${fixed(latest.distance, 3)} m` : 'no echo'}
+            </span>
+          </p>
+
+          {distanceScale !== 1 && (
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
+              <span>
+                Calibrated: readings multiplied by{' '}
+                <span className="font-mono tabular-nums text-[var(--text-primary)]">
+                  {fixed(distanceScale, 3)}
+                </span>
+              </span>
+              {onResetCalibration && (
+                <Button variant="secondary" onClick={onResetCalibration}>
+                  Clear
+                </Button>
+              )}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

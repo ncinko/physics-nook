@@ -8,6 +8,7 @@ import {
   sanitizeLeaderboardName,
 } from '../../lib/shared/leaderboardNames';
 import {
+  MAX_GRAPH_SCORE,
   MAX_TOTAL_SCORE,
   MOTION_GAME_DEFAULTS,
   MOTION_GRAPH_COUNT,
@@ -21,13 +22,27 @@ import {
   selectBestMotionGameScoresByUniqueName,
   type MotionGameLeaderboardScore,
 } from '../../lib/kinematics/motionGame';
-import { MOTION_DETECTOR_RANGE, type SensorContext } from '../../lib/vernier/sensorIds';
+import {
+  canRetryRound,
+  mergeAttempt,
+  nextRoundAction,
+  pickPracticeGraphIndex,
+  type MotionActivity,
+  type PracticeQuantity,
+  type RoundResult,
+} from '../../lib/kinematics/motionSession';
+import { DEFAULT_SENSOR_CONTEXT } from '../../lib/vernier/sensorIds';
 import { resample, velocityAt, type MotionSample } from '../../lib/vernier/motionStream';
 import { DEFAULT_PERIOD_SECONDS } from '../../lib/vernier/ngioSession';
 import { decideStream } from '../../lib/vernier/streamPolicy';
 import { useVernierMotion } from '../hardware/useVernierMotion';
+import { useDetectorCalibration } from '../hardware/useDetectorCalibration';
 import VernierConnectPanel from '../hardware/VernierConnectPanel';
 import TargetPlot, { type TracePoint } from './motionGame/TargetPlot';
+import RoundOverlay, { type OverlayPhase } from './motionGame/RoundOverlay';
+import ActivityChooser, { type ActivityChoice } from './motionGame/ActivityChooser';
+import CalibratePanel from './motionGame/CalibratePanel';
+import WalkerStrip from './motionGame/WalkerStrip';
 
 // Motion Match: walk the shape of a graph.
 //
@@ -36,13 +51,24 @@ import TargetPlot, { type TracePoint } from './motionGame/TargetPlot';
 // refresh, and a backgrounded tab throttles rAF to nothing — which would
 // silently truncate a round mid-walk.
 
-type Phase = 'setup' | 'ready' | 'arming' | 'countdown' | 'recording' | 'review' | 'finished';
-
-interface RoundResult {
-  samples: MotionSample[];
-  score: number;
-  retried: boolean;
-}
+/**
+ * Which screen is showing.
+ *
+ * `phase` is a screen enum, not a round enum — 'setup', 'calibrate' and
+ * 'finished' are not phases of a walk. Keeping calibrate here rather than
+ * making it a separate mode flag is what lets the detector's duty cycle stay a
+ * pure function of this one value, which is the property that makes those
+ * effects auditable.
+ */
+type Phase =
+  | 'setup'
+  | 'calibrate'
+  | 'ready'
+  | 'arming'
+  | 'countdown'
+  | 'recording'
+  | 'review'
+  | 'finished';
 
 const COUNTDOWN_SECONDS = 3;
 const TICK_MS = 100;
@@ -63,11 +89,12 @@ const HOLD_SECONDS = 3;
  * screen or a name entry box is unpleasant in a classroom.
  *
  * 20 Hz is the sensor manual's optimum and only a recording needs it. Getting
- * on the mark needs enough resolution to feel responsive but no more. Anything
- * else just needs a live reading so the connect panel's calibration check has
- * something to read. Once the three rounds are scored nothing reads the
- * detector at all, so it stops rather than idling — a board being read over is
- * no place for a metronome.
+ * on the mark needs enough resolution to feel responsive but no more, and so
+ * does calibrating — that wants a settled average, not resolution. Anything
+ * else just needs a live reading so the connect panel has something to show.
+ * Once the three rounds are scored nothing reads the detector at all, so it
+ * stops rather than idling — a board being read over is no place for a
+ * metronome.
  */
 const IDLE_PERIOD_SECONDS = 1;
 const AIMING_PERIOD_SECONDS = 0.25;
@@ -92,12 +119,22 @@ const quantityTitle = (quantity: 'position' | 'velocity') =>
  * deleting it would cost the only way to test any of that. It just has no
  * business being a choice a reader can make: the activity is walking in front
  * of a detector, and a mouse-driven run is a different exercise wearing the
- * same clothes. Add `?practice=1` to the URL to bring it back.
+ * same clothes. Add `?walker=1` to the URL to bring it back.
+ *
+ * Not to be confused with Practice mode, which is a real activity on real
+ * hardware. The walker stands in for the detector; Practice stands in for
+ * nothing.
  */
-const isPracticeEnabled = (): boolean => {
+const isSimulatedWalkerEnabled = (): boolean => {
   if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).has('practice');
+  return new URLSearchParams(window.location.search).has('walker');
 };
+
+const NEXT_LABEL = {
+  reroll: 'New graph',
+  finish: 'See the total',
+  advance: 'Next graph',
+} as const;
 
 interface LocalScore extends MotionGameLeaderboardScore {
   id: string;
@@ -105,11 +142,16 @@ interface LocalScore extends MotionGameLeaderboardScore {
 
 export default function MotionMatchGame({ className = '' }: { className?: string }) {
   const device = useVernierMotion();
+  const calibration = useDetectorCalibration();
 
   const [phase, setPhase] = useState<Phase>('setup');
+  const [activity, setActivity] = useState<MotionActivity>('match');
+  const [choice, setChoice] = useState<ActivityChoice>('match');
+  const [practiceQuantity, setPracticeQuantity] = useState<PracticeQuantity>('position');
+  const [practicePick, setPracticePick] = useState(0);
   const [roundIndex, setRoundIndex] = useState(0);
   const [seed, setSeed] = useState(() => randomSeed());
-  const [allowPractice] = useState(isPracticeEnabled);
+  const [allowSimulated] = useState(isSimulatedWalkerEnabled);
   const [results, setResults] = useState<(RoundResult | null)[]>([null, null, null]);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [elapsed, setElapsed] = useState(0);
@@ -132,16 +174,41 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   // Targets are regenerated every run. In a cloud run the seed comes from the
   // server alongside the run token, so the endpoint can rebuild the same three
-  // graphs when it scores the submission; practice runs just roll their own.
+  // graphs when it scores the submission; walker runs just roll their own.
   const graphs = useMemo(() => generateMotionGraphs(seed), [seed]);
-  const graph = graphs[roundIndex];
-  const isPractice = device.sourceId === 'practice';
+
+  // Practice walks one graph out of that same triple rather than calling a
+  // generator of its own, so `generateMotionGraphs` stays the single way a
+  // target is ever built — the contract the scoring endpoint depends on.
+  const rounds = useMemo(
+    () => (activity === 'practice' ? [graphs[practicePick]] : graphs),
+    [activity, graphs, practicePick],
+  );
+  const roundCount = rounds.length;
+  // `??` covers the tick where the activity has changed but the round index has
+  // not caught up yet.
+  const graph = rounds[roundIndex] ?? rounds[0];
+
+  const isSimulated = device.sourceId === 'simulated';
   const connected = device.status.kind === 'ready' || device.status.kind === 'streaming';
 
   const liveDistance =
     device.latest && device.latest.quality === 'ok' ? device.latest.distance : null;
   const onMark =
     liveDistance !== null && Math.abs(liveDistance - graph.startMeters) <= ON_MARK_TOLERANCE;
+
+  // --- calibration ---------------------------------------------------------
+
+  // Destructured for the same reason as the stream controls below: the hook's
+  // value object is rebuilt on every sample.
+  const { setSensorContext } = device;
+  const calibrationScale = calibration.scale;
+  const sourceId = device.sourceId;
+  useEffect(() => {
+    // `sourceId` is a dependency because a freshly constructed source starts at
+    // the default context and has to be told again.
+    setSensorContext({ ...DEFAULT_SENSOR_CONTEXT, distanceScale: calibrationScale });
+  }, [calibrationScale, sourceId, setSensorContext]);
 
   // --- local leaderboard ---------------------------------------------------
 
@@ -225,15 +292,15 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     [device],
   );
 
-  // Drop the practice walker onto the round's start mark whenever a round is
-  // waiting to begin. Doing it here rather than in each of beginGame/retry/next
+  // Drop the simulated walker onto the round's start mark whenever a round is
+  // waiting to begin. Doing it here rather than in each of the round callbacks
   // keeps it correct when the targets have just been regenerated: `graph` is
   // derived from the new seed, which the callbacks cannot see yet.
-  const practiceSource = device.practice;
+  const simulatedSource = device.simulated;
   useEffect(() => {
     if (phase !== 'ready') return;
-    practiceSource?.reset(graph.startMeters);
-  }, [phase, graph.startMeters, practiceSource]);
+    simulatedSource?.reset(graph.startMeters);
+  }, [phase, graph.startMeters, simulatedSource]);
 
   const finishRound = useCallback(() => {
     recordingRef.current = false;
@@ -242,18 +309,13 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
     setResults((previous) => {
       const next = [...previous];
-      const existing = previous[roundIndex];
-      // One retry per graph, better attempt counts.
-      next[roundIndex] =
-        existing && existing.score >= score
-          ? { ...existing, retried: true }
-          : { samples, score, retried: existing !== null };
+      next[roundIndex] = mergeAttempt(previous[roundIndex], { samples, score }, activity);
       return next;
     });
 
     setLiveTrace(samples);
     setPhase('review');
-  }, [graph, roundIndex]);
+  }, [activity, graph, roundIndex]);
 
   // Countdown and recording clock.
   useEffect(() => {
@@ -298,7 +360,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const streamPeriod: number | null =
     phase === 'countdown' || phase === 'recording'
       ? DEFAULT_PERIOD_SECONDS
-      : phase === 'ready' || phase === 'arming'
+      : phase === 'ready' || phase === 'arming' || phase === 'calibrate'
         ? AIMING_PERIOD_SECONDS
         : phase === 'finished'
           ? null
@@ -308,7 +370,6 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   // depending on `device` here would restart the stream twenty times a second.
   const { startStream, setStreamPeriod, stopStream } = device;
   const statusKind = device.status.kind;
-  const sourceId = device.sourceId;
 
   /** The source we have already opened a stream for, if any. */
   const streamedSourceRef = useRef<string | null>(null);
@@ -410,23 +471,47 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   // --- round control -------------------------------------------------------
 
-  const beginGame = useCallback(async () => {
-    submittedRef.current = false;
-    runIdRef.current = null;
-    setSubmitted(false);
-    setPlayerName('');
-    setNameError(null);
-    setResults([null, null, null]);
-    setRoundIndex(0);
-    setLiveTrace([]);
-    setPhase('ready');
+  const beginActivity = useCallback(
+    async (next: MotionActivity) => {
+      submittedRef.current = false;
+      setSubmitted(false);
+      setPlayerName('');
+      setNameError(null);
+      setResults([null, null, null]);
+      setRoundIndex(0);
+      setLiveTrace([]);
+      setActivity(next);
+      setPhase('ready');
 
-    if (isPractice) {
-      setSeed(randomSeed());
-    } else {
-      await createServerRun();
-    }
-  }, [createServerRun, isPractice]);
+      if (next === 'practice') {
+        // The pick is taken from the seed being set, not from `seed` state,
+        // which this callback cannot see updated yet.
+        const nextSeed = randomSeed();
+        setSeed(nextSeed);
+        setPracticePick(pickPracticeGraphIndex(practiceQuantity, nextSeed));
+        runIdRef.current = null;
+        return;
+      }
+
+      if (isSimulated) {
+        runIdRef.current = null;
+        setSeed(randomSeed());
+        return;
+      }
+
+      // Reuse a token already held rather than minting another. The endpoint
+      // allows 60 runs an hour per IP hash and a classroom shares one address,
+      // so stepping in and out of the menu should not spend that budget.
+      if (runIdRef.current === null) await createServerRun();
+    },
+    [createServerRun, isSimulated, practiceQuantity],
+  );
+
+  const leaveActivity = useCallback(() => {
+    recordingRef.current = false;
+    setLiveTrace([]);
+    setPhase('setup');
+  }, []);
 
   const armRound = useCallback(() => {
     setLiveTrace([]);
@@ -439,25 +524,41 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   }, []);
 
   const nextRound = useCallback(() => {
-    if (roundIndex >= MOTION_GRAPH_COUNT - 1) {
+    const action = nextRoundAction(activity, roundIndex, roundCount);
+
+    if (action === 'reroll') {
+      const nextSeed = randomSeed();
+      setSeed(nextSeed);
+      setPracticePick(pickPracticeGraphIndex(practiceQuantity, nextSeed));
+      setResults([null, null, null]);
+      setLiveTrace([]);
+      setPhase('ready');
+      return;
+    }
+
+    if (action === 'finish') {
       // The stream is not stopped here; it drops to the idle rate, which keeps
-      // the connect panel's live reading and calibration check working.
+      // the connect panel's live reading working.
       setPhase('finished');
       return;
     }
+
     setRoundIndex(roundIndex + 1);
     setLiveTrace([]);
     setPhase('ready');
-  }, [roundIndex]);
+  }, [activity, practiceQuantity, roundCount, roundIndex]);
 
   // --- submission ----------------------------------------------------------
 
   const completed = results.filter((result): result is RoundResult => result !== null);
   const totalScore = motionGameTotal(completed.map((result) => result.score));
   const retriesUsed = completed.filter((result) => result.retried).length;
-  const canPostToCloud = !isPractice && device.sourceId !== null;
+  // Practice never mints a run token, so it could not post even if it tried.
+  // Saying so here keeps the reason next to the other two gates.
+  const canPostToCloud = activity === 'match' && !isSimulated && device.sourceId !== null;
 
   const handleScoreSubmit = useCallback(async () => {
+    if (activity !== 'match') return;
     if (submittedRef.current || completed.length < MOTION_GRAPH_COUNT) return;
 
     if (isBlockedLeaderboardName(playerName)) {
@@ -517,7 +618,16 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       setIsPosting(false);
       runIdRef.current = null;
     }
-  }, [canPostToCloud, completed, playerName, retriesUsed, saveLocalScore, totalScore]);
+  }, [
+    activity,
+    canPostToCloud,
+    completed,
+    graphs,
+    playerName,
+    retriesUsed,
+    saveLocalScore,
+    totalScore,
+  ]);
 
   // --- derived plot data ---------------------------------------------------
 
@@ -537,41 +647,72 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     }));
   }, [liveTrace, graph.quantity]);
 
+  const roundResult = results[roundIndex] ?? null;
+
+  // Leaving is offered freely in practice, where nothing is at stake, and in a
+  // match only before the first walk — a misclick should not be able to throw
+  // away a scored run in progress.
+  const canLeave =
+    activity === 'practice'
+      ? phase === 'ready' || phase === 'review'
+      : phase === 'ready' && roundIndex === 0 && results.every((result) => result === null);
+
+  const heading =
+    activity === 'practice'
+      ? `Practice: ${quantityTitle(graph.quantity)}`
+      : `Graph ${roundIndex + 1} of ${roundCount}: ${quantityTitle(graph.quantity)}`;
+
   return (
     <div className={`not-prose px-5 py-4 ${className}`.trim()}>
       {phase === 'setup' && (
         <>
-          <VernierConnectPanel device={device} allowPractice={allowPractice} />
+          <VernierConnectPanel
+            device={device}
+            allowSimulated={allowSimulated}
+            distanceScale={calibration.scale}
+            onResetCalibration={calibration.reset}
+          />
           {connected && (
-            <div className="mt-4">
-              <Button onClick={() => void beginGame()}>Match Graphs</Button>
-              {isPractice && (
+            <>
+              <ActivityChooser
+                choice={choice}
+                onChoiceChange={setChoice}
+                practiceQuantity={practiceQuantity}
+                onPracticeQuantityChange={setPracticeQuantity}
+                canCalibrate={device.sourceId === 'webusb'}
+                onStart={() => {
+                  if (choice === 'calibrate') setPhase('calibrate');
+                  else void beginActivity(choice);
+                }}
+              />
+              {isSimulated && (
                 <p className="mt-2 text-sm text-[var(--text-muted)]">
                   Simulated walker — scores stay on this device and never reach the shared board.
                 </p>
               )}
-            </div>
+            </>
           )}
         </>
       )}
 
-      {phase !== 'setup' && phase !== 'finished' && (
-        <div>
-          <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">
-            Graph {roundIndex + 1} of {MOTION_GRAPH_COUNT}: {quantityTitle(graph.quantity)}
-          </h3>
+      {phase === 'calibrate' && (
+        <CalibratePanel device={device} calibration={calibration} onBack={() => setPhase('setup')} />
+      )}
 
-          {/* The controls sit on the plot rather than under it. Whoever presses
-              them is about to walk away from the screen, so they should be the
-              biggest thing in view and in the place the eye is already resting.
-              Recording is the one phase with no overlay — nothing should cover
-              the trace while it is being drawn. */}
+      {phase !== 'setup' && phase !== 'calibrate' && phase !== 'finished' && (
+        <div>
+          <h3 className="mb-3 text-lg font-semibold text-[var(--text-primary)]">{heading}</h3>
+
           {/* The aspect ratio is on the wrapper, not left to the SVG's own
               intrinsic sizing. An inline SVG sized only by `width: 100%` can
               resolve to zero height, and then `inset-0` has no box to centre
               the controls in and the card spills out of the plot. Fixing the
-              ratio here matches the viewBox and makes the overlay reliable. */}
-          <div className="relative aspect-[720/340] w-full">
+              ratio here matches the viewBox and makes the overlay reliable.
+
+              It is also the overlay's container query: the card's type scales
+              with the plot, which is what makes the start mark readable from
+              the far end of the room in fullscreen. */}
+          <div className="@container relative aspect-[720/340] w-full">
             <TargetPlot
               className="absolute inset-0 h-full w-full"
               graph={graph}
@@ -580,99 +721,28 @@ export default function MotionMatchGame({ className = '' }: { className?: string
             />
 
             {phase !== 'recording' && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
-                <div className="pointer-events-auto max-w-md rounded-xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-6 py-5 text-center shadow-lg">
-                  {phase === 'ready' && (
-                    <>
-                      <p className="text-sm text-[var(--text-primary)]">
-                        Stand {fixed(graph.startMeters, 2)} m from the detector. The round starts on
-                        its own once you have held that spot for {HOLD_SECONDS} seconds.
-                      </p>
-                      <Button className="mt-3 px-6 py-2.5 text-base" onClick={armRound}>
-                        Begin the round
-                      </Button>
-                    </>
-                  )}
-
-                  {phase === 'arming' && (
-                    <>
-                      <p className="text-sm text-[var(--text-primary)]">
-                        Stand {fixed(graph.startMeters, 2)} m from the detector.
-                      </p>
-
-                      <p className="mt-2 text-sm" role="status">
-                        {liveDistance === null ? (
-                          <span className="text-[var(--text-muted)]">
-                            No echo yet — is anything in front of the detector?
-                          </span>
-                        ) : onMark ? (
-                          <span className="text-[var(--accent-green)]">
-                            Hold it — starting in {Math.ceil(holdRemaining)}…
-                          </span>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">
-                            You are at {fixed(liveDistance, 2)} m. Move onto the mark.
-                          </span>
-                        )}
-                      </p>
-
-                      <div
-                        aria-hidden="true"
-                        className="mt-3 h-1.5 w-full overflow-hidden rounded bg-[var(--grid-line)]"
-                      >
-                        <div
-                          className="h-full rounded bg-[var(--accent-green)]"
-                          style={{
-                            width: `${((HOLD_SECONDS - holdRemaining) / HOLD_SECONDS) * 100}%`,
-                          }}
-                        />
-                      </div>
-
-                      <Button variant="secondary" className="mt-3" onClick={retryRound}>
-                        Cancel
-                      </Button>
-                    </>
-                  )}
-
-                  {phase === 'countdown' && (
-                    <p
-                      className="text-6xl font-semibold tabular-nums text-[var(--accent-red)]"
-                      role="status"
-                    >
-                      {countdown > 0 ? countdown : 'Go'}
-                    </p>
-                  )}
-
-                  {phase === 'review' && results[roundIndex] && (
-                    <>
-                      <p className="text-4xl font-semibold tabular-nums text-[var(--text-primary)]">
-                        {results[roundIndex]!.score}
-                        <span className="text-xl text-[var(--text-muted)]"> / 100</span>
-                      </p>
-                      <div className="mt-3 flex flex-wrap items-center justify-center gap-3">
-                        {!results[roundIndex]!.retried && (
-                          <Button variant="secondary" className="px-5 py-2.5" onClick={retryRound}>
-                            Retry this graph
-                          </Button>
-                        )}
-                        <Button className="px-6 py-2.5 text-base" onClick={nextRound}>
-                          {roundIndex >= MOTION_GRAPH_COUNT - 1 ? 'See the total' : 'Next graph'}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+              <RoundOverlay
+                phase={phase as OverlayPhase}
+                startMeters={graph.startMeters}
+                holdSeconds={HOLD_SECONDS}
+                holdRemaining={holdRemaining}
+                liveDistance={liveDistance}
+                onMark={onMark}
+                countdown={countdown}
+                score={roundResult ? roundResult.score : null}
+                maxScore={MAX_GRAPH_SCORE}
+                canRetry={roundResult !== null && canRetryRound(roundResult, activity)}
+                nextLabel={NEXT_LABEL[nextRoundAction(activity, roundIndex, roundCount)]}
+                onArm={armRound}
+                onCancel={retryRound}
+                onRetry={retryRound}
+                onNext={nextRound}
+                onLeave={canLeave ? leaveActivity : null}
+              />
             )}
           </div>
 
-          {isPractice &&
-            (phase === 'ready' ||
-              phase === 'arming' ||
-              phase === 'countdown' ||
-              phase === 'recording') && (
-            <PracticeStrip device={device} />
-          )}
+          {isSimulated && phase !== 'review' && <WalkerStrip device={device} />}
 
           <div className="mt-3 min-h-[1.75rem]">
             {phase === 'recording' && (
@@ -748,7 +818,10 @@ export default function MotionMatchGame({ className = '' }: { className?: string
           )}
 
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button onClick={() => void beginGame()}>Play again</Button>
+            <Button onClick={() => void beginActivity('match')}>Play again</Button>
+            <Button variant="secondary" onClick={() => setPhase('setup')}>
+              Back to the menu
+            </Button>
           </div>
 
           <div className="mt-6 grid gap-6 sm:grid-cols-2">
@@ -761,69 +834,6 @@ export default function MotionMatchGame({ className = '' }: { className?: string
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Pointer and keyboard control for the simulated walker. Left is close to the
- * detector, right is far — the same orientation as distance on the plot above,
- * so the mental mapping is the one the graph already teaches.
- */
-function PracticeStrip({ device }: { device: ReturnType<typeof useVernierMotion> }) {
-  const min = MOTION_DETECTOR_RANGE.minMeters;
-  const max = 2.6;
-  const current = device.latest?.distance ?? min;
-
-  const setFromClientX = (element: HTMLElement, clientX: number) => {
-    const rect = element.getBoundingClientRect();
-    const fraction = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    device.practice?.setTarget(min + fraction * (max - min));
-  };
-
-  return (
-    <div
-      role="slider"
-      tabIndex={0}
-      aria-label="Simulated walker position"
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={Number(current.toFixed(2))}
-      aria-valuetext={`${current.toFixed(2)} metres from the detector`}
-      className="mt-3 h-12 w-full cursor-ew-resize touch-none rounded border border-[var(--grid-line)] bg-[var(--sim-bg)]"
-      style={{ touchAction: 'none' }}
-      onPointerDown={(event) => {
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setFromClientX(event.currentTarget, event.clientX);
-      }}
-      onPointerMove={(event) => {
-        if (event.buttons === 0) return;
-        setFromClientX(event.currentTarget, event.clientX);
-      }}
-      onKeyDown={(event) => {
-        const step = event.shiftKey ? 0.01 : 0.05;
-        if (event.key === 'ArrowLeft') {
-          device.practice?.setTarget((device.practice?.getTarget() ?? current) - step);
-          event.preventDefault();
-        }
-        if (event.key === 'ArrowRight') {
-          device.practice?.setTarget((device.practice?.getTarget() ?? current) + step);
-          event.preventDefault();
-        }
-      }}
-    >
-      <div className="relative h-full">
-        <div
-          className="absolute top-1 h-10 w-1 -translate-x-1/2 rounded bg-[var(--accent-blue)]"
-          style={{ left: `${((current - min) / (max - min)) * 100}%` }}
-        />
-        <span className="absolute bottom-1 left-2 text-[11px] text-[var(--text-muted)]">
-          near ({min} m)
-        </span>
-        <span className="absolute right-2 bottom-1 text-[11px] text-[var(--text-muted)]">
-          far ({max} m)
-        </span>
-      </div>
     </div>
   );
 }

@@ -333,3 +333,17 @@ input[type="checkbox"] {
   color: var(--text-primary);
   border: 1px solid var(--grid-line);
 }
+
+/* Readable from across the room. Motion Match's controls are pressed by
+   someone who is about to walk several metres away from the screen.
+
+   A size class rather than a Tailwind `text-*` utility because `.btn` is
+   unlayered while utilities live in `@layer utilities`, so an unlayered rule
+   wins regardless of specificity — `className="text-base"` on a `.btn` does
+   nothing. This wins over `.btn` by source order, the same way `.btn-secondary`
+   already does. */
+.btn-lg {
+  padding: 0.55rem 1.15rem;
+  font-size: 1.125rem;
+  border-radius: 0.7rem;
+}

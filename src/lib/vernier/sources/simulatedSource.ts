@@ -4,14 +4,16 @@
  * Not a shortcut: it models the two things that make the real game hard. A
  * person cannot teleport, so the walker accelerates toward where you point it
  * and is speed-capped at a brisk walk; and a sonar is noisy, so readings carry
- * a millimetre or two of jitter and occasionally drop a ping. Practising here
- * teaches the same anticipation the real detector demands.
+ * a millimetre or two of jitter and occasionally drop a ping. Walking it with
+ * the mouse teaches the same anticipation the real detector demands.
  *
  * It is also how the game gets tested. Everything downstream — the recording
  * loop, scoring, retries, the local board — runs identically whether the
  * samples came from here or from a LabQuest Mini.
  *
- * Practice runs never reach the cloud leaderboard; `isReal` is false.
+ * Walker runs never reach the cloud leaderboard; `isReal` is false. That is a
+ * different gate from Practice mode, which runs on real hardware and simply
+ * never mints a run token.
  */
 
 import { MOTION_DETECTOR_RANGE } from '../sensorIds.ts';
@@ -45,7 +47,7 @@ const clamp = (value: number, min: number, max: number) => Math.min(max, Math.ma
 
 /**
  * Advances the walker one tick toward `target`. Pure, so the feel of the
- * practice mode can be tuned against tests rather than by eye.
+ * walker can be tuned against tests rather than by eye.
  */
 export const stepWalker = (
   state: WalkerState,
@@ -71,7 +73,7 @@ export const stepWalker = (
   return { position, velocity };
 };
 
-export interface PracticeSource extends MotionSource {
+export interface SimulatedSource extends MotionSource {
   /** Where the player is pointing, in metres from the detector. */
   setTarget: (distance: number) => void;
   getTarget: () => number;
@@ -79,13 +81,13 @@ export interface PracticeSource extends MotionSource {
   reset: (distance: number) => void;
 }
 
-export interface PracticeSourceOptions {
+export interface SimulatedSourceOptions {
   walker?: Partial<WalkerOptions>;
   random?: () => number;
   startDistance?: number;
 }
 
-export const createPracticeSource = (options: PracticeSourceOptions = {}): PracticeSource => {
+export const createSimulatedSource = (options: SimulatedSourceOptions = {}): SimulatedSource => {
   const walkerOptions = { ...DEFAULT_WALKER_OPTIONS, ...options.walker };
   const random = options.random ?? Math.random;
 
@@ -99,7 +101,7 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
   let periodSeconds = 0.05;
   let status: SourceStatus = {
     kind: 'idle',
-    message: 'Practice mode — no detector needed',
+    message: 'Simulated walker — no detector needed',
     sensorName: 'Virtual walker',
   };
 
@@ -140,15 +142,15 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
   };
 
   return {
-    id: 'practice',
-    label: 'Practice mode (no detector)',
+    id: 'simulated',
+    label: 'Simulated walker (no detector)',
     isReal: false,
     isSupported: () => true,
 
     connect: async () => {
       setStatus({
         kind: 'ready',
-        message: 'Practice mode ready',
+        message: 'Simulated walker ready',
         sensorName: 'Virtual walker',
       });
     },
@@ -157,7 +159,7 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
       elapsed = 0;
       periodSeconds = options.periodSeconds ?? 0.05;
       runTimer();
-      setStatus({ kind: 'streaming', message: 'Practice mode running', sensorName: 'Virtual walker' });
+      setStatus({ kind: 'streaming', message: 'Simulated walker running', sensorName: 'Virtual walker' });
     },
 
     setPeriod: async (next: number) => {
@@ -168,15 +170,22 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
 
     stop: async () => {
       stopTimer();
-      setStatus({ kind: 'ready', message: 'Practice mode ready', sensorName: 'Virtual walker' });
+      setStatus({ kind: 'ready', message: 'Simulated walker ready', sensorName: 'Virtual walker' });
     },
 
     disconnect: async () => {
       stopTimer();
       samples.clear();
-      setStatus({ kind: 'idle', message: 'Practice mode stopped', sensorName: null });
+      setStatus({ kind: 'idle', message: 'Simulated walker stopped', sensorName: null });
       statuses.clear();
     },
+
+    /**
+     * Deliberately inert. The walker emits true metres directly and never runs
+     * a sensor conversion, so there is nothing here for a scale to correct —
+     * which is exactly why the calibrate screen refuses to open on it.
+     */
+    setSensorContext: () => {},
 
     subscribe: samples.subscribe,
     onStatus: statuses.subscribe,
@@ -192,8 +201,8 @@ export const createPracticeSource = (options: PracticeSourceOptions = {}): Pract
     },
 
     diagnostics: () => ({
-      sourceId: 'practice',
-      sourceLabel: 'Practice mode (no detector)',
+      sourceId: 'simulated',
+      sourceLabel: 'Simulated walker (no detector)',
       deviceName: 'Virtual walker',
       vendorId: null,
       productId: null,

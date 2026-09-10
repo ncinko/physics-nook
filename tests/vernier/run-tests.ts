@@ -341,6 +341,28 @@ const measurementFrame = (
   return Uint8Array.from([NGIO_LOCK.MEASUREMENT, length, 0x00, ngioChecksum(head), ...body]);
 };
 
+/**
+ * Drives the handshake to a live stream, answering success to everything and
+ * reporting a Motion Detector 2 on DIG 1. The block below walks the same path
+ * one phase at a time and asserts the order; this is for tests that only need
+ * somewhere to start from.
+ */
+const reachStreaming = (): SessionState => {
+  const opened = startSession();
+  let state: SessionState = opened.state;
+  let writes = opened.writes;
+
+  for (let guard = 0; guard < 20 && state.phase !== 'streaming'; guard += 1) {
+    const payload =
+      state.phase === 'identify-sensor' ? [69, 0, 0, 0, 1, 0, 0, 0] : [NGIO_STATUS.SUCCESS];
+    const result = step(state, { type: 'report', bytes: replyTo(writes[0], payload) });
+    state = result.state;
+    writes = result.writes;
+  }
+
+  return state;
+};
+
 {
   const opened = startSession();
   assert.equal(opened.state.phase, 'init');
@@ -476,8 +498,37 @@ const measurementFrame = (
   const stopped = step(orphan.state, { type: 'stop' });
   assert.equal(stopped.state.phase, 'stopping');
   assert.equal(stopped.writes.length, 1);
+  assert.equal(
+    stopped.writes[0][4],
+    NGIO_CMD_ID.STOP_MEASUREMENTS,
+    'a stop actually sends STOP_MEASUREMENTS, not just a phase change',
+  );
   const confirmed = step(stopped.state, { type: 'report', bytes: replyTo(stopped.writes[0]) });
   assert.equal(confirmed.state.phase, 'stopped');
+}
+
+{
+  // Stopping a live stream, which is what disconnecting does.
+  //
+  // Closing the USB device tells the interface nothing — it keeps measuring,
+  // and the Motion Detector keeps clicking in the room. So `disconnect` sends
+  // this before it releases the device, and that write has to exist from the
+  // streaming phase, not only from the orphaned one above.
+  const streaming = reachStreaming();
+  assert.equal(streaming.phase, 'streaming');
+
+  const halt = step(streaming, { type: 'stop' });
+  assert.equal(halt.state.phase, 'stopping');
+  assert.equal(halt.writes.length, 1, 'a streaming session has something to send');
+  assert.equal(halt.writes[0][4], NGIO_CMD_ID.STOP_MEASUREMENTS);
+
+  // And stopping something already stopped is silent, so a second disconnect
+  // or an unmount straight after one cannot write to a released device.
+  const settled = step(halt.state, { type: 'report', bytes: replyTo(halt.writes[0]) });
+  assert.equal(settled.state.phase, 'stopped');
+  const again = step(settled.state, { type: 'stop' });
+  assert.equal(again.writes.length, 0);
+  assert.equal(again.state.phase, 'stopped');
 }
 
 {

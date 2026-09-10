@@ -99,6 +99,16 @@ const usbApi = (): UsbApi | null => {
 const RESPONSE_TIMEOUT_MS = 1500;
 
 /**
+ * How long disconnecting will spend trying to silence the detector.
+ *
+ * A five-byte bulk write to a device on the desk is sub-millisecond, so this is
+ * not a budget — it is a guarantee that teardown finishes. `disconnect` runs on
+ * unmount, and a `transferOut` to a device that has stopped answering can hang
+ * forever; that would leave a page navigation waiting on a dead USB pipe.
+ */
+const DISCONNECT_STOP_TIMEOUT_MS = 250;
+
+/**
  * Receive buffer for each bulk read, matching the 30000 Vernier's own WebUSB
  * transport uses.
  *
@@ -454,6 +464,32 @@ export const createWebUsbSource = (): MotionSource => {
 
     disconnect: async () => {
       clearWatchdog();
+
+      // Silence the detector before letting go of it.
+      //
+      // Releasing the interface and closing the device tells the LabQuest
+      // nothing: it goes on measuring at whatever rate the session was running
+      // at, and the Motion Detector goes on clicking — in a classroom, until
+      // somebody pulls the USB cable. The page said "Disconnected" while the
+      // room could still hear it.
+      //
+      // Best-effort. A device already unplugged, or one that has stopped
+      // answering, must not turn disconnecting into an error: there is nothing
+      // left to silence in either case. This also runs on unmount, so
+      // navigating away stops the clicking too.
+      if (session) {
+        const result = step(session, { type: 'stop' });
+        session = result.state;
+        await Promise.race([
+          (async () => {
+            for (const packet of result.writes) {
+              await write(packet);
+            }
+          })().catch(() => {}),
+          new Promise((resolve) => setTimeout(resolve, DISCONNECT_STOP_TIMEOUT_MS)),
+        ]);
+      }
+
       reading = false;
       if (device?.opened) {
         await device.releaseInterface(interfaceNumber).catch(() => {});

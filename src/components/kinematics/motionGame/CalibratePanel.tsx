@@ -80,8 +80,7 @@ export default function CalibratePanel({ device, calibration, onBack }: Calibrat
       <h3 className="text-lg font-semibold text-[var(--text-primary)]">Calibrate the detector</h3>
 
       <p className="mt-1 max-w-prose text-sm text-[var(--text-muted)]">
-        Put something the detector can see at a distance you have measured — a metre or two works
-        best, and it is the range the graphs use. Wait for the averaged reading to settle, type the
+        Put something the detector can see at a distance you have measured. Wait for the averaged reading to settle, type the
         distance you measured, and set the scale.
       </p>
 

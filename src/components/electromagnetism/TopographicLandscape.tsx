@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+// Thick contours: WebGL ignores LineBasicMaterial's linewidth, so the lines are
+// drawn as camera-facing ribbons whose width is set in screen pixels.
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { Button, ControlBar } from '../shared/InlineControls';
 import { themeColors, onThemeChange, getCssColor } from '../shared/themeColors';
 import { shortestTurn, orbitEye, frameHalfWidth, nearestSegment, hitScore,
@@ -32,6 +37,20 @@ const FULL_TURN_MS = 1800;
 const SPIN_PER_PIXEL = 0.32, PITCH_PER_PIXEL = 0.3;
 // How close the pointer must come to a contour, in CSS pixels, to read it.
 const PROBE_RADIUS = 9;
+// Contour weight in CSS pixels, and the heavier weight the one being read takes.
+// Wide enough to survive a projector or a small laptop screen without matting
+// the steep ground into a solid block.
+const CONTOUR_WIDTH = 2.2, CONTOUR_HIGHLIGHT_WIDTH = 4.2;
+// Unread contours stay a little short of solid, so the highlighted one still
+// separates from the pack; below that they disappear on a washed-out screen.
+const CONTOUR_OPACITY = 0.8;
+// World units each contour floats above the ground it traces, and the extra
+// lift the highlighted one takes so it crosses over its neighbours cleanly.
+const CONTOUR_LIFT = 4, HIGHLIGHT_LIFT = 5;
+// Daylight on the tilted view: a strong sun against a modest ambient fill, so
+// every slope that faces away from it reads as shaded. Overhead the sun is off
+// and the fill carries the whole image, which needs it far brighter.
+const SUN_INTENSITY = 2.5, AMBIENT_INTENSITY = 0.8, AMBIENT_OVERHEAD = 2.75;
 // The framing the two fixed views use; a spin only ever widens it from here.
 const FRAME_HALF_WIDTH = 1280, FRAME_MARGIN = 1.04;
 
@@ -93,8 +112,8 @@ export default function TopographicLandscape() {
     const material = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1,
       polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
     scene.add(new THREE.Mesh(geometry, material));
-    const ambient = new THREE.AmbientLight(0xffffff, 1.1);
-    const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+    const ambient = new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY);
+    const sun = new THREE.DirectionalLight(0xffffff, SUN_INTENSITY);
     sun.position.set(-800, 1800, 600);
     scene.add(ambient, sun);
 
@@ -102,12 +121,13 @@ export default function TopographicLandscape() {
       const coords: number[] = [];
       for (const segment of contour.segments) {
         for (const [x, z] of segment) coords.push(x - TERRAIN_WIDTH / 2,
-          contour.level * VERTICAL_SCALE + 1, z - TERRAIN_DEPTH / 2);
+          contour.level * VERTICAL_SCALE + CONTOUR_LIFT, z - TERRAIN_DEPTH / 2);
       }
-      const lineGeometry = new THREE.BufferGeometry();
-      lineGeometry.setAttribute('position', new THREE.Float32BufferAttribute(coords, 3));
-      const lineMaterial = new THREE.LineBasicMaterial({ transparent: true, opacity: 0.5 });
-      const line = new THREE.LineSegments(lineGeometry, lineMaterial);
+      const lineGeometry = new LineSegmentsGeometry();
+      lineGeometry.setPositions(coords);
+      const lineMaterial = new LineMaterial({ transparent: true, opacity: CONTOUR_OPACITY,
+        linewidth: CONTOUR_WIDTH });
+      const line = new LineSegments2(lineGeometry, lineMaterial);
       scene.add(line);
       return { level: contour.level, line, points: coords };
     });
@@ -210,15 +230,22 @@ export default function TopographicLandscape() {
       place();
       // Remove directional shading overhead so this reads as a 2D contour map.
       const flat = Math.max(0, Math.min(1, (elevation - TILTED) / SWEEP));
-      sun.intensity = 1.7 * (1 - flat);
-      ambient.intensity = 1.1 + 1.1 * flat;
+      sun.intensity = SUN_INTENSITY * (1 - flat);
+      ambient.intensity = AMBIENT_INTENSITY + (AMBIENT_OVERHEAD - AMBIENT_INTENSITY) * flat;
       renderer.render(scene, camera);
       paint();
     };
 
     /** Lift the contour being read out of the pack. */
     const highlight = () => {
-      for (const item of lines) item.line.material.opacity = item.level === reading?.level ? 1 : 0.5;
+      for (const item of lines) {
+        const lit = item.level === reading?.level;
+        item.line.material.opacity = lit ? 1 : CONTOUR_OPACITY;
+        item.line.material.linewidth = lit ? CONTOUR_HIGHLIGHT_WIDTH : CONTOUR_WIDTH;
+        // Float the read contour over the ones it crosses, so the heavier line
+        // is not cut into by its neighbours where they run close together.
+        item.line.position.y = lit ? HIGHLIGHT_LIFT : 0;
+      }
     };
 
     const applyTheme = () => {
@@ -237,7 +264,8 @@ export default function TopographicLandscape() {
       colorAttribute.needsUpdate = true;
       for (const item of lines) {
         item.line.material.color.set(item.level <= LIGHT_CONTOUR_MAX
-          ? getCssColor('--terrain-snow', palette.bg) : getCssColor('--terrain-contour', palette.text));
+          ? getCssColor('--terrain-contour-light', '#ffffff')
+          : getCssColor('--terrain-contour', palette.text));
       }
       draw();
     };
@@ -327,6 +355,8 @@ export default function TopographicLandscape() {
       height = host.clientHeight;
       if (!width || !height) return;
       renderer.setSize(width, height, false);
+      // Ribbon width is measured against this, so a resize has to restate it.
+      for (const item of lines) item.line.material.resolution.set(width, height);
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       overlay.width = Math.round(width * dpr); overlay.height = Math.round(height * dpr);
       draw();
@@ -384,9 +414,6 @@ export default function TopographicLandscape() {
         <canvas ref={overlayRef} aria-hidden="true" className="pointer-events-none absolute inset-0 h-full w-full" />
       </div>}
       <figcaption className="text-center text-sm leading-relaxed text-[var(--text-muted)]">
-        Contour lines run every {interval} m, from
-        {' '}{levels[0]} m to {highest} m. 
-        <br />
         <button type="button" onClick={showNext} aria-busy={loading}
           className="mt-1 text-xs underline decoration-dotted underline-offset-2
             hover:text-[var(--text-primary)] focus-visible:outline focus-visible:outline-2

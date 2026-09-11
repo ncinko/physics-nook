@@ -8,7 +8,10 @@
     --terrain-rock: #767c83;
     --terrain-snow: #f0f5fa;
     --terrain-water: #2f5d7c;
-    --terrain-contour: #253b42;
+    /* Contours have to read against the ground under them, so they run near
+       black on rock and snow and near white on dark forest and water. */
+    --terrain-contour: #101d23;
+    --terrain-contour-light: #ffffff;
   }
   /* Surface ladder. Every panel on the site picks one of these four, so a
      reader can tell containers apart by depth instead of by which component

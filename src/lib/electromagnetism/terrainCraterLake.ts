@@ -12,8 +12,9 @@ export const craterLake = surveyedLandscape(elevation, {
   // each would draw a speck rather than a contour worth reading.
   levels: [1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600],
   exaggeration: STANDARD_EXAGGERATION,
-  // Forest reaches most of the way up the outer flanks.
-  lightContourMax: 2000,
+  // Forest reaches most of the way up the outer flanks, and the bare rim above
+  // it is dark enough in shadow that the light line still reads best there.
+  lightContourMax: Infinity,
   description: 'Crater Lake in Oregon, the flooded caldera of Mount Mazama, with Wizard Island '
     + 'standing in the lake, the rim ringing it, and Mount Scott out to the east',
   credit: 'Elevation data: USGS via the AWS Terrain Tiles open dataset',

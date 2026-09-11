@@ -40,7 +40,7 @@ const PROBE_RADIUS = 9;
 // Contour weight in CSS pixels, and the heavier weight the one being read takes.
 // Wide enough to survive a projector or a small laptop screen without matting
 // the steep ground into a solid block.
-const CONTOUR_WIDTH = 2.2, CONTOUR_HIGHLIGHT_WIDTH = 4.2;
+const CONTOUR_WIDTH = 1.7, CONTOUR_HIGHLIGHT_WIDTH = 3.2;
 // Unread contours stay a little short of solid, so the highlighted one still
 // separates from the pack; below that they disappear on a washed-out screen.
 const CONTOUR_OPACITY = 0.8;

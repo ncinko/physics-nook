@@ -29,6 +29,29 @@ import {
   positionOfT,
   velocityOfT,
 } from '../../src/lib/kinematics/sampleMotion.ts';
+import {
+  CROSSING_TIMES,
+  LOOP_A,
+  SAMPLE2D_PATH_LENGTH,
+  SAMPLE2D_T_MAX,
+  SAMPLE2D_T_MIN,
+  TIP_TIMES,
+  accelerationOfT2D,
+  magnitude,
+  motionTrend2D,
+  pathLength2DOfT,
+  positionOfT2D,
+  splitAcceleration,
+  velocityOfT2D,
+  type Vec2,
+} from '../../src/lib/kinematics/sampleMotion2D.ts';
+import {
+  LAUNCH_ANGLE_MAX,
+  LAUNCH_ANGLE_MIN,
+  LAUNCH_SPEED_MAX,
+  launchComponents,
+  launchFromPointer,
+} from '../../src/lib/kinematics/launch.ts';
 import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
 import { metadataAction } from '../../src/lib/kinematics/videoAnalysis.ts';
 import {
@@ -85,6 +108,8 @@ import {
   WALK_CYCLE,
   WALK_STRIDE,
   hedgehogGait,
+  HEADING_FLIP_BAND,
+  hedgehogHeading,
   strideIndex,
 } from '../../src/lib/kinematics/hedgehogGait.ts';
 import {
@@ -338,6 +363,126 @@ assert.equal(speedTrend(-2, -1), 'speeding-up', 'leftward and getting faster is 
 assert.equal(speedTrend(2, -1), 'slowing-down');
 assert.equal(speedTrend(-2, 1), 'slowing-down');
 assert.equal(speedTrend(0, -1), 'speeding-up', 'from rest, any acceleration speeds it up');
+
+// 2D sample motion: the figure eight behind the 2D kinematics hedgehog.
+{
+  const component = (f: (t: number) => Vec2, key: 'x' | 'y') => (t: number) => f(t)[key];
+  [0.3, 1.7, 2.5, 4.1, 6.6, 8.9].forEach((t) => {
+    (['x', 'y'] as const).forEach((key) => {
+      near(numericDerivative(component(positionOfT2D, key), t), velocityOfT2D(t)[key], 1e-5);
+      near(numericDerivative(component(velocityOfT2D, key), t), accelerationOfT2D(t)[key], 1e-5);
+    });
+  });
+
+  // The loop closes, so the animation wraps without a jump.
+  [positionOfT2D, velocityOfT2D, accelerationOfT2D].forEach((f) => {
+    near(f(SAMPLE2D_T_MIN).x, f(SAMPLE2D_T_MAX).x, 1e-9);
+    near(f(SAMPLE2D_T_MIN).y, f(SAMPLE2D_T_MAX).y, 1e-9);
+  });
+
+  // Acceleration vanishes at the crossing...
+  CROSSING_TIMES.forEach((t) => {
+    near(magnitude(accelerationOfT2D(t)), 0, 1e-9);
+    near(positionOfT2D(t).x, 0, 1e-9);
+    assert.equal(motionTrend2D(velocityOfT2D(t), accelerationOfT2D(t)).speed, 'constant');
+    assert.equal(motionTrend2D(velocityOfT2D(t), accelerationOfT2D(t)).turn, 'straight');
+  });
+
+  // ...and is purely sideways at the lobe tips: turning, speed momentarily fixed.
+  TIP_TIMES.forEach((t) => {
+    const v = velocityOfT2D(t);
+    const a = accelerationOfT2D(t);
+    near(v.x * a.x + v.y * a.y, 0, 1e-9);
+    assert.ok(magnitude(a) > 1, 'the hedgehog is turning hard at the tips');
+    near(Math.abs(positionOfT2D(t).x), LOOP_A, 1e-9);
+    assert.equal(motionTrend2D(v, a).speed, 'constant');
+  });
+  // The two lobes go round in opposite senses.
+  assert.equal(motionTrend2D(velocityOfT2D(TIP_TIMES[0]), accelerationOfT2D(TIP_TIMES[0])).turn, 'right');
+  assert.equal(motionTrend2D(velocityOfT2D(TIP_TIMES[1]), accelerationOfT2D(TIP_TIMES[1])).turn, 'left');
+
+  // Between them it speeds up and slows down while turning.
+  const trends = new Set<string>();
+  let minSpeed = Infinity;
+  let maxSpeed = 0;
+  for (let t = 0; t < SAMPLE2D_T_MAX; t += 0.01) {
+    const v = velocityOfT2D(t);
+    const trend = motionTrend2D(v, accelerationOfT2D(t));
+    trends.add(`${trend.speed}/${trend.turn}`);
+    minSpeed = Math.min(minSpeed, magnitude(v));
+    maxSpeed = Math.max(maxSpeed, magnitude(v));
+  }
+  ['speeding-up/left', 'speeding-up/right', 'slowing-down/left', 'slowing-down/right'].forEach((combo) =>
+    assert.ok(trends.has(combo), `the loop should include ${combo}`),
+  );
+  // Both gaits show up, and it never stops.
+  assert.ok(minSpeed > BRACE_SPEED && minSpeed < RUN_SPEED, `min speed ${minSpeed}`);
+  assert.ok(maxSpeed > RUN_SPEED && maxSpeed < ROLL_SPEED, `max speed ${maxSpeed}`);
+
+  // Path length accumulates |v| and never decreases.
+  near(pathLength2DOfT(SAMPLE2D_T_MIN), 0);
+  near(SAMPLE2D_PATH_LENGTH, numericIntegral((t) => magnitude(velocityOfT2D(t)), 0, SAMPLE2D_T_MAX), 1e-4);
+  near(pathLength2DOfT(3.3), numericIntegral((t) => magnitude(velocityOfT2D(t)), 0, 3.3), 1e-3);
+  let previousPath = -1;
+  for (let t = 0; t <= SAMPLE2D_T_MAX; t += 0.05) {
+    const path = pathLength2DOfT(t);
+    assert.ok(path >= previousPath);
+    previousPath = path;
+  }
+
+  // Trend classification.
+  assert.deepEqual(
+    [motionTrend2D({ x: 1, y: 0 }, { x: 1, y: 0 }).speed, motionTrend2D({ x: 1, y: 0 }, { x: 1, y: 0 }).turn],
+    ['speeding-up', 'straight'],
+  );
+  assert.equal(motionTrend2D({ x: 1, y: 0 }, { x: -1, y: 0 }).speed, 'slowing-down');
+  assert.equal(motionTrend2D({ x: 1, y: 0 }, { x: 0, y: 1 }).turn, 'left');
+  assert.equal(motionTrend2D({ x: 1, y: 0 }, { x: 0, y: 1 }).speed, 'constant');
+  assert.equal(motionTrend2D({ x: 1, y: 0 }, { x: 0, y: -1 }).turn, 'right');
+  assert.equal(motionTrend2D({ x: 0, y: 0 }, { x: 0, y: 0 }).speed, 'constant');
+  assert.equal(motionTrend2D({ x: 0, y: 0 }, { x: 0, y: 2 }).speed, 'speeding-up');
+  near(splitAcceleration({ x: 3, y: 4 }, { x: 3, y: 4 }).parallel, 5);
+  near(splitAcceleration({ x: 3, y: 4 }, { x: -4, y: 3 }).perpendicular, 5);
+}
+
+// The side-view hedgehog on a top-down field: faces the way it runs, never
+// upside down, and does not flicker around vertical.
+{
+  for (let deg = -180; deg <= 180; deg += 5) {
+    const theta = (deg * Math.PI) / 180;
+    [1, -1].forEach((previous) => {
+      const pose = hedgehogHeading(Math.cos(theta) * 2, Math.sin(theta) * 2, previous as 1 | -1);
+      assert.ok(Math.abs(pose.rotate) <= Math.PI / 2 + 1e-12, `upside down at ${deg}°`);
+    });
+  }
+  // Up and to the right: facing right, nose raised (anticlockwise on screen).
+  const upRight = hedgehogHeading(1, 1, -1);
+  assert.equal(upRight.facing, 1);
+  near(upRight.rotate, -Math.PI / 4, 1e-12);
+  // Up and to the left: mirrored, nose raised (clockwise on screen).
+  const upLeft = hedgehogHeading(-1, 1, 1);
+  assert.equal(upLeft.facing, -1);
+  near(upLeft.rotate, Math.PI / 4, 1e-12);
+  // Straight right is level.
+  near(hedgehogHeading(2, 0).rotate, 0);
+  // Stopped: holds its facing, lies level.
+  assert.deepEqual(hedgehogHeading(0, 0, -1), { facing: -1, rotate: 0 });
+  // Just past vertical it keeps its facing; well past it, it turns round.
+  const nudge = Math.sin(HEADING_FLIP_BAND / 2);
+  assert.equal(hedgehogHeading(-nudge, -1, 1).facing, 1);
+  assert.equal(hedgehogHeading(-0.5, -1, 1).facing, -1);
+}
+
+// Launch decomposition geometry.
+{
+  near(launchComponents(20, 30).vx, 17.320508075688775, 1e-9);
+  near(launchComponents(20, 30).vy, 10, 1e-9);
+  assert.deepEqual(launchFromPointer(100, 0, 5), { angleDeg: 0, speed: 20 });
+  assert.equal(launchFromPointer(-10, 50, 5).angleDeg, LAUNCH_ANGLE_MAX, 'behind the launcher pins to vertical');
+  assert.equal(launchFromPointer(10, -10, 5).angleDeg, LAUNCH_ANGLE_MIN, 'below ground pins to horizontal');
+  assert.equal(launchFromPointer(5000, 5000, 5).speed, LAUNCH_SPEED_MAX);
+  near(launchFromPointer(30, 40, 5).speed, 10);
+}
 
 
 // Hedgehog sprite sheet. The art lives in a PNG, so what can be checked here is

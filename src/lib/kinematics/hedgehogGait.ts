@@ -117,6 +117,46 @@ export function hedgehogGait({
   return { frame: WALK_CYCLE[strideIndex(distance, WALK_STRIDE)], facing, slowing, gait: 'walk' };
 }
 
+/**
+ * How close to straight up or down, in radians, the hedgehog keeps facing the
+ * way it was. Without the band it would flip back and forth on every frame
+ * while its heading hovers around vertical.
+ */
+export const HEADING_FLIP_BAND = (12 * Math.PI) / 180;
+
+export interface HeadingPose {
+  facing: 1 | -1;
+  /**
+   * Turn to apply to the sprite in screen coordinates (y down), so positive is
+   * clockwise. Always within a quarter turn, so the sprite is never upside down.
+   */
+  rotate: number;
+}
+
+/**
+ * Points the side-view sprite along a 2D velocity (vx, vy in the usual y-up
+ * convention) on a top-down field. The sprite faces whichever way vx points and
+ * tilts up to a quarter turn to follow the heading, so it runs belly-down in
+ * every direction; it only mirrors once the heading has swung clearly past
+ * vertical.
+ */
+export function hedgehogHeading(vx: number, vy: number, previousFacing: 1 | -1 = 1): HeadingPose {
+  const speed = Math.hypot(vx, vy);
+  if (speed < IDLE_SPEED) {
+    return { facing: previousFacing, rotate: 0 };
+  }
+
+  const nearVertical = Math.abs(vx) < speed * Math.sin(HEADING_FLIP_BAND);
+  const facing: 1 | -1 = nearVertical ? previousFacing : vx > 0 ? 1 : -1;
+
+  // Tilt of the heading above the direction the sprite faces. Held past
+  // vertical inside the flip band, so it is clamped to a quarter turn. The
+  // mirror flips which screen rotation raises the nose, and screen y points down.
+  const quarter = Math.PI / 2;
+  const tilt = Math.max(-quarter, Math.min(quarter, Math.atan2(vy, facing * vx)));
+  return { facing, rotate: -facing * tilt };
+}
+
 /** Which frame of a four-frame cycle a given distance travelled lands on. */
 export function strideIndex(distance: number, stride: number) {
   const phase = Math.floor((distance / stride) * 4) % 4;

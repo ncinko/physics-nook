@@ -10,6 +10,7 @@ import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
+import HedgehogField2D from '../../components/kinematics/HedgehogField2D';
 import LaunchDecomposition from '../../components/kinematics/LaunchDecomposition';
 import ProjectileLauncher from '../../components/kinematics/ProjectileLauncher';
 import Kinematics2DSandbox from '../../components/kinematics/Kinematics2DSandbox';
@@ -35,7 +36,13 @@ $$
 \end{aligned}
 $$
 
-The definitions are the same, but we now track motion along two perpendicular axes.
+Here is the hedgehog from the [1D page](/kinematics) again, now running a figure eight across a top-down field. Its three kinematic vectors move with it: **position** $\vec{r}$ points from the origin to the hedgehog, **velocity** $\vec{v}$ points the way it is running, and **acceleration** $\vec{a}$ points the way its velocity is changing.
+
+<InteractiveAnchor id="hedgehog-field" />
+
+<HedgehogField2D client:load />
+
+The definitions are the same as in one dimension, but each quantity now has a direction as well as a size. Watch the arrows for a full loop: velocity always points along the path, but acceleration usually doesn't.
 
 ## Component Motion
 
@@ -67,7 +74,7 @@ y(t) &= y_i + v_{iy}t + \frac{1}{2}a_yt^2.
 \end{aligned}
 $$
 
-Note that these are all functions of a common variable $$t$$. This shared time is what lets us combine the separate one-dimensional calculations into a two-dimensional path.
+Note that these are all functions of a common variable $$t$$. This shared time is what lets us combine the separate one-dimensional calculations into a two-dimensional path. The hedgehog's figure eight works the same way. Its acceleration isn't constant, but $$x(t)$$ and $$y(t)$$ are each a simple back-and-forth motion in one dimension, running on the same clock.
 
 
 ## Launch Components
@@ -82,12 +89,7 @@ $$
 
 <InteractiveAnchor id="launch-decomposition" />
 
-<SimulationBlock
-  title="Launch Decomposition"
-  description="Drag the launch vector or use the sliders to see how speed and angle set the horizontal and vertical velocity components."
->
-  <LaunchDecomposition client:only="react" />
-</SimulationBlock>
+<LaunchDecomposition client:visible />
 
 ## Projectile Motion
 
@@ -167,6 +169,8 @@ $$
 $$
 
 This equation can be interpreted as "acceleration changes the velocity vector".  If the acceleration and velocity vectors are aligned, the velocity gets larger in time: the object speeds up. If acceleration points opposite the velocity, the velocity gets smaller: the object slows down.  What happens when acceleration is perpendicular to velocity?
+
+Look back at the hedgehog at either tip of its figure eight. There its acceleration points straight across its velocity. The hedgehog is turning, but for that instant its speed isn't changing at all. Turn on **split a along and across v** to see any acceleration as two parts: the part along the velocity changes the speed, and the part across it changes the direction. In the sandbox below, you choose the acceleration yourself.
 
 <InteractiveAnchor id="acceleration-sandbox" />
 

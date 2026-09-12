@@ -1,311 +1,280 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useRef, useState, type PointerEvent } from 'react';
 
-type Size = {
-  width: number;
-  height: number;
-};
+import {
+  LAUNCH_ANGLE_MAX,
+  LAUNCH_ANGLE_MIN,
+  LAUNCH_SPEED_MAX,
+  LAUNCH_SPEED_MIN,
+  launchComponents,
+  launchFromPointer,
+} from '../../lib/kinematics/launch';
+import { fixed } from '../../utils/format';
+import { ControlBar, Slider } from '../shared/InlineControls';
 
-type Geometry = {
-  originX: number;
-  originY: number;
-  zoom: number;
-};
+// Inline illustration for the launch-components equations: drag the tip of the
+// launch velocity (or use the sliders) and watch it resolve into v0 cos(theta)
+// along the ground and v0 sin(theta) straight up. Pointer geometry lives in
+// lib/kinematics/launch.
 
-const ANGLE_MIN = 0;
-const ANGLE_MAX = 90;
-const SPEED_MIN = 0;
-const SPEED_MAX = 60;
-const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+const VIEW_W = 440;
+const VIEW_H = 400;
+const ORIGIN_X = 56;
+const ORIGIN_Y = 356;
+const ZOOM = Math.min((VIEW_W - ORIGIN_X - 24) / LAUNCH_SPEED_MAX, (ORIGIN_Y - 20) / LAUNCH_SPEED_MAX);
+const TICKS = [0, 10, 20, 30, 40, 50, 60];
 
-const clamp = (value: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, value));
-const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
-const toDegrees = (radians: number) => (radians * 180) / Math.PI;
+// Velocity keeps the green it has everywhere else in the kinematics pages.
+const VELOCITY_GREEN = '#16a34a';
 
-const getCssColor = (name: string, fallback: string) => {
-  if (typeof window === 'undefined') {
-    return fallback;
-  }
-
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
-};
-
-const drawArrow = (
-  ctx: CanvasRenderingContext2D,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-  color: string,
-  lineWidth = 3,
-) => {
-  const angle = Math.atan2(y1 - y0, x1 - x0);
-  const head = Math.max(13, lineWidth * 4.25);
-
-  ctx.save();
-  ctx.strokeStyle = color;
-  ctx.fillStyle = color;
-  ctx.lineWidth = lineWidth;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-};
+const round = (n: number) => Math.round(n * 1000) / 1000;
+const sx = (vx: number) => round(ORIGIN_X + vx * ZOOM);
+const sy = (vy: number) => round(ORIGIN_Y - vy * ZOOM);
 
 export default function LaunchDecomposition() {
   const [angleDeg, setAngleDeg] = useState(35);
   const [speed, setSpeed] = useState(34);
-  const [size, setSize] = useState<Size>({ width: 760, height: 420 });
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const geometryRef = useRef<Geometry>({ originX: 64, originY: 340, zoom: 8 });
+  const svgRef = useRef<SVGSVGElement | null>(null);
   const draggingRef = useRef(false);
 
-  const components = useMemo(() => {
-    const angle = toRadians(angleDeg);
-    return {
-      vx: speed * Math.cos(angle),
-      vy: speed * Math.sin(angle),
-    };
-  }, [angleDeg, speed]);
+  const { vx, vy } = launchComponents(speed, angleDeg);
+  const tipX = sx(vx);
+  const tipY = sy(vy);
+  const angle = (angleDeg * Math.PI) / 180;
 
-  useEffect(() => {
-    const element = wrapperRef.current;
-    if (!element) {
-      return undefined;
-    }
-
-    const resize = () => {
-      const width = Math.max(320, Math.floor(element.clientWidth));
-      const height = Math.max(310, Math.min(460, Math.round(width * 0.55)));
-      setSize({ width, height });
-    };
-
-    resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(element);
-
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
+  const updateFromPointer = (event: PointerEvent<SVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) {
       return;
     }
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
-      return;
-    }
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(size.width * dpr);
-    canvas.height = Math.floor(size.height * dpr);
-    canvas.style.width = `${size.width}px`;
-    canvas.style.height = `${size.height}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, size.width, size.height);
-
-    const simBg = getCssColor('--surface-plot', '#ffffff');
-    const grid = getCssColor('--grid-line', '#d1d5db');
-    const text = getCssColor('--text-primary', '#111827');
-    const muted = getCssColor('--text-muted', '#4b5563');
-    const blue = getCssColor('--accent-blue', '#2563eb');
-    const green = '#16a34a';
-    const amber = '#d97706';
-
-    const originX = 68;
-    const originY = size.height - 54;
-    const availableX = size.width - originX - 44;
-    const availableY = originY - 28;
-    const zoom = Math.min(availableX / SPEED_MAX, availableY / SPEED_MAX);
-    geometryRef.current = { originX, originY, zoom };
-
-    const endX = originX + components.vx * zoom;
-    const endY = originY - components.vy * zoom;
-    const xEnd = originX + components.vx * zoom;
-    const yEnd = originY - components.vy * zoom;
-
-    ctx.fillStyle = simBg;
-    ctx.fillRect(0, 0, size.width, size.height);
-
-    ctx.strokeStyle = grid;
-    ctx.lineWidth = 1;
-    for (let x = originX; x <= size.width - 24; x += 42) {
-      ctx.beginPath();
-      ctx.moveTo(x, 18);
-      ctx.lineTo(x, originY);
-      ctx.stroke();
-    }
-    for (let y = originY; y >= 18; y -= 42) {
-      ctx.beginPath();
-      ctx.moveTo(20, y);
-      ctx.lineTo(size.width - 20, y);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = muted;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(20, originY);
-    ctx.lineTo(size.width - 20, originY);
-    ctx.moveTo(originX, size.height - 22);
-    ctx.lineTo(originX, 18);
-    ctx.stroke();
-
-    ctx.fillStyle = muted;
-    ctx.font = `13px ${FONT}`;
-    ctx.fillText('x', size.width - 30, originY - 8);
-    ctx.fillText('y', originX + 8, 30);
-
-    ctx.save();
-    ctx.setLineDash([7, 6]);
-    ctx.strokeStyle = grid;
-    ctx.lineWidth = 1.4;
-    ctx.beginPath();
-    ctx.moveTo(xEnd, originY);
-    ctx.lineTo(xEnd, yEnd);
-    ctx.stroke();
-    ctx.restore();
-
-    drawArrow(ctx, originX, originY, xEnd, originY, green, 3);
-    drawArrow(ctx, xEnd, originY, xEnd, yEnd, amber, 3);
-    drawArrow(ctx, originX, originY, endX, endY, blue, 3.4);
-
-    const arcRadius = 42;
-    ctx.strokeStyle = text;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(originX, originY, arcRadius, 0, -toRadians(angleDeg), true);
-    ctx.stroke();
-
-    ctx.fillStyle = text;
-    ctx.font = `600 14px ${FONT}`;
-    ctx.fillText('theta', originX + 48, originY - 16);
-
-    ctx.fillStyle = blue;
-    ctx.font = `700 16px ${FONT}`;
-    ctx.fillText('v0', endX + 10, endY - 10);
-    ctx.fillStyle = green;
-    ctx.fillText('v0x', (originX + xEnd) / 2 - 12, originY - 10);
-    ctx.fillStyle = amber;
-    ctx.fillText('v0y', xEnd + 10, (originY + yEnd) / 2);
-
-    ctx.fillStyle = text;
-    ctx.beginPath();
-    ctx.arc(originX, originY, 5, 0, Math.PI * 2);
-    ctx.fill();
-  }, [angleDeg, components.vx, components.vy, size]);
-
-  const updateFromPointer = (event: PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
-    const { originX, originY, zoom } = geometryRef.current;
-    const dx = px - originX;
-    const dy = originY - py;
-
-    setAngleDeg(clamp(toDegrees(Math.atan2(dy, dx)), ANGLE_MIN, ANGLE_MAX));
-    setSpeed(clamp(Math.hypot(dx, dy) / Math.max(zoom, 0.001), SPEED_MIN, SPEED_MAX));
+    const rect = svg.getBoundingClientRect();
+    const px = ((event.clientX - rect.left) * VIEW_W) / rect.width;
+    const py = ((event.clientY - rect.top) * VIEW_H) / rect.height;
+    const next = launchFromPointer(px - ORIGIN_X, ORIGIN_Y - py, ZOOM);
+    setAngleDeg(next.angleDeg);
+    setSpeed(next.speed);
   };
 
-  const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+  const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    // Touch only grabs the handle, so a finger elsewhere on the diagram still
+    // scrolls the page; a mouse can click anywhere to place the tip.
+    const onHandle = (event.target as Element).closest('[data-launch-handle]') !== null;
+    if (event.pointerType !== 'mouse' && !onHandle) {
+      return;
+    }
+    event.preventDefault();
     draggingRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     updateFromPointer(event);
   };
 
-  const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (!draggingRef.current) {
-      return;
+  const onPointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (draggingRef.current) {
+      updateFromPointer(event);
     }
-
-    updateFromPointer(event);
   };
 
-  const stopDragging = () => {
+  const endDrag = () => {
     draggingRef.current = false;
   };
 
-  return (
-    <div ref={wrapperRef} className="flex h-full min-h-[34rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
-      <div className="grid gap-3 md:grid-cols-3">
-        <Readout label="Launch speed" value={`${speed.toFixed(1)} m/s`} accent="var(--accent-blue)" />
-        <Readout label="Horizontal component" value={`${components.vx.toFixed(1)} m/s`} accent="#16a34a" />
-        <Readout label="Vertical component" value={`${components.vy.toFixed(1)} m/s`} accent="#d97706" />
-      </div>
+  const arcR = 38;
+  const showArc = speed * ZOOM > arcR + 12 && angleDeg > 2;
+  const showRightAngle = vx * ZOOM > 14 && vy * ZOOM > 14;
 
-      <canvas
-        ref={canvasRef}
-        className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
-        style={{ touchAction: 'none' }}
-        aria-label="Launch velocity vector decomposed into horizontal and vertical components"
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={stopDragging}
-        onPointerCancel={stopDragging}
-        onPointerLeave={stopDragging}
+  return (
+    <div className="not-prose mx-auto my-8 w-full max-w-[640px] text-[var(--text-primary)]">
+      <ControlBar className="mb-3">
+        <Slider
+          label="Angle θ"
+          unit="°"
+          min={LAUNCH_ANGLE_MIN}
+          max={LAUNCH_ANGLE_MAX}
+          value={angleDeg}
+          onChange={setAngleDeg}
+          format={(value) => fixed(value, 0)}
+        />
+        <Slider
+          label={
+            <>
+              Speed v<sub>0</sub>
+            </>
+          }
+          unit="m/s"
+          min={LAUNCH_SPEED_MIN}
+          max={LAUNCH_SPEED_MAX}
+          step={0.5}
+          value={speed}
+          onChange={setSpeed}
+          format={(value) => fixed(value, 1)}
+        />
+      </ControlBar>
+
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        role="img"
+        aria-label={`Launch velocity of ${fixed(speed, 1)} metres per second at ${fixed(angleDeg, 0)} degrees, with a horizontal component of ${fixed(vx, 1)} and a vertical component of ${fixed(vy, 1)} metres per second`}
+        className="mx-auto block h-auto w-full max-w-[460px] select-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+      >
+        <rect
+          x={ORIGIN_X}
+          y={sy(LAUNCH_SPEED_MAX)}
+          width={round(LAUNCH_SPEED_MAX * ZOOM)}
+          height={round(LAUNCH_SPEED_MAX * ZOOM)}
+          fill="var(--surface-plot)"
+          stroke="var(--grid-line)"
+        />
+
+        {TICKS.map((tick) => (
+          <g key={tick}>
+            <line x1={sx(tick)} x2={sx(tick)} y1={sy(0)} y2={sy(LAUNCH_SPEED_MAX)} stroke="var(--grid-line)" opacity={0.7} />
+            <line x1={sx(0)} x2={sx(LAUNCH_SPEED_MAX)} y1={sy(tick)} y2={sy(tick)} stroke="var(--grid-line)" opacity={0.7} />
+            <text x={sx(tick)} y={ORIGIN_Y + 16} textAnchor="middle" fontSize={11} fill="var(--text-muted)">
+              {tick}
+            </text>
+            {tick > 0 && (
+              <text x={ORIGIN_X - 8} y={sy(tick) + 4} textAnchor="end" fontSize={11} fill="var(--text-muted)">
+                {tick}
+              </text>
+            )}
+          </g>
+        ))}
+        <text x={sx(LAUNCH_SPEED_MAX)} y={VIEW_H - 6} textAnchor="end" fontSize={12} fill="var(--text-muted)">
+          m/s
+        </text>
+
+        <line x1={ORIGIN_X} x2={sx(LAUNCH_SPEED_MAX)} y1={ORIGIN_Y} y2={ORIGIN_Y} stroke="var(--text-muted)" strokeWidth={1.5} />
+        <line x1={ORIGIN_X} x2={ORIGIN_X} y1={ORIGIN_Y} y2={sy(LAUNCH_SPEED_MAX)} stroke="var(--text-muted)" strokeWidth={1.5} />
+
+        {showRightAngle && (
+          <polyline
+            points={`${tipX - 10},${ORIGIN_Y} ${tipX - 10},${ORIGIN_Y - 10} ${tipX},${ORIGIN_Y - 10}`}
+            fill="none"
+            stroke="var(--text-muted)"
+            strokeWidth={1.2}
+          />
+        )}
+
+        {showArc && (
+          <>
+            <path
+              d={`M ${ORIGIN_X + arcR} ${ORIGIN_Y} A ${arcR} ${arcR} 0 0 0 ${round(ORIGIN_X + arcR * Math.cos(angle))} ${round(ORIGIN_Y - arcR * Math.sin(angle))}`}
+              fill="none"
+              stroke="var(--text-primary)"
+              strokeWidth={1.4}
+            />
+            <text
+              x={round(ORIGIN_X + (arcR + 14) * Math.cos(angle / 2))}
+              y={round(ORIGIN_Y - (arcR + 14) * Math.sin(angle / 2) + 5)}
+              textAnchor="middle"
+              fontSize={15}
+              fontStyle="italic"
+              fill="var(--text-primary)"
+            >
+              θ
+            </text>
+          </>
+        )}
+
+        <Arrow x0={ORIGIN_X} y0={ORIGIN_Y} x1={tipX} y1={ORIGIN_Y} dashed />
+        <Arrow x0={tipX} y0={ORIGIN_Y} x1={tipX} y1={tipY} dashed />
+        <Arrow x0={ORIGIN_X} y0={ORIGIN_Y} x1={tipX} y1={tipY} />
+
+        {vx * ZOOM > 30 && (
+          <Symbol x={round((ORIGIN_X + tipX) / 2)} y={ORIGIN_Y + 34} sub="0x" anchor="middle" />
+        )}
+        {vy * ZOOM > 30 && <Symbol x={tipX + 8} y={round((ORIGIN_Y + tipY) / 2 + 5)} sub="0y" anchor="start" />}
+        {speed * ZOOM > 20 && (
+          <Symbol
+            x={round(tipX - 14 * Math.sin(angle) - 6)}
+            y={round(tipY - 12 * Math.cos(angle) - 4)}
+            sub="0"
+            anchor="end"
+          />
+        )}
+
+        <circle cx={ORIGIN_X} cy={ORIGIN_Y} r={4} fill="var(--text-primary)" />
+
+        <g data-launch-handle="" style={{ cursor: 'grab', touchAction: 'none' }}>
+          <circle cx={tipX} cy={tipY} r={20} fill="transparent" />
+          <circle cx={tipX} cy={tipY} r={6.5} fill={VELOCITY_GREEN} stroke="var(--surface-plot)" strokeWidth={2} />
+        </g>
+      </svg>
+
+      <p className="mt-2 mb-0 text-center text-sm text-[var(--text-muted)]">
+        <span className="whitespace-nowrap">
+          v<sub>0x</sub> = v<sub>0</sub> cos θ ={' '}
+          <span className="font-semibold tabular-nums text-[var(--text-primary)]">{fixed(vx, 1)} m/s</span>
+        </span>
+        <span aria-hidden="true" className="mx-3">
+          ·
+        </span>
+        <span className="whitespace-nowrap">
+          v<sub>0y</sub> = v<sub>0</sub> sin θ ={' '}
+          <span className="font-semibold tabular-nums text-[var(--text-primary)]">{fixed(vy, 1)} m/s</span>
+        </span>
+      </p>
+    </div>
+  );
+}
+
+const HEAD_LENGTH = 11;
+const HEAD_HALF_WIDTH = 5.5;
+
+function Arrow({ x0, y0, x1, y1, dashed = false }: { x0: number; y0: number; x1: number; y1: number; dashed?: boolean }) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const length = Math.hypot(dx, dy);
+  if (length < 3) {
+    return null;
+  }
+  const ux = dx / length;
+  const uy = dy / length;
+  const head = Math.min(HEAD_LENGTH, length * 0.6);
+  const bx = x1 - ux * head;
+  const by = y1 - uy * head;
+  return (
+    <g opacity={dashed ? 0.75 : 1}>
+      <line
+        x1={x0}
+        y1={y0}
+        x2={round(bx + ux)}
+        y2={round(by + uy)}
+        stroke={VELOCITY_GREEN}
+        strokeWidth={dashed ? 2.2 : 3.2}
+        strokeLinecap="round"
+        strokeDasharray={dashed ? '6 4' : undefined}
       />
-
-      <div className="grid gap-3 md:grid-cols-2">
-        <Control label={`Angle ${angleDeg.toFixed(1)} deg`}>
-          <input
-            type="range"
-            min={ANGLE_MIN}
-            max={ANGLE_MAX}
-            step={0.1}
-            value={angleDeg}
-            onChange={(event) => setAngleDeg(Number(event.currentTarget.value))}
-            className="w-full accent-[var(--accent-blue)]"
-          />
-        </Control>
-        <Control label={`Speed ${speed.toFixed(1)} m/s`}>
-          <input
-            type="range"
-            min={SPEED_MIN}
-            max={SPEED_MAX}
-            step={0.1}
-            value={speed}
-            onChange={(event) => setSpeed(Number(event.currentTarget.value))}
-            className="w-full accent-[var(--accent-blue)]"
-          />
-        </Control>
-      </div>
-    </div>
+      <polygon
+        points={`${x1},${y1} ${round(bx - uy * HEAD_HALF_WIDTH)},${round(by + ux * HEAD_HALF_WIDTH)} ${round(bx + uy * HEAD_HALF_WIDTH)},${round(by - ux * HEAD_HALF_WIDTH)}`}
+        fill={VELOCITY_GREEN}
+      />
+    </g>
   );
 }
 
-function Readout({ label, value, accent }: { label: string; value: string; accent: string }) {
+function Symbol({ x, y, sub, anchor }: { x: number; y: number; sub: string; anchor: 'start' | 'middle' | 'end' }) {
   return (
-    <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <div className="text-xs font-semibold uppercase text-[var(--text-muted)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold" style={{ color: accent }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function Control({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">{label}</span>
-      {children}
-    </label>
+    <text
+      x={x}
+      y={y}
+      textAnchor={anchor}
+      fontSize={16}
+      fontStyle="italic"
+      fontWeight={700}
+      fill={VELOCITY_GREEN}
+      stroke="var(--surface-plot)"
+      strokeWidth={3}
+      paintOrder="stroke"
+    >
+      v
+      <tspan fontSize={11} dy={4}>
+        {sub}
+      </tspan>
+    </text>
   );
 }

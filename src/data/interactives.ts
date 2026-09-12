@@ -245,12 +245,22 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'challenge', 'acceleration'],
   },
   {
+    id: 'hedgehog-field',
+    title: 'Hedgehog in 2D',
+    description:
+      'Watch the hedgehog run a figure eight with its position, velocity, and acceleration vectors drawn on, and split the acceleration into the parts that change speed and direction.',
+    href: '/kinematics/two-dimensional#hedgehog-field',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['kinematics', 'vectors', 'velocity', 'acceleration'],
+  },
+  {
     id: 'launch-decomposition',
     title: 'Launch Decomposition',
-    description: 'Break projectile motion into horizontal and vertical components.',
+    description: 'Drag a launch vector and watch its horizontal and vertical components, v₀cosθ and v₀sinθ, change.',
     href: '/kinematics/two-dimensional#launch-decomposition',
     module: 'Mechanics',
-    kind: 'standalone',
+    kind: 'inline',
     tags: ['vectors', 'projectiles', 'components'],
   },
   {

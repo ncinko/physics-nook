@@ -26,7 +26,15 @@ import { mechanicsPath } from '../../data/modules';
 
 In one dimension, position, velocity, and acceleration are each described by one signed number. In two dimensions, each requires two components.  This dimensional scaling is a property of **vector** quantities, unlike **scalars** (e.g. mass and time).
 
-Need a slower ramp into vector notation? The **[Vectors](/math/vectors) page** covers components, magnitude, direction, addition, scaling, and subtraction before those ideas are used for motion.
+Most of first-year physics relies heavily on the vector formalism, so I suggest building a strong foundation with the concept.  If it's completely new to you, check out the **[Vectors](/math/vectors)** page.
+
+Here is the hedgehog again, now running a figure eight across a field. We again use vectors to describe its motion: **position** $\vec{r}$ points from the origin to the hedgehog, **velocity** $\vec{v}$ points the way it is running, and **acceleration** $\vec{a}$ points the way its velocity is changing.
+
+<InteractiveAnchor id="hedgehog-field" />
+
+<HedgehogField2D client:load />
+
+The definitions are the same as in one dimension, but it's now clear why we need both a magnitude and direction to describe each quantity.  Written out symbolically, the three kinematic variables are:
 
 $$
 \begin{aligned}
@@ -36,17 +44,9 @@ $$
 \end{aligned}
 $$
 
-Here is the hedgehog from the [1D page](/kinematics) again, now running a figure eight across a top-down field. Its three kinematic vectors move with it: **position** $\vec{r}$ points from the origin to the hedgehog, **velocity** $\vec{v}$ points the way it is running, and **acceleration** $\vec{a}$ points the way its velocity is changing.
-
-<InteractiveAnchor id="hedgehog-field" />
-
-<HedgehogField2D client:load />
-
-The definitions are the same as in one dimension, but each quantity now has a direction as well as a size. Watch the arrows for a full loop: velocity always points along the path, but acceleration usually doesn't.
-
 ## Component Motion
 
-The useful trick is to split the vector equation into component equations. If acceleration is constant, then
+For simplicity, let's again consider the case of constant acceleration:
 
 $$
 \vec{v}(t) = \vec{v}_i + \vec{a}t,
@@ -58,7 +58,7 @@ $$
 \vec{r}(t) = \vec{r}_i + \vec{v}_it + \frac{1}{2}\vec{a}t^2.
 $$
 
-Written as separate horizontal and vertical equations, this becomes
+This notation is very concise, but we often like to consider the $x-$ and $y-$ directions independently.  For a baseball flying through the air, these could represent its motion along the horizontal and vertical directions.
 
 $$
 \begin{aligned}
@@ -74,10 +74,12 @@ y(t) &= y_i + v_{iy}t + \frac{1}{2}a_yt^2.
 \end{aligned}
 $$
 
-Note that these are all functions of a common variable $$t$$. This shared time is what lets us combine the separate one-dimensional calculations into a two-dimensional path. The hedgehog's figure eight works the same way. Its acceleration isn't constant, but $$x(t)$$ and $$y(t)$$ are each a simple back-and-forth motion in one dimension, running on the same clock.
+This is effectively just a duplicate set of 1D kinematic equations.  Note that these are all functions of a common variable $$t$$. The shared time is what lets us combine the separate one-dimensional calculations into a two-dimensional path. 
+
+The hedgehog's figure eight motion works the same way.  Although its acceleration isn't constant, you can consider $$x(t)$$ and $$y(t)$$ as simple back-and-forth motion in one dimension.
 
 
-## Launch Components
+## Launch Velocity
 
 Projectile problems often describe an initial velocity using a launch speed $v_0$ and angle $\theta$.  It's common to use a $$0$$ subscript in place of $$i$$, when $$t=0$$ is implicitly the initial time. The horizontal and vertical pieces are
 

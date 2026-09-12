@@ -1,4 +1,4 @@
-import { Cloud, Dices, Pause, Play, RotateCcw, Trophy, WifiOff } from 'lucide-react';
+import { Cloud, Dices, RotateCcw, Square, Trophy, WifiOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   GOAL_RUSH_DEFAULTS,
@@ -38,7 +38,6 @@ type Runtime = {
   vy: number;
   ax: number;
   ay: number;
-  running: boolean;
   gravityOn: boolean;
   goalRush: boolean;
   score: number;
@@ -46,7 +45,6 @@ type Runtime = {
   goldenHits: number;
   timeLeft: number;
   boostLeft: number;
-  ended: boolean;
   spawns: Spawn[];
   lastTime: number | null;
   elapsedMs: number;
@@ -110,7 +108,6 @@ const createRuntime = (): Runtime => ({
   vy: 0,
   ax: 0,
   ay: 0,
-  running: false,
   gravityOn: false,
   goalRush: false,
   score: 0,
@@ -118,7 +115,6 @@ const createRuntime = (): Runtime => ({
   goldenHits: 0,
   timeLeft: GAME_TIME,
   boostLeft: 0,
-  ended: false,
   spawns: [],
   lastTime: null,
   elapsedMs: 0,
@@ -312,17 +308,12 @@ export default function Kinematics2DSandbox() {
     [createServerRun, seedSpawns, syncSnapshot],
   );
 
+  // Back to the centre in the current mode: a fresh sandbox, or a fresh Goal
+  // Rush run that starts counting down straight away.
   const restart = useCallback(() => {
-    const shouldStart = runtimeRef.current.goalRush;
-
     reset(true);
-
-    if (shouldStart) {
-      runtimeRef.current.running = true;
-      window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
-      syncSnapshot();
-    }
-  }, [reset, syncSnapshot]);
+    window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
+  }, [reset]);
 
   useEffect(() => {
     setLocalScores(loadLocalScores());
@@ -410,8 +401,7 @@ export default function Kinematics2DSandbox() {
         key === 'd' ||
         key === 'w' ||
         key === 's' ||
-        key === 'r' ||
-        key === ' ';
+        key === 'r';
 
       if (!usesControl) {
         return;
@@ -435,14 +425,9 @@ export default function Kinematics2DSandbox() {
       keysRef.current.right = key === 'arrowright' || key === 'd' ? isDown : keysRef.current.right;
       keysRef.current.up = key === 'arrowup' || key === 'w' ? isDown : keysRef.current.up;
       keysRef.current.down = key === 'arrowdown' || key === 's' ? isDown : keysRef.current.down;
-
-      if (key === ' ' && isDown) {
-        runtimeRef.current.running = true;
-        syncSnapshot();
-      }
     };
 
-    // Listen on the sandbox itself, not the window: arrow keys and space should
+    // Listen on the sandbox itself, not the window: the steering keys should
     // steer only while the sandbox (or a control inside it) has focus, and
     // scroll the page as usual everywhere else.
     const wrapper = wrapperRef.current;
@@ -468,7 +453,7 @@ export default function Kinematics2DSandbox() {
       wrapper.removeEventListener('keyup', onUp);
       wrapper.removeEventListener('focusout', onFocusOut);
     };
-  }, [restart, syncSnapshot]);
+  }, [restart]);
 
   const toScreen = useCallback(
     (x: number, y: number) => ({
@@ -488,14 +473,14 @@ export default function Kinematics2DSandbox() {
 
   const finishGame = useCallback(() => {
     const runtime = runtimeRef.current;
-    if (runtime.ended) {
-      return;
-    }
-
-    runtime.ended = true;
-    runtime.running = false;
     runtime.timeLeft = 0;
     runtime.finalDurationMs = Math.max(0, Math.round(runtime.elapsedMs));
+    // Straight back to free play, so the board never stops responding. The
+    // finished run's score and run id stay on the runtime for the save dialog;
+    // clearing goalRush also stops the countdown from finishing a second time.
+    runtime.goalRush = false;
+    runtime.spawns = [];
+    runtime.boostLeft = 0;
     setNameModalOpen(true);
   }, []);
 
@@ -531,36 +516,28 @@ export default function Kinematics2DSandbox() {
       runtime.ay = ay;
       runtime.boostLeft = Math.max(0, runtime.boostLeft - dt);
 
-      if (runtime.running && !runtime.ended) {
-        runtime.vx += runtime.ax * dt;
-        runtime.vy += runtime.ay * dt;
-        const speed = Math.hypot(runtime.vx, runtime.vy);
-        if (speed > MAX_SPEED) {
-          runtime.vx *= MAX_SPEED / speed;
-          runtime.vy *= MAX_SPEED / speed;
-        }
-        runtime.x += runtime.vx * dt;
-        runtime.y += runtime.vy * dt;
+      runtime.vx += runtime.ax * dt;
+      runtime.vy += runtime.ay * dt;
+      const speed = Math.hypot(runtime.vx, runtime.vy);
+      if (speed > MAX_SPEED) {
+        runtime.vx *= MAX_SPEED / speed;
+        runtime.vy *= MAX_SPEED / speed;
+      }
+      runtime.x += runtime.vx * dt;
+      runtime.y += runtime.vy * dt;
 
-        if (runtime.goalRush) {
-          runtime.elapsedMs += dt * 1000;
-          while (runtime.elapsedMs >= runtime.nextClockSpawnMs) {
-            spawnIdRef.current += 1;
-            runtime.spawns[0] = makeClockSpawn(spawnIdRef.current);
-            runtime.nextClockSpawnMs += CLOCK_SPAWN_INTERVAL_MS;
-          }
-
-          runtime.timeLeft = Math.max(0, runtime.timeLeft - dt);
-          if (runtime.timeLeft <= 0) {
-            finishGame();
-          }
+      if (runtime.goalRush) {
+        runtime.elapsedMs += dt * 1000;
+        while (runtime.elapsedMs >= runtime.nextClockSpawnMs) {
+          spawnIdRef.current += 1;
+          runtime.spawns[0] = makeClockSpawn(spawnIdRef.current);
+          runtime.nextClockSpawnMs += CLOCK_SPAWN_INTERVAL_MS;
         }
-      } else {
-        const damping = Math.exp(-2.4 * dt);
-        runtime.vx *= damping;
-        runtime.vy *= damping;
-        runtime.x += runtime.vx * dt;
-        runtime.y += runtime.vy * dt;
+
+        runtime.timeLeft = Math.max(0, runtime.timeLeft - dt);
+        if (runtime.timeLeft <= 0) {
+          finishGame();
+        }
       }
 
       const halfW = BOARD_HALF_SIZE - PLAYER_RADIUS - 8;
@@ -582,7 +559,7 @@ export default function Kinematics2DSandbox() {
         runtime.vy *= -0.62;
       }
 
-      if (runtime.goalRush && runtime.running && !runtime.ended) {
+      if (runtime.goalRush) {
         runtime.spawns.forEach((spawn, index) => {
           const touched = Math.hypot(runtime.x - spawn.x, runtime.y - spawn.y) <= PLAYER_RADIUS + spawn.radius;
           if (!touched) {
@@ -785,39 +762,17 @@ export default function Kinematics2DSandbox() {
     };
   }, [drawScene, stepRuntime]);
 
-  const setRunning = (running: boolean) => {
-    const runtime = runtimeRef.current;
-    if (runtime.ended && running) {
-      reset(true);
-      runtimeRef.current.running = true;
-    } else {
-      runtime.running = running;
-    }
-    syncSnapshot();
+  // Starting a game always turns gravity off: every run is played on the same
+  // flat field, so scores on the board compare like with like.
+  const startGoalRush = () => {
+    runtimeRef.current.goalRush = true;
+    runtimeRef.current.gravityOn = false;
+    restart();
   };
 
-  const setGoalRush = (goalRush: boolean) => {
-    const runtime = runtimeRef.current;
-    runtime.goalRush = goalRush;
-    runtime.running = false;
-    runtime.ended = false;
-    runtime.timeLeft = GAME_TIME;
-    runtime.score = 0;
-    runtime.normalHits = 0;
-    runtime.goldenHits = 0;
-    runtime.boostLeft = 0;
-    runtime.elapsedMs = 0;
-    runtime.finalDurationMs = null;
-    runtime.runId = null;
-    runtime.spawns = [];
-    submittedRef.current = false;
-    setNameModalOpen(false);
-    if (goalRush) {
-      seedSpawns();
-      void createServerRun();
-      window.requestAnimationFrame(() => wrapperRef.current?.focus({ preventScroll: true }));
-    }
-    syncSnapshot();
+  const endGoalRush = () => {
+    runtimeRef.current.goalRush = false;
+    restart();
   };
 
   const setGravity = (gravityOn: boolean) => {
@@ -958,9 +913,9 @@ export default function Kinematics2DSandbox() {
           </div>
 
           <ControlBar>
-              <button type="button" title={snapshot.running ? 'Pause' : 'Start'} onClick={() => setRunning(!snapshot.running)} className={buttonClass}>
-                {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {snapshot.running ? 'Pause' : 'Start'}
+              <button type="button" onClick={snapshot.goalRush ? endGoalRush : startGoalRush} className={buttonClass}>
+                {snapshot.goalRush ? <Square className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
+                {snapshot.goalRush ? 'End Goal Rush' : 'Goal Rush'}
               </button>
               <button type="button" title="Reset" onClick={restart} className={buttonClass}>
                 <RotateCcw className="h-4 w-4" />
@@ -969,7 +924,6 @@ export default function Kinematics2DSandbox() {
                   R
                 </kbd>
               </button>
-              <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
               <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
           </ControlBar>
         </div>

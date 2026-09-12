@@ -47,6 +47,9 @@ const PLOT_LEFT = 48;
 const PLOT_RIGHT_INSET = 36;
 const GROUND_INSET = 42;
 const PLOT_TOP_INSET = 34;
+// Vertical space in fullscreen taken by the block header, readout, buttons, and
+// sliders, which the graph has to leave free.
+const FULLSCREEN_CHROME_PX = 260;
 
 // One quantity, one colour, matching the 2D hedgehog and the other kinematics
 // interactives: trajectories trace position in blue, velocity is green, and
@@ -160,17 +163,43 @@ export default function ProjectileLauncher() {
       return undefined;
     }
 
+    const block = element.closest('[data-simulation-block]');
+
+    const isFullscreen = () =>
+      block instanceof HTMLElement &&
+      (document.fullscreenElement === block || block.classList.contains('is-fallback-fullscreen'));
+
     const resize = () => {
       const width = Math.max(340, Math.floor(element.clientWidth));
-      const height = Math.max(300, Math.min(480, Math.round(width * 0.5)));
-      setSize({ width, height });
+      // On the page the graph is at most 480px tall. Fullscreen has the whole
+      // screen to spend, so allow up to twice that, while leaving room below
+      // for the readout, buttons, and sliders.
+      const height = isFullscreen()
+        ? Math.max(300, Math.min(960, width, window.innerHeight - FULLSCREEN_CHROME_PX))
+        : Math.max(300, Math.min(480, Math.round(width * 0.5)));
+      setSize((current) =>
+        current.width === width && current.height === height ? current : { width, height },
+      );
     };
 
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(element);
+    // Entering fullscreen does not always change the wrapper's width, so watch
+    // the fullscreen state itself as well.
+    const mutationObserver = new MutationObserver(resize);
+    if (block) {
+      mutationObserver.observe(block, { attributes: true, attributeFilter: ['class'] });
+    }
+    document.addEventListener('fullscreenchange', resize);
+    window.addEventListener('resize', resize);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      mutationObserver.disconnect();
+      document.removeEventListener('fullscreenchange', resize);
+      window.removeEventListener('resize', resize);
+    };
   }, []);
 
   useEffect(() => {

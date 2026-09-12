@@ -1,4 +1,4 @@
-import { Cloud, Dices, Pause, Play, RotateCcw, Timer, Trophy, WifiOff, Zap } from 'lucide-react';
+import { Cloud, Dices, Pause, Play, RotateCcw, Trophy, WifiOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   GOAL_RUSH_DEFAULTS,
@@ -10,6 +10,9 @@ import {
   sanitizeLeaderboardName,
 } from '../../lib/kinematics/stopZones';
 import { generateLeaderboardName } from '../../lib/shared/leaderboardNames';
+import { fixed } from '../../utils/format';
+import { ControlBar, Toggle } from '../shared/InlineControls';
+import { Readout } from '../shared/Readout';
 
 type Size = {
   width: number;
@@ -77,6 +80,18 @@ const SPAWN_COUNT = 4;
 const FULLSCREEN_RAIL_MIN_WIDTH = 1100;
 const FULLSCREEN_RAIL_MIN_HEIGHT = 760;
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
+// On the lesson page the board is capped so the sandbox sits in the reading
+// flow; fullscreen lets it grow to fill the screen.
+const INLINE_MAX_SIDE = 480;
+
+// One quantity, one colour, matching the 2D hedgehog and the 1D explorers.
+const POSITION_COLOR = 'var(--accent-blue)';
+const VELOCITY_COLOR = '#16a34a';
+const ACCELERATION_COLOR = 'var(--accent-purple)';
+
+/** A board vector as grid-square components, with y flipped to point up. */
+const gridVector = (x: number, y: number) =>
+  `⟨${fixed(x / GRID_CELL_SIZE, 1)}, ${fixed(-y / GRID_CELL_SIZE, 1)}⟩`;
 
 const randomBetween = (min: number, max: number) => min + Math.random() * (max - min);
 
@@ -179,18 +194,6 @@ export default function Kinematics2DSandbox() {
   const [isPosting, setIsPosting] = useState(false);
   const [shellSize, setShellSize] = useState<Size>({ width: 0, height: 0 });
   const [fullscreenActive, setFullscreenActive] = useState(false);
-
-  const readouts = useMemo(
-    () => [
-      {
-        label: 'position',
-        value: `<${(snapshot.x / GRID_CELL_SIZE).toFixed(1)}, ${(-snapshot.y / GRID_CELL_SIZE).toFixed(1)}>`,
-      },
-      { label: 'velocity', value: `${(snapshot.speed / GRID_CELL_SIZE).toFixed(1)} sq/s` },
-      { label: 'acceleration', value: `${(Math.hypot(snapshot.ax, snapshot.ay) / GRID_CELL_SIZE).toFixed(1)} sq/s^2` },
-    ],
-    [snapshot.ax, snapshot.ay, snapshot.speed, snapshot.x, snapshot.y],
-  );
 
   const syncSnapshot = useCallback(() => {
     setSnapshot(makeSnapshot(runtimeRef.current));
@@ -375,8 +378,8 @@ export default function Kinematics2DSandbox() {
     const resize = () => {
       const availableWidth = Math.max(320, Math.floor(element.clientWidth));
       const availableHeight = fullscreenActive
-        ? Math.max(320, shellSize.height - 270)
-        : availableWidth;
+        ? Math.max(320, shellSize.height - 220)
+        : INLINE_MAX_SIDE;
       const side = Math.max(320, Math.floor(Math.min(availableWidth, availableHeight)));
       setSize({ width: side, height: side });
     };
@@ -439,14 +442,31 @@ export default function Kinematics2DSandbox() {
       }
     };
 
+    // Listen on the sandbox itself, not the window: arrow keys and space should
+    // steer only while the sandbox (or a control inside it) has focus, and
+    // scroll the page as usual everywhere else.
+    const wrapper = wrapperRef.current;
+    if (!wrapper) {
+      return undefined;
+    }
+
     const onDown = (event: KeyboardEvent) => updateKey(event, true);
     const onUp = (event: KeyboardEvent) => updateKey(event, false);
-    window.addEventListener('keydown', onDown, { passive: false });
-    window.addEventListener('keyup', onUp, { passive: false });
+    // A key released after focus has moved away never reaches us, so drop any
+    // held keys on the way out rather than letting the player drift forever.
+    const onFocusOut = (event: FocusEvent) => {
+      if (!wrapper.contains(event.relatedTarget as Node | null)) {
+        keysRef.current = { left: false, right: false, up: false, down: false };
+      }
+    };
+    wrapper.addEventListener('keydown', onDown);
+    wrapper.addEventListener('keyup', onUp);
+    wrapper.addEventListener('focusout', onFocusOut);
 
     return () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup', onUp);
+      wrapper.removeEventListener('keydown', onDown);
+      wrapper.removeEventListener('keyup', onUp);
+      wrapper.removeEventListener('focusout', onFocusOut);
     };
   }, [restart, syncSnapshot]);
 
@@ -611,16 +631,21 @@ export default function Kinematics2DSandbox() {
     canvas.style.width = `${displayWidth}px`;
     canvas.style.height = `${displayHeight}px`;
     ctx.setTransform(dpr * scaleX, 0, 0, dpr * scaleY, 0, 0);
+    // Board units per CSS pixel, so strokes and text keep their on-screen size
+    // however far the board is scaled down.
+    const px = 1 / scaleX;
 
     const bg = getCssColor('--surface-plot', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
-    const blue = getCssColor('--accent-blue', '#3b82f6');
     const red = getCssColor('--accent-red', '#ef4444');
-    const green = '#16a34a';
+    const velocity = VELOCITY_COLOR;
+    const acceleration = getCssColor('--accent-purple', '#7e57c2');
+    // Pickups stay clear of the vector colours: velocity is green and
+    // acceleration purple, so plain targets are neutral and clocks are cyan.
     const amber = '#d97706';
-    const violet = '#7c3aed';
+    const cyan = '#0891b2';
 
     const runtime = runtimeRef.current;
     ctx.clearRect(0, 0, BOARD_SIZE, BOARD_SIZE);
@@ -628,7 +653,7 @@ export default function Kinematics2DSandbox() {
     ctx.fillRect(0, 0, BOARD_SIZE, BOARD_SIZE);
 
     ctx.strokeStyle = grid;
-    ctx.lineWidth = 1;
+    ctx.lineWidth = px;
     for (let x = BOARD_HALF_SIZE; x <= BOARD_SIZE; x += GRID_CELL_SIZE) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -655,7 +680,7 @@ export default function Kinematics2DSandbox() {
     }
 
     ctx.strokeStyle = muted;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * px;
     ctx.beginPath();
     ctx.moveTo(0, BOARD_HALF_SIZE);
     ctx.lineTo(BOARD_SIZE, BOARD_HALF_SIZE);
@@ -667,15 +692,17 @@ export default function Kinematics2DSandbox() {
       runtime.spawns.forEach((spawn) => {
         const point = toScreen(spawn.x, spawn.y);
         if (spawn.kind === 'goal') {
-          ctx.strokeStyle = spawn.golden ? amber : green;
+          ctx.strokeStyle = spawn.golden ? amber : muted;
           ctx.lineWidth = spawn.golden ? 4 : 3;
           ctx.beginPath();
           ctx.arc(point.x, point.y, spawn.radius, 0, Math.PI * 2);
           ctx.stroke();
-          ctx.fillStyle = spawn.golden ? 'rgba(217,119,6,0.28)' : 'rgba(22,163,74,0.22)';
+          ctx.fillStyle = spawn.golden ? amber : muted;
+          ctx.globalAlpha = spawn.golden ? 0.28 : 0.22;
           ctx.beginPath();
           ctx.arc(point.x, point.y, spawn.radius * 0.42, 0, Math.PI * 2);
           ctx.fill();
+          ctx.globalAlpha = 1;
         } else if (spawn.kind === 'boost') {
           ctx.fillStyle = red;
           ctx.beginPath();
@@ -687,7 +714,7 @@ export default function Kinematics2DSandbox() {
           ctx.textBaseline = 'middle';
           ctx.fillText('+', point.x, point.y);
         } else {
-          ctx.strokeStyle = violet;
+          ctx.strokeStyle = cyan;
           ctx.lineWidth = 3;
           ctx.beginPath();
           ctx.arc(point.x, point.y, spawn.radius, 0, Math.PI * 2);
@@ -711,31 +738,30 @@ export default function Kinematics2DSandbox() {
       ctx.fill();
     }
 
+    // Arrows start at the player's centre and sit behind its disc.
+    drawArrow(ctx, player.x, player.y, player.x + runtime.ax * 0.24, player.y + runtime.ay * 0.24, acceleration, 'a', px);
+    drawArrow(ctx, player.x, player.y, player.x + runtime.vx * 0.18, player.y + runtime.vy * 0.18, velocity, 'v', px);
+
     ctx.fillStyle = text;
     ctx.strokeStyle = grid;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * px;
     ctx.beginPath();
     ctx.arc(player.x, player.y, PLAYER_RADIUS, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
 
-    drawArrow(ctx, player.x, player.y, player.x + runtime.vx * 0.18, player.y + runtime.vy * 0.18, blue, 'v');
-    drawArrow(ctx, player.x, player.y, player.x + runtime.ax * 0.24, player.y + runtime.ay * 0.24, amber, 'a');
-
     ctx.fillStyle = text;
-    ctx.font = `600 13px ${FONT}`;
+    ctx.font = `600 ${13 * px}px ${FONT}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     if (runtime.goalRush) {
-      ctx.fillText(`time ${runtime.timeLeft.toFixed(1)} s`, 14, 12);
-      ctx.fillText(`score ${runtime.score}`, 14, 32);
-    } else {
-      ctx.fillText('sandbox', 14, 12);
+      ctx.fillText(`time ${runtime.timeLeft.toFixed(1)} s`, 12 * px, 10 * px);
+      ctx.fillText(`score ${runtime.score}`, 12 * px, 28 * px);
     }
 
     ctx.strokeStyle = muted;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(1, 1, BOARD_SIZE - 2, BOARD_SIZE - 2);
+    ctx.lineWidth = 2 * px;
+    ctx.strokeRect(px, px, BOARD_SIZE - 2 * px, BOARD_SIZE - 2 * px);
   }, [size.height, size.width, toScreen]);
 
   useEffect(() => {
@@ -800,6 +826,8 @@ export default function Kinematics2DSandbox() {
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    // Clicking the board focuses the sandbox, so the keys work from here on.
+    wrapperRef.current?.focus({ preventScroll: true });
     const rect = event.currentTarget.getBoundingClientRect();
     const point = toWorld(event.clientX - rect.left, event.clientY - rect.top);
     pointerRef.current = { active: true, x: point.x, y: point.y };
@@ -825,7 +853,6 @@ export default function Kinematics2DSandbox() {
     [apiStatus, cloudScores, localScores],
   );
   const leaderboardLabel = apiStatus === 'online' ? 'Cloud leaderboard' : 'Local leaderboard';
-  const bestScore = leaderboardScores[0]?.score ?? 0;
   const useLeaderboardRail =
     fullscreenActive &&
     shellSize.width >= FULLSCREEN_RAIL_MIN_WIDTH &&
@@ -898,23 +925,24 @@ export default function Kinematics2DSandbox() {
   return (
     <div
       ref={wrapperRef}
-      tabIndex={-1}
-      className="flex h-full min-h-[48rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
+      tabIndex={0}
+      aria-label="2D acceleration sandbox: focus here, then steer with the arrow keys or WASD"
+      className="flex h-full flex-col gap-3 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)]"
     >
-      <div className="grid gap-3 md:grid-cols-3">
-        {readouts.map((readout) => (
-          <Readout key={readout.label} label={readout.label} value={readout.value} />
-        ))}
-      </div>
+      <Readout variant="inline" className="justify-center tabular-nums">
+        <Readout.Value label={<VectorSymbol color={POSITION_COLOR}>r</VectorSymbol>} value={gridVector(snapshot.x, snapshot.y)} unit="sq" />
+        <Readout.Value label={<VectorSymbol color={VELOCITY_COLOR}>v</VectorSymbol>} value={gridVector(snapshot.vx, snapshot.vy)} unit="sq/s" />
+        <Readout.Value label={<VectorSymbol color={ACCELERATION_COLOR}>a</VectorSymbol>} value={gridVector(snapshot.ax, snapshot.ay)} unit="sq/s²" />
+      </Readout>
 
       <div
         className={
           useLeaderboardRail
             ? 'grid flex-1 gap-4 grid-cols-[minmax(0,1fr)_minmax(20rem,0.36fr)]'
-            : 'flex flex-1 flex-col gap-4'
+            : 'flex flex-1 flex-col gap-3'
         }
       >
-        <div className="flex min-w-0 flex-col gap-4">
+        <div className="flex min-w-0 flex-col gap-3">
           <div ref={stageRef} className="flex min-w-0 justify-center">
             <canvas
               ref={canvasRef}
@@ -929,8 +957,7 @@ export default function Kinematics2DSandbox() {
             />
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,0.6fr)]">
-            <div className="flex flex-wrap gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
+          <ControlBar>
               <button type="button" title={snapshot.running ? 'Pause' : 'Start'} onClick={() => setRunning(!snapshot.running)} className={buttonClass}>
                 {snapshot.running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
                 {snapshot.running ? 'Pause' : 'Start'}
@@ -944,52 +971,24 @@ export default function Kinematics2DSandbox() {
               </button>
               <Toggle checked={snapshot.goalRush} onChange={setGoalRush} label="Goal Rush" />
               <Toggle checked={snapshot.gravityOn} onChange={setGravity} label="Gravity" />
-            </div>
-
-            <div className="grid gap-2 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 text-sm shadow-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-                  <Timer className="h-4 w-4 text-[var(--accent-blue)]" />
-                  Time
-                </span>
-                <strong>{snapshot.goalRush ? `${snapshot.timeLeft.toFixed(1)} s` : 'sandbox'}</strong>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-                  <Trophy className="h-4 w-4 text-[#d97706]" />
-                  Best
-                </span>
-                <strong>{bestScore}</strong>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 text-[var(--text-muted)]">
-                  <Zap className="h-4 w-4 text-[var(--accent-red)]" />
-                  Boost
-                </span>
-                <strong>{snapshot.boostLeft > 0 ? `${snapshot.boostLeft.toFixed(1)} s` : '--'}</strong>
-              </div>
-            </div>
-          </div>
-
-          {snapshot.goalRush && snapshot.ended && (
-            <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 text-center shadow-sm">
-              <p className="m-0 text-lg font-semibold">Final score: {snapshot.score}</p>
-              <p className="mt-1 mb-0 text-sm text-[var(--text-muted)]">
-                Normal zones: {snapshot.normalHits}. Golden zones: {snapshot.goldenHits}.
-              </p>
-            </div>
-          )}
+          </ControlBar>
         </div>
 
-        <aside className="flex min-w-0 flex-col gap-4">
-          <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <h3 className="m-0 text-base font-semibold">{leaderboardLabel}</h3>
+        <aside className={useLeaderboardRail ? 'flex min-w-0 flex-col gap-4' : 'mx-auto flex w-full max-w-[32rem] min-w-0 flex-col gap-4'}>
+          <details className="group border border-[var(--grid-line)] bg-[var(--bg-primary)] shadow-sm">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden="true" className="text-[var(--text-muted)] transition-transform group-open:rotate-90">
+                  ▸
+                </span>
+                <span className="text-base font-semibold">{leaderboardLabel}</span>
+              </span>
               <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)]">
                 {apiStatus === 'online' ? <Cloud size={15} /> : <WifiOff size={15} />}
                 {apiStatus}
               </span>
-            </div>
+            </summary>
+            <div className="px-4 pb-4">
             {leaderboardScores.length > 0 ? (
               <div>
                 <div className="grid grid-cols-[2.25rem_minmax(5.5rem,0.85fr)_minmax(0,1fr)_4.5rem] gap-2 border-b border-[var(--grid-line)] pb-2 text-xs font-semibold uppercase text-[var(--text-muted)]">
@@ -1016,7 +1015,8 @@ export default function Kinematics2DSandbox() {
               <p className="m-0 text-sm text-[var(--text-muted)]">No scores yet.</p>
             )}
             {isPosting && <p className="mt-3 mb-0 text-sm text-[var(--text-muted)]">Posting score...</p>}
-          </div>
+            </div>
+          </details>
         </aside>
       </div>
 
@@ -1105,29 +1105,19 @@ function formatGoalRushDuration(durationMs: number | null) {
   return `${(durationMs / 1000).toFixed(1)} s`;
 }
 
-function Readout({ label, value }: { label: string; value: string }) {
+function VectorSymbol({ color, children }: { color: string; children: string }) {
   return (
-    <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <div className="text-xs font-semibold uppercase text-[var(--text-muted)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{value}</div>
-    </div>
+    <span className="font-bold italic" style={{ color }}>
+      {children}
+    </span>
   );
 }
 
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (checked: boolean) => void; label: string }) {
-  return (
-    <label className="inline-flex min-h-10 items-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(event) => onChange(event.currentTarget.checked)}
-        className="accent-[var(--accent-blue)]"
-      />
-      {label}
-    </label>
-  );
-}
-
+/**
+ * Arrow in board units. `px` is board units per CSS pixel, so the shaft, head,
+ * and label keep a constant on-screen size at any board scale. The shaft stops
+ * at the base of the head rather than running through it to the tip.
+ */
 function drawArrow(
   ctx: CanvasRenderingContext2D,
   x0: number,
@@ -1136,30 +1126,41 @@ function drawArrow(
   y1: number,
   color: string,
   label: string,
+  px: number,
 ) {
-  if (Math.hypot(x1 - x0, y1 - y0) < 2) {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const length = Math.hypot(dx, dy);
+  if (length < 4 * px) {
     return;
   }
 
-  const angle = Math.atan2(y1 - y0, x1 - x0);
-  const head = 8;
+  const ux = dx / length;
+  const uy = dy / length;
+  const head = Math.min(11 * px, length * 0.6);
+  const halfWidth = 5.5 * px;
+  const baseX = x1 - ux * head;
+  const baseY = y1 - uy * head;
+
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.lineWidth = 2.6 * px;
+  ctx.lineCap = 'butt';
   ctx.beginPath();
   ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
+  // A hair past the base so no seam shows between shaft and head.
+  ctx.lineTo(baseX + ux * px, baseY + uy * px);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x1, y1);
-  ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+  ctx.lineTo(baseX - uy * halfWidth, baseY + ux * halfWidth);
+  ctx.lineTo(baseX + uy * halfWidth, baseY - ux * halfWidth);
   ctx.closePath();
   ctx.fill();
-  ctx.font = `700 13px ${FONT}`;
-  ctx.fillText(label, x1 + 8, y1 + 4);
+  ctx.font = `italic 700 ${15 * px}px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, x1 + ux * 12 * px, y1 + uy * 12 * px);
   ctx.restore();
 }

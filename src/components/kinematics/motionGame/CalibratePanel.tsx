@@ -16,6 +16,7 @@ import { Button } from '../../shared/InlineControls';
 import { fixed } from '../../../utils/format';
 import {
   CALIBRATION_SAMPLE_COUNT,
+  DEFAULT_SCALE,
   MIN_CALIBRATION_SAMPLES,
   averageDistance,
   describeScale,
@@ -129,7 +130,7 @@ export default function CalibratePanel({ device, calibration, onBack }: Calibrat
             setOutcome(null);
           }}
         >
-          Reset to 1.000
+          Reset to {fixed(DEFAULT_SCALE, 3)}
         </Button>
       </form>
 

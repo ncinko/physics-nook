@@ -7,12 +7,12 @@
  * verbatim between the browser island and the Cloudflare Function so the two
  * can never disagree about what a score means.
  *
- * DESIGN CONSTRAINT: every target fits in about two metres of floor.
- * The detector reads from 0.15 m to 6 m, but a person needs room to stop, and
- * a classroom or hallway rarely offers more. So all three curves live between
- * 0.60 m and 2.30 m and never ask for more than 0.40 m/s — a walk, not a dash.
- * That is what makes a perfect match physically achievable rather than a
- * target you approach asymptotically.
+ * DESIGN CONSTRAINT: every target fits inside three metres of floor.
+ * The detector nominally reads from 0.15 m to 6 m, but in practice it is only
+ * reliable to about 3 m, and a person needs room to stop before that. So all
+ * three curves live between 0.60 m and 2.90 m and never ask for more than
+ * 0.60 m/s — a brisk walk, not a dash. That is what makes a perfect match
+ * physically achievable rather than a target you approach asymptotically.
  */
 
 import {
@@ -76,16 +76,19 @@ export const MOTION_GRAPH_COUNT = MOTION_GRAPH_IDS.length;
  * detector reads 0.15 m to 6 m — but the part of it a person can actually walk
  * in a classroom, with room to stop at either end.
  */
-export const TARGET_BAND = { min: 0.6, max: 2.3 } as const;
+export const TARGET_BAND = { min: 0.6, max: 2.9 } as const;
 
-/** A comfortable walk. Above this a target stops being matchable. */
-export const MAX_TARGET_SPEED = 0.4;
+/** Top of the position plots: the band plus a little headroom, on a round tick. */
+export const POSITION_AXIS_MAX = 3.2;
+
+/** A brisk walk. Above this a target stops being matchable. */
+export const MAX_TARGET_SPEED = 0.6;
 
 /** Slowest a leg of the walk may be, so a target never reads as "stand still". */
-const MIN_TARGET_SPEED = 0.2;
+const MIN_TARGET_SPEED = 0.3;
 
 /** Shortest meaningful walk, in metres. */
-const MIN_LEG_METRES = 0.4;
+const MIN_LEG_METRES = 0.6;
 
 /** Velocity cannot step; a person needs this long to change pace. */
 const RAMP_SECONDS = 0.5;
@@ -233,7 +236,7 @@ const generateLinearPositionGraph = (rng: Rng): TargetGraph => {
     startValue: start,
     startMeters: start,
     axisMin: 0,
-    axisMax: 2.6,
+    axisMax: POSITION_AXIS_MAX,
     segments,
   };
 };
@@ -268,7 +271,7 @@ const generateCurvedPositionGraph = (rng: Rng): TargetGraph => {
     startValue: start,
     startMeters: start,
     axisMin: 0,
-    axisMax: 2.6,
+    axisMax: POSITION_AXIS_MAX,
     segments: [
       { until: round2(outDuration), value: peak, ease: 'smooth' },
       {
@@ -360,8 +363,8 @@ const generateVelocityGraph = (rng: Rng): TargetGraph => {
     durationSeconds: ROUND_SECONDS,
     startValue: 0,
     startMeters: start,
-    axisMin: -0.6,
-    axisMax: 0.6,
+    axisMin: -0.8,
+    axisMax: 0.8,
     segments,
   };
 };
@@ -409,7 +412,7 @@ export const describeTarget = (graph: TargetGraph): string => {
  * squared error would.
  *
  * The velocity figure is much tighter than the position one because velocities
- * are small numbers: the targets never exceed 0.4 m/s, so scoring them against
+ * are small numbers: the targets never exceed 0.6 m/s, so scoring them against
  * a half-metre-per-second scale handed most of the marks to anyone who simply
  * stood still. Calibrated so that walking the target scores in the high
  * nineties, a fifth of a second of lag costs about ten, and standing still

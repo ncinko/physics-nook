@@ -24,10 +24,15 @@ import {
 } from '../../lib/kinematics/motionGame';
 import {
   canRetryRound,
+  matchOutcome,
   mergeAttempt,
   nextRoundAction,
   pickPracticeGraphIndex,
+  playerResults,
+  turnAt,
+  turnCount,
   type MotionActivity,
+  type PlayerCount,
   type PracticeQuantity,
   type RoundResult,
 } from '../../lib/kinematics/motionSession';
@@ -136,6 +141,12 @@ const NEXT_LABEL = {
   advance: 'Next graph',
 } as const;
 
+const playerName = (player: number) => `Player ${player + 1}`;
+
+function replaceAt<T>(list: readonly T[], index: number, value: T): T[] {
+  return list.map((item, position) => (position === index ? value : item));
+}
+
 interface LocalScore extends MotionGameLeaderboardScore {
   id: string;
 }
@@ -146,21 +157,24 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
   const [phase, setPhase] = useState<Phase>('setup');
   const [activity, setActivity] = useState<MotionActivity>('match');
+  const [players, setPlayers] = useState<PlayerCount>(1);
   const [choice, setChoice] = useState<ActivityChoice>('match');
   const [practiceQuantity, setPracticeQuantity] = useState<PracticeQuantity>('position');
   const [practicePick, setPracticePick] = useState(0);
-  const [roundIndex, setRoundIndex] = useState(0);
+  const [turnIndex, setTurnIndex] = useState(0);
   const [seed, setSeed] = useState(() => randomSeed());
   const [allowSimulated] = useState(isSimulatedWalkerEnabled);
-  const [results, setResults] = useState<(RoundResult | null)[]>([null, null, null]);
+  // One entry per turn, in the order they are walked. `playerResults` reads a
+  // player's graphs back out of it.
+  const [results, setResults] = useState<(RoundResult | null)[]>([]);
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [elapsed, setElapsed] = useState(0);
   const [liveTrace, setLiveTrace] = useState<MotionSample[]>([]);
 
-  const [playerName, setPlayerName] = useState('');
-  const [nameError, setNameError] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [isPosting, setIsPosting] = useState(false);
+  const [playerNames, setPlayerNames] = useState(['', '']);
+  const [nameErrors, setNameErrors] = useState<(string | null)[]>([null, null]);
+  const [submitted, setSubmitted] = useState([false, false]);
+  const [postingPlayer, setPostingPlayer] = useState<number | null>(null);
   const [apiStatus, setApiStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
   const [cloudScores, setCloudScores] = useState<LocalScore[]>([]);
   const [localScores, setLocalScores] = useState<LocalScore[]>([]);
@@ -168,8 +182,9 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const bufferRef = useRef<MotionSample[]>([]);
   const offsetRef = useRef<number | null>(null);
   const recordingRef = useRef(false);
-  const runIdRef = useRef<string | null>(null);
-  const submittedRef = useRef(false);
+  /** One server run token per player, all minted against the same seed. */
+  const runIdsRef = useRef<(string | null)[] | null>(null);
+  const submittedRef = useRef([false, false]);
   const wallStartRef = useRef(0);
 
   // Targets are regenerated every run. In a cloud run the seed comes from the
@@ -184,10 +199,12 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     () => (activity === 'practice' ? [graphs[practicePick]] : graphs),
     [activity, graphs, practicePick],
   );
-  const roundCount = rounds.length;
-  // `??` covers the tick where the activity has changed but the round index has
+  const sessionPlayers: PlayerCount = activity === 'practice' ? 1 : players;
+  const turnTotal = turnCount(activity, rounds.length, sessionPlayers);
+  const turn = turnAt(turnIndex, sessionPlayers);
+  // `??` covers the tick where the activity has changed but the turn index has
   // not caught up yet.
-  const graph = rounds[roundIndex] ?? rounds[0];
+  const graph = rounds[turn.graphIndex] ?? rounds[0];
 
   const isSimulated = device.sourceId === 'simulated';
   const connected = device.status.kind === 'ready' || device.status.kind === 'streaming';
@@ -251,19 +268,23 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     }
   }, []);
 
-  const createServerRun = useCallback(async () => {
+  const createServerRun = useCallback(async (count: PlayerCount) => {
     try {
-      const response = await fetch('/api/kinematics/motion-game/run', {
+      const response = await fetch(`/api/kinematics/motion-game/run?players=${count}`, {
         method: 'POST',
         headers: { accept: 'application/json' },
       });
       if (!response.ok) throw new Error(`Motion game run request failed: ${response.status}`);
       const body = await response.json();
-      runIdRef.current = typeof body.runId === 'string' ? body.runId : null;
+      const ids: unknown[] = Array.isArray(body.runIds) ? body.runIds : [body.runId];
+      const valid = ids.filter((id): id is string => typeof id === 'string');
+      // A token short means a player whose score could not be checked, so the
+      // whole match plays offline rather than posting for one player only.
+      runIdsRef.current = valid.length === count ? valid : null;
       if (Number.isFinite(Number(body.seed))) setSeed(Number(body.seed) >>> 0);
-      setApiStatus(runIdRef.current ? 'online' : 'offline');
+      setApiStatus(runIdsRef.current ? 'online' : 'offline');
     } catch {
-      runIdRef.current = null;
+      runIdsRef.current = null;
       setApiStatus('offline');
     }
   }, []);
@@ -309,13 +330,13 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
     setResults((previous) => {
       const next = [...previous];
-      next[roundIndex] = mergeAttempt(previous[roundIndex], { samples, score }, activity);
+      next[turnIndex] = mergeAttempt(previous[turnIndex] ?? null, { samples, score }, activity);
       return next;
     });
 
     setLiveTrace(samples);
     setPhase('review');
-  }, [activity, graph, roundIndex]);
+  }, [activity, graph, turnIndex]);
 
   // Countdown and recording clock.
   useEffect(() => {
@@ -472,15 +493,16 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   // --- round control -------------------------------------------------------
 
   const beginActivity = useCallback(
-    async (next: MotionActivity) => {
-      submittedRef.current = false;
-      setSubmitted(false);
-      setPlayerName('');
-      setNameError(null);
-      setResults([null, null, null]);
-      setRoundIndex(0);
+    async (next: MotionActivity, count: PlayerCount = 1) => {
+      submittedRef.current = [false, false];
+      setSubmitted([false, false]);
+      setPlayerNames(['', '']);
+      setNameErrors([null, null]);
+      setResults([]);
+      setTurnIndex(0);
       setLiveTrace([]);
       setActivity(next);
+      setPlayers(count);
       setPhase('ready');
 
       if (next === 'practice') {
@@ -489,20 +511,25 @@ export default function MotionMatchGame({ className = '' }: { className?: string
         const nextSeed = randomSeed();
         setSeed(nextSeed);
         setPracticePick(pickPracticeGraphIndex(practiceQuantity, nextSeed));
-        runIdRef.current = null;
+        runIdsRef.current = null;
         return;
       }
 
       if (isSimulated) {
-        runIdRef.current = null;
+        runIdsRef.current = null;
         setSeed(randomSeed());
         return;
       }
 
-      // Reuse a token already held rather than minting another. The endpoint
+      // Reuse tokens already held rather than minting more. The endpoint
       // allows 60 runs an hour per IP hash and a classroom shares one address,
-      // so stepping in and out of the menu should not spend that budget.
-      if (runIdRef.current === null) await createServerRun();
+      // so stepping in and out of the menu should not spend that budget. A
+      // held set only fits if it has a live token for every player: two players
+      // cannot share one, and they must share a seed, so a mismatch mints anew.
+      const held = runIdsRef.current;
+      if (held === null || held.length !== count || held.some((id) => id === null)) {
+        await createServerRun(count);
+      }
     },
     [createServerRun, isSimulated, practiceQuantity],
   );
@@ -524,13 +551,13 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   }, []);
 
   const nextRound = useCallback(() => {
-    const action = nextRoundAction(activity, roundIndex, roundCount);
+    const action = nextRoundAction(activity, turnIndex, turnTotal);
 
     if (action === 'reroll') {
       const nextSeed = randomSeed();
       setSeed(nextSeed);
       setPracticePick(pickPracticeGraphIndex(practiceQuantity, nextSeed));
-      setResults([null, null, null]);
+      setResults([]);
       setLiveTrace([]);
       setPhase('ready');
       return;
@@ -543,91 +570,105 @@ export default function MotionMatchGame({ className = '' }: { className?: string
       return;
     }
 
-    setRoundIndex(roundIndex + 1);
+    setTurnIndex(turnIndex + 1);
     setLiveTrace([]);
     setPhase('ready');
-  }, [activity, practiceQuantity, roundCount, roundIndex]);
+  }, [activity, practiceQuantity, turnTotal, turnIndex]);
 
   // --- submission ----------------------------------------------------------
 
-  const completed = results.filter((result): result is RoundResult => result !== null);
-  const totalScore = motionGameTotal(completed.map((result) => result.score));
-  const retriesUsed = completed.filter((result) => result.retried).length;
+  const standings = useMemo(
+    () =>
+      Array.from({ length: sessionPlayers }, (_, player) => {
+        const rows = playerResults(results, player, sessionPlayers, MOTION_GRAPH_COUNT);
+        const done = rows.filter((row): row is RoundResult => row !== null);
+        return {
+          rows,
+          complete: done.length === MOTION_GRAPH_COUNT,
+          total: motionGameTotal(done.map((row) => row.score)),
+          retriesUsed: done.filter((row) => row.retried).length,
+        };
+      }),
+    [results, sessionPlayers],
+  );
+
   // Practice never mints a run token, so it could not post even if it tried.
   // Saying so here keeps the reason next to the other two gates.
   const canPostToCloud = activity === 'match' && !isSimulated && device.sourceId !== null;
 
-  const handleScoreSubmit = useCallback(async () => {
-    if (activity !== 'match') return;
-    if (submittedRef.current || completed.length < MOTION_GRAPH_COUNT) return;
+  const handleScoreSubmit = useCallback(
+    async (player: number) => {
+      if (activity !== 'match') return;
+      const standing = standings[player];
+      if (!standing || !standing.complete || submittedRef.current[player]) return;
 
-    if (isBlockedLeaderboardName(playerName)) {
-      setNameError('That name cannot go on a shared board. Try another, or roll one.');
-      return;
-    }
+      const name = playerNames[player];
+      if (isBlockedLeaderboardName(name)) {
+        setNameErrors((previous) =>
+          replaceAt(previous, player, 'That name cannot go on a shared board. Try another, or roll one.'),
+        );
+        return;
+      }
 
-    submittedRef.current = true;
-    setSubmitted(true);
+      submittedRef.current = replaceAt(submittedRef.current, player, true);
+      setSubmitted((previous) => replaceAt(previous, player, true));
 
-    const attempts = graphs.map((target, index) => ({
-      graph: target.id,
-      retried: completed[index].retried,
-      samples: fromMotionSamples(
-        resample(completed[index].samples, SUBMISSION_PERIOD_SECONDS, target.durationSeconds),
-      ),
-    }));
+      const rows = standing.rows as RoundResult[];
+      const attempts = graphs.map((target, index) => ({
+        graph: target.id,
+        retried: rows[index].retried,
+        samples: fromMotionSamples(
+          resample(rows[index].samples, SUBMISSION_PERIOD_SECONDS, target.durationSeconds),
+        ),
+      }));
 
-    const entry: LocalScore = {
-      id: `local-${Date.now()}`,
-      name: sanitizeLeaderboardName(playerName),
-      score: totalScore,
-      graph1Score: completed[0].score,
-      graph2Score: completed[1].score,
-      graph3Score: completed[2].score,
-      retriesUsed,
-      createdAt: Date.now(),
-    };
+      const entry: LocalScore = {
+        id: `local-${Date.now()}-${player}`,
+        name: sanitizeLeaderboardName(name),
+        score: standing.total,
+        graph1Score: rows[0].score,
+        graph2Score: rows[1].score,
+        graph3Score: rows[2].score,
+        retriesUsed: standing.retriesUsed,
+        createdAt: Date.now(),
+      };
 
-    saveLocalScore(entry);
+      saveLocalScore(entry);
 
-    if (!canPostToCloud || !runIdRef.current) {
-      setApiStatus('offline');
-      return;
-    }
+      const runId = runIdsRef.current?.[player] ?? null;
+      if (!canPostToCloud || !runId) {
+        setApiStatus('offline');
+        return;
+      }
 
-    setIsPosting(true);
-    try {
-      const response = await fetch('/api/kinematics/motion-game/leaderboard', {
-        method: 'POST',
-        headers: { accept: 'application/json', 'content-type': 'application/json' },
-        body: JSON.stringify({
-          runId: runIdRef.current,
-          name: entry.name,
-          score: entry.score,
-          retriesUsed,
-          attempts,
-        }),
-      });
-      if (!response.ok) throw new Error(`Motion game score submit failed: ${response.status}`);
-      const body = await response.json();
-      setCloudScores(Array.isArray(body.scores) ? body.scores : []);
-      setApiStatus('online');
-    } catch {
-      setApiStatus('offline');
-    } finally {
-      setIsPosting(false);
-      runIdRef.current = null;
-    }
-  }, [
-    activity,
-    canPostToCloud,
-    completed,
-    graphs,
-    playerName,
-    retriesUsed,
-    saveLocalScore,
-    totalScore,
-  ]);
+      setPostingPlayer(player);
+      try {
+        const response = await fetch('/api/kinematics/motion-game/leaderboard', {
+          method: 'POST',
+          headers: { accept: 'application/json', 'content-type': 'application/json' },
+          body: JSON.stringify({
+            runId,
+            name: entry.name,
+            score: entry.score,
+            retriesUsed: standing.retriesUsed,
+            attempts,
+          }),
+        });
+        if (!response.ok) throw new Error(`Motion game score submit failed: ${response.status}`);
+        const body = await response.json();
+        setCloudScores(Array.isArray(body.scores) ? body.scores : []);
+        setApiStatus('online');
+      } catch {
+        setApiStatus('offline');
+      } finally {
+        setPostingPlayer(null);
+        // Spent either way: the endpoint consumes a token it accepted, and a
+        // rejected one is not going to pass on a second try.
+        if (runIdsRef.current) runIdsRef.current = replaceAt(runIdsRef.current, player, null);
+      }
+    },
+    [activity, canPostToCloud, graphs, playerNames, saveLocalScore, standings],
+  );
 
   // --- derived plot data ---------------------------------------------------
 
@@ -647,7 +688,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
     }));
   }, [liveTrace, graph.quantity]);
 
-  const roundResult = results[roundIndex] ?? null;
+  const roundResult = results[turnIndex] ?? null;
 
   // Leaving is offered freely in practice, where nothing is at stake, and in a
   // match only before the first walk — a misclick should not be able to throw
@@ -655,12 +696,101 @@ export default function MotionMatchGame({ className = '' }: { className?: string
   const canLeave =
     activity === 'practice'
       ? phase === 'ready' || phase === 'review'
-      : phase === 'ready' && roundIndex === 0 && results.every((result) => result === null);
+      : phase === 'ready' && turnIndex === 0 && !results.some(Boolean);
+
+  const turnPlayer = sessionPlayers === 2 ? playerName(turn.player) : null;
 
   const heading =
     activity === 'practice'
       ? `Practice: ${quantityTitle(graph.quantity)}`
-      : `Graph ${roundIndex + 1} of ${roundCount}: ${quantityTitle(graph.quantity)}`;
+      : `${turnPlayer ? `${turnPlayer} · ` : ''}Graph ${turn.graphIndex + 1} of ${rounds.length}: ${quantityTitle(graph.quantity)}`;
+
+  const nextAction = nextRoundAction(activity, turnIndex, turnTotal);
+  const nextLabel = (() => {
+    if (sessionPlayers === 1) return NEXT_LABEL[nextAction];
+    if (nextAction === 'finish') return 'See who won';
+    const upcoming = turnAt(turnIndex + 1, sessionPlayers);
+    return upcoming.graphIndex === turn.graphIndex
+      ? `${playerName(upcoming.player)}'s turn`
+      : NEXT_LABEL.advance;
+  })();
+
+  const finishedHeading = (() => {
+    if (sessionPlayers === 1) return `${standings[0]?.total ?? 0} out of ${MAX_TOTAL_SCORE}`;
+    const totals = standings.map((standing) => standing.total);
+    const outcome = matchOutcome(totals);
+    if (outcome.kind === 'tie') return `A tie at ${totals[0]} each`;
+    const loser = outcome.winner === 0 ? 1 : 0;
+    return `${playerName(outcome.winner)} wins, ${totals[outcome.winner]} to ${totals[loser]}`;
+  })();
+
+  const renderPlayerResult = (player: number) => {
+    const standing = standings[player];
+    if (!standing) return null;
+    const fieldId = `motion-game-name-${player}`;
+
+    return (
+      <>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">
+          {graphs
+            .map(
+              (target, index) =>
+                `Graph ${index + 1} (${target.quantity}) ${standing.rows[index]?.score ?? 0}`,
+            )
+            .join(' · ')}
+          {standing.retriesUsed > 0 &&
+            ` · ${standing.retriesUsed} retr${standing.retriesUsed === 1 ? 'y' : 'ies'} used`}
+        </p>
+
+        {!submitted[player] && canPostToCloud && (
+          <form
+            className="mt-3 flex flex-wrap items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleScoreSubmit(player);
+            }}
+          >
+            <label className="text-sm text-[var(--text-primary)]" htmlFor={fieldId}>
+              Name for the board
+            </label>
+            <input
+              id={fieldId}
+              className="rounded border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-2 py-1 text-sm text-[var(--text-primary)]"
+              maxLength={24}
+              value={playerNames[player]}
+              onChange={(event) => {
+                const value = event.target.value;
+                setPlayerNames((previous) => replaceAt(previous, player, value));
+                setNameErrors((previous) => replaceAt(previous, player, null));
+              }}
+            />
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setPlayerNames((previous) => replaceAt(previous, player, generateLeaderboardName()));
+                setNameErrors((previous) => replaceAt(previous, player, null));
+              }}
+            >
+              <Dices aria-hidden="true" className="mr-1 inline h-4 w-4 align-text-bottom" />
+              Roll
+            </Button>
+            <Button
+              type="submit"
+              disabled={postingPlayer !== null || playerNames[player].trim().length === 0}
+            >
+              {postingPlayer === player ? 'Posting…' : 'Post score'}
+            </Button>
+            {nameErrors[player] && (
+              <p className="w-full text-sm text-[var(--accent-red)]" role="alert">
+                {nameErrors[player]}
+              </p>
+            )}
+          </form>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className={`not-prose px-5 py-4 ${className}`.trim()}>
@@ -680,9 +810,9 @@ export default function MotionMatchGame({ className = '' }: { className?: string
                 practiceQuantity={practiceQuantity}
                 onPracticeQuantityChange={setPracticeQuantity}
                 canCalibrate={device.sourceId === 'webusb'}
-                onStart={() => {
+                onStart={(count) => {
                   if (choice === 'calibrate') setPhase('calibrate');
-                  else void beginActivity(choice);
+                  else void beginActivity(choice, count);
                 }}
               />
               {isSimulated && (
@@ -723,6 +853,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
             {phase !== 'recording' && (
               <RoundOverlay
                 phase={phase as OverlayPhase}
+                player={turnPlayer}
                 startMeters={graph.startMeters}
                 holdSeconds={HOLD_SECONDS}
                 holdRemaining={holdRemaining}
@@ -732,7 +863,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
                 score={roundResult ? roundResult.score : null}
                 maxScore={MAX_GRAPH_SCORE}
                 canRetry={roundResult !== null && canRetryRound(roundResult, activity)}
-                nextLabel={NEXT_LABEL[nextRoundAction(activity, roundIndex, roundCount)]}
+                nextLabel={nextLabel}
                 onArm={armRound}
                 onCancel={retryRound}
                 onRetry={retryRound}
@@ -756,58 +887,24 @@ export default function MotionMatchGame({ className = '' }: { className?: string
 
       {phase === 'finished' && (
         <div>
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
-            {totalScore} out of {MAX_TOTAL_SCORE}
-          </h3>
-          <p className="mt-1 text-sm text-[var(--text-muted)]">
-            {graphs.map(
-              (target, index) =>
-                `Graph ${index + 1} (${target.quantity}) ${completed[index]?.score ?? 0}`,
-            ).join(' · ')}
-            {retriesUsed > 0 && ` · ${retriesUsed} retr${retriesUsed === 1 ? 'y' : 'ies'} used`}
-          </p>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">{finishedHeading}</h3>
 
-          {!submitted && canPostToCloud && (
-            <form
-              className="mt-4 flex flex-wrap items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleScoreSubmit();
-              }}
-            >
-              <label className="text-sm text-[var(--text-primary)]" htmlFor="motion-game-name">
-                Name for the board
-              </label>
-              <input
-                id="motion-game-name"
-                className="rounded border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-2 py-1 text-sm text-[var(--text-primary)]"
-                maxLength={24}
-                value={playerName}
-                onChange={(event) => {
-                  setPlayerName(event.target.value);
-                  setNameError(null);
-                }}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => {
-                  setPlayerName(generateLeaderboardName());
-                  setNameError(null);
-                }}
-              >
-                <Dices aria-hidden="true" className="mr-1 inline h-4 w-4 align-text-bottom" />
-                Roll
-              </Button>
-              <Button type="submit" disabled={isPosting || playerName.trim().length === 0}>
-                {isPosting ? 'Posting…' : 'Post score'}
-              </Button>
-              {nameError && (
-                <p className="w-full text-sm text-[var(--accent-red)]" role="alert">
-                  {nameError}
-                </p>
-              )}
-            </form>
+          {sessionPlayers === 1 ? (
+            renderPlayerResult(0)
+          ) : (
+            <div className="mt-3 grid gap-5 sm:grid-cols-2">
+              {standings.map((standing, player) => (
+                <div key={player}>
+                  <h4 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {playerName(player)}:{' '}
+                    <span className="tabular-nums">
+                      {standing.total} out of {MAX_TOTAL_SCORE}
+                    </span>
+                  </h4>
+                  {renderPlayerResult(player)}
+                </div>
+              ))}
+            </div>
           )}
 
           {!canPostToCloud && (
@@ -818,7 +915,7 @@ export default function MotionMatchGame({ className = '' }: { className?: string
           )}
 
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button onClick={() => void beginActivity('match')}>Play again</Button>
+            <Button onClick={() => void beginActivity('match', players)}>Play again</Button>
             <Button variant="secondary" onClick={() => setPhase('setup')}>
               Back to the menu
             </Button>

@@ -26,7 +26,7 @@ export interface WalkerState {
 }
 
 export interface WalkerOptions {
-  /** Brisk walk. The targets never ask for more than 0.4 m/s. */
+  /** Brisk walk. The targets never ask for more than 0.6 m/s. */
   maxSpeed: number;
   /** How hard the walker pulls toward the pointer, in 1/s. */
   responsiveness: number;

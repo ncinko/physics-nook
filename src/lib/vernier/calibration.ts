@@ -27,7 +27,7 @@
  * The scale is never transmitted. The scoring endpoint rescores the submitted
  * distances and range-checks them, and a client-side number it can only trust
  * or reject on adds nothing. Nor does it need to: the scale is a single global
- * multiplier on a target spanning 0.6-2.3 m, so a dishonest value that flatters
+ * multiplier on a target spanning 0.6-2.9 m, so a dishonest value that flatters
  * one leg penalises another — at 2 m, 15% is 30 cm against a
  * `SCORING_ZERO_AT.position` of 0.4, a large loss rather than a gift.
  *
@@ -43,6 +43,16 @@ export const CALIBRATION_STORAGE_KEY = 'physics-nook-motion-detector-calibration
 
 /** The detector trusted as it reads. */
 export const NEUTRAL_SCALE = 1;
+
+/**
+ * The scale an uncalibrated detector starts at, and what Reset returns to.
+ *
+ * The classroom detectors this is used with consistently read about 13% short,
+ * and every session began with the same trip to the calibrate screen to stretch
+ * them by 15%. Starting there makes Calibrate the fix for a detector that
+ * disagrees with the usual one, rather than a ritual before every game.
+ */
+export const DEFAULT_SCALE = 1.15;
 
 /** Readings averaged before a scale is computed, and the fewest that will do. */
 export const CALIBRATION_SAMPLE_COUNT = 12;
@@ -114,14 +124,15 @@ export const averageDistance = (
 export const serializeScale = (scale: number): string => scale.toFixed(6);
 
 /**
- * Reads a stored scale back. Only garbage is refused — anything that is not a
- * positive finite number could not have come from a calibration, and applying
- * it would leave the detector reading zero, or nothing at all.
+ * Reads a stored scale back, falling back to `DEFAULT_SCALE` when nothing is
+ * stored. Only garbage is refused — anything that is not a positive finite
+ * number could not have come from a calibration, and applying it would leave
+ * the detector reading zero, or nothing at all.
  */
 export const readStoredScale = (raw: string | null): number => {
-  if (raw === null) return NEUTRAL_SCALE;
+  if (raw === null) return DEFAULT_SCALE;
   const parsed = Number.parseFloat(raw);
-  return isUsableScale(parsed) ? parsed : NEUTRAL_SCALE;
+  return isUsableScale(parsed) ? parsed : DEFAULT_SCALE;
 };
 
 /** Plain English for a factor, since 1.043 says nothing to a reader. */

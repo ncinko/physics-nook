@@ -8,12 +8,13 @@
  * clothes, and it exists so the game can be tested without hardware.
  */
 
+import { POSITION_AXIS_MAX } from '../../../lib/kinematics/motionGame';
 import { MOTION_DETECTOR_RANGE } from '../../../lib/vernier/sensorIds';
 import type { VernierMotionApi } from '../../hardware/useVernierMotion';
 
 export default function WalkerStrip({ device }: { device: VernierMotionApi }) {
   const min = MOTION_DETECTOR_RANGE.minMeters;
-  const max = 2.6;
+  const max = POSITION_AXIS_MAX;
   const current = device.latest?.distance ?? min;
 
   const setFromClientX = (element: HTMLElement, clientX: number) => {

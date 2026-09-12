@@ -1,6 +1,7 @@
 import { Cable, CheckCircle2, Loader2, Mouse, TriangleAlert } from 'lucide-react';
 import { Button } from '../shared/InlineControls';
 import { fixed } from '../../utils/format';
+import { DEFAULT_SCALE } from '../../lib/vernier/calibration';
 import type { VernierMotionApi } from './useVernierMotion';
 
 // Connecting a LabQuest Mini and confirming it reads the world correctly.
@@ -43,7 +44,7 @@ const STATUS_TONE: Record<string, string> = {
 export default function VernierConnectPanel({
   device,
   allowSimulated = false,
-  distanceScale = 1,
+  distanceScale = DEFAULT_SCALE,
   onResetCalibration,
   className = '',
 }: VernierConnectPanelProps) {
@@ -105,7 +106,9 @@ export default function VernierConnectPanel({
             </span>
           </p>
 
-          {distanceScale !== 1 && (
+          {/* Only a departure from the default is news. The default stretch is
+              what every detector gets, so announcing it would be noise. */}
+          {distanceScale !== DEFAULT_SCALE && (
             <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[var(--text-muted)]">
               <span>
                 Calibrated: readings multiplied by{' '}

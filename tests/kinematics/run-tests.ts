@@ -1513,15 +1513,16 @@ console.log('Video analysis tests passed.');
     validateMotionGameScoreSubmission,
   } = await import('../../src/lib/kinematics/motionGame.ts');
 
-  // --- every generated target has to be walkable in about two metres ------
+  // --- every generated target has to be walkable inside three metres -----
   //
   // The targets are random now, so this is the property that matters: not that
   // one hand-tuned curve fits the room, but that no seed can produce one that
   // does not. If the generator is ever loosened, this is the test that should
-  // stop it.
+  // stop it. Three metres is where the detector stops being reliable.
   const REACH_MIN = 0.5;
-  const REACH_MAX = 2.5;
-  const WALKABLE_SPEED = 0.45;
+  const REACH_MAX = 3.0;
+  const WALKABLE_SPEED = 0.65;
+  const SPAN_BUDGET = 2.5;
   const SEEDS = 400;
 
   let widestSpan = 0;
@@ -1604,21 +1605,25 @@ console.log('Video analysis tests passed.');
       assert.ok(minPosition >= REACH_MIN, `${where}: comes within ${minPosition.toFixed(2)} m`);
       assert.ok(maxPosition <= REACH_MAX, `${where}: reaches ${maxPosition.toFixed(2)} m`);
       assert.ok(
-        maxPosition - minPosition <= 2,
-        `${where}: spans ${(maxPosition - minPosition).toFixed(2)} m, over the two-metre budget`,
+        maxPosition - minPosition <= SPAN_BUDGET,
+        `${where}: spans ${(maxPosition - minPosition).toFixed(2)} m, over the ${SPAN_BUDGET} m budget`,
       );
 
       // And it has to actually ask for a walk, not a stand.
       assert.ok(
-        maxPosition - minPosition >= 0.35,
+        maxPosition - minPosition >= 0.5,
         `${where}: only spans ${(maxPosition - minPosition).toFixed(2)} m — nothing to walk`,
       );
     });
   }
 
-  assert.ok(widestSpan <= 2, `widest generated span was ${widestSpan.toFixed(2)} m`);
+  assert.ok(widestSpan <= SPAN_BUDGET, `widest generated span was ${widestSpan.toFixed(2)} m`);
   assert.ok(fastest <= MAX_TARGET_SPEED + 0.05, `fastest generated pace was ${fastest.toFixed(3)} m/s`);
-  assert.ok(TARGET_BAND.min >= 0.5 && TARGET_BAND.max <= 2.5);
+  assert.ok(TARGET_BAND.min >= 0.5 && TARGET_BAND.max <= 3.0);
+  // Harder than the original 2.3 m / 0.4 m/s targets, and it has to show: some
+  // seed must actually use the far end and the faster pace.
+  assert.ok(widestSpan > 1.9, `targets never go far; widest span ${widestSpan.toFixed(2)} m`);
+  assert.ok(fastest > 0.45, `targets never go fast; fastest pace ${fastest.toFixed(3)} m/s`);
 
   // --- seeded, so the server can rebuild what the browser drew -----------
   assert.deepEqual(
@@ -2009,10 +2014,15 @@ console.log('Video analysis tests passed.');
   );
   const {
     canRetryRound,
+    matchOutcome,
     mergeAttempt,
     nextRoundAction,
     pickPracticeGraphIndex,
+    playerResults,
     practiceGraph,
+    turnAt,
+    turnCount,
+    turnIndexFor,
   } = await import('../../src/lib/kinematics/motionSession.ts');
 
   // --- the browser/endpoint contract ---------------------------------------
@@ -2025,9 +2035,9 @@ console.log('Video analysis tests passed.');
   // own precisely so this stays true.
   const GOLDEN: Array<[number, Array<[string, number, number, number]>]> = [
     [0, [['position-linear', 0.91, 0.91, 5], ['position-curved', 0.69, 0.69, 3], ['velocity-steps', 0, 0.85, 13]]],
-    [1, [['position-linear', 0.81, 0.81, 7], ['position-curved', 0.74, 0.74, 3], ['velocity-steps', 0, 0.71, 13]]],
+    [1, [['position-linear', 0.81, 0.81, 7], ['position-curved', 0.65, 0.65, 3], ['velocity-steps', 0, 0.91, 9]]],
     [7, [['position-linear', 0.83, 0.83, 5], ['position-curved', 0.69, 0.69, 3], ['velocity-steps', 0, 0.81, 9]]],
-    [12345, [['position-linear', 1.1, 1.1, 7], ['position-curved', 0.82, 0.82, 3], ['velocity-steps', 0, 0.91, 13]]],
+    [12345, [['position-linear', 1.1, 1.1, 7], ['position-curved', 0.94, 0.94, 3], ['velocity-steps', 0, 0.86, 13]]],
   ];
 
   for (const [seed, expected] of GOLDEN) {
@@ -2101,6 +2111,50 @@ console.log('Video analysis tests passed.');
   assert.equal(nextRoundAction('match', 1, 3), 'advance');
   assert.equal(nextRoundAction('match', 2, 3), 'finish');
   assert.equal(nextRoundAction('practice', 0, 1), 'reroll');
+
+  // --- two players, one detector -------------------------------------------
+  assert.equal(turnCount('match', 3, 1), 3);
+  assert.equal(turnCount('match', 3, 2), 6);
+  assert.equal(turnCount('practice', 3, 2), 1, 'practice is always one walk');
+
+  // One player is the old order exactly.
+  assert.deepEqual(
+    [0, 1, 2].map((turn) => turnAt(turn, 1)),
+    [0, 1, 2].map((graphIndex) => ({ graphIndex, player: 0 })),
+  );
+
+  // Two players both walk a graph before the next one, and who goes first
+  // swaps each graph so walking second is not always the same person's edge.
+  assert.deepEqual(
+    [0, 1, 2, 3, 4, 5].map((turn) => turnAt(turn, 2)),
+    [
+      { graphIndex: 0, player: 0 },
+      { graphIndex: 0, player: 1 },
+      { graphIndex: 1, player: 1 },
+      { graphIndex: 1, player: 0 },
+      { graphIndex: 2, player: 0 },
+      { graphIndex: 2, player: 1 },
+    ],
+  );
+  for (const players of [1, 2] as const) {
+    for (let turn = 0; turn < turnCount('match', 3, players); turn += 1) {
+      const { graphIndex, player } = turnAt(turn, players);
+      assert.equal(turnIndexFor(graphIndex, player, players), turn, 'turnIndexFor inverts turnAt');
+    }
+  }
+  assert.equal(nextRoundAction('match', 4, 6), 'advance');
+  assert.equal(nextRoundAction('match', 5, 6), 'finish', 'a two-player match ends after six walks');
+
+  // Each player's results come back in graph order whatever order they walked.
+  const perTurn = ['p1g1', 'p2g1', 'p2g2', 'p1g2', 'p1g3', 'p2g3'];
+  assert.deepEqual(playerResults(perTurn, 0, 2, 3), ['p1g1', 'p1g2', 'p1g3']);
+  assert.deepEqual(playerResults(perTurn, 1, 2, 3), ['p2g1', 'p2g2', 'p2g3']);
+  assert.deepEqual(playerResults(['a', 'b', 'c'], 0, 1, 3), ['a', 'b', 'c']);
+  assert.deepEqual(playerResults(['p1g1'], 1, 2, 3), [null, null, null], 'unwalked turns are null');
+
+  assert.deepEqual(matchOutcome([240, 210]), { kind: 'win', winner: 0 });
+  assert.deepEqual(matchOutcome([180, 255]), { kind: 'win', winner: 1 });
+  assert.deepEqual(matchOutcome([230, 230]), { kind: 'tie' });
 }
 
 console.log('Motion Match tests passed.');

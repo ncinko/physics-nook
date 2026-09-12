@@ -23,6 +23,8 @@ export type OverlayPhase = 'ready' | 'arming' | 'countdown' | 'review';
 
 interface RoundOverlayProps {
   phase: OverlayPhase;
+  /** Whose turn it is in a two-player match, or null when there is one player. */
+  player: string | null;
   /** Where to stand when the countdown ends, in metres from the detector. */
   startMeters: number;
   holdSeconds: number;
@@ -46,6 +48,7 @@ interface RoundOverlayProps {
 
 export default function RoundOverlay({
   phase,
+  player,
   startMeters,
   holdSeconds,
   holdRemaining,
@@ -65,6 +68,14 @@ export default function RoundOverlay({
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
       <div className="pointer-events-auto w-[min(92%,44rem)] rounded-xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-[clamp(0.75rem,2.5cqw,1.5rem)] text-center shadow-lg">
+        {/* Named before walking and on the score, the two moments the players
+            swap places. In the trace's blue: this is who "you" is right now. */}
+        {player && (phase === 'ready' || phase === 'review') && (
+          <p className="mb-1 text-[clamp(0.85rem,2.4cqw,1.35rem)] font-semibold uppercase tracking-wide text-[var(--accent-blue)]">
+            {player}
+          </p>
+        )}
+
         {phase === 'ready' && (
           <>
             <BigReading label="Stand at" value={`${fixed(startMeters, 2)} m`} />

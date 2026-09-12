@@ -5,11 +5,15 @@
  * toggle buttons, with any settings belonging to the selected one below. The
  * three names say what they do, so there is no explanatory line under them —
  * a caption that only restates its button is noise on a screen someone is
- * about to walk away from. Nothing starts until the start button is pressed.
+ * about to walk away from. Nothing starts until a start button is pressed.
+ *
+ * Match graphs has two start buttons rather than a player-count toggle and one
+ * start: picking the count *is* starting, so a separate setting would be a
+ * click that does nothing on its own.
  */
 
 import { Button } from '../../shared/InlineControls';
-import type { PracticeQuantity } from '../../../lib/kinematics/motionSession';
+import type { PlayerCount, PracticeQuantity } from '../../../lib/kinematics/motionSession';
 
 export type ActivityChoice = 'match' | 'practice' | 'calibrate';
 
@@ -25,8 +29,7 @@ const QUANTITIES: Array<{ value: PracticeQuantity; label: string }> = [
   { value: 'mixed', label: 'Mixed' },
 ];
 
-const START_LABEL: Record<ActivityChoice, string> = {
-  match: 'Start the game',
+const START_LABEL: Record<Exclude<ActivityChoice, 'match'>, string> = {
   practice: 'Start practicing',
   calibrate: 'Open calibration',
 };
@@ -38,7 +41,8 @@ interface ActivityChooserProps {
   onPracticeQuantityChange: (quantity: PracticeQuantity) => void;
   /** False with the simulated walker connected — there is nothing to calibrate. */
   canCalibrate: boolean;
-  onStart: () => void;
+  /** Player count only means something for a match; the others pass 1. */
+  onStart: (players: PlayerCount) => void;
 }
 
 export default function ActivityChooser({
@@ -102,10 +106,21 @@ export default function ActivityChooser({
         </p>
       )}
 
-      <div>
-        <Button className="btn-lg" disabled={calibrateBlocked} onClick={onStart}>
-          {START_LABEL[choice]}
-        </Button>
+      <div className="flex flex-wrap gap-3">
+        {choice === 'match' ? (
+          <>
+            <Button className="btn-lg" onClick={() => onStart(1)}>
+              1 player
+            </Button>
+            <Button className="btn-lg" onClick={() => onStart(2)}>
+              2 player
+            </Button>
+          </>
+        ) : (
+          <Button className="btn-lg" disabled={calibrateBlocked} onClick={() => onStart(1)}>
+            {START_LABEL[choice]}
+          </Button>
+        )}
       </div>
     </div>
   );

@@ -10,7 +10,11 @@ import {
   validateMotionGameScoreSubmission,
 } from '../../../../src/lib/kinematics/motionGame';
 
-const SCORE_SUBMITS_PER_HOUR = 20;
+/**
+ * Per IP hash, shared by a whole classroom. About 20 students posting a handful
+ * of scores each in an hour, with room to spare.
+ */
+const SCORE_SUBMITS_PER_HOUR = 120;
 
 const fetchTopScores = async (db: any, limit: number) => {
   const result = await db

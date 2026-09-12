@@ -63,6 +63,7 @@ import {
 import { decideStream } from '../../src/lib/vernier/streamPolicy.ts';
 import {
   MIN_CALIBRATION_SAMPLES,
+  DEFAULT_SCALE,
   NEUTRAL_SCALE,
   averageDistance,
   computeScale,
@@ -883,14 +884,21 @@ assert.equal(isUsableScale(-1), false);
 assert.equal(isUsableScale(Number.NaN), false);
 
 {
+  // Nothing stored means the classroom default, not the raw detector: these
+  // detectors read short, and 1.15 is the stretch every session used to set by
+  // hand.
+  assert.equal(DEFAULT_SCALE, 1.15);
+  assert.equal(readStoredScale(null), DEFAULT_SCALE);
+  assert.notEqual(DEFAULT_SCALE, NEUTRAL_SCALE);
+
   // Only garbage is refused on the way in: a value that is not a positive
   // finite number could not have come from a calibration, and applying it would
   // leave the detector reading zero or nothing at all.
-  assert.equal(readStoredScale(null), NEUTRAL_SCALE);
-  assert.equal(readStoredScale('abc'), NEUTRAL_SCALE);
-  assert.equal(readStoredScale(''), NEUTRAL_SCALE);
-  assert.equal(readStoredScale('0'), NEUTRAL_SCALE);
-  assert.equal(readStoredScale('-2'), NEUTRAL_SCALE);
+  assert.equal(readStoredScale('abc'), DEFAULT_SCALE);
+  assert.equal(readStoredScale(''), DEFAULT_SCALE);
+  assert.equal(readStoredScale('0'), DEFAULT_SCALE);
+  assert.equal(readStoredScale('-2'), DEFAULT_SCALE);
+  assert.equal(readStoredScale('1'), 1, 'an explicit 1.000 is kept, not replaced by the default');
   assert.equal(readStoredScale('5'), 5, 'a big correction survives a reload');
   assert.ok(Math.abs(readStoredScale('1.0234') - 1.0234) < 1e-12);
   assert.ok(Math.abs(readStoredScale(serializeScale(1.0234)) - 1.0234) < 1e-6);

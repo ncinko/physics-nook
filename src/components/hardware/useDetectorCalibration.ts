@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   CALIBRATION_STORAGE_KEY,
-  NEUTRAL_SCALE,
+  DEFAULT_SCALE,
   computeScale,
   readStoredScale,
   serializeScale,
@@ -25,7 +25,7 @@ export interface DetectorCalibration {
 }
 
 export const useDetectorCalibration = (): DetectorCalibration => {
-  const [scale, setScale] = useState(NEUTRAL_SCALE);
+  const [scale, setScale] = useState(DEFAULT_SCALE);
 
   // Read in an effect rather than during render, so the island paints the same
   // markup every time and a private window with storage disabled is not an
@@ -34,14 +34,14 @@ export const useDetectorCalibration = (): DetectorCalibration => {
     try {
       setScale(readStoredScale(window.localStorage.getItem(CALIBRATION_STORAGE_KEY)));
     } catch {
-      setScale(NEUTRAL_SCALE);
+      setScale(DEFAULT_SCALE);
     }
   }, []);
 
   const store = useCallback((next: number) => {
     setScale(next);
     try {
-      if (next === NEUTRAL_SCALE) window.localStorage.removeItem(CALIBRATION_STORAGE_KEY);
+      if (next === DEFAULT_SCALE) window.localStorage.removeItem(CALIBRATION_STORAGE_KEY);
       else window.localStorage.setItem(CALIBRATION_STORAGE_KEY, serializeScale(next));
     } catch {
       // Storage refused. The scale still applies for this session, which is the
@@ -58,7 +58,7 @@ export const useDetectorCalibration = (): DetectorCalibration => {
     [scale, store],
   );
 
-  const reset = useCallback(() => store(NEUTRAL_SCALE), [store]);
+  const reset = useCallback(() => store(DEFAULT_SCALE), [store]);
 
-  return { scale, isDefault: scale === NEUTRAL_SCALE, apply, reset };
+  return { scale, isDefault: scale === DEFAULT_SCALE, apply, reset };
 };

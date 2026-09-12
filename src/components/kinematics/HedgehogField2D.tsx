@@ -174,7 +174,7 @@ export default function HedgehogField2D() {
         <Toggle label={<Swatch color={POSITION_COLOR}>position r</Swatch>} checked={showR} onChange={setShowR} />
         <Toggle label={<Swatch color={VELOCITY_COLOR}>velocity v</Swatch>} checked={showV} onChange={setShowV} />
         <Toggle label={<Swatch color={ACCELERATION_COLOR}>acceleration a</Swatch>} checked={showA} onChange={setShowA} />
-        <Toggle label="split a along and across v" checked={splitA} onChange={setSplitA} />
+        <Toggle label="decompose a" checked={splitA} onChange={setSplitA} />
       </ControlBar>
 
       <svg

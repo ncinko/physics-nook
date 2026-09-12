@@ -1,4 +1,4 @@
-import { Cloud, Dices, RotateCcw, Square, Trophy, WifiOff } from 'lucide-react';
+import { Cloud, Dices, Trophy, WifiOff } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import {
   GOAL_RUSH_DEFAULTS,
@@ -914,11 +914,9 @@ export default function Kinematics2DSandbox() {
 
           <ControlBar>
               <button type="button" onClick={snapshot.goalRush ? endGoalRush : startGoalRush} className={buttonClass}>
-                {snapshot.goalRush ? <Square className="h-4 w-4" /> : <Trophy className="h-4 w-4" />}
                 {snapshot.goalRush ? 'End Goal Rush' : 'Goal Rush'}
               </button>
               <button type="button" title="Reset" onClick={restart} className={buttonClass}>
-                <RotateCcw className="h-4 w-4" />
                 Reset
                 <kbd className="ml-1 border border-[var(--grid-line)] bg-[var(--sim-bg)] px-1.5 py-0.5 text-[0.7rem] font-semibold leading-none text-[var(--text-muted)]">
                   R

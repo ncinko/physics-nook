@@ -1,5 +1,8 @@
-import { Pause, Play, RotateCcw, Target } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
+
+import { fixed } from '../../utils/format';
+import { ControlBar, Slider } from '../shared/InlineControls';
+import { Readout } from '../shared/Readout';
 
 type Size = {
   width: number;
@@ -34,6 +37,11 @@ const HIT_TOLERANCE_M = 0.2;
 const HIT_SPRITE_CHANCE = 0.25;
 const HIT_SPRITE_DURATION_MS = 1700;
 const HIT_SPRITE_SRC = '/images/resetti.png';
+
+// One quantity, one colour, matching the 2D hedgehog and the other kinematics
+// interactives: trajectories trace position in blue, velocity is green, and
+// acceleration is purple.
+const VELOCITY_COLOR = '#16a34a';
 
 const clamp = (value: number, min: number, max: number) =>
   Math.max(min, Math.min(max, value));
@@ -93,7 +101,6 @@ export default function ProjectileLauncher() {
   const [drag, setDrag] = useState(0);
   const [targetX, setTargetX] = useState(50);
   const [playing, setPlaying] = useState(false);
-  const [showGrid, setShowGrid] = useState(true);
   const [activeProjectiles, setActiveProjectiles] = useState<ProjectileState[]>([]);
   const [landedTrajectories, setLandedTrajectories] = useState<ProjectileState[]>([]);
   const [focusedProjectileId, setFocusedProjectileId] = useState<number | null>(null);
@@ -133,19 +140,6 @@ export default function ProjectileLauncher() {
     );
   }, [activeProjectiles, focusedProjectileId, landedTrajectories]);
 
-  const readoutMetrics = useMemo(() => {
-    if (!currentTrajectory) {
-      return { time: 0, range: 0, maxHeight: 0, miss: 0 };
-    }
-
-    return {
-      time: currentTrajectory.t,
-      range: currentTrajectory.x,
-      maxHeight: currentTrajectory.maxHeight,
-      miss: Math.abs(targetX - currentTrajectory.x),
-    };
-  }, [currentTrajectory, targetX]);
-
   useEffect(() => {
     const element = wrapperRef.current;
     if (!element) {
@@ -154,7 +148,7 @@ export default function ProjectileLauncher() {
 
     const resize = () => {
       const width = Math.max(340, Math.floor(element.clientWidth));
-      const height = Math.max(340, Math.min(560, Math.round(width * 0.56)));
+      const height = Math.max(300, Math.min(480, Math.round(width * 0.5)));
       setSize({ width, height });
     };
 
@@ -390,15 +384,13 @@ export default function ProjectileLauncher() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const bg = getCssColor('--surface-plot', '#ffffff');
-    const panel = getCssColor('--bg-primary', '#ffffff');
     const grid = getCssColor('--grid-line', '#d1d5db');
     const text = getCssColor('--text-primary', '#111827');
     const muted = getCssColor('--text-muted', '#4b5563');
-    const blue = getCssColor('--accent-blue', '#2563eb');
+    const position = getCssColor('--accent-blue', '#2563eb');
     const red = getCssColor('--accent-red', '#ef4444');
-    const green = '#16a34a';
-    const amber = '#d97706';
-    const launcher = '#c2410c';
+    const velocity = VELOCITY_COLOR;
+    const acceleration = getCssColor('--accent-purple', '#7e57c2');
 
     ctx.clearRect(0, 0, size.width, size.height);
     ctx.fillStyle = bg;
@@ -408,27 +400,26 @@ export default function ProjectileLauncher() {
     const groundY = size.height - 42;
     const stepMeters = GRID_STEP_M;
 
-    if (showGrid) {
-      ctx.strokeStyle = grid;
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= rangeMax; x += stepMeters) {
-        const sx = worldToScreen({ x, y: 0 }).x;
-        ctx.beginPath();
-        ctx.moveTo(sx, 18);
-        ctx.lineTo(sx, groundY + 6);
-        ctx.stroke();
-      }
-      for (let y = 0; y <= heightMax; y += stepMeters) {
-        const sy = worldToScreen({ x: 0, y }).y;
-        ctx.beginPath();
-        ctx.moveTo(34, sy);
-        ctx.lineTo(size.width - 18, sy);
-        ctx.stroke();
-      }
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= rangeMax; x += stepMeters) {
+      const sx = worldToScreen({ x, y: 0 }).x;
+      ctx.beginPath();
+      ctx.moveTo(sx, 18);
+      ctx.lineTo(sx, groundY + 6);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= heightMax; y += stepMeters) {
+      const sy = worldToScreen({ x: 0, y }).y;
+      ctx.beginPath();
+      ctx.moveTo(34, sy);
+      ctx.lineTo(size.width - 18, sy);
+      ctx.stroke();
     }
 
-    ctx.strokeStyle = green;
-    ctx.lineWidth = 3;
+    // The ground is a neutral line: green is reserved for velocity.
+    ctx.strokeStyle = text;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(20, groundY);
     ctx.lineTo(size.width - 18, groundY);
@@ -443,10 +434,13 @@ export default function ProjectileLauncher() {
 
     ctx.fillStyle = muted;
     ctx.font = `12px ${FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'alphabetic';
     for (let x = 0; x <= rangeMax; x += stepMeters * 2) {
       const sx = worldToScreen({ x, y: 0 }).x;
-      ctx.fillText(`${x.toFixed(0)} m`, sx - 8, groundY + 20);
+      ctx.fillText(`${x.toFixed(0)} m`, sx, groundY + 20);
     }
+    ctx.textAlign = 'left';
 
     const target = worldToScreen({ x: targetX, y: 0 });
     ctx.strokeStyle = red;
@@ -502,7 +496,7 @@ export default function ProjectileLauncher() {
     landedTrajectories.forEach((trajectory) => {
       drawPath(
         trajectory.path,
-        blue,
+        position,
         getTrailOpacity(trajectory.launchIndex, launchCount),
         2.3,
         [8, 6],
@@ -510,7 +504,7 @@ export default function ProjectileLauncher() {
     });
 
     activeProjectiles.forEach((projectile) => {
-      drawPath(projectile.path, blue, projectile.id === focusedProjectileId ? 1 : 0.68, 2.6);
+      drawPath(projectile.path, position, projectile.id === focusedProjectileId ? 1 : 0.68, 2.6);
     });
 
     const origin = worldToScreen({ x: 0, y: 0 });
@@ -518,22 +512,10 @@ export default function ProjectileLauncher() {
       x: initialComponents.vx * 0.72,
       y: initialComponents.vy * 0.72,
     });
-    drawArrow(ctx, origin.x, origin.y, launchTip.x, launchTip.y, launcher, 3);
-    ctx.fillStyle = launcher;
-    ctx.font = `700 12px ${FONT}`;
-    ctx.fillText('v0', launchTip.x + 8, launchTip.y - 8);
+    drawArrow(ctx, origin.x, origin.y, launchTip.x, launchTip.y, velocity, 3);
+    drawVectorLabel(ctx, origin, launchTip, 'v', '0', velocity);
 
-    activeProjectiles.forEach((projectile) => {
-      const ball = worldToScreen({ x: projectile.x, y: projectile.y });
-      ctx.save();
-      ctx.globalAlpha = projectile.id === focusedProjectileId ? 1 : 0.72;
-      ctx.fillStyle = blue;
-      ctx.beginPath();
-      ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    });
-
+    // Arrows go down before the balls so each ball sits on top of its own arrows.
     const focusedActiveProjectile =
       focusedProjectileId === null
         ? null
@@ -541,21 +523,30 @@ export default function ProjectileLauncher() {
 
     if (focusedActiveProjectile) {
       const ball = worldToScreen({ x: focusedActiveProjectile.x, y: focusedActiveProjectile.y });
-      drawArrow(
-        ctx,
-        ball.x,
-        ball.y,
-        ball.x + focusedActiveProjectile.vx * scale * 0.35,
-        ball.y - focusedActiveProjectile.vy * scale * 0.35,
-        blue,
-        2,
-      );
-      drawArrow(ctx, ball.x, ball.y, ball.x, ball.y + gravity * scale * 0.52, amber, 2);
-      ctx.fillStyle = text;
-      ctx.font = `600 12px ${FONT}`;
-      ctx.fillText('v', ball.x + 12, ball.y - 10);
-      ctx.fillText('a', ball.x + 10, ball.y + 26);
+      const vTip = {
+        x: ball.x + focusedActiveProjectile.vx * scale * 0.35,
+        y: ball.y - focusedActiveProjectile.vy * scale * 0.35,
+      };
+      // The full acceleration, drag included, not just gravity.
+      const ax = -drag * focusedActiveProjectile.vx;
+      const ay = -gravity - drag * focusedActiveProjectile.vy;
+      const aTip = { x: ball.x + ax * scale * 0.52, y: ball.y - ay * scale * 0.52 };
+      drawArrow(ctx, ball.x, ball.y, vTip.x, vTip.y, velocity, 2.4);
+      drawArrow(ctx, ball.x, ball.y, aTip.x, aTip.y, acceleration, 2.4);
+      drawVectorLabel(ctx, ball, vTip, 'v', '', velocity);
+      drawVectorLabel(ctx, ball, aTip, 'a', '', acceleration);
     }
+
+    activeProjectiles.forEach((projectile) => {
+      const ball = worldToScreen({ x: projectile.x, y: projectile.y });
+      ctx.save();
+      ctx.globalAlpha = projectile.id === focusedProjectileId ? 1 : 0.72;
+      ctx.fillStyle = position;
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
 
     ctx.fillStyle = text;
     ctx.beginPath();
@@ -578,7 +569,7 @@ export default function ProjectileLauncher() {
       ctx.lineTo(target.x, target.y - 12);
       ctx.stroke();
       ctx.restore();
-      ctx.fillStyle = panel;
+      ctx.fillStyle = bg;
       ctx.strokeStyle = red;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -588,6 +579,7 @@ export default function ProjectileLauncher() {
     }
   }, [
     activeProjectiles,
+    drag,
     focusedProjectileId,
     getWorldViewport,
     gravity,
@@ -595,7 +587,6 @@ export default function ProjectileLauncher() {
     initialComponents.vy,
     landedTrajectories,
     launchCount,
-    showGrid,
     showHitSprite,
     hitSpriteReady,
     size.height,
@@ -644,19 +635,18 @@ export default function ProjectileLauncher() {
   };
 
   return (
-    <div ref={wrapperRef} className="flex h-full min-h-[42rem] flex-col gap-4 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
-      <div className="grid gap-3 md:grid-cols-4">
-        <Readout label="time" value={`${readoutMetrics.time.toFixed(2)} s`} />
-        <Readout label="range" value={`${readoutMetrics.range.toFixed(1)} m`} />
-        <Readout label="max height" value={`${readoutMetrics.maxHeight.toFixed(1)} m`} />
-        <Readout label="miss" value={`${readoutMetrics.miss.toFixed(1)} m`} />
-      </div>
+    <div ref={wrapperRef} className="flex h-full flex-col gap-3 bg-[var(--sim-bg)] p-4 text-[var(--text-primary)]">
+      <Readout variant="inline" className="justify-center tabular-nums">
+        <Readout.Value label="t" value={fixed(currentTrajectory?.t ?? 0, 2)} unit="s" />
+        <Readout.Value label="range" value={fixed(currentTrajectory?.x ?? 0, 1)} unit="m" />
+        <Readout.Value label="max height" value={fixed(currentTrajectory?.maxHeight ?? 0, 1)} unit="m" />
+      </Readout>
 
       <canvas
         ref={canvasRef}
         className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
         style={{ touchAction: 'none' }}
-        aria-label="Projectile launcher with draggable launch vector and target flag"
+        aria-label="Projectile launcher: drag to aim the launch velocity, or drag the red flag to move the target"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDragging}
@@ -664,72 +654,40 @@ export default function ProjectileLauncher() {
         onPointerLeave={stopDragging}
       />
 
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.55fr)]">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Control label={`Angle ${angleDeg.toFixed(1)} deg`}>
-            <input className="w-full accent-[var(--accent-blue)]" type="range" min={0} max={88} step={0.1} value={angleDeg} onChange={(event) => setAngleDeg(Number(event.currentTarget.value))} />
-          </Control>
-          <Control label={`Speed ${speed.toFixed(1)} m/s`}>
-            <input className="w-full accent-[var(--accent-blue)]" type="range" min={2} max={60} step={0.1} value={speed} onChange={(event) => setSpeed(Number(event.currentTarget.value))} />
-          </Control>
-          <Control label={`Gravity ${gravity.toFixed(1)} m/s^2`}>
-            <input className="w-full accent-[var(--accent-blue)]" type="range" min={1} max={20} step={0.1} value={gravity} onChange={(event) => setGravity(Number(event.currentTarget.value))} />
-          </Control>
-          <Control label={`Air drag ${drag.toFixed(2)} s^-1`}>
-            <input className="w-full accent-[var(--accent-blue)]" type="range" min={0} max={0.7} step={0.01} value={drag} onChange={(event) => setDrag(Number(event.currentTarget.value))} />
-          </Control>
-        </div>
+      <ControlBar>
+        <button type="button" onClick={launch} className={buttonClass}>
+          Launch
+        </button>
+        <button
+          type="button"
+          onClick={() => setPlaying((value) => (activeProjectiles.length > 0 ? !value : value))}
+          className={buttonClass}
+          disabled={activeProjectiles.length === 0}
+        >
+          {playing ? 'Pause' : 'Resume'}
+        </button>
+        <button type="button" title="Clear trajectories" onClick={clear} className={buttonClass}>
+          Reset
+        </button>
+      </ControlBar>
 
-        <div className="flex flex-col gap-3 border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            <button type="button" title="Launch" onClick={launch} className={buttonClass}>
-              <Play className="h-4 w-4" />
-              Launch
-            </button>
-            <button type="button" title={playing ? 'Pause' : 'Resume'} onClick={() => setPlaying((value) => (activeProjectiles.length > 0 ? !value : value))} className={buttonClass} disabled={activeProjectiles.length === 0}>
-              <Pause className="h-4 w-4" />
-              {playing ? 'Pause' : 'Resume'}
-            </button>
-            <button type="button" title="Clear trajectories" onClick={clear} className={buttonClass}>
-              <RotateCcw className="h-4 w-4" />
-              Reset
-            </button>
-          </div>
-          <label className="flex items-center gap-2 text-sm font-medium text-[var(--text-muted)]">
-            <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} className="accent-[var(--accent-blue)]" />
-            Grid
-          </label>
-          <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
-            <Target className="h-4 w-4 text-[var(--accent-red)]" />
-            Drag the flag to set a target.
-          </div>
-        </div>
-      </div>
+      <ControlBar>
+        <Slider label="Angle" unit="°" min={0} max={88} step={0.5} value={angleDeg} onChange={setAngleDeg} format={(value) => fixed(value, 0)} />
+        <Slider label="Speed" unit="m/s" min={2} max={60} step={0.5} value={speed} onChange={setSpeed} format={(value) => fixed(value, 1)} />
+        <Slider label="Gravity" unit="m/s²" min={1} max={20} step={0.1} value={gravity} onChange={setGravity} format={(value) => fixed(value, 1)} />
+        <Slider label="Air drag" unit="1/s" min={0} max={0.7} step={0.01} value={drag} onChange={setDrag} format={(value) => fixed(value, 2)} />
+      </ControlBar>
     </div>
   );
 }
 
 const buttonClass =
-  'inline-flex items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--grid-line)] bg-[var(--bg-primary)] px-3 py-2 text-sm font-semibold text-[var(--text-primary)] shadow-sm transition-colors hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] disabled:cursor-not-allowed disabled:opacity-50';
 
-function Readout({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <div className="text-xs font-semibold uppercase text-[var(--text-muted)]">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-[var(--text-primary)]">{value}</div>
-    </div>
-  );
-}
-
-function Control({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block border border-[var(--grid-line)] bg-[var(--bg-primary)] p-3 shadow-sm">
-      <span className="mb-2 block text-sm font-semibold text-[var(--text-muted)]">{label}</span>
-      {children}
-    </label>
-  );
-}
-
+/**
+ * The shaft stops at the base of the head instead of running through it to the
+ * tip, so a wide line never pokes out past the point.
+ */
 function drawArrow(
   ctx: CanvasRenderingContext2D,
   x0: number,
@@ -739,24 +697,69 @@ function drawArrow(
   color: string,
   lineWidth = 2,
 ) {
-  const angle = Math.atan2(y1 - y0, x1 - x0);
-  const head = Math.max(11, lineWidth * 4.5);
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const length = Math.hypot(dx, dy);
+  if (length < 3) {
+    return;
+  }
+
+  const ux = dx / length;
+  const uy = dy / length;
+  const head = Math.min(Math.max(10, lineWidth * 4), length * 0.6);
+  const halfWidth = head * 0.5;
+  const baseX = x1 - ux * head;
+  const baseY = y1 - uy * head;
 
   ctx.save();
   ctx.strokeStyle = color;
   ctx.fillStyle = color;
   ctx.lineWidth = lineWidth;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
+  ctx.lineCap = 'butt';
   ctx.beginPath();
   ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
+  // A hair past the base so no seam shows between shaft and head.
+  ctx.lineTo(baseX + ux, baseY + uy);
   ctx.stroke();
   ctx.beginPath();
   ctx.moveTo(x1, y1);
-  ctx.lineTo(x1 - head * Math.cos(angle - Math.PI / 6), y1 - head * Math.sin(angle - Math.PI / 6));
-  ctx.lineTo(x1 - head * Math.cos(angle + Math.PI / 6), y1 - head * Math.sin(angle + Math.PI / 6));
+  ctx.lineTo(baseX - uy * halfWidth, baseY + ux * halfWidth);
+  ctx.lineTo(baseX + uy * halfWidth, baseY - ux * halfWidth);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+
+/** An italic vector symbol, with an optional subscript, just past an arrow's tip. */
+function drawVectorLabel(
+  ctx: CanvasRenderingContext2D,
+  from: Point,
+  tip: Point,
+  symbol: string,
+  subscript: string,
+  color: string,
+) {
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 3) {
+    return;
+  }
+
+  const x = tip.x + (dx / length) * 13;
+  const y = tip.y + (dy / length) * 13;
+
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'center';
+  ctx.font = `italic 700 15px ${FONT}`;
+  ctx.fillText(symbol, x, y);
+  if (subscript) {
+    const symbolWidth = ctx.measureText(symbol).width;
+    ctx.font = `700 10px ${FONT}`;
+    ctx.textAlign = 'left';
+    ctx.fillText(subscript, x + symbolWidth / 2, y + 5);
+  }
   ctx.restore();
 }

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 
+import {
+  BASE_RANGE_M,
+  gridStep,
+  isHit,
+  nextTargetX,
+  zoomedRange,
+} from '../../lib/kinematics/projectileLauncher';
 import { fixed } from '../../utils/format';
 import { ControlBar, Slider } from '../shared/InlineControls';
 import { Readout } from '../shared/Readout';
@@ -27,16 +34,19 @@ type ProjectileState = {
   maxHeight: number;
 };
 
-type DragMode = 'aim' | 'target' | null;
-
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif';
-const VIEWPORT_WIDTH_M = 100;
-const GRID_STEP_M = 10;
 const TRAIL_FADE_LAUNCHES = 10;
-const HIT_TOLERANCE_M = 0.2;
-const HIT_SPRITE_CHANCE = 0.25;
-const HIT_SPRITE_DURATION_MS = 1700;
+// On a hit, Resetti pops up beside the flag for this long, and then the flag
+// moves somewhere new.
+const HIT_SPRITE_DURATION_MS = 2500;
+const HIT_SPRITE_SIZE = 26;
 const HIT_SPRITE_SRC = '/images/resetti.png';
+
+// Canvas insets around the plot, in CSS pixels.
+const PLOT_LEFT = 48;
+const PLOT_RIGHT_INSET = 36;
+const GROUND_INSET = 42;
+const PLOT_TOP_INSET = 34;
 
 // One quantity, one colour, matching the 2D hedgehog and the other kinematics
 // interactives: trajectories trace position in blue, velocity is green, and
@@ -107,6 +117,10 @@ export default function ProjectileLauncher() {
   const [launchCount, setLaunchCount] = useState(0);
   const [showHitSprite, setShowHitSprite] = useState(false);
   const [hitSpriteReady, setHitSpriteReady] = useState(false);
+  // Horizontal extent of the view in metres. Grows when a shot leaves the
+  // screen and holds there until Reset.
+  const [rangeM, setRangeM] = useState(BASE_RANGE_M);
+  const rangeRef = useRef(BASE_RANGE_M);
 
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -115,7 +129,7 @@ export default function ProjectileLauncher() {
   const landedTrajectoriesRef = useRef<ProjectileState[]>([]);
   const rafRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
-  const dragModeRef = useRef<DragMode>(null);
+  const aimingRef = useRef(false);
   const nextProjectileIdRef = useRef(1);
   const launchCountRef = useRef(0);
   const hitSpriteTimeoutRef = useRef<number | null>(null);
@@ -173,15 +187,19 @@ export default function ProjectileLauncher() {
     };
   }, []);
 
-  const triggerHitSprite = useCallback(() => {
+  // A hit shows Resetti beside the flag, then moves the flag once he leaves. A
+  // second hit while he is still up (another ball landing by the same flag)
+  // does not restart the celebration.
+  const celebrateHit = useCallback(() => {
     if (hitSpriteTimeoutRef.current !== null) {
-      window.clearTimeout(hitSpriteTimeoutRef.current);
+      return;
     }
 
     setShowHitSprite(true);
     hitSpriteTimeoutRef.current = window.setTimeout(() => {
       setShowHitSprite(false);
       hitSpriteTimeoutRef.current = null;
+      setTargetX((current) => nextTargetX(current));
     }, HIT_SPRITE_DURATION_MS);
   }, []);
 
@@ -222,6 +240,8 @@ export default function ProjectileLauncher() {
     launchCountRef.current = 0;
     nextProjectileIdRef.current = 1;
     lastFrameRef.current = null;
+    rangeRef.current = BASE_RANGE_M;
+    setRangeM(BASE_RANGE_M);
     setActiveProjectiles([]);
     setLandedTrajectories([]);
     setFocusedProjectileId(null);
@@ -267,8 +287,8 @@ export default function ProjectileLauncher() {
           state.vy = 0;
           state.landed = true;
           state.path[state.path.length - 1] = { x: state.x, y: 0 };
-          if (Math.abs(targetX - state.x) <= HIT_TOLERANCE_M && Math.random() < HIT_SPRITE_CHANCE) {
-            triggerHitSprite();
+          if (isHit(state.x, targetX)) {
+            celebrateHit();
           }
           newlyLanded.push(state);
           return;
@@ -286,7 +306,7 @@ export default function ProjectileLauncher() {
         );
       }
     },
-    [drag, gravity, targetX, triggerHitSprite],
+    [drag, gravity, targetX, celebrateHit],
   );
 
   useEffect(() => {
@@ -307,6 +327,19 @@ export default function ProjectileLauncher() {
         for (let index = 0; index < substeps; index += 1) {
           step(dt / substeps);
         }
+
+        // Zoom out to keep every ball in flight on screen. The range only grows.
+        const plotAspect =
+          (size.height - GROUND_INSET - PLOT_TOP_INSET) / Math.max(1, size.width - PLOT_LEFT - PLOT_RIGHT_INSET);
+        let nextRange = rangeRef.current;
+        activeProjectilesRef.current.forEach((projectile) => {
+          nextRange = zoomedRange(nextRange, projectile.x, projectile.y, plotAspect);
+        });
+        if (nextRange !== rangeRef.current) {
+          rangeRef.current = nextRange;
+          setRangeM(nextRange);
+        }
+
         setActiveProjectiles(cloneProjectiles(activeProjectilesRef.current));
         setLandedTrajectories(cloneProjectiles(landedTrajectoriesRef.current));
 
@@ -331,35 +364,28 @@ export default function ProjectileLauncher() {
       rafRef.current = null;
       lastFrameRef.current = null;
     };
-  }, [playing, step]);
+  }, [playing, step, size.height, size.width]);
 
   const getWorldViewport = useCallback(() => {
-    const scale = (size.width - 84) / VIEWPORT_WIDTH_M;
+    const plotWidth = size.width - PLOT_LEFT - PLOT_RIGHT_INSET;
+    const scale = plotWidth / rangeM;
 
     return {
       scale,
-      rangeMax: VIEWPORT_WIDTH_M,
-      heightMax: Math.max(0, (size.height - 76) / scale),
+      // Pixels per metre at the unzoomed range. Arrows are sized with this, so
+      // they keep their on-screen length when the view zooms out.
+      baseScale: plotWidth / BASE_RANGE_M,
+      rangeMax: rangeM,
+      heightMax: Math.max(0, (size.height - GROUND_INSET - PLOT_TOP_INSET) / scale),
     };
-  }, [size.height, size.width]);
+  }, [rangeM, size.height, size.width]);
 
   const worldToScreen = useCallback(
     (point: Point) => {
       const { scale } = getWorldViewport();
       return {
-        x: 48 + point.x * scale,
-        y: size.height - 42 - point.y * scale,
-      };
-    },
-    [getWorldViewport, size.height],
-  );
-
-  const screenToWorld = useCallback(
-    (x: number, y: number) => {
-      const { scale } = getWorldViewport();
-      return {
-        x: (x - 48) / scale,
-        y: (size.height - 42 - y) / scale,
+        x: PLOT_LEFT + point.x * scale,
+        y: size.height - GROUND_INSET - point.y * scale,
       };
     },
     [getWorldViewport, size.height],
@@ -396,9 +422,9 @@ export default function ProjectileLauncher() {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size.width, size.height);
 
-    const { rangeMax, heightMax, scale } = getWorldViewport();
-    const groundY = size.height - 42;
-    const stepMeters = GRID_STEP_M;
+    const { rangeMax, heightMax, baseScale } = getWorldViewport();
+    const groundY = size.height - GROUND_INSET;
+    const stepMeters = gridStep(rangeMax);
 
     ctx.strokeStyle = grid;
     ctx.lineWidth = 1;
@@ -458,8 +484,8 @@ export default function ProjectileLauncher() {
     ctx.fill();
 
     if (showHitSprite && hitSpriteReady && hitSpriteRef.current) {
-      const spriteSize = 24;
-      const spriteGap = 10;
+      const spriteSize = HIT_SPRITE_SIZE;
+      const spriteGap = 20;
       const spriteX =
         target.x + spriteGap + spriteSize <= size.width - 18
           ? target.x + spriteGap
@@ -508,10 +534,10 @@ export default function ProjectileLauncher() {
     });
 
     const origin = worldToScreen({ x: 0, y: 0 });
-    const launchTip = worldToScreen({
-      x: initialComponents.vx * 0.72,
-      y: initialComponents.vy * 0.72,
-    });
+    const launchTip = {
+      x: origin.x + initialComponents.vx * 0.72 * baseScale,
+      y: origin.y - initialComponents.vy * 0.72 * baseScale,
+    };
     drawArrow(ctx, origin.x, origin.y, launchTip.x, launchTip.y, velocity, 3);
     drawVectorLabel(ctx, origin, launchTip, 'v', '0', velocity);
 
@@ -524,13 +550,13 @@ export default function ProjectileLauncher() {
     if (focusedActiveProjectile) {
       const ball = worldToScreen({ x: focusedActiveProjectile.x, y: focusedActiveProjectile.y });
       const vTip = {
-        x: ball.x + focusedActiveProjectile.vx * scale * 0.35,
-        y: ball.y - focusedActiveProjectile.vy * scale * 0.35,
+        x: ball.x + focusedActiveProjectile.vx * baseScale * 0.35,
+        y: ball.y - focusedActiveProjectile.vy * baseScale * 0.35,
       };
       // The full acceleration, drag included, not just gravity.
       const ax = -drag * focusedActiveProjectile.vx;
       const ay = -gravity - drag * focusedActiveProjectile.vy;
-      const aTip = { x: ball.x + ax * scale * 0.52, y: ball.y - ay * scale * 0.52 };
+      const aTip = { x: ball.x + ax * baseScale * 0.52, y: ball.y - ay * baseScale * 0.52 };
       drawArrow(ctx, ball.x, ball.y, vTip.x, vTip.y, velocity, 2.4);
       drawArrow(ctx, ball.x, ball.y, aTip.x, aTip.y, acceleration, 2.4);
       drawVectorLabel(ctx, ball, vTip, 'v', '', velocity);
@@ -600,38 +626,29 @@ export default function ProjectileLauncher() {
   }, [drawScene]);
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
-    const target = worldToScreen({ x: targetX, y: 0 });
-    const targetDistance = Math.hypot(px - target.x, py - (target.y - 26));
-
-    dragModeRef.current = targetDistance < 30 ? 'target' : 'aim';
+    aimingRef.current = true;
     event.currentTarget.setPointerCapture(event.pointerId);
     handlePointerMove(event);
   };
 
+  // Dragging anywhere aims the launch arrow. The pointer is read at the
+  // unzoomed scale the arrow is drawn at, so aiming feels the same zoomed out.
   const handlePointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
-    if (!dragModeRef.current) {
+    if (!aimingRef.current) {
       return;
     }
 
     const rect = event.currentTarget.getBoundingClientRect();
-    const px = event.clientX - rect.left;
-    const py = event.clientY - rect.top;
-    const point = screenToWorld(px, py);
+    const { baseScale } = getWorldViewport();
+    const dx = (event.clientX - rect.left - PLOT_LEFT) / baseScale;
+    const dy = (size.height - GROUND_INSET - (event.clientY - rect.top)) / baseScale;
 
-    if (dragModeRef.current === 'target') {
-      setTargetX(clamp(point.x, 4, VIEWPORT_WIDTH_M - 4));
-      return;
-    }
-
-    setAngleDeg(clamp(toDegrees(Math.atan2(point.y, point.x)), 0, 88));
-    setSpeed(clamp(Math.hypot(point.x, point.y) * 1.4, 2, 60));
+    setAngleDeg(clamp(toDegrees(Math.atan2(dy, dx)), 0, 88));
+    setSpeed(clamp(Math.hypot(dx, dy) / 0.72, 2, 60));
   };
 
   const stopDragging = () => {
-    dragModeRef.current = null;
+    aimingRef.current = false;
   };
 
   return (
@@ -646,7 +663,7 @@ export default function ProjectileLauncher() {
         ref={canvasRef}
         className="block max-w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] shadow-sm"
         style={{ touchAction: 'none' }}
-        aria-label="Projectile launcher: drag to aim the launch velocity, or drag the red flag to move the target"
+        aria-label="Projectile launcher: drag to aim the launch velocity, and land within a metre of the red flag"
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDragging}

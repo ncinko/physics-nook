@@ -52,6 +52,18 @@ import {
   launchComponents,
   launchFromPointer,
 } from '../../src/lib/kinematics/launch.ts';
+import {
+  BASE_RANGE_M,
+  HIT_RADIUS_M,
+  TARGET_MAX_M,
+  TARGET_MIN_JUMP_M,
+  TARGET_MIN_M,
+  ZOOM_STEP_M,
+  gridStep,
+  isHit,
+  nextTargetX,
+  zoomedRange,
+} from '../../src/lib/kinematics/projectileLauncher.ts';
 import { stripsUnder } from '../../src/lib/kinematics/areaStrips.ts';
 import { metadataAction } from '../../src/lib/kinematics/videoAnalysis.ts';
 import {
@@ -471,6 +483,42 @@ assert.equal(speedTrend(0, -1), 'speeding-up', 'from rest, any acceleration spee
   const nudge = Math.sin(HEADING_FLIP_BAND / 2);
   assert.equal(hedgehogHeading(-nudge, -1, 1).facing, 1);
   assert.equal(hedgehogHeading(-0.5, -1, 1).facing, -1);
+}
+
+// Projectile launcher: hits, flag relocation, and zooming out.
+{
+  assert.equal(isHit(50 + HIT_RADIUS_M, 50), true, 'a metre away still counts');
+  assert.equal(isHit(50 - 0.4, 50), true);
+  assert.equal(isHit(51.2, 50), false);
+
+  // Relocated flags stay on the field and always move a noticeable distance.
+  let seed = 7;
+  const lcg = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
+  for (let i = 0; i < 500; i += 1) {
+    const current = TARGET_MIN_M + lcg() * (TARGET_MAX_M - TARGET_MIN_M);
+    const next = nextTargetX(current, lcg);
+    assert.ok(next >= TARGET_MIN_M && next <= TARGET_MAX_M, `flag at ${next} is off the field`);
+    assert.ok(Math.abs(next - current) >= TARGET_MIN_JUMP_M, `flag only moved from ${current} to ${next}`);
+  }
+  // A random source stuck on one value still yields a legal, distant flag.
+  near(nextTargetX(21, () => 0), TARGET_MAX_M);
+  near(nextTargetX(99, () => 1), TARGET_MIN_M);
+
+  // Zoom never shrinks, snaps to whole steps, and fits both far and tall shots.
+  assert.equal(zoomedRange(BASE_RANGE_M, 60, 20, 0.5), BASE_RANGE_M, 'on screen: no zoom');
+  const far = zoomedRange(BASE_RANGE_M, 130, 10, 0.5);
+  assert.ok(far >= 130 && far % ZOOM_STEP_M === 0, `far shot range ${far}`);
+  const tall = zoomedRange(BASE_RANGE_M, 20, 80, 0.5);
+  assert.ok(tall * 0.5 >= 80, `tall shot range ${tall} leaves height ${tall * 0.5}`);
+  assert.equal(zoomedRange(200, 10, 10, 0.5), 200, 'stays zoomed out until reset');
+
+  assert.equal(gridStep(100), 10);
+  assert.equal(gridStep(150), 20);
+  assert.equal(gridStep(300), 50);
+  assert.equal(gridStep(1000), 100);
 }
 
 // Launch decomposition geometry.

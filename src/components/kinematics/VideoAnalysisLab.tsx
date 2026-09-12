@@ -236,6 +236,11 @@ export function VideoAnalysisLab() {
     try {
       const response = await fetch(TUTORIAL_VIDEO_SRC);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      // A web filter's block page arrives as HTML with a 200; wrapped as an MP4
+      // it would surface as a misleading codec error instead of this message.
+      if (!response.headers.get('content-type')?.startsWith('video/')) {
+        throw new Error('Not a video response');
+      }
       const blob = await response.blob();
       handleFile(new File([blob], TUTORIAL_VIDEO_NAME, { type: 'video/mp4' }));
       // The clip is a known 30.000 fps cut, so the tour can promise round

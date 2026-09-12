@@ -1,0 +1,32 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+// Without this page Cloudflare Pages answers every missing URL — including a
+// JavaScript chunk from an older deploy — with the home page and a 200. A
+// browser then rejects that HTML as a module script and the island stays
+// blank with no explanation. A real 404 lets the recovery script in
+// BaseLayout and the fallback in SimulationBlock tell what went wrong.
+---
+
+<BaseLayout
+  title="Page not found"
+  description="This page does not exist on Physics Nook."
+  canonicalPath="/404"
+  noindex={true}
+>
+  <section class="mx-auto max-w-2xl px-4 pb-16 pt-10 text-center sm:px-6">
+    <h1 class="m-0 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+      Page not found
+    </h1>
+    <p class="mt-4 mb-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
+      That address doesn't match anything on Physics Nook. It may have moved, or the link may have a typo.
+    </p>
+    <p class="mt-6 mb-0 text-sm sm:text-base">
+      <a href="/" class="text-[var(--accent-blue)] underline underline-offset-2">Home</a>
+      <span class="px-2 text-[var(--text-muted)]">·</span>
+      <a href="/interactives" class="text-[var(--accent-blue)] underline underline-offset-2">Interactives</a>
+      <span class="px-2 text-[var(--text-muted)]">·</span>
+      <a href="/resources" class="text-[var(--accent-blue)] underline underline-offset-2">Resources</a>
+    </p>
+  </section>
+</BaseLayout>

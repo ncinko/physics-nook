@@ -75,6 +75,20 @@ export const standalonePages: PageMeta[] = [
     image: '/social/physics-nook-card.svg',
     noindex: true,
   },
+  {
+    title: 'Connection Check',
+    description: "Check whether this browser and network can run Physics Nook's interactives.",
+    canonicalPath: '/diagnostics',
+    image: '/social/physics-nook-card.svg',
+    noindex: true,
+  },
+  {
+    title: 'Page not found',
+    description: 'This page does not exist on Physics Nook.',
+    canonicalPath: '/404',
+    image: '/social/physics-nook-card.svg',
+    noindex: true,
+  },
 ];
 
 export const buildDocumentTitle = (pageMeta: PageMeta) =>

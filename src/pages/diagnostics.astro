@@ -1,0 +1,282 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="Connection Check"
+  description="Check whether this browser and network can run Physics Nook's interactives."
+  canonicalPath="/diagnostics"
+  noindex={true}
+>
+  <section class="mx-auto max-w-3xl px-4 pb-16 pt-4 sm:px-6">
+    <h1 class="m-0 text-3xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+      Connection check
+    </h1>
+    <p class="mt-3 mb-0 text-sm leading-7 text-[var(--text-muted)] sm:text-base">
+      If an interactive won't load, this page tests the pieces it needs. Press
+      <strong>Copy report</strong> and send the text to your teacher. It contains no personal
+      information, only browser and network results.
+    </p>
+
+    <div class="mt-6 overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
+      <ul data-diagnostics-list class="m-0 list-none divide-y divide-[var(--grid-line)] p-0">
+        <li class="flex gap-3 px-4 py-3 text-sm">
+          <span class="font-semibold text-[#b42318]">Fail</span>
+          <span class="text-[color:var(--text-primary)]">
+            JavaScript files did not run. The network or a browser extension may be blocking
+            this site's scripts.
+          </span>
+        </li>
+      </ul>
+    </div>
+
+    <div class="mt-4 flex flex-wrap items-center gap-3">
+      <button
+        type="button"
+        data-diagnostics-copy
+        disabled
+        class="rounded-md border border-[var(--grid-line)] bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-50"
+      >
+        Copy report
+      </button>
+      <span data-diagnostics-status class="text-sm text-[var(--text-muted)]">Running checks…</span>
+    </div>
+
+    <textarea
+      data-diagnostics-report
+      readonly
+      rows="12"
+      aria-label="Diagnostics report"
+      class="mt-4 w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] p-3 font-mono text-xs text-[color:var(--text-primary)]"
+    ></textarea>
+  </section>
+</BaseLayout>
+
+<script>
+  type Level = 'pass' | 'warn' | 'fail' | 'info';
+  interface Result {
+    label: string;
+    level: Level;
+    detail: string;
+  }
+
+  const TIMEOUT_MS = 8000;
+
+  const withTimeout = async (url: string, init: RequestInit = {}) => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      return await fetch(url, { cache: 'no-store', ...init, signal: controller.signal });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  };
+
+  const describeError = (error: unknown) =>
+    error instanceof DOMException && error.name === 'AbortError'
+      ? `timed out after ${TIMEOUT_MS / 1000} s`
+      : error instanceof Error
+        ? error.message
+        : String(error);
+
+  const assetPaths = (root: ParentNode) =>
+    [...root.querySelectorAll('script[src], link[href], astro-island')]
+      .map((element) =>
+        element.getAttribute('src') ??
+        element.getAttribute('href') ??
+        element.getAttribute('component-url') ??
+        '',
+      )
+      .filter((value) => value.startsWith('/_astro/'))
+      .sort();
+
+  const checks: Array<() => Promise<Result>> = [
+    async () => ({
+      label: 'JavaScript',
+      level: 'pass',
+      detail: 'Site scripts downloaded and ran.',
+    }),
+
+    async () => {
+      const label = 'Latest version';
+      try {
+        const response = await withTimeout(window.location.pathname);
+        const html = await response.text();
+        const fresh = assetPaths(new DOMParser().parseFromString(html, 'text/html'));
+        const current = assetPaths(document);
+        if (fresh.join('|') === current.join('|')) {
+          return { label, level: 'pass', detail: 'This page matches the live site.' };
+        }
+        return {
+          label,
+          level: 'warn',
+          detail: 'The site was updated since this page opened. Reload before using an interactive.',
+        };
+      } catch (error) {
+        return { label, level: 'fail', detail: `Could not re-fetch the page: ${describeError(error)}` };
+      }
+    },
+
+    async () => {
+      const label = 'Interactive files';
+      const chunk = assetPaths(document).find((path) => path.endsWith('.js'));
+      if (!chunk) return { label, level: 'info', detail: 'No script file to test on this page.' };
+      try {
+        const response = await withTimeout(chunk);
+        const type = response.headers.get('content-type') ?? 'unknown';
+        if (response.ok && type.includes('javascript')) {
+          return { label, level: 'pass', detail: `Script file loads (${type}).` };
+        }
+        return {
+          label,
+          level: 'fail',
+          detail: `Script file returned HTTP ${response.status}, ${type}. A filter may be replacing it.`,
+        };
+      } catch (error) {
+        return { label, level: 'fail', detail: `Script file blocked: ${describeError(error)}` };
+      }
+    },
+
+    async () => {
+      const label = 'Site server';
+      try {
+        const response = await withTimeout('/api/ip-location');
+        const type = response.headers.get('content-type') ?? 'unknown';
+        // The body holds an approximate location; only the fact that it
+        // answered belongs in the report.
+        if (response.ok && type.includes('json')) {
+          return { label, level: 'pass', detail: 'Server functions respond.' };
+        }
+        return { label, level: 'fail', detail: `Server returned HTTP ${response.status}, ${type}.` };
+      } catch (error) {
+        return { label, level: 'fail', detail: `Server unreachable: ${describeError(error)}` };
+      }
+    },
+
+    async () => {
+      const label = 'Sample video';
+      try {
+        const response = await withTimeout('/videos/caltrain-tutorial.mp4', {
+          headers: { Range: 'bytes=0-1023' },
+        });
+        const type = response.headers.get('content-type') ?? 'unknown';
+        await response.arrayBuffer();
+        if (response.ok && type.startsWith('video/')) {
+          return { label, level: 'pass', detail: `Video downloads (HTTP ${response.status}).` };
+        }
+        return {
+          label,
+          level: 'fail',
+          detail: `Video returned HTTP ${response.status}, ${type}. Video may be filtered.`,
+        };
+      } catch (error) {
+        return { label, level: 'fail', detail: `Video blocked: ${describeError(error)}` };
+      }
+    },
+
+    async () => {
+      const probe = document.createElement('video');
+      const h264 = probe.canPlayType('video/mp4; codecs="avc1.42E01E"');
+      const hevc = probe.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"');
+      return {
+        label: 'Video formats',
+        level: h264 ? 'pass' : 'fail',
+        detail: `H.264: ${h264 || 'no'}. HEVC (iPhone "High Efficiency"): ${hevc || 'no'}.`,
+      };
+    },
+
+    async () => {
+      const supported = 'requestVideoFrameCallback' in HTMLVideoElement.prototype;
+      return {
+        label: 'Frame timing',
+        level: supported ? 'pass' : 'warn',
+        detail: supported
+          ? 'Exact frame times available.'
+          : 'Not available; frame times are estimated to within half a frame.',
+      };
+    },
+
+    async () => {
+      const nav = navigator as Navigator & {
+        deviceMemory?: number;
+        connection?: { effectiveType?: string };
+      };
+      const parts = [
+        `online: ${navigator.onLine}`,
+        `memory: ${nav.deviceMemory ?? '?'} GB`,
+        `cores: ${navigator.hardwareConcurrency ?? '?'}`,
+        `connection: ${nav.connection?.effectiveType ?? '?'}`,
+        `screen: ${window.innerWidth}×${window.innerHeight}`,
+      ];
+      return { label: 'Device', level: 'info', detail: parts.join(', ') };
+    },
+  ];
+
+  const levelText: Record<Level, string> = { pass: 'OK', warn: 'Warning', fail: 'Fail', info: 'Info' };
+  const levelColor: Record<Level, string> = {
+    pass: 'text-[#067647]',
+    warn: 'text-[#b54708]',
+    fail: 'text-[#b42318]',
+    info: 'text-[var(--text-muted)]',
+  };
+
+  const list = document.querySelector<HTMLUListElement>('[data-diagnostics-list]');
+  const copyButton = document.querySelector<HTMLButtonElement>('[data-diagnostics-copy]');
+  const status = document.querySelector<HTMLElement>('[data-diagnostics-status]');
+  const report = document.querySelector<HTMLTextAreaElement>('[data-diagnostics-report]');
+
+  const render = (results: Result[]) => {
+    if (!list) return;
+    list.replaceChildren(
+      ...results.map((result) => {
+        const item = document.createElement('li');
+        item.className = 'flex gap-3 px-4 py-3 text-sm';
+        const level = document.createElement('span');
+        level.className = `w-16 shrink-0 font-semibold ${levelColor[result.level]}`;
+        level.textContent = levelText[result.level];
+        const body = document.createElement('span');
+        body.className = 'text-[color:var(--text-primary)]';
+        body.textContent = `${result.label}: ${result.detail}`;
+        item.append(level, body);
+        return item;
+      }),
+    );
+  };
+
+  const run = async () => {
+    const results = await Promise.all(
+      checks.map((check) =>
+        check().catch((error): Result => ({ label: 'Check', level: 'fail', detail: describeError(error) })),
+      ),
+    );
+    render(results);
+
+    const text = [
+      'Physics Nook connection check',
+      `Time: ${new Date().toISOString()}`,
+      `Page: ${window.location.href}`,
+      `Browser: ${navigator.userAgent}`,
+      '',
+      ...results.map((result) => `[${levelText[result.level]}] ${result.label}: ${result.detail}`),
+    ].join('\n');
+
+    if (report) report.value = text;
+    if (copyButton) copyButton.disabled = false;
+    const failures = results.filter((result) => result.level === 'fail').length;
+    if (status) status.textContent = failures ? `${failures} problem${failures > 1 ? 's' : ''} found.` : 'All checks passed.';
+  };
+
+  copyButton?.addEventListener('click', async () => {
+    if (!report) return;
+    try {
+      await navigator.clipboard.writeText(report.value);
+    } catch {
+      // Clipboard access can be refused; selecting lets the student copy by hand.
+      report.select();
+      document.execCommand('copy');
+    }
+    if (status) status.textContent = 'Copied. Paste it into a message to your teacher.';
+  });
+
+  void run();
+</script>

@@ -52,6 +52,40 @@ const socialImageUrl = Astro.site ? new URL(pageMeta.image, Astro.site).toString
       })();
       document.documentElement.setAttribute('data-theme', theme);
     </script>
+    <script is:inline>
+      // A page opened before a deploy still points at the old /_astro/ chunks,
+      // which no longer exist, so its islands fail to hydrate. Reloading picks
+      // up the new HTML. The timestamp guard allows one reload per few minutes,
+      // so a chunk that is genuinely blocked (a school web filter) falls
+      // through to SimulationBlock's visible notice instead of a reload loop.
+      (() => {
+        const RELOAD_KEY = 'physics-nook-chunk-reload';
+        const RELOAD_WINDOW_MS = 5 * 60 * 1000;
+        const MODULE_FAILURE =
+          /dynamically imported module|module script failed|error loading dynamically imported|Unable to preload/i;
+
+        const recover = () => {
+          if (window.__physicsNookReloading) return;
+          try {
+            const last = Number(sessionStorage.getItem(RELOAD_KEY)) || 0;
+            if (Date.now() - last < RELOAD_WINDOW_MS) return;
+            sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+          } catch {
+            // Without storage there is no loop guard, so never reload.
+            return;
+          }
+          window.__physicsNookReloading = true;
+          window.location.reload();
+        };
+
+        window.addEventListener('astro:hydration-error', recover);
+        window.addEventListener('vite:preloadError', recover);
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason;
+          if (MODULE_FAILURE.test(String(reason?.message ?? reason ?? ''))) recover();
+        });
+      })();
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="generator" content={Astro.generator} />

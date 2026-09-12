@@ -66,6 +66,26 @@ const breakoutClass =
         height === 'tall' ? 'min-h-[34rem]' : 'min-h-[24rem]',
       ]}
     >
+      <div
+        data-simulation-fallback
+        role="alert"
+        hidden
+        class="m-5 rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[color:var(--text-primary)] shadow-sm"
+      >
+        <p class="m-0 font-semibold">This interactive didn't load.</p>
+        <p class="mt-1 mb-0 text-[var(--text-muted)]">
+          Reload the page. If it keeps happening, especially on a school network, the site's files may be
+          filtered. The <a href="/diagnostics" class="text-[var(--accent-blue)] underline underline-offset-2">connection check</a>
+          can tell you what's blocked.
+        </p>
+        <button
+          type="button"
+          data-simulation-reload
+          class="mt-3 rounded-md border border-[var(--grid-line)] bg-[var(--accent-blue)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:brightness-110"
+        >
+          Reload
+        </button>
+      </div>
       <slot />
     </div>
   </div>
@@ -116,6 +136,47 @@ const breakoutClass =
     });
 
     document.addEventListener('fullscreenchange', updateFromFullscreenState);
+  });
+
+  /**
+   * An island that never hydrates leaves an empty box, which reads as "the site
+   * is broken" with nothing to act on. Show a notice instead when hydration
+   * fails outright, or when an island is still unhydrated well after the block
+   * scrolled into view (a filter stalling the request rather than refusing it).
+   * BaseLayout reloads once first on a failure; this covers what that can't fix.
+   */
+  const STALL_MS = 12000;
+
+  document.querySelectorAll<HTMLElement>('[data-simulation-block]').forEach((block) => {
+    const fallback = block.querySelector<HTMLElement>('[data-simulation-fallback]');
+    if (!fallback || !block.querySelector('astro-island')) return;
+
+    const pending = () => block.querySelector('astro-island[ssr]') !== null;
+    const show = () => {
+      if ((window as Window & { __physicsNookReloading?: boolean }).__physicsNookReloading) return;
+      fallback.hidden = false;
+    };
+
+    fallback
+      .querySelector('[data-simulation-reload]')
+      ?.addEventListener('click', () => window.location.reload());
+
+    block.addEventListener('astro:hydration-error', () => {
+      // Let BaseLayout's window listener decide on a reload first.
+      window.setTimeout(show, 0);
+    });
+    block.addEventListener('astro:hydrate', () => {
+      if (!pending()) fallback.hidden = true;
+    });
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      window.setTimeout(() => {
+        if (pending()) show();
+      }, STALL_MS);
+    });
+    observer.observe(block);
   });
 </script>
 

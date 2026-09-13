@@ -13,11 +13,10 @@ import {
   velocityOfT2D,
   type Vec2,
 } from '../../lib/kinematics/sampleMotion2D';
-import { hedgehogGait, hedgehogHeading } from '../../lib/kinematics/hedgehogGait';
+import { hedgehogTopdownGait, hedgehogTopdownHeading } from '../../lib/kinematics/hedgehogGait';
 import { fixed } from '../../utils/format';
 import { ControlBar, Toggle } from '../shared/InlineControls';
-import { HedgehogSprite } from './HedgehogSprite';
-import { HEDGEHOG_CELL_H } from './hedgehogSheet';
+import { HedgehogTopdownSprite } from './HedgehogTopdownSprite';
 import StopwatchDial from './StopwatchDial';
 
 // The 2D companion to the 1D page's MotionOpener: the same hedgehog, now running
@@ -42,6 +41,10 @@ const V_SCALE = 0.7;
 const A_SCALE = 0.8;
 
 const READOUT_STEP = 0.1;
+
+// The top-down sprite is turned to every heading, so it never sits on the pixel
+// grid anyway; this just sizes it against the field.
+const SPRITE_SCALE = 1.5;
 
 // One quantity, one colour, matching the 1D graph explorers.
 const POSITION_COLOR = 'var(--accent-blue)';
@@ -83,7 +86,7 @@ export default function HedgehogField2D() {
 
   const rafRef = useRef<number | null>(null);
   const lastFrameRef = useRef<number | null>(null);
-  const facingRef = useRef<1 | -1>(1);
+  const headingRef = useRef(0);
 
   useEffect(() => {
     if (typeof window === 'undefined' || !window.matchMedia) {
@@ -135,13 +138,10 @@ export default function HedgehogField2D() {
   const speed = magnitude(v);
   const { aParallel, aPerp } = motionTrend2D(v, a);
 
-  const heading = hedgehogHeading(v.x, v.y, facingRef.current);
-  facingRef.current = heading.facing;
+  const heading = hedgehogTopdownHeading(v.x, v.y, headingRef.current);
+  headingRef.current = heading;
 
-  const pose = useMemo(
-    () => hedgehogGait({ distance: pathLength2DOfT(t), velocity: speed, acceleration: aParallel }),
-    [t, speed, aParallel],
-  );
+  const pose = useMemo(() => hedgehogTopdownGait(pathLength2DOfT(t), speed), [t, speed]);
 
   const hx = toX(r.x);
   const hy = toY(r.y);
@@ -248,8 +248,8 @@ export default function HedgehogField2D() {
         {showA && !splitA && <Arrow from={{ x: hx, y: hy }} to={aTip} color={ACCELERATION_COLOR} label="a" />}
         {showV && <Arrow from={{ x: hx, y: hy }} to={vTip} color={VELOCITY_COLOR} label="v" />}
 
-        <g transform={`translate(${hx} ${hy}) rotate(${round((heading.rotate * 180) / Math.PI)}) translate(0 ${HEDGEHOG_CELL_H / 2}) scale(${heading.facing} 1)`}>
-          <HedgehogSprite frame={pose.frame} />
+        <g transform={`translate(${hx} ${hy}) rotate(${round((heading * 180) / Math.PI)})`}>
+          <HedgehogTopdownSprite frame={pose.frame} scale={SPRITE_SCALE} />
         </g>
 
         {showR && (

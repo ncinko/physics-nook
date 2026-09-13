@@ -118,43 +118,62 @@ export function hedgehogGait({
 }
 
 /**
- * How close to straight up or down, in radians, the hedgehog keeps facing the
- * way it was. Without the band it would flip back and forth on every frame
- * while its heading hovers around vertical.
+ * The 2D field draws the hedgehog from above, from its own sheet. Seen from
+ * above there is no braking pose and nothing to curl into - just standing,
+ * walking, and running - and no side to face, so the sprite is turned to point
+ * along its velocity instead of mirrored.
  */
-export const HEADING_FLIP_BAND = (12 * Math.PI) / 180;
+export type TopdownGaitFrame =
+  | 'idle1'
+  | 'idle2'
+  | 'idle3'
+  | 'walk1'
+  | 'walk2'
+  | 'walk3'
+  | 'walk4'
+  | 'run1'
+  | 'run2'
+  | 'run3'
+  | 'run4';
 
-export interface HeadingPose {
-  facing: 1 | -1;
-  /**
-   * Turn to apply to the sprite in screen coordinates (y down), so positive is
-   * clockwise. Always within a quarter turn, so the sprite is never upside down.
-   */
-  rotate: number;
+export const TOPDOWN_STAND_FRAME: TopdownGaitFrame = 'idle1';
+export const TOPDOWN_WALK_CYCLE: readonly TopdownGaitFrame[] = ['walk1', 'walk2', 'walk3', 'walk4'];
+export const TOPDOWN_RUN_CYCLE: readonly TopdownGaitFrame[] = ['run1', 'run2', 'run3', 'run4'];
+
+/**
+ * The figure eight's speed swings between about 2.5 m/s at its tips and 3.6 m/s
+ * at the crossing, all of it above the 1D pages' RUN_SPEED. Splitting the gait
+ * inside that range lets the hedgehog walk round the tips and run through the
+ * middle, so the change of speed shows up in its legs as well as its arrow.
+ */
+export const TOPDOWN_RUN_SPEED = 3;
+
+/** Metres covered per complete four-frame stride, per gait, on the field. */
+export const TOPDOWN_WALK_STRIDE = 0.8;
+export const TOPDOWN_RUN_STRIDE = 1;
+
+export function hedgehogTopdownGait(distance: number, speed: number) {
+  if (speed < IDLE_SPEED) {
+    return { frame: TOPDOWN_STAND_FRAME, gait: 'stand' as const };
+  }
+  if (speed >= TOPDOWN_RUN_SPEED) {
+    return { frame: TOPDOWN_RUN_CYCLE[strideIndex(distance, TOPDOWN_RUN_STRIDE)], gait: 'run' as const };
+  }
+  return { frame: TOPDOWN_WALK_CYCLE[strideIndex(distance, TOPDOWN_WALK_STRIDE)], gait: 'walk' as const };
 }
 
 /**
- * Points the side-view sprite along a 2D velocity (vx, vy in the usual y-up
- * convention) on a top-down field. The sprite faces whichever way vx points and
- * tilts up to a quarter turn to follow the heading, so it runs belly-down in
- * every direction; it only mirrors once the heading has swung clearly past
- * vertical.
+ * Turn, in radians, that points the top-down sprite's nose along a 2D velocity
+ * (vx, vy in the usual y-up convention). The sprite is drawn nose-down on the
+ * screen and screen y points down, so this is the angle to hand straight to an
+ * SVG `rotate()`: positive is clockwise. While stopped it holds the heading it
+ * had, so it does not snap back to facing down.
  */
-export function hedgehogHeading(vx: number, vy: number, previousFacing: 1 | -1 = 1): HeadingPose {
-  const speed = Math.hypot(vx, vy);
-  if (speed < IDLE_SPEED) {
-    return { facing: previousFacing, rotate: 0 };
+export function hedgehogTopdownHeading(vx: number, vy: number, previous = 0) {
+  if (Math.hypot(vx, vy) < IDLE_SPEED) {
+    return previous;
   }
-
-  const nearVertical = Math.abs(vx) < speed * Math.sin(HEADING_FLIP_BAND);
-  const facing: 1 | -1 = nearVertical ? previousFacing : vx > 0 ? 1 : -1;
-
-  // Tilt of the heading above the direction the sprite faces. Held past
-  // vertical inside the flip band, so it is clamped to a quarter turn. The
-  // mirror flips which screen rotation raises the nose, and screen y points down.
-  const quarter = Math.PI / 2;
-  const tilt = Math.max(-quarter, Math.min(quarter, Math.atan2(vy, facing * vx)));
-  return { facing, rotate: -facing * tilt };
+  return Math.atan2(-vx, -vy);
 }
 
 /** Which frame of a four-frame cycle a given distance travelled lands on. */

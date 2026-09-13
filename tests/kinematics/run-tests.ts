@@ -127,10 +127,25 @@ import {
   WALK_CYCLE,
   WALK_STRIDE,
   hedgehogGait,
-  HEADING_FLIP_BAND,
-  hedgehogHeading,
+  hedgehogTopdownGait,
+  hedgehogTopdownHeading,
   strideIndex,
+  TOPDOWN_RUN_CYCLE,
+  TOPDOWN_RUN_SPEED,
+  TOPDOWN_STAND_FRAME,
+  TOPDOWN_WALK_CYCLE,
 } from '../../src/lib/kinematics/hedgehogGait.ts';
+import {
+  HEDGEHOG_TOPDOWN_CELL,
+  HEDGEHOG_TOPDOWN_CELLS,
+  HEDGEHOG_TOPDOWN_GUTTER,
+  HEDGEHOG_TOPDOWN_SHEET_COLS,
+  HEDGEHOG_TOPDOWN_SHEET_H,
+  HEDGEHOG_TOPDOWN_SHEET_ROWS,
+  HEDGEHOG_TOPDOWN_SHEET_SRC,
+  HEDGEHOG_TOPDOWN_SHEET_W,
+  topdownCellOrigin,
+} from '../../src/components/kinematics/hedgehogTopdownSheet.ts';
 import {
   selectBestGoalRushScoresByUniqueName,
   validateGoalRushScoreSubmission,
@@ -464,32 +479,55 @@ assert.equal(speedTrend(0, -1), 'speeding-up', 'from rest, any acceleration spee
   near(splitAcceleration({ x: 3, y: 4 }, { x: -4, y: 3 }).perpendicular, 5);
 }
 
-// The side-view hedgehog on a top-down field: faces the way it runs, never
-// upside down, and does not flicker around vertical.
+// The top-down hedgehog on the 2D field: its nose, drawn pointing down the
+// screen, is turned to point along the velocity in every direction.
 {
-  for (let deg = -180; deg <= 180; deg += 5) {
+  for (let deg = -180; deg < 180; deg += 5) {
     const theta = (deg * Math.PI) / 180;
-    [1, -1].forEach((previous) => {
-      const pose = hedgehogHeading(Math.cos(theta) * 2, Math.sin(theta) * 2, previous as 1 | -1);
-      assert.ok(Math.abs(pose.rotate) <= Math.PI / 2 + 1e-12, `upside down at ${deg}°`);
-    });
+    const vx = Math.cos(theta) * 2;
+    const vy = Math.sin(theta) * 2;
+    const turn = hedgehogTopdownHeading(vx, vy);
+    // SVG rotate(turn) carries the screen-down nose (0, 1) to (-sin, cos); in
+    // screen coordinates the velocity is (vx, -vy).
+    near(-Math.sin(turn), Math.cos(theta), 1e-12);
+    near(Math.cos(turn), -Math.sin(theta), 1e-12);
   }
-  // Up and to the right: facing right, nose raised (anticlockwise on screen).
-  const upRight = hedgehogHeading(1, 1, -1);
-  assert.equal(upRight.facing, 1);
-  near(upRight.rotate, -Math.PI / 4, 1e-12);
-  // Up and to the left: mirrored, nose raised (clockwise on screen).
-  const upLeft = hedgehogHeading(-1, 1, 1);
-  assert.equal(upLeft.facing, -1);
-  near(upLeft.rotate, Math.PI / 4, 1e-12);
-  // Straight right is level.
-  near(hedgehogHeading(2, 0).rotate, 0);
-  // Stopped: holds its facing, lies level.
-  assert.deepEqual(hedgehogHeading(0, 0, -1), { facing: -1, rotate: 0 });
-  // Just past vertical it keeps its facing; well past it, it turns round.
-  const nudge = Math.sin(HEADING_FLIP_BAND / 2);
-  assert.equal(hedgehogHeading(-nudge, -1, 1).facing, 1);
-  assert.equal(hedgehogHeading(-0.5, -1, 1).facing, -1);
+  // Running right is a quarter turn anticlockwise on screen.
+  near(hedgehogTopdownHeading(2, 0), -Math.PI / 2, 1e-12);
+  // Stopped: holds the heading it had.
+  assert.equal(hedgehogTopdownHeading(0, 0, 1.2), 1.2);
+
+  // The figure eight walks round its tips and runs through the crossing.
+  const tipSpeed = magnitude(velocityOfT2D(TIP_TIMES[0]));
+  const crossingSpeed = magnitude(velocityOfT2D(CROSSING_TIMES[0]));
+  assert.ok(tipSpeed < TOPDOWN_RUN_SPEED && crossingSpeed > TOPDOWN_RUN_SPEED);
+  assert.equal(hedgehogTopdownGait(0, tipSpeed).gait, 'walk');
+  assert.equal(hedgehogTopdownGait(0, crossingSpeed).gait, 'run');
+  assert.equal(hedgehogTopdownGait(0, 0).frame, TOPDOWN_STAND_FRAME);
+}
+
+// Top-down hedgehog sheet: metadata matches the PNG, and every frame the gait
+// asks for has its own cell.
+{
+  const bytes = readFileSync(new URL(`../../public${HEDGEHOG_TOPDOWN_SHEET_SRC}`, import.meta.url));
+  assert.equal(bytes.subarray(1, 4).toString('ascii'), 'PNG');
+  assert.equal(bytes.readUInt32BE(16), HEDGEHOG_TOPDOWN_SHEET_W, 'top-down sheet width should match');
+  assert.equal(bytes.readUInt32BE(20), HEDGEHOG_TOPDOWN_SHEET_H, 'top-down sheet height should match');
+  assert.ok(HEDGEHOG_TOPDOWN_GUTTER >= 1);
+
+  const seen = new Set<string>();
+  Object.entries(HEDGEHOG_TOPDOWN_CELLS).forEach(([name, cell]) => {
+    assert.ok(cell.col < HEDGEHOG_TOPDOWN_SHEET_COLS && cell.row < HEDGEHOG_TOPDOWN_SHEET_ROWS, `${name} is off the sheet`);
+    const key = `${cell.col},${cell.row}`;
+    assert.ok(!seen.has(key), `two top-down frames share cell ${key}`);
+    seen.add(key);
+    const origin = topdownCellOrigin(cell);
+    assert.ok(origin.x + HEDGEHOG_TOPDOWN_CELL + HEDGEHOG_TOPDOWN_GUTTER <= HEDGEHOG_TOPDOWN_SHEET_W);
+    assert.ok(origin.y + HEDGEHOG_TOPDOWN_CELL + HEDGEHOG_TOPDOWN_GUTTER <= HEDGEHOG_TOPDOWN_SHEET_H);
+  });
+  [TOPDOWN_STAND_FRAME, ...TOPDOWN_WALK_CYCLE, ...TOPDOWN_RUN_CYCLE].forEach((name) => {
+    assert.ok(name in HEDGEHOG_TOPDOWN_CELLS, `top-down gait frame ${name} has no cell`);
+  });
 }
 
 // Projectile launcher: hits, flag relocation, and zooming out.

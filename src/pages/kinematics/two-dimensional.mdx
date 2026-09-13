@@ -8,6 +8,7 @@ canonicalPath: /kinematics/two-dimensional
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ComponentReveal from '../../components/textbook/ComponentReveal.astro';
+import VelocityChangeDiagram from '../../components/kinematics/VelocityChangeDiagram.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
@@ -179,13 +180,21 @@ The horizontal component of velocity stays constant while the vertical component
 
 For small intervals of time $$\Delta t$$,
 
-$$
-\begin{aligned}
-\Delta \vec{v} &\approx \vec{a}\Delta t
-\end{aligned}
-$$
+<ComponentReveal label="Diagram">
+  <div slot="vector">
+    $$
+    \Delta \vec{v} \approx \vec{a}\Delta t
+    $$
+  </div>
 
-This equation can be interpreted as "acceleration changes the velocity vector".  If the acceleration and velocity vectors are aligned, the velocity gets larger in time: the object speeds up. If acceleration points opposite the velocity, the velocity gets smaller: the object slows down.  What happens when acceleration is perpendicular to velocity?
+  $$
+  \vec{v}_i + \vec{a}\Delta t \approx \vec{v}_f
+  $$
+
+  <VelocityChangeDiagram />
+</ComponentReveal>
+
+This equation can be interpreted as "acceleration changes the velocity vector" (click it to see the addition drawn out).  If the acceleration and velocity vectors are aligned, the velocity gets larger in time: the object speeds up. If acceleration points opposite the velocity, the velocity gets smaller: the object slows down.  What happens when acceleration is perpendicular to velocity?
 
 Look back at the hedgehog at either tip of its figure eight. At these two points, acceleration is perpendicular to velocity. The hedgehog is turning, and for that instant, its speed isn't changing at all. Turn on **decompose a** to see the acceleration vector as: one component parallel to velocity that changes the speed, and another component perpendicular to velocity that turns the hedgehog.
 

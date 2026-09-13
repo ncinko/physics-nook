@@ -1,0 +1,69 @@
+---
+// Static tip-to-tail diagram for v_i + aΔt = v_f. Colors match HedgehogField2D:
+// velocity green, acceleration purple; the resulting final velocity is blue.
+type Point = { x: number; y: number };
+
+const VELOCITY_COLOR = '#16a34a';
+const ACCELERATION_COLOR = 'var(--accent-purple)';
+const RESULT_COLOR = 'var(--accent-blue)';
+
+const tail: Point = { x: 40, y: 180 };
+const vInitialTip: Point = { x: 240, y: 130 };
+const vFinalTip: Point = { x: 285, y: 45 };
+
+// Shorten each shaft so its line ends at the base of the arrowhead.
+function arrow(from: Point, to: Point, head = 12, halfWidth = 6) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  const ux = dx / length;
+  const uy = dy / length;
+  const base = { x: to.x - ux * head, y: to.y - uy * head };
+  const points = [
+    `${to.x},${to.y}`,
+    `${base.x - uy * halfWidth},${base.y + ux * halfWidth}`,
+    `${base.x + uy * halfWidth},${base.y - ux * halfWidth}`,
+  ].join(' ');
+  return { x1: from.x, y1: from.y, x2: base.x, y2: base.y, points };
+}
+
+const vInitial = arrow(tail, vInitialTip);
+const aDt = arrow(vInitialTip, vFinalTip);
+const vFinal = arrow(tail, vFinalTip);
+---
+
+<figure class="velocity-change-diagram m-0 py-3">
+  <svg
+    viewBox="0 0 340 215"
+    class="mx-auto block h-auto w-full max-w-[22rem]"
+    role="img"
+    aria-labelledby="velocity-change-diagram-title"
+  >
+    <title id="velocity-change-diagram-title">
+      Tip-to-tail addition: the initial velocity plus a times delta t gives the final velocity.
+    </title>
+
+    <line x1={vFinal.x1} y1={vFinal.y1} x2={vFinal.x2} y2={vFinal.y2} style={`stroke:${RESULT_COLOR}`} stroke-width="3" stroke-linecap="round" />
+    <polygon points={vFinal.points} style={`fill:${RESULT_COLOR}`} />
+
+    <line x1={vInitial.x1} y1={vInitial.y1} x2={vInitial.x2} y2={vInitial.y2} style={`stroke:${VELOCITY_COLOR}`} stroke-width="3" stroke-linecap="round" />
+    <polygon points={vInitial.points} style={`fill:${VELOCITY_COLOR}`} />
+
+    <line x1={aDt.x1} y1={aDt.y1} x2={aDt.x2} y2={aDt.y2} style={`stroke:${ACCELERATION_COLOR}`} stroke-width="3" stroke-linecap="round" />
+    <polygon points={aDt.points} style={`fill:${ACCELERATION_COLOR}`} />
+
+    <circle cx={tail.x} cy={tail.y} r="3.5" style="fill:var(--text-primary)" />
+
+    <g font-size="15" font-weight="700" font-style="italic">
+      <text x="150" y="176" style={`fill:${VELOCITY_COLOR}`}>v<tspan dy="4" font-size="11">i</tspan></text>
+      <text x="272" y="98" style={`fill:${ACCELERATION_COLOR}`}>a<tspan font-style="normal"> Δt</tspan></text>
+      <text x="128" y="96" style={`fill:${RESULT_COLOR}`}>v<tspan dy="4" font-size="11">f</tspan></text>
+    </g>
+  </svg>
+
+  <figcaption class="type-supporting mt-2 text-center">
+    Place the tail of <span style={`color:${ACCELERATION_COLOR}`}>a&#8201;Δt</span> at the tip of
+    <span style={`color:${VELOCITY_COLOR}`}>v<sub>i</sub></span>; the
+    <span style={`color:${RESULT_COLOR}`}>final velocity v<sub>f</sub></span> runs from the first tail to the last tip.
+  </figcaption>
+</figure>

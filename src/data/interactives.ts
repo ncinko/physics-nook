@@ -282,6 +282,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['vectors', 'acceleration', 'sandbox'],
   },
   {
+    id: 'cat-path-problem',
+    title: 'Where Is the Cat?',
+    description: 'Place dots on a field grid to trace a cat with steady eastward velocity and a northward velocity that ramps up, then check against the answer.',
+    href: '/kinematics/two-dimensional#cat-path-problem',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['kinematics', 'vectors', 'problem'],
+  },
+  {
     id: 'forces-with-newt',
     title: 'Forces With Newt',
     description: 'Explore spring, normal, tension, gravity, friction, and net force diagrams with Newt the physics frog.',

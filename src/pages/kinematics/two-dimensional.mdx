@@ -14,6 +14,8 @@ import HedgehogField2D from '../../components/kinematics/HedgehogField2D';
 import LaunchDecomposition from '../../components/kinematics/LaunchDecomposition';
 import ProjectileLauncher from '../../components/kinematics/ProjectileLauncher';
 import Kinematics2DSandbox from '../../components/kinematics/Kinematics2DSandbox';
+import GridDotProblem from '../../components/kinematics/GridDotProblem';
+import { catPathAnswer } from '../../lib/kinematics/gridDotProblem';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
 import { mechanicsPath } from '../../data/modules';
@@ -262,6 +264,68 @@ Look back at the hedgehog at either tip of its figure eight. At these two points
     #### Check
 
     A two-second flight at a little over $17\,\text{m/s}$ horizontally should cover a bit more than $34\,\text{m}$, so $35.3\,\text{m}$ is reasonable.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard
+    title="Where Is the Cat?"
+    accent="red"
+  >
+    #### Problem
+
+    We are looking down on a flat field of grass. Each square represents a region $1\,\text{m}$ wide and $1\,\text{m}$ long. The black dot represents a cat running along a path across the field. We've captured the cat right at the starting time $t = 0.0\,\text{s}$.
+
+    Your task is to draw in dots representing the cat at 1-second intervals, according to these rules:
+
+    - The cat has an initial velocity in the eastward direction of $4\,\text{m/s}$, and it keeps this constant horizontal velocity throughout.
+    - The cat has no initial velocity in the northward direction. However, its northward velocity increases steadily by $+1\,\text{m/s}$ each second until it reaches (and stays at) $+4\,\text{m/s}$.
+
+    Place six dots, for $t = 1$ through $6\,\text{s}$, then check your work.
+
+    <InteractiveAnchor id="cat-path-problem" />
+
+    <GridDotProblem
+      client:visible
+      cols={26}
+      rows={18}
+      snapStep={0.5}
+      answer={catPathAnswer()}
+      subjectLabel="cat"
+    />
+
+    <DerivationPanel title="Show the solution steps">
+      #### Solve
+
+      Treat the two directions separately. East has no acceleration:
+
+      $$
+      x(t) = (4\,\text{m/s})\,t.
+      $$
+
+      North starts from rest with $a_y = 1\,\text{m/s}^2$. The velocity $v_y = t$ reaches $4\,\text{m/s}$ at $t = 4\,\text{s}$, so for the first four seconds
+
+      $$
+      y(t) = \tfrac{1}{2}(1\,\text{m/s}^2)\,t^2,
+      $$
+
+      and after that the cat moves north at a steady $4\,\text{m/s}$:
+
+      $$
+      y(t) = 8\,\text{m} + (4\,\text{m/s})(t - 4\,\text{s}).
+      $$
+
+      | $t$ (s) | $v_y$ (m/s) | $x$ (m) | $y$ (m) |
+      | :-: | :-: | :-: | :-: |
+      | 1 | 1 | 4 | 0.5 |
+      | 2 | 2 | 8 | 2 |
+      | 3 | 3 | 12 | 4.5 |
+      | 4 | 4 | 16 | 8 |
+      | 5 | 4 | 20 | 12 |
+      | 6 | 4 | 24 | 16 |
+
+      #### Check
+
+      The dots are evenly spaced eastward but spread further apart northward for the first four seconds, so the path curves upward. Once $v_y$ stops changing, each second moves the cat $4\,\text{m}$ east and $4\,\text{m}$ north, and the last dots fall on a straight line.
+    </DerivationPanel>
   </WorkedExampleCard>
 </ProblemSolvingSection>
 

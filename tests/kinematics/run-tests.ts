@@ -53,6 +53,13 @@ import {
   launchFromPointer,
 } from '../../src/lib/kinematics/launch.ts';
 import {
+  catPathAnswer,
+  gradeDots,
+  gradeSummary,
+  snapToGrid,
+  toggleDot,
+} from '../../src/lib/kinematics/gridDotProblem.ts';
+import {
   BASE_RANGE_M,
   HIT_RADIUS_M,
   TARGET_MAX_M,
@@ -2206,3 +2213,43 @@ console.log('Video analysis tests passed.');
 }
 
 console.log('Motion Match tests passed.');
+
+{
+  const answer = catPathAnswer();
+  assert.deepEqual(answer, [
+    { x: 4, y: 0.5 },
+    { x: 8, y: 2 },
+    { x: 12, y: 4.5 },
+    { x: 16, y: 8 },
+    { x: 20, y: 12 },
+    { x: 24, y: 16 },
+  ]);
+  for (let i = 4; i < answer.length; i += 1) {
+    assert.equal(answer[i].y - answer[i - 1].y, 4, 'northward velocity holds at 4 m/s after t = 4 s');
+  }
+
+  assert.deepEqual(snapToGrid(4.3, 4.2, 0.5, 26, 18), { x: 4.5, y: 4 });
+  assert.deepEqual(snapToGrid(-2, 30, 0.5, 26, 18), { x: 0, y: 18 }, 'snapping clamps to the grid');
+  assert.deepEqual(snapToGrid(7.6, 1.4, 1, 26, 18), { x: 8, y: 1 });
+
+  const all = gradeDots([...answer].reverse(), answer);
+  assert.equal(all.correct, true, 'grading ignores placement order');
+  assert.equal(gradeSummary(all, 6), 'All 6 dots are in the right place.');
+
+  const partial = gradeDots([answer[0], answer[1], { x: 5, y: 5 }], answer);
+  assert.equal(partial.correct, false);
+  assert.equal(partial.matched.length, 2);
+  assert.equal(partial.missing.length, 4);
+  assert.deepEqual(partial.extra, [{ x: 5, y: 5 }]);
+  assert.equal(gradeSummary(partial, 6), '2 of 6 dots correct, 1 extra dot.');
+
+  const duplicate = gradeDots([answer[0], answer[0]], answer);
+  assert.equal(duplicate.matched.length, 1, 'one dot cannot claim an answer point twice');
+  assert.equal(duplicate.extra.length, 1);
+
+  const placed = toggleDot(toggleDot([], { x: 4, y: 0.5 }), { x: 8, y: 2 });
+  assert.equal(placed.length, 2);
+  assert.deepEqual(toggleDot(placed, { x: 4, y: 0.5 }), [{ x: 8, y: 2 }], 'toggling an existing dot removes it');
+}
+
+console.log('Grid dot problem tests passed.');

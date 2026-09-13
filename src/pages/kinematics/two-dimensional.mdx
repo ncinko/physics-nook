@@ -32,21 +32,12 @@ In one dimension, position, velocity, and acceleration are each described by one
 
 Most of first-year physics relies heavily on the vector formalism, so I suggest building a strong foundation with the concept.  If it's completely new to you, check out the **[Vectors](/math/vectors)** page.
 
-The hedgehog returns, now running a figure eight across a field. We again use vectors to describe its motion: **position** $\vec{r}$ points from the origin to the hedgehog, **velocity** $\vec{v}$ points the way it is running, and **acceleration** $\vec{a}$ points the way its velocity is changing.
+The hedgehog returns, now running a figure eight across a field. We again use vectors to describe its motion: **position** $\vec{r}$ points from the origin to the hedgehog, **velocity** $\vec{v}$ points the way it is running, and **acceleration** $\vec{a}$ points the way its velocity is changing.  The definitions are the same as in one dimension, but it's now clear why we need both a magnitude and direction to describe each quantity.
 
 <InteractiveAnchor id="hedgehog-field" />
 
 <HedgehogField2D client:load />
 
-The definitions are the same as in one dimension, but it's now clear why we need both a magnitude and direction to describe each quantity.  Written out symbolically, the three kinematic variables are:
-
-$$
-\begin{aligned}
-\vec{r} &= \langle x, y \rangle,\\
-\vec{v} &= \langle v_x, v_y \rangle,\\
-\vec{a} &= \langle a_x, a_y \rangle.
-\end{aligned}
-$$
 
 ## Component Motion
 
@@ -92,12 +83,11 @@ You get to choose the coordinate system, but the splitting only works if you fol
 - **Pick the origin and orientation that make the problem easiest.** The axes don't have to be horizontal and vertical; for a block on a ramp, tilting $x$ along the slope is often simpler. By convention, the positive $y$-axis sits $90^\circ$ counterclockwise from the positive $x$-axis.
 - **Keep the same axes for the whole problem.** Every vector ($\vec{r}$, $\vec{v}$, and $\vec{a}$) must be broken into components along the same fixed axes, and those axes can't move or rotate partway through. The signs of your components follow from which directions you called positive.
 
-The hedgehog's figure eight motion works the same way.  Although its acceleration isn't constant, you can consider $$x(t)$$ and $$y(t)$$ as simple back-and-forth motion in one dimension.
 
 
-## Launch Velocity
+## Projectile Motion
 
-Projectile problems often describe the initial velocity $\vec{v}_0$ using a launch speed $v_0 = |\vec{v}_0|$ and angle $\theta$. The horizontal and vertical pieces are
+Projectile problems often describe the initial velocity $\vec{v}_0$ using a launch speed $v_0 = |\vec{v}_0|$ and angle $\theta$ "from the horizontal".  This gives us a natural choice of coordinate system, and we can begin by finding the two components of the initial velocity vector:
 
 $$
 v_{0x} = v_0\cos\theta,
@@ -109,7 +99,6 @@ $$
 
 <LaunchDecomposition client:visible />
 
-## Projectile Motion
 
 A simple projectile has no horizontal acceleration and a constant downward acceleration from gravity:
 
@@ -123,15 +112,15 @@ If the projectile starts at the origin, the component equations become
 
 $$
 \begin{aligned}
-x(t) &= v_{0x}t,\\
-y(t) &= v_{0y}t - \frac{1}{2}gt^2,
+x &= v_0\cos\thetat,\\
+y &= v_0\sin\thetat - \frac{1}{2}gt^2,
 \end{aligned}
 $$
 
 $$
 \begin{aligned}
-v_x(t) &= v_{0x},\\
-v_y(t) &= v_{0y} - gt.
+v_x &=  v_0\cos\theta,\\
+v_y &= v_0\sin\theta - gt.
 \end{aligned}
 $$
 

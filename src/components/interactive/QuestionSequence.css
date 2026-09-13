@@ -1,3 +1,13 @@
+/* Right after Problem Solving, the last example row's hairline already closes
+   that section, so a second rule above the checkpoint would read as a double
+   line. Astro may emit a hydration script between the two. */
+.problem-solving + astro-island > .checkpoint,
+.problem-solving + script + astro-island > .checkpoint {
+  margin-top: 2.5rem;
+  border-top-width: 0;
+  padding-top: 0;
+}
+
 .checkpoint-option {
   border-color: var(--grid-line);
   background-color: var(--surface-elevated);

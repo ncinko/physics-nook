@@ -77,7 +77,7 @@ const phases = [
 ];
 ---
 
-<section class="not-prose my-10 overflow-hidden rounded-[2rem] border border-[var(--grid-line)] bg-[var(--sim-bg)] shadow-sm">
+<section class="not-prose my-10 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--sim-bg)] shadow-sm">
   <div class="relative min-h-[16rem] overflow-hidden border-b border-[var(--grid-line)] bg-[var(--sim-bg)]">
     <SpringBannerField client:visible />
     <div class="pointer-events-none relative z-10 px-6 py-5">
@@ -99,7 +99,7 @@ const phases = [
           <h4 class="mt-3 mb-2 text-lg font-semibold text-[color:var(--text-primary)]">{phase.title}</h4>
           <p class="mt-0 mb-4 text-sm leading-7 text-[color:var(--text-muted)]">{phase.note}</p>
 
-          <div class="rounded-2xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--sim-bg)_78%,white)] p-3">
+          <div class="rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--sim-bg)_78%,white)] p-3">
             <svg
               viewBox={`0 0 ${stageWidth} ${stageHeight}`}
               class="h-auto w-full"
@@ -146,7 +146,7 @@ const phases = [
             </svg>
           </div>
 
-          <div class="mt-4 space-y-2 rounded-2xl border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4 shadow-sm">
+          <div class="mt-4 space-y-2 rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4 shadow-sm">
             <div class="flex items-center justify-between gap-4 text-sm">
               <span class="text-[color:var(--text-muted)]">Displacement</span>
               <span class="font-semibold text-[color:var(--text-primary)]">{phase.displacement}</span>
@@ -155,7 +155,7 @@ const phases = [
               <span class="text-[color:var(--text-muted)]">Speed</span>
               <span class="font-semibold text-[color:var(--text-primary)]">{phase.speed}</span>
             </div>
-            <p class="m-0 rounded-xl px-3 py-2 text-sm leading-6" style={`background:color-mix(in srgb, ${phase.accent} 10%, var(--bg-primary)); color:${phase.accent};`}>
+            <p class="m-0 rounded-[calc(var(--radius-control)-0.25rem)] px-3 py-2 text-sm leading-6" style={`background:color-mix(in srgb, ${phase.accent} 10%, var(--bg-primary)); color:${phase.accent};`}>
               {phase.energy}
             </p>
           </div>

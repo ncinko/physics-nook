@@ -54,14 +54,14 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
         </div>
 
         <div
-          class="inline-flex w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-1 shadow-sm sm:w-auto"
+          class="inline-flex w-full rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-1 shadow-sm sm:w-auto"
           aria-label="Filter interactives"
           role="group"
         >
           {filterOptions.map((option) => (
             <button
               type="button"
-              class="interactive-filter flex-1 rounded-md px-3 py-2 text-sm font-semibold text-[color:var(--text-muted)] transition-colors sm:flex-none"
+              class="interactive-filter flex-1 rounded-[calc(var(--radius-control)-0.25rem)] px-3 py-2 text-sm font-semibold text-[color:var(--text-muted)] transition-colors sm:flex-none"
               data-kind-filter={option.id}
               aria-pressed={option.id === 'all' ? 'true' : 'false'}
             >
@@ -86,7 +86,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
               </div>
             </div>
 
-            <div class="overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
+            <div class="overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
               <div class="divide-y divide-[var(--grid-line)]">
                 {entries.map((entry) => (
                   <a
@@ -103,14 +103,14 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
                           {entry.title}
                         </h3>
                         {entry.experimental && (
-                          <span class="rounded-md border border-[var(--grid-line)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                          <span class="rounded-[var(--radius-control)] border border-[var(--grid-line)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
                             Experimental
                           </span>
                         )}
                       </div>
                       <div class="mt-2 flex flex-wrap gap-1.5">
                         {entry.tags.map((tag) => (
-                          <span class="rounded-md bg-[color-mix(in_srgb,var(--sim-bg)_86%,transparent)] px-2 py-1 text-xs text-[color:var(--text-muted)]">
+                          <span class="rounded-[var(--radius-control)] bg-[color-mix(in_srgb,var(--sim-bg)_86%,transparent)] px-2 py-1 text-xs text-[color:var(--text-muted)]">
                             {tag}
                           </span>
                         ))}
@@ -122,7 +122,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
                     </p>
 
                     <div class="flex items-center gap-2 md:justify-end">
-                      <span class={`rounded-md border px-2.5 py-1 text-xs font-semibold ${kindClasses[entry.kind]}`}>
+                      <span class={`rounded-[var(--radius-control)] border px-2.5 py-1 text-xs font-semibold ${kindClasses[entry.kind]}`}>
                         {interactiveKindLabels[entry.kind]}
                       </span>
                     </div>
@@ -135,7 +135,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
       </div>
 
       <p
-        class="interactive-empty mt-8 hidden rounded-lg border border-[var(--grid-line)] bg-[var(--sim-bg)] px-4 py-3 text-sm text-[color:var(--text-muted)]"
+        class="interactive-empty mt-8 hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--sim-bg)] px-4 py-3 text-sm text-[color:var(--text-muted)]"
         data-empty-state
       >
         No interactives match this filter.

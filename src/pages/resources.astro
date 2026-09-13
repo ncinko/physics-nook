@@ -31,7 +31,7 @@ import { externalResourceGroups } from '../data/externalResources';
         {exploreModuleGroups.map((group) => (
           <a
             href={group.href}
-            class="group block rounded-[1.4rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+            class="group block rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[var(--accent-blue)] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
           >
             <span class="block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--accent-blue)] group-hover:text-[color:color-mix(in_srgb,var(--accent-blue)_70%,black)]">
               {group.cardEyebrow}
@@ -59,7 +59,7 @@ import { externalResourceGroups } from '../data/externalResources';
             <h3 class="m-0 text-base font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
               {group.label}
             </h3>
-            <div class="mt-3 overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
+            <div class="mt-3 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
               <div class="divide-y divide-[var(--grid-line)]">
                 {group.resources.map((resource) => (
                   <a

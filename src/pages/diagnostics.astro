@@ -18,7 +18,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       information, only browser and network results.
     </p>
 
-    <div class="mt-6 overflow-hidden rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
+    <div class="mt-6 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] shadow-sm">
       <ul data-diagnostics-list class="m-0 list-none divide-y divide-[var(--grid-line)] p-0">
         <li class="flex gap-3 px-4 py-3 text-sm">
           <span class="font-semibold text-[#b42318]">Fail</span>
@@ -35,7 +35,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         type="button"
         data-diagnostics-copy
         disabled
-        class="rounded-md border border-[var(--grid-line)] bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-50"
+        class="rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--accent-blue)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:brightness-110 disabled:opacity-50"
       >
         Copy report
       </button>
@@ -47,7 +47,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       readonly
       rows="12"
       aria-label="Diagnostics report"
-      class="mt-4 w-full rounded-lg border border-[var(--grid-line)] bg-[var(--surface-plot)] p-3 font-mono text-xs text-[color:var(--text-primary)]"
+      class="mt-4 w-full rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--surface-plot)] p-3 font-mono text-xs text-[color:var(--text-primary)]"
     ></textarea>
   </section>
 </BaseLayout>

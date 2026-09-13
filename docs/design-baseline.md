@@ -30,7 +30,7 @@ In Paper this reads as a warm recessed panel carrying light data surfaces: the v
 
 An unboxed diagram that sits directly in the reading flow stays transparent; see [adding-simulations.md](adding-simulations.md).
 
-Corners come from two tokens in the same file: `--radius-panel` (1rem) for a boxed panel such as `SimulationBlock`, and `--radius-control` (0.5rem) for buttons, answer options, and focus rings inside it. Pills and letter circles stay `rounded-full`. Write them as `rounded-[var(--radius-panel)]` rather than picking a Tailwind size.
+Corners come from two tokens in the same file: `--radius-panel` (1rem) for a boxed panel such as `SimulationBlock`, and `--radius-control` (0.5rem) for buttons, answer options, and focus rings inside it. Pills and letter circles stay `rounded-full`. Write them as `rounded-[var(--radius-panel)]` rather than picking a Tailwind size. A control that sits inside another control's padding, such as a segmented filter button, uses `rounded-[calc(var(--radius-control)-0.25rem)]` so the corners stay concentric. The homepage's three module cards are the one deliberate exception: they keep their larger `2rem` hero corners.
 
 ## Lesson Tail
 

@@ -48,31 +48,31 @@ $$
 
 ## Component Motion
 
-For simplicity, let's again consider the case of constant acceleration:
+For simplicity, let's again consider the case of constant acceleration, with the clock starting at $t = 0$. As in [1D kinematics](/kinematics#kinematic-equations), a zero subscript marks a value at $t = 0$:
 
 $$
-\vec{v}(t) = \vec{v}_i + \vec{a}t,
+\vec{v}(t) = \vec{v}_0 + \vec{a}t,
 $$
 
 and
 
 $$
-\vec{r}(t) = \vec{r}_i + \vec{v}_it + \frac{1}{2}\vec{a}t^2.
+\vec{r}(t) = \vec{r}_0 + \vec{v}_0t + \frac{1}{2}\vec{a}t^2.
 $$
 
 This notation is very concise, but we often like to consider the $x-$ and $y-$ directions independently.  For a baseball flying through the air, these could represent its motion along the horizontal and vertical directions.
 
 $$
 \begin{aligned}
-v_x(t) &= v_{ix} + a_xt,\\
-v_y(t) &= v_{iy} + a_yt,
+v_x(t) &= v_{0x} + a_xt,\\
+v_y(t) &= v_{0y} + a_yt,
 \end{aligned}
 $$
 
 $$
 \begin{aligned}
-x(t) &= x_i + v_{ix}t + \frac{1}{2}a_xt^2,\\
-y(t) &= y_i + v_{iy}t + \frac{1}{2}a_yt^2.
+x(t) &= x_0 + v_{0x}t + \frac{1}{2}a_xt^2,\\
+y(t) &= y_0 + v_{0y}t + \frac{1}{2}a_yt^2.
 \end{aligned}
 $$
 
@@ -83,7 +83,7 @@ The hedgehog's figure eight motion works the same way.  Although its acceleratio
 
 ## Launch Velocity
 
-Projectile problems often describe an initial velocity using a launch speed $v_0$ and angle $\theta$.  It's common to use a $$0$$ subscript in place of $$i$$, when $$t=0$$ is implicitly the initial time. The horizontal and vertical pieces are
+Projectile problems often describe the initial velocity $\vec{v}_0$ using a launch speed $v_0 = |\vec{v}_0|$ and angle $\theta$. The horizontal and vertical pieces are
 
 $$
 v_{0x} = v_0\cos\theta,

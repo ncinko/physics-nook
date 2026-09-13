@@ -143,7 +143,9 @@ Again, we often plot velocity against time.  The graphical interpretations repea
 
 ## Kinematic Equations
 
-The common constant-acceleration equations come straight from the definitions above. Let the clock start at $t_i = 0$, and call the final time $t_f = t$. The **displacement** is $\Delta x = x_f - x_i$. Click an equation to reveal where it comes from.
+The common constant-acceleration equations come straight from the definitions above. So far, an interval has run from $t_1$ to $t_2$, and it could start at any time. It's usually simplest to start the clock when the motion of interest begins, so the initial time is $t_0 = 0$ and the elapsed time is just $\Delta t = t - 0 = t$.
+
+This choice is so common that it comes with its own notation: a **zero subscript** marks a value at $t = 0$. So $x_0$ is the initial position and $v_0$ is the initial velocity. Symbols without a subscript, $x$ and $v$, are the values at some later time $t$, and the **displacement** is $\Delta x = x - x_0$. We'll use this notation throughout the site. Click an equation to reveal where it comes from.
 
 <div class="kinematic-equation-tabs not-prose my-6 rounded-[1.35rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_88%,transparent)] px-5 py-5 shadow-sm">
   <input id="kinematic-eq-velocity" name="kinematic-equation" type="radio" />
@@ -154,25 +156,25 @@ The common constant-acceleration equations come straight from the definitions ab
   <div class="kinematic-equation-grid grid gap-4 md:grid-cols-2">
     <label for="kinematic-eq-velocity" class="kinematic-equation-panel kinematic-equation-panel-velocity cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
-      v_f = v_i + at
+      v = v_0 + at
       $$
     </label>
 
     <label for="kinematic-eq-average" class="kinematic-equation-panel kinematic-equation-panel-average cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
-      \Delta x = \left(\frac{v_i + v_f}{2}\right)t
+      \Delta x = \left(\frac{v_0 + v}{2}\right)t
       $$
     </label>
 
     <label for="kinematic-eq-displacement" class="kinematic-equation-panel kinematic-equation-panel-displacement cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
-      \Delta x = v_i t + \frac{1}{2}at^2
+      \Delta x = v_0 t + \frac{1}{2}at^2
       $$
     </label>
 
     <label for="kinematic-eq-notime" class="kinematic-equation-panel kinematic-equation-panel-notime cursor-pointer rounded-xl border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_70%,var(--surface-elevated))] px-4 py-3 transition-colors duration-200">
       $$
-      v_f^2 = v_i^2 + 2a\Delta x
+      v^2 = v_0^2 + 2a\Delta x
       $$
     </label>
   </div>
@@ -183,15 +185,15 @@ The common constant-acceleration equations come straight from the definitions ab
 
       $$
       a = \frac{\Delta v}{\Delta t}
-      = \frac{v_f - v_i}{t}.
+      = \frac{v - v_0}{t}.
       $$
 
-      Multiply both sides by $t$ and add $v_i$:
+      Multiply both sides by $t$ and add $v_0$:
 
       $$
-      at = v_f - v_i
+      at = v - v_0
       \qquad \Rightarrow \qquad
-      v_f = v_i + at.
+      v = v_0 + at.
       $$
     </div>
 
@@ -211,13 +213,13 @@ The common constant-acceleration equations come straight from the definitions ab
       When acceleration is constant, velocity changes at a steady rate, so the average velocity is the midpoint between the initial and final velocities:
 
       $$
-      \overline{v} = \frac{v_i + v_f}{2}.
+      \overline{v} = \frac{v_0 + v}{2}.
       $$
 
       Therefore,
 
       $$
-      \Delta x = \left(\frac{v_i + v_f}{2}\right)t.
+      \Delta x = \left(\frac{v_0 + v}{2}\right)t.
       $$
     </div>
 
@@ -225,38 +227,44 @@ The common constant-acceleration equations come straight from the definitions ab
       Start with the average-velocity displacement equation:
 
       $$
-      \Delta x = \left(\frac{v_i + v_f}{2}\right)t.
+      \Delta x = \left(\frac{v_0 + v}{2}\right)t.
       $$
 
-      Substitute $v_f = v_i + at$:
+      Substitute $v = v_0 + at$:
 
       $$
       \Delta x
-      = \left(\frac{v_i + v_i + at}{2}\right)t
-      = v_i t + \frac{1}{2}at^2.
+      = \left(\frac{v_0 + v_0 + at}{2}\right)t
+      = v_0 t + \frac{1}{2}at^2.
+      $$
+
+      Since $\Delta x = x - x_0$, the same result gives the position at any time $t$:
+
+      $$
+      x(t) = x_0 + v_0 t + \frac{1}{2}at^2.
       $$
     </div>
 
     <div class="equation-derivation derivation-notime prose prose-theme max-w-none">
-      Start with $v_f = v_i + at$, then solve for time:
+      Start with $v = v_0 + at$, then solve for time:
 
       $$
-      t = \frac{v_f - v_i}{a}.
+      t = \frac{v - v_0}{a}.
       $$
 
       Substitute that into the average-velocity displacement equation:
 
       $$
       \Delta x
-      = \left(\frac{v_i + v_f}{2}\right)
-      \left(\frac{v_f - v_i}{a}\right)
-      = \frac{v_f^2 - v_i^2}{2a}.
+      = \left(\frac{v_0 + v}{2}\right)
+      \left(\frac{v - v_0}{a}\right)
+      = \frac{v^2 - v_0^2}{2a}.
       $$
 
       Rearranging gives
 
       $$
-      v_f^2 = v_i^2 + 2a\Delta x.
+      v^2 = v_0^2 + 2a\Delta x.
       $$
     </div>
   </div>
@@ -363,8 +371,8 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
 
     #### Given
 
-    - $v_i = 8.0\,\text{m/s}$
-    - $v_f = 0$
+    - $v_0 = 8.0\,\text{m/s}$
+    - $v = 0$ when the cart stops
     - $a = -2.0\,\text{m/s}^2$
 
     #### Use
@@ -372,14 +380,14 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
     With constant acceleration,
 
     $$
-    v_f = v_i + at.
+    v = v_0 + at.
     $$
 
     The velocity changes linearly, so the displacement is average velocity times time:
 
     $$
     \Delta x = \overline{v}t
-    = \left(\frac{v_i + v_f}{2}\right)t.
+    = \left(\frac{v_0 + v}{2}\right)t.
     $$
 
     #### Solve
@@ -423,8 +431,8 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
 
     #### Given
 
-    - $v_i = 12\,\text{m/s}$
-    - $v_f = 0$ at the highest point
+    - $v_0 = 12\,\text{m/s}$
+    - $v = 0$ at the highest point
     - $a = -g = -9.8\,\text{m/s}^2$
 
     #### Use
@@ -432,7 +440,7 @@ If the interval does not start at $t = 0$, replace $t$ with $\Delta t$.
     The question asks for a displacement and never mentions time, so reach for the equation that has no $t$ in it:
 
     $$
-    v_f^2 = v_i^2 + 2a\Delta y.
+    v^2 = v_0^2 + 2a\Delta y.
     $$
 
     #### Solve

@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import NewtSprite, { NEWT_MOUTH_OFFSET, NEWT_RADIUS } from './NewtSprite';
+import { TongueMouthStub, TongueStrand } from './NewtTongue';
 import { ForceArrow, FORCE_COLORS, type ForceVector } from './ForceArrow';
 import { Button } from '../shared/InlineControls';
 import {
@@ -199,61 +200,6 @@ const springPath = (start: Vector2, end: Vector2, coils = 9, amplitude = 9) => {
 
   points.push(add(start, scale(direction, length - lead)), end);
   return points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' ');
-};
-
-const tonguePath = (start: Vector2, end: Vector2, slack = false) => {
-  const delta = subtract(end, start);
-  const length = magnitude(delta);
-
-  if (length < 1) {
-    return `M ${start.x} ${start.y}`;
-  }
-
-  const direction = scale(delta, 1 / length);
-  const normal = { x: -direction.y, y: direction.x };
-  const sag = slack ? Math.min(54, length * 0.22) : Math.min(12, length * 0.04);
-  const bend = slack ? 18 : 6;
-  const c1 = add(add(start, scale(delta, 0.32)), scale(normal, bend));
-  const c2 = add(add(start, scale(delta, 0.68)), scale(normal, -bend));
-  const c2Sag = add(c2, { x: 0, y: sag });
-
-  return `M ${start.x} ${start.y} C ${c1.x} ${c1.y} ${c2Sag.x} ${c2Sag.y} ${end.x} ${end.y}`;
-};
-
-const TongueBandMarks = ({ start, end, count = 13 }: { start: Vector2; end: Vector2; count?: number }) => {
-  const delta = subtract(end, start);
-  const length = magnitude(delta);
-
-  if (length < 1) {
-    return null;
-  }
-
-  const direction = scale(delta, 1 / length);
-  const normal = { x: -direction.y, y: direction.x };
-
-  return (
-    <g opacity="0.42">
-      {Array.from({ length: count }, (_, index) => {
-        const t = (index + 1) / (count + 1);
-        const center = add(start, scale(delta, t));
-        const half = 3.2;
-        const p1 = add(center, scale(normal, half));
-        const p2 = subtract(center, scale(normal, half));
-        return (
-          <line
-            key={index}
-            x1={p1.x}
-            y1={p1.y}
-            x2={p2.x}
-            y2={p2.y}
-            stroke="#be185d"
-            strokeLinecap="round"
-            strokeWidth="1.8"
-          />
-        );
-      })}
-    </g>
-  );
 };
 
 const localMattressCompression = (coordinate: number, center: number, compression: number) => {
@@ -843,8 +789,6 @@ export function TongueTensionNewt() {
   const displayedTension = tongueTensionForce(mouth, anchor, restLength, stiffness * TENSION_DYNAMICS_FORCE_SCALE);
   const gravity = gravityForce(2, 9.8);
   const tensionArrowScale = (magnitude(gravity) * TENSION_WEIGHT_ARROW_SCALE) / (2 * TENSION_PIXEL_GRAVITY);
-  const tongueDirection = normalize(subtract(anchor, mouth), { x: -1, y: 0 });
-  const tongueJoin = add(mouth, scale(tongueDirection, 20));
   const tongueMouthAngle =
     (Math.atan2(anchor.y - mouth.y, anchor.x - mouth.x) * 180) / Math.PI - (body.angle ?? 0);
 
@@ -975,37 +919,9 @@ export function TongueTensionNewt() {
         <text x={anchor.x + 22} y={anchor.y - 18} fill="var(--text-muted)" fontSize="13" fontWeight="700">
           anchor
         </text>
-        <path
-          d={tonguePath(anchor, tongueJoin, !tension.taut)}
-          fill="none"
-          stroke="#f9a8d4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={tension.taut ? 10 : 8}
-        />
-        <path
-          d={tonguePath(anchor, tongueJoin, !tension.taut)}
-          fill="none"
-          stroke="#ec4899"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={tension.taut ? 5 : 4}
-          opacity={tension.taut ? 0.9 : 0.72}
-        />
-        {tension.taut && <TongueBandMarks start={anchor} end={tongueJoin} />}
-        <circle cx={anchor.x} cy={anchor.y} r="6.5" fill="#f9a8d4" stroke="#be185d" strokeWidth="1.5" />
+        <TongueStrand anchor={anchor} mouth={mouth} taut={tension.taut} />
         <NewtSprite x={newt.x} y={newt.y} angle={body.angle ?? 0}>
-          <g transform={`translate(${NEWT_MOUTH_OFFSET.x} ${NEWT_MOUTH_OFFSET.y}) rotate(${tongueMouthAngle})`}>
-            <path
-              d="M 0 0 C 6 -1.5 14 -1.5 21 0"
-              fill="none"
-              stroke="#ec4899"
-              strokeLinecap="round"
-              strokeWidth="5.5"
-              opacity="0.86"
-            />
-            <ellipse cx="1.5" cy="0" rx="4" ry="2.5" fill="#be185d" opacity="0.55" />
-          </g>
+          <TongueMouthStub angle={tongueMouthAngle} />
         </NewtSprite>
         <ForceArrow origin={mouth} vector={displayedTension.force} color={FORCE_COLORS.spring} label="tension" scale={tensionArrowScale} maxLength={76} />
         <ForceArrow origin={{ x: newt.x - 42, y: newt.y + 6 }} vector={gravity} color={FORCE_COLORS.gravity} label="weight" scale={TENSION_WEIGHT_ARROW_SCALE} maxLength={76} />

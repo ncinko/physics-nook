@@ -6,6 +6,7 @@ import {
   convexHull,
   distanceToHull,
   interactionScenes,
+  SCENE_VIEW,
   systemBoundaryPath,
   thirdLawPair,
   contactNormalForce,
@@ -210,6 +211,24 @@ for (const scene of interactionScenes) {
       );
     }
     assert.ok(systemBoundaryPath(scene, chosen.map((object) => object.id)).startsWith('M '));
+  }
+}
+
+// The in-scene drawing: every object and every arrow tail lies inside it.
+const inView = (point: { x: number; y: number }) =>
+  point.x >= 0 && point.x <= SCENE_VIEW.width && point.y >= 0 && point.y <= SCENE_VIEW.height;
+for (const scene of interactionScenes) {
+  for (const object of scene.objects) {
+    assert.ok(inView(object.inScene), `${scene.id}/${object.id} is drawn outside the scene`);
+  }
+  for (const interaction of scene.interactions) {
+    assert.ok(inView(interaction.applyAt.a) && inView(interaction.applyAt.b), `${scene.id}/${interaction.id} has an arrow outside the scene`);
+    // Forces on Earth start at or below its surface, inside its body.
+    for (const end of ['a', 'b'] as const) {
+      if (interaction[end] === 'earth') {
+        assert.ok(interaction.applyAt[end].y >= SCENE_VIEW.ground, `${scene.id}/${interaction.id} draws Earth's force above the ground`);
+      }
+    }
   }
 }
 

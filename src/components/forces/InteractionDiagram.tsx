@@ -1,6 +1,7 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { Select, ControlBar } from '../shared/InlineControls';
 import { ForceArrow, FORCE_COLORS } from './ForceArrow';
+import ForcePairScene from './ForcePairScene';
 import {
   add,
   BUBBLE_RADIUS,
@@ -11,7 +12,6 @@ import {
   scale,
   subtract,
   systemBoundaryPath,
-  thirdLawPair,
   type Interaction,
   type InteractionKind,
   type InteractionScene,
@@ -19,15 +19,14 @@ import {
 } from '../../lib/forces';
 
 // Interaction diagram: objects as bubbles, one labelled link per interaction.
-// In the "pairs" stage, tapping a link draws its two third-law forces, one on
+// In the "pairs" stage, tapping a link draws its two third-law forces in a
+// realistic drawing of the scene beside the diagram (ForcePairScene), one on
 // each object. In the "system" stage, tapping bubbles moves them in or out of a
 // dashed boundary, and the links that cross it become a particle free-body
 // diagram. Scene data and the boundary geometry live in lib/forces/interactions.
 
 const VIEW = { width: 540, height: 400 };
 const FBD_VIEW = { width: 240, height: 240 };
-const ARROW_SCALE = 34;
-const ARROW_MAX = 60;
 const FBD_SCALE = 40;
 const FBD_MAX = 92;
 const LINK_SPREAD = 34;
@@ -149,27 +148,11 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
   const linkOpacity = (interaction: Interaction) => {
     if (stage === 'pairs') {
       if (!pairLink) return 1;
-      return interaction.id === pairLink.id ? 0.35 : 0.18;
+      return interaction.id === pairLink.id ? 1 : 0.3;
     }
     if (internalIds.has(interaction.id)) return 0.3;
     return externalIds.has(interaction.id) || system.length === 0 ? 1 : 0.55;
   };
-
-  // Third-law arrows start at each bubble's edge, pointing along the force.
-  const pairArrows = pairLink
-    ? (() => {
-        const { onA, onB } = thirdLawPair(pairLink);
-        const a = objectById(pairLink.a);
-        const b = objectById(pairLink.b);
-        return [
-          { key: 'onB', target: b, agent: a, force: onB },
-          { key: 'onA', target: a, agent: b, force: onA },
-        ].map((entry) => ({
-          ...entry,
-          origin: add(entry.target.position, scale(normalize(entry.force), BUBBLE_RADIUS + 4)),
-        }));
-      })()
-    : [];
 
   const systemNames = scene.objects.filter((object) => system.includes(object.id)).map((object) => object.name);
 
@@ -272,7 +255,7 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
               d={path}
               fill="none"
               stroke={color}
-              strokeWidth={3}
+              strokeWidth={pressed ? 5 : 3}
               strokeLinecap="round"
               opacity={linkOpacity(interaction)}
             />
@@ -337,19 +320,6 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
           </g>
         );
       })}
-
-      {pairArrows.map((arrow) => (
-        <ForceArrow
-          key={arrow.key}
-          origin={arrow.origin}
-          vector={arrow.force}
-          scale={ARROW_SCALE}
-          maxLength={ARROW_MAX}
-          color={COLOR[pairLink!.kind]}
-          label={`${arrow.agent.label} on ${arrow.target.label}`}
-          labelBounds={VIEW}
-        />
-      ))}
     </svg>
   );
 
@@ -366,7 +336,10 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
 
       {stage === 'pairs' ? (
         <>
-          {diagram}
+          <div className="grid items-center gap-4 md:grid-cols-2">
+            {diagram}
+            <ForcePairScene scene={scene} pair={pairLink} color={pairLink ? COLOR[pairLink.kind] : undefined} />
+          </div>
           <p className="m-0 text-center text-sm leading-6 text-[var(--text-muted)]" aria-live="polite">
             {pairLink ? pairLink.pair : 'Tap a link to see the pair of forces it stands for.'}
           </p>

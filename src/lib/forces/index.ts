@@ -41,6 +41,7 @@ export {
   convexHull,
   distanceToHull,
   interactionScenes,
+  SCENE_VIEW,
   systemBoundaryPath,
   thirdLawPair,
   type ExternalForce,

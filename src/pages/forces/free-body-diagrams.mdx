@@ -43,13 +43,13 @@ A falling ball is the simplest case. Earth pulls on the ball, and the ball pulls
 
 <InteractiveAnchor id="interaction-diagram" />
 
-<InteractionDiagram client:visible />
+<InteractionDiagram client:visible stage="pairs" />
 
 ## Interactions
 
 An **interaction diagram** is a map of who is interacting with whom. Each object gets a bubble. Each interaction gets one link, labeled by its type: gravity, normal, tension, friction, or a push. There are no arrows yet, and no sizes. The only question is *which* objects interact, and *how*.
 
-One link always stands for two forces: one acting on each object, pointing in opposite directions. This is **Newton's third law**:
+One link always stands for two forces. Tap a link above to see them: one force acts on each object, and the two point in opposite directions. This is **Newton's third law**:
 
 $$
 \vec{F}_{\htmlClass{math-hint math-hint-on}{\text{A on B}}} = -\vec{F}_{\text{B on A}}.
@@ -59,7 +59,7 @@ $$
 
 The two forces in a pair are the same kind of interaction, equal in size, opposite in direction, and they always act on **different objects**. That last fact is why a single link joins two *different* bubbles.
 
-Switch to *Newt pushing a box* and find the friction link between Newt and Earth. Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push from the floor is the only thing that can move Newt, and nothing about it breaks the third law.
+Switch to *Newt pushing a box* and tap the friction link between Newt and Earth. Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push from the floor is the only thing that can move Newt, and nothing about it breaks the third law.
 
 ## Choosing a System
 

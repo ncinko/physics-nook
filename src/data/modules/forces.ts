@@ -13,9 +13,9 @@ export const forcesModule: ModuleMeta = {
     'Connect net force to acceleration',
     'Use spring-like microscopic models for normal force and tension',
     'Draw force vectors for gravity, friction, normal force, tension, and applied pushes',
+    'Draw interaction diagrams and use a system boundary to find the forces on a system',
     'Isolate a single system and draw a complete free-body diagram for it',
     'Tell third-law partners apart from forces that balance on one diagram',
-    "Apply Newton's second law along tilted axes on an inclined plane",
   ],
   status: 'active',
   navVisibility: 'hidden',
@@ -44,11 +44,11 @@ export const forcesModule: ModuleMeta = {
       title: 'Free-Body Diagrams',
       shortTitle: 'Free-Body Diagrams',
       description:
-        "Isolate one object, draw every force acting on it, and turn the picture into equations with Newton's three laws.",
+        "Map every interaction, draw a boundary around one system, and turn its free-body diagram into equations with Newton's three laws.",
       seo: {
         title: 'Free-Body Diagrams',
         description:
-          "Build free-body diagrams interactively, separate third-law partners from balanced forces, and apply Newton's second law along tilted axes on an inclined plane.",
+          "Draw interaction diagrams, choose a system boundary, build free-body diagrams interactively, and apply Newton's three laws to elevators, pushes, and pulleys.",
         canonicalPath: '/forces/free-body-diagrams',
         image: '/social/physics-nook-card.svg',
         // Unlisted lesson: reachable only by typing the URL, so keep it out of

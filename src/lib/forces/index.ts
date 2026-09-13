@@ -34,6 +34,23 @@ export {
   type FreeBodyScenario,
 } from './freeBody.ts';
 
+export {
+  BOUNDARY_PAD,
+  BUBBLE_RADIUS,
+  classifyForSystem,
+  convexHull,
+  distanceToHull,
+  interactionScenes,
+  systemBoundaryPath,
+  thirdLawPair,
+  type ExternalForce,
+  type Interaction,
+  type InteractionKind,
+  type InteractionObject,
+  type InteractionScene,
+  type SystemClassification,
+} from './interactions.ts';
+
 export interface BodyState {
   position: Vector2;
   velocity: Vector2;

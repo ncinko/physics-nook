@@ -1,0 +1,85 @@
+---
+// Static tip-to-tail sum for Newt in an elevator speeding up as it rises:
+// N + mg = ΣF. The forces are collinear, so each arrow gets its own column and
+// dotted guides carry the tip of one to the tail of the next.
+import { FORCE_COLORS } from './ForceArrow';
+
+type Point = { x: number; y: number };
+
+const NORMAL_COLOR = FORCE_COLORS.normal;
+const GRAVITY_COLOR = FORCE_COLORS.gravity;
+const NET_COLOR = FORCE_COLORS.net;
+
+const base = 200;
+const normalTip = 40;
+const gravityTip = 150;
+
+const normalTail: Point = { x: 90, y: base };
+const normalHead: Point = { x: 90, y: normalTip };
+const gravityTail: Point = { x: 160, y: normalTip };
+const gravityHead: Point = { x: 160, y: gravityTip };
+const netTail: Point = { x: 230, y: base };
+const netHead: Point = { x: 230, y: gravityTip };
+
+// Shorten each shaft so its line ends at the base of the arrowhead.
+function arrow(from: Point, to: Point, head = 12, halfWidth = 6) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy);
+  const ux = dx / length;
+  const uy = dy / length;
+  const b = { x: to.x - ux * head, y: to.y - uy * head };
+  const points = [
+    `${to.x},${to.y}`,
+    `${b.x - uy * halfWidth},${b.y + ux * halfWidth}`,
+    `${b.x + uy * halfWidth},${b.y - ux * halfWidth}`,
+  ].join(' ');
+  return { x1: from.x, y1: from.y, x2: b.x, y2: b.y, points };
+}
+
+const normal = arrow(normalTail, normalHead);
+const gravity = arrow(gravityTail, gravityHead);
+const net = arrow(netTail, netHead);
+---
+
+<figure class="net-force-diagram m-0 py-3">
+  <svg
+    viewBox="0 0 320 225"
+    class="mx-auto block h-auto w-full max-w-[20rem]"
+    role="img"
+    aria-labelledby="net-force-diagram-title"
+  >
+    <title id="net-force-diagram-title">
+      Tip-to-tail addition: the upward normal force plus the shorter downward weight leaves a small upward net force.
+    </title>
+
+    <g style="stroke:var(--text-muted)" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.8">
+      <line x1="90" y1={normalTip} x2="160" y2={normalTip} />
+      <line x1="160" y1={gravityTip} x2="250" y2={gravityTip} />
+      <line x1="70" y1={base} x2="250" y2={base} />
+    </g>
+
+    <line x1={normal.x1} y1={normal.y1} x2={normal.x2} y2={normal.y2} style={`stroke:${NORMAL_COLOR}`} stroke-width="4" stroke-linecap="round" />
+    <polygon points={normal.points} style={`fill:${NORMAL_COLOR}`} />
+
+    <line x1={gravity.x1} y1={gravity.y1} x2={gravity.x2} y2={gravity.y2} style={`stroke:${GRAVITY_COLOR}`} stroke-width="4" stroke-linecap="round" />
+    <polygon points={gravity.points} style={`fill:${GRAVITY_COLOR}`} />
+
+    <line x1={net.x1} y1={net.y1} x2={net.x2} y2={net.y2} style={`stroke:${NET_COLOR}`} stroke-width="4" stroke-linecap="round" />
+    <polygon points={net.points} style={`fill:${NET_COLOR}`} />
+
+    <circle cx={normalTail.x} cy={normalTail.y} r="3.5" style="fill:var(--text-primary)" />
+
+    <g font-size="15" font-weight="700" font-style="italic">
+      <text x="72" y="124" text-anchor="end" style={`fill:${NORMAL_COLOR}`}>N</text>
+      <text x="176" y="100" style={`fill:${GRAVITY_COLOR}`}>mg</text>
+      <text x="246" y="180" style={`fill:${NET_COLOR}`}><tspan font-style="normal">Σ</tspan>F</text>
+    </g>
+  </svg>
+
+  <figcaption class="type-supporting mt-2 text-center">
+    Place the tail of <span style={`color:${GRAVITY_COLOR}`}>mg</span> at the tip of
+    <span style={`color:${NORMAL_COLOR}`}>N</span>; the
+    <span style={`color:${NET_COLOR}`}>net force ΣF</span> runs from the first tail to the last tip.
+  </figcaption>
+</figure>

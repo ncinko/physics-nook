@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
 import {
+  BOUNDARY_PAD,
+  BUBBLE_RADIUS,
+  classifyForSystem,
+  convexHull,
+  distanceToHull,
+  interactionScenes,
+  systemBoundaryPath,
+  thirdLawPair,
   contactNormalForce,
   evaluateFreeBodySelection,
   freeBodyScenarios,
@@ -166,5 +174,76 @@ assert.deepEqual(
   evaluateFreeBodySelection(resting, ['weight', 'normal', 'not-a-force']),
   { correct: true, missing: [], extra: [] },
 );
+
+// --- interaction diagrams -------------------------------------------------
+
+for (const scene of interactionScenes) {
+  const objectIds = scene.objects.map((object) => object.id);
+  assert.equal(new Set(objectIds).size, objectIds.length, `${scene.id} has duplicate object ids`);
+  const linkIds = scene.interactions.map((interaction) => interaction.id);
+  assert.equal(new Set(linkIds).size, linkIds.length, `${scene.id} has duplicate interaction ids`);
+
+  for (const interaction of scene.interactions) {
+    assert.ok(objectIds.includes(interaction.a) && objectIds.includes(interaction.b), `${scene.id}/${interaction.id} links unknown objects`);
+    assert.notEqual(interaction.a, interaction.b, `${scene.id}/${interaction.id} links an object to itself`);
+    // Third law: the two halves of every pair cancel.
+    const { onA, onB } = thirdLawPair(interaction);
+    near(onA.x + onB.x, 0);
+    near(onA.y + onB.y, 0);
+  }
+
+  // Everything inside the boundary: every link is internal, nothing is left to draw.
+  const everything = classifyForSystem(scene, objectIds);
+  assert.equal(everything.external.length, 0);
+  assert.equal(everything.internal.length, scene.interactions.length);
+
+  // Layout guard: for every possible system, the boundary must stay clear of
+  // every bubble left outside it, or the picture would lie about membership.
+  for (let mask = 1; mask < 1 << objectIds.length; mask += 1) {
+    const chosen = scene.objects.filter((_, index) => mask & (1 << index));
+    const hull = convexHull(chosen.map((object) => object.position));
+    for (const outsider of scene.objects.filter((object) => !chosen.includes(object))) {
+      const clearance = distanceToHull(outsider.position, hull);
+      assert.ok(
+        clearance >= 2 * BUBBLE_RADIUS + BOUNDARY_PAD,
+        `${scene.id}: boundary around ${chosen.map((object) => object.id).join('+')} overlaps ${outsider.id} (${clearance.toFixed(1)})`,
+      );
+    }
+    assert.ok(systemBoundaryPath(scene, chosen.map((object) => object.id)).startsWith('M '));
+  }
+}
+
+// A single-object system reproduces the free-body builder's answer key.
+const kindsOnNewt = (sceneId: string) =>
+  classifyForSystem(interactionScenes.find((scene) => scene.id === sceneId)!, ['newt'])
+    .external.map((force) => force.interaction.kind)
+    .sort();
+const answerKinds = (scenarioId: string) =>
+  freeBodyScenarios
+    .find((scenario) => scenario.id === scenarioId)!
+    .candidates.filter((candidate) => candidate.belongs)
+    .map((candidate) => candidate.kind)
+    .sort();
+assert.deepEqual(kindsOnNewt('table'), answerKinds('resting'));
+assert.deepEqual(kindsOnNewt('hanging'), answerKinds('hanging'));
+
+// Newt + box: the push becomes internal; floor and gravity links stay external.
+const pushScene = interactionScenes.find((scene) => scene.id === 'pushing-box')!;
+const pair = classifyForSystem(pushScene, ['newt', 'box']);
+assert.deepEqual(pair.internal.map((interaction) => interaction.id), ['newt-box-push']);
+assert.equal(pair.external.length, 6);
+assert.ok(pair.external.every((force) => force.by === 'earth'));
+
+// Newt alone: the box pushes him backward, the floor pushes him forward.
+const newtAlone = classifyForSystem(pushScene, ['newt']);
+const pushOnNewt = newtAlone.external.find((force) => force.interaction.id === 'newt-box-push')!;
+assert.ok(pushOnNewt.force.x < 0);
+assert.equal(pushOnNewt.by, 'box');
+const floorOnNewt = newtAlone.external.find((force) => force.interaction.id === 'earth-newt-friction')!;
+assert.ok(floorOnNewt.force.x > 0);
+
+// Links with neither end inside are ignored entirely.
+assert.equal(classifyForSystem(pushScene, ['box']).external.some((force) => force.interaction.id === 'earth-newt-gravity'), false);
+assert.equal(systemBoundaryPath(pushScene, []), '');
 
 console.log('Forces helper tests passed.');

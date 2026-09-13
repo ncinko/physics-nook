@@ -1,20 +1,20 @@
 ---
 layout: ../../layouts/TextbookLayout.astro
 title: Free-Body Diagrams
-description: Isolate one object, draw every force acting on it, and turn the picture into equations with Newton's three laws.
+description: Map every interaction, draw a boundary around one system, and turn its free-body diagram into equations with Newton's three laws.
 canonicalPath: /forces/free-body-diagrams
 ---
 
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
-import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ComponentReveal from '../../components/textbook/ComponentReveal.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import MathHint from '../../components/textbook/MathHint.astro';
+import InteractionDiagram from '../../components/forces/InteractionDiagram';
+import NetForceDiagram from '../../components/forces/NetForceDiagram.astro';
 import FreeBodyDiagramBuilder from '../../components/forces/FreeBodyDiagramBuilder';
-import InclineFreeBody from '../../components/forces/InclineFreeBody';
-import { FrictionForceNewt } from '../../components/forces/ForcesNewtInteractives';
 import { mechanicsPath } from '../../data/modules';
 import { forcesModule } from '../../data/modules/forces';
 
@@ -37,37 +37,50 @@ export const unlistedMechanicsPath = {
 
 # Free-Body Diagrams
 
-The [Forces](/forces) page introduced the cast: weight, spring forces, the normal force, and tension. Recognizing them is not the same as being able to use them. This page is the method — isolate one object, draw every force acting on it, and read the equations straight off the picture. Friction joins the cast here, once there is a diagram to put it on.
+The [Forces](/forces) page introduced the cast: weight, spring forces, the normal force, and tension. This page is about using them. Before drawing a single arrow, it helps to notice something the cast list hides: a force is never a property of one object. Every force is one half of an **interaction** between two objects.
 
-Almost every mechanics problem you will meet is the same three steps in a trench coat. Pick the object. Draw its forces. Apply Newton's second law along each axis.
+A falling ball is the simplest case. Earth pulls on the ball, and the ball pulls on Earth. We draw that as two objects joined by one link, labeled with the kind of interaction.
 
-## Newton's Three Laws
+<InteractiveAnchor id="interaction-diagram" />
 
-**Newton's first law** says an object's velocity does not change unless a force acts on it. This is the [force-free motion](/forces#force-free-newt) idea from the previous page: no net force means no acceleration, whether the object is sitting still or already moving. Nothing needs to push a moving object to keep it moving.
+<InteractionDiagram client:visible stage="pairs" />
 
-**Newton's second law** says the net force sets the acceleration:
+## Interactions
 
-$$
-\sum \htmlClass{math-hint math-hint-net}{\vec{F}} = m\vec{a}.
-$$
+An **interaction diagram** is a map of who is interacting with whom. Each object gets a bubble. Each interaction gets one link, labeled by its type: gravity, normal, tension, friction, or a push. There are no arrows yet, and no sizes. The only question is *which* objects interact, and *how*.
 
-<MathHint id="net" label="Net force">The vector sum of every force acting on the object — not any single force, and not the largest one.</MathHint>
-
-The sum runs over every force acting on the object, and it is a *vector* sum. The first law is really the special case $\sum \vec{F} = 0$.
-
-**Newton's third law** says forces come in pairs: if A pushes on B, then B pushes back on A with equal magnitude and opposite direction.
+One link always stands for two forces. Tap a link above to see them: one force acts on each object, and the two point in opposite directions. This is **Newton's third law**:
 
 $$
-\vec{F}_{\text{A on B}} = -\vec{F}_{\text{B on A}}.
+\vec{F}_{\htmlClass{math-hint math-hint-on}{\text{A on B}}} = -\vec{F}_{\text{B on A}}.
 $$
 
-The two forces in a third-law pair always act on **different objects**. That single fact is what keeps the pair from cancelling, and it is the most common place a first free-body diagram goes wrong.
+<MathHint id="on" label="Subscripts">Read "A on B" as the force that object A exerts on object B. Swapping the names gives the partner force.</MathHint>
 
-## One Object At A Time
+The two forces in a pair are the same kind of interaction, equal in size, opposite in direction, and they always act on **different objects**. That last fact is why a single link joins two *different* bubbles.
 
-A **free-body diagram** shows one chosen object — the **system** — with every force acting on it drawn as an arrow, and nothing else in the picture. Three rules do most of the work:
+Switch to *Newt pushing a box* and tap the friction link between Newt and Earth. Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push from the floor is the only thing that can move Newt, and nothing about it breaks the third law.
 
-- **Only forces on the system.** A force the system exerts on something else belongs on *that* thing's diagram.
+## Choosing a System
+
+An interaction diagram shows everything. A free-body diagram shows one piece of it. To pick the piece, draw a dashed **system boundary** around the object or objects you care about.
+
+- A link that **crosses** the boundary is an external interaction. Its force on the object inside becomes an arrow on the free-body diagram.
+- A link with **both ends inside** is internal. Both of its forces act on the system, they cancel, and neither goes on the diagram.
+
+Tap the bubbles to move them in or out of the system.
+
+<InteractiveAnchor id="system-boundary" />
+
+<InteractionDiagram client:visible stage="system" initialScene="pushing-box" />
+
+With only Newt inside, the box pushes him backward. Add the box to the system and that push vanishes from the diagram. Nothing physical changed; the push just became internal. Choosing a clever system is often the fastest way through a problem, because it hides the forces you do not want to solve for.
+
+## Free-Body Diagrams
+
+A **free-body diagram** shows the chosen system — often drawn as a single dot — with every external force acting on it as an arrow, and nothing else in the picture. Reading one off an interaction diagram means following three rules:
+
+- **Only forces on the system.** The partner of each force acts on the object at the other end of the link, outside the boundary.
 - **Only forces acting now.** The shove that started an object moving is not on the diagram once your hand is gone.
 - **Only forces.** Velocity is not a force. Acceleration is not a force. The quantity $m\vec{a}$ is not a force — it is what the forces add up to.
 
@@ -77,91 +90,46 @@ Try each of these on Newt. Choose the forces you think belong, look at the diagr
 
 <FreeBodyDiagramBuilder client:visible />
 
-The resting case is worth dwelling on. Newt pushes down on the table and the table pushes up on Newt, and those two forces are a third-law pair — equal, opposite, and *never on the same diagram*. What balances Newt's weight is the normal force, which is a different force with a different partner. If third-law pairs did cancel on one diagram, nothing could ever accelerate.
+The resting case is worth dwelling on. Newt pushes down on the table and the table pushes up on Newt: those two forces share the *normal* link, so they are a third-law pair, and only one of them acts on Newt. What balances Newt's weight is the normal force from the table — a force from a different link, whose partner lives on the table. The weight's own partner is Newt's pull on Earth, at the far end of the gravity link. If third-law pairs could cancel on one diagram, nothing would ever accelerate.
 
-## Friction
+## Newton's First and Second Laws
 
-The sliding scenario above leaned on friction without pinning it down. It is the one everyday contact force the previous page left out, because it is awkward to discuss before you can draw a diagram: **friction** acts *along* a surface rather than perpendicular to it, and its size depends on how hard the surfaces are pressed together — which is to say, on the normal force.
+**Newton's first law** says an object's velocity does not change unless a net force acts on it. This is the [force-free motion](/forces#force-free-newt) idea from the previous page: no net force means no acceleration, whether the object is sitting still or already moving.
 
-It comes in two regimes. While the surfaces are not sliding, **static friction** takes whatever value it needs to prevent sliding, up to a ceiling:
+**Newton's second law** says the net force sets the acceleration. Once the free-body diagram is drawn, the sum runs over its arrows, and nothing else:
 
-$$
-f_s \le \mu_s N.
-$$
-
-Push past that ceiling and the surfaces slip. **Kinetic friction** then takes a roughly fixed value opposing the sliding:
-
-$$
-f_k = \mu_k N.
-$$
-
-The **coefficients of friction** $\mu_s$ and $\mu_k$ describe the pair of surfaces in contact, not either surface alone. Usually $\mu_k$ is a little smaller than $\mu_s$, which is why a stuck drawer lurches once it finally breaks free.
-
-On level ground the vertical forces balance, so the horizontal axis carries the whole story.
-
-<InteractiveAnchor id="friction-net-force-newt" />
-
-<FrictionForceNewt client:visible />
-
-Hold a gentle push and nothing moves: static friction takes exactly the value that cancels it. In the sum underneath, the four arrows close into a loop with nothing left over. Static friction is not a fixed number — it is whatever it needs to be, up to its limit, which is why Newt holds still across a whole range of pushes rather than at one magic value.
-
-Raise the push past that limit and the loop breaks open. The gap between where the chain starts and where it ends *is* the net force; there is no separate arrow that appears out of nowhere, just the leftover of four arrows laid end to end. Let go and the push disappears, leaving friction as the only unbalanced force, which is what brings Newt back to rest.
-
-## Tilted Axes
-
-Once the diagram is drawn, Newton's second law splits into one equation per axis:
-
-$$
-\sum F_x = ma_x,
-\qquad
-\sum F_y = ma_y.
-$$
-
-You get to choose those axes, and choosing well is most of the work. On a ramp, the acceleration points along the slope, so tilt the axes to match: one along the surface, one perpendicular to it. Then the normal force lies entirely on one axis, friction lies entirely on the other, and only the weight has to be broken into components:
-
-$$
-F_{g,\parallel} = mg\sin\theta,
-\qquad
-F_{g,\perp} = mg\cos\theta.
-$$
-
-<InteractiveAnchor id="incline-free-body" />
-
-<InclineFreeBody client:visible />
-
-Perpendicular to the surface, Newt does not accelerate, so those forces balance:
-
-$$
-N = mg\cos\theta.
-$$
-
-This is the payoff from the previous page's warning that $N$ is not always $mg$. On a ramp the surface only has to support the perpendicular part of the weight, so the steeper the ramp, the smaller the normal force — and, since friction is capped at $\mu_s N$, the less friction the surface can supply.
-
-Along the surface, the second law gives
-
-$$
-mg\sin\theta - f = ma.
-$$
-
-<DerivationPanel title="Why sliding starts at the angle where tanθ equals μs" accent="blue">
-  Static friction can supply anything up to $f_{\text{max}} = \mu_s N$. Newt stays put as long as the down-slope pull does not exceed that ceiling:
+<ComponentReveal>
+  <div slot="vector">
+    $$
+    \sum \vec{F} = m\vec{a},
+    $$
+  </div>
 
   $$
-  mg\sin\theta \le \mu_s N = \mu_s mg\cos\theta.
+  \begin{aligned}
+  \textstyle\sum F_x &= ma_x,\\
+  \textstyle\sum F_y &= ma_y.
+  \end{aligned}
   $$
+</ComponentReveal>
 
-  The mass and $g$ appear on both sides, so both cancel:
+The first law is just the special case $\sum \vec{F} = 0$. As in [2D kinematics](/kinematics/two-dimensional), each component equation is independent, provided the axes are perpendicular and stay fixed for the whole problem.
 
-  $$
-  \sin\theta \le \mu_s\cos\theta
-  \quad\Longrightarrow\quad
-  \tan\theta \le \mu_s.
-  $$
+The sum is a *vector* sum, so it is worth seeing drawn out. Newt stands in an elevator that is speeding up as it rises:
 
-  Sliding begins at $\theta = \arctan\mu_s$, the **slip angle**. Notice what is missing: the mass. A heavy frog and a light frog slip at exactly the same angle, because a heavier frog presses harder and gets proportionally more friction in return. Tilting a board until an object slides is a genuine way to measure $\mu_s$.
-</DerivationPanel>
+<ComponentReveal label="Diagram">
+  <div slot="vector">
+    $$
+    \vec{N} + m\vec{g} = \sum \vec{F}
+    $$
+  </div>
 
-<ProblemSolvingSection intro="Each of these is the same three steps: choose the system, draw its forces, then write the second law along each axis.">
+  <NetForceDiagram />
+</ComponentReveal>
+
+The normal force has to be longer than the weight. If the two were equal, the arrows would close up with nothing left over, and Newt would not accelerate. The small leftover arrow is the net force, and it points the way Newt is accelerating: up. That is why the floor of a rising elevator feels like it presses harder on your feet.
+
+<ProblemSolvingSection intro="Each of these follows the same path: map the interactions, draw a boundary around a system, then write the second law along each axis.">
   <WorkedExampleCard title="Apparent Weight in an Elevator" accent="blue">
     #### Problem
 
@@ -169,7 +137,7 @@ $$
 
     #### Use
 
-    The system is the passenger. Two forces act on them: the weight $mg$ down and the normal force $N$ from the scale up. Taking up as positive,
+    The system is the passenger. Two links cross the boundary: gravity with Earth and normal with the scale. Taking up as positive,
 
     $$
     \sum F_y = N - mg = ma_y.
@@ -183,39 +151,42 @@ $$
     N = m(g + a_y) = (60)(9.8 + 2.0) = 708\ \text{N}.
     $$
 
-    The scale reads the normal force it supplies, so it reads $708\ \text{N}$.
+    The scale reads the push it receives from the passenger, which is the third-law partner of $N$, so it reads $708\ \text{N}$.
 
     #### Check
 
     Larger than the $588\ \text{N}$ weight, as it must be: the net force has to point up to accelerate the passenger up.
   </WorkedExampleCard>
 
-  <WorkedExampleCard title="Will the Crate Slide?" accent="red">
+  <WorkedExampleCard title="Pushing Two Boxes" accent="red">
     #### Problem
 
-    A crate sits on a ramp inclined at $25^\circ$, with $\mu_s = 0.60$ and $\mu_k = 0.45$. Does it slide, and if so, what is its acceleration?
+    On a frictionless floor, you push box A ($4.0\ \text{kg}$) with a horizontal force of $24\ \text{N}$. Box A pushes box B ($2.0\ \text{kg}$) ahead of it. Find the acceleration and the force box A exerts on box B.
 
     #### Use
 
-    Tilt the axes to the slope. Perpendicular, the crate does not accelerate, so $N = mg\cos\theta$. Sliding starts when
+    The interaction diagram has a *push* link between your hand and A, and another *push* link between A and B. Along the floor, nothing else acts. Two different boundaries answer the two questions:
 
-    $$
-    \tan\theta > \mu_s.
-    $$
+    - Around **A and B together**, the A–B push is internal, so only your $24\ \text{N}$ crosses the boundary.
+    - Around **B alone**, only the push from A crosses.
 
     #### Solve
 
-    Compare the two numbers:
+    For the two-box system,
 
     $$
-    \tan 25^\circ = 0.47 < 0.60 = \mu_s.
+    a = \frac{F}{m_A + m_B} = \frac{24}{6.0} = 4.0\ \text{m/s}^2.
     $$
 
-    The crate does not slide. Static friction supplies exactly $mg\sin 25^\circ$ up the slope, the net force is zero, and $a = 0$. The value of $\mu_k$ never enters.
+    For box B alone,
+
+    $$
+    F_{\text{A on B}} = m_B a = (2.0)(4.0) = 8.0\ \text{N}.
+    $$
 
     #### Check
 
-    The slip angle is $\arctan 0.60 = 31^\circ$, and $25^\circ$ is below it — consistent with the crate holding.
+    On box A alone the forces are $24\ \text{N}$ forward and the $8.0\ \text{N}$ partner backward, and $16\ \text{N} = (4.0)(4.0)$, so both boxes agree on the same acceleration.
   </WorkedExampleCard>
 
   <WorkedExampleCard title="Two Blocks and One Rope" accent="blue">
@@ -225,7 +196,7 @@ $$
 
     #### Use
 
-    Draw *two* diagrams. The table block feels tension $T$ forward; the hanging block feels its weight $m_2g$ down and tension $T$ up. The rope links them, so both share one acceleration magnitude $a$:
+    Draw a boundary around *each* block. The table block has tension $T$ crossing its boundary horizontally; the hanging block has its weight $m_2g$ down and tension $T$ up. The rope links them, so both share one acceleration magnitude $a$:
 
     $$
     T = m_1a,
@@ -247,7 +218,7 @@ $$
 
     #### Check
 
-    The tension is less than the hanging block's $19.6\ \text{N}$ weight, which it must be — otherwise that block could not accelerate downward.
+    Drawing one boundary around both blocks and the rope makes the tension internal and gives $m_2g = (m_1 + m_2)a$ in a single step, the same equation the addition produced.
   </WorkedExampleCard>
 </ProblemSolvingSection>
 
@@ -256,11 +227,20 @@ $$
   eyebrow="Free-Body Diagrams Checkpoint"
   questions={[
     {
+      id: 'fbd-truck-car',
+      question: 'A heavy truck collides head-on with a small car. During the collision, how does the force on the car compare with the force on the truck?',
+      options: [
+        { id: 'A', text: 'The truck exerts a larger force, because it has more mass.', isCorrect: false, explanation: 'Mass decides how much each vehicle accelerates, not how large the forces are. The collision is one interaction, so it is one pair of forces.' },
+        { id: 'B', text: 'The forces are equal in size and opposite in direction.', isCorrect: true, explanation: 'Right. One link, two forces, equal and opposite. The car accelerates far more only because its mass is smaller.' },
+        { id: 'C', text: 'The car receives the larger force, because it is damaged more.', isCorrect: false, explanation: 'Damage follows the car’s larger acceleration and weaker structure. The forces themselves are a third-law pair and match exactly.' }
+      ]
+    },
+    {
       id: 'fbd-sliding-forward',
       question: 'A book slides to the right across a rough table after you let go. Which forces belong on its free-body diagram?',
       options: [
-        { id: 'A', text: 'Weight, normal force, and friction pointing left.', isCorrect: true, explanation: 'Right. Gravity and the table still act, and friction opposes the sliding. Nothing pushes the book forward once your hand is gone.' },
-        { id: 'B', text: 'Weight, normal force, friction, and a forward force of motion.', isCorrect: false, explanation: 'Motion needs no force to continue. The first law says the book coasts on its own, and the only horizontal force is friction.' },
+        { id: 'A', text: 'Weight, normal force, and friction pointing left.', isCorrect: true, explanation: 'Right. The book interacts with Earth (gravity) and the table (normal and friction). Your hand is no longer touching it, so there is no link to you.' },
+        { id: 'B', text: 'Weight, normal force, friction, and a forward force of motion.', isCorrect: false, explanation: 'A force needs a partner object. Nothing is touching the book from behind, so there is no link that could supply a forward force.' },
         { id: 'C', text: 'Only friction, since the vertical forces cancel.', isCorrect: false, explanation: 'Balanced forces still belong on the diagram. Leaving them out hides why the normal force — and therefore the friction — has the size it does.' }
       ]
     },
@@ -268,36 +248,27 @@ $$
       id: 'fbd-third-law-pair',
       question: 'A mug rests on a table. Why is the normal force on the mug not the third-law partner of its weight?',
       options: [
-        { id: 'A', text: 'Because they have different magnitudes.', isCorrect: false, explanation: 'They happen to be equal here, but that is a consequence of zero acceleration, not of the third law. Tilt the table and the equality breaks.' },
-        { id: 'B', text: 'Because both act on the mug, and partners act on different objects.', isCorrect: true, explanation: 'Exactly. The weight is paired with the pull of the mug on Earth; the normal force is paired with the push of the mug on the table.' },
-        { id: 'C', text: 'Because the normal force is a contact force and gravity is not.', isCorrect: false, explanation: 'True but irrelevant. Third-law pairs are always the same kind of interaction; what identifies them is which objects they act on.' }
+        { id: 'A', text: 'Because they have different magnitudes.', isCorrect: false, explanation: 'They happen to be equal here, but that is a consequence of zero acceleration, not of the third law. In an accelerating elevator the equality breaks.' },
+        { id: 'B', text: 'Because both act on the mug, and partners act on different objects.', isCorrect: true, explanation: 'Exactly. They come from different links: the weight is paired with the mug’s pull on Earth, and the normal force with the mug’s push on the table.' },
+        { id: 'C', text: 'Because the normal force is a contact force and gravity is not.', isCorrect: false, explanation: 'True, and it is a sign they come from different links, but what defines a pair is that it is one interaction acting on two different objects.' }
       ]
     },
     {
-      id: 'fbd-incline-normal',
-      question: 'A block sits on a ramp at angle $\\theta$. How does the normal force compare with $mg$?',
+      id: 'fbd-internal-push',
+      question: 'Newt pushes a box across the floor. If you draw one system boundary around both Newt and the box, why does the push between them disappear from the free-body diagram?',
       options: [
-        { id: 'A', text: 'It equals $mg$, since the block is not accelerating.', isCorrect: false, explanation: 'The block is not accelerating perpendicular to the ramp, so $N$ balances only the perpendicular part of the weight, not all of it.' },
-        { id: 'B', text: 'It equals $mg\\sin\\theta$.', isCorrect: false, explanation: 'That is the component along the slope, the one that tries to slide the block. The perpendicular component uses cosine.' },
-        { id: 'C', text: 'It equals $mg\\cos\\theta$, so it shrinks as the ramp steepens.', isCorrect: true, explanation: 'Right. The surface only supports the perpendicular part of the weight, which is also why the friction ceiling $\\mu_s N$ drops on a steeper ramp.' }
-      ]
-    },
-    {
-      id: 'fbd-slip-angle',
-      question: 'Two crates, one twice as heavy as the other, sit on the same ramp. The ramp is slowly tilted. Which slides first?',
-      options: [
-        { id: 'A', text: 'The heavier one, because gravity pulls it harder.', isCorrect: false, explanation: 'Gravity does pull harder, but the crate also presses harder, so the friction available grows by the same factor.' },
-        { id: 'B', text: 'The lighter one, because there is less friction holding it.', isCorrect: false, explanation: 'There is less friction, but there is also less weight to hold. The two effects scale together.' },
-        { id: 'C', text: 'Neither — they slip at the same angle.', isCorrect: true, explanation: 'Correct. Mass cancels out of $\\tan\\theta \\le \\mu_s$, so the slip angle depends only on the surfaces.' }
+        { id: 'A', text: 'Because the push is smaller than the friction from the floor.', isCorrect: false, explanation: 'The size of the push does not matter. Even a huge push would drop out of this diagram.' },
+        { id: 'B', text: 'Because pushes between living things and objects are not real forces.', isCorrect: false, explanation: 'The push is a perfectly real contact force. Draw a boundary around the box alone and it appears.' },
+        { id: 'C', text: 'Because both ends of the push link are inside, so its two forces act on the system and cancel.', isCorrect: true, explanation: 'Right. The push is internal: Newt on box and box on Newt are both inside the boundary, and a third-law pair always sums to zero.' }
       ]
     },
     {
       id: 'fbd-ma-not-a-force',
       question: 'Why does $m\\vec{a}$ never appear as an arrow on a free-body diagram?',
       options: [
-        { id: 'A', text: 'Because it is the result the forces produce, not one of the forces.', isCorrect: true, explanation: 'Exactly. It lives on the right-hand side of $\\sum \\vec{F} = m\\vec{a}$. Drawing it as an arrow would count the same physics twice.' },
+        { id: 'A', text: 'Because it is the result the forces produce, not one of the forces.', isCorrect: true, explanation: 'Exactly. It lives on the right-hand side of $\\sum \\vec{F} = m\\vec{a}$, and there is no link on the interaction diagram that could supply it.' },
         { id: 'B', text: 'Because it points in the same direction as the net force anyway.', isCorrect: false, explanation: 'It does point that way, but that is why drawing it is redundant, not why it is wrong to call it a force.' },
-        { id: 'C', text: 'Because it is only nonzero when the object accelerates.', isCorrect: false, explanation: 'Applied forces also come and go. What disqualifies $m\\vec{a}$ is that nothing exerts it.' }
+        { id: 'C', text: 'Because it is only nonzero when the object accelerates.', isCorrect: false, explanation: 'Applied forces also come and go. What disqualifies $m\\vec{a}$ is that no object exerts it.' }
       ]
     }
   ]}

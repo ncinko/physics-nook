@@ -1,7 +1,11 @@
 .checkpoint-option {
   border-color: var(--grid-line);
-  background-color: var(--bg-primary);
+  background-color: var(--surface-elevated);
   color: var(--text-primary);
+}
+
+.checkpoint-option:not([data-result]):hover {
+  border-color: var(--accent-blue);
 }
 
 .checkpoint-letter {
@@ -10,11 +14,11 @@
   color: var(--text-primary);
 }
 
-.checkpoint-option[data-result='correct'] {
+.checkpoint [data-result='correct'] {
   --checkpoint-accent: var(--accent-green);
 }
 
-.checkpoint-option[data-result='incorrect'] {
+.checkpoint [data-result='incorrect'] {
   --checkpoint-accent: var(--accent-red);
 }
 
@@ -27,6 +31,11 @@
 .checkpoint-option[data-result] .checkpoint-letter {
   border-color: inherit;
   background-color: color-mix(in srgb, var(--checkpoint-accent) 18%, var(--bg-primary));
+}
+
+/* The explanation hangs off a rule in the result color rather than a card. */
+.explanation[data-result] {
+  border-color: color-mix(in srgb, var(--checkpoint-accent) 70%, var(--grid-line));
 }
 
 /* Keep the existing stronger feedback colors in Light. */

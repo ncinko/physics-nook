@@ -35,14 +35,14 @@ const breakoutClass =
 <section class={`not-prose relative left-1/2 my-10 -translate-x-1/2 sm:px-6 lg:px-8 ${breakoutClass}`}>
   <div
     data-simulation-block
-    class="simulation-shell relative flex flex-col overflow-hidden rounded-2xl border border-theme-grid bg-[var(--sim-bg)] shadow-sm"
+    class="simulation-shell relative flex flex-col overflow-hidden rounded-[var(--radius-panel)] border border-theme-grid bg-[var(--sim-bg)] shadow-sm"
   >
     {showFullscreen && (
       <button
         type="button"
         data-simulation-fullscreen-toggle
         class:list={[
-          'absolute top-4 right-4 z-20 rounded-md px-3 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition-colors',
+          'absolute top-4 right-4 z-20 rounded-[var(--radius-control)] px-3 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition-colors',
           highlightFullscreen
             ? 'border border-[color:color-mix(in_srgb,var(--accent-blue)_45%,var(--grid-line))] bg-[var(--accent-blue)] text-white shadow-md ring-2 ring-[color:color-mix(in_srgb,var(--accent-blue)_25%,transparent)] hover:brightness-110'
             : 'border border-theme-grid bg-[var(--surface-elevated)] text-theme-text hover:border-theme-blue hover:text-theme-blue',
@@ -70,7 +70,7 @@ const breakoutClass =
         data-simulation-fallback
         role="alert"
         hidden
-        class="m-5 rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[color:var(--text-primary)] shadow-sm"
+        class="m-5 rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-5 py-4 text-sm text-[color:var(--text-primary)] shadow-sm"
       >
         <p class="m-0 font-semibold">This interactive didn't load.</p>
         <p class="mt-1 mb-0 text-[var(--text-muted)]">

@@ -13,49 +13,39 @@ const {
   accent = 'blue',
 } = Astro.props;
 
-const accentStyles = accent === 'red'
-  ? {
-      focus: 'focus-visible:ring-[var(--accent-red)]',
-    }
-  : {
-      focus: 'focus-visible:ring-[var(--accent-blue)]',
-    };
-
-const chevronBubbleClass = 'border-[color:color-mix(in_srgb,#9bb8ab_52%,var(--grid-line))] bg-[color-mix(in_srgb,#d8ebe1_44%,var(--surface-elevated))] text-[color:color-mix(in_srgb,#56786b_78%,var(--text-primary))]';
+const focusClass = accent === 'red'
+  ? 'focus-visible:ring-[var(--accent-red)]'
+  : 'focus-visible:ring-[var(--accent-blue)]';
 ---
 
 <details
   open={defaultOpen}
-  class="worked-example overflow-hidden rounded-[1.6rem] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--surface-elevated)_92%,transparent)] shadow-sm"
+  class="worked-example border-b border-[var(--grid-line)]"
 >
   <summary
-    class={`flex cursor-pointer list-none items-start gap-4 px-5 py-5 transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--surface-elevated)_84%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sim-bg)] ${accentStyles.focus}`}
+    class={`group flex cursor-pointer list-none items-start gap-4 rounded-[var(--radius-control)] px-1 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] ${focusClass}`}
   >
     <div class="min-w-0 flex-1">
-      <div class="min-w-0">
-        <h3 class="m-0 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">{title}</h3>
-        {prompt && <p class="mt-2 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">{prompt}</p>}
-      </div>
+      <h3 class="m-0 text-lg font-semibold tracking-tight text-[color:var(--text-primary)] transition-colors duration-200 group-hover:text-[color:var(--accent-blue)]">{title}</h3>
+      {prompt && <p class="mt-1 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">{prompt}</p>}
     </div>
 
-    <span class={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border shadow-sm transition-transform duration-200 worked-example-chevron ${chevronBubbleClass}`}>
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        class="h-5 w-5"
-        aria-hidden="true"
-      >
-        <path
-          fill-rule="evenodd"
-          d="M7.22 4.97a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.19 10 7.22 6.03a.75.75 0 0 1 0-1.06Z"
-          clip-rule="evenodd"
-        />
-      </svg>
-    </span>
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      class="worked-example-chevron mt-1 h-5 w-5 flex-shrink-0 text-[color:var(--text-muted)] transition-transform duration-200"
+      aria-hidden="true"
+    >
+      <path
+        fill-rule="evenodd"
+        d="M7.22 4.97a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.19 10 7.22 6.03a.75.75 0 0 1 0-1.06Z"
+        clip-rule="evenodd"
+      />
+    </svg>
   </summary>
 
-  <div class="border-t border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--bg-primary)_68%,var(--surface-elevated))] px-5 py-5">
+  <div class="mb-6 ml-1 border-l-2 border-[var(--grid-line)] pl-4">
     <div class="worked-example-body prose prose-theme max-w-none">
       <slot />
     </div>

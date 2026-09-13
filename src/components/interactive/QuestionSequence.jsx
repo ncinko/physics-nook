@@ -70,16 +70,21 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
   };
 
   return (
-    <section className="checkpoint not-prose rounded-3xl border border-[var(--grid-line)] bg-[color:var(--sim-bg)] p-5 text-[color:var(--text-primary)] shadow-sm md:p-6">
-      <p className="mb-4 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+    <section className="checkpoint not-prose my-12 border-t border-[var(--grid-line)] pt-6 text-[color:var(--text-primary)]">
+      <p className="mb-4 flex items-baseline gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
         {eyebrow}
+        {questions.length > 1 && (
+          <span className="font-medium normal-case tracking-normal text-[var(--text-muted)]">
+            {questionIndex + 1} of {questions.length}
+          </span>
+        )}
       </p>
 
       <div ref={questionRef} className="mb-5 text-lg font-semibold leading-relaxed">
         {currentQuestion.question}
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {currentQuestion.options.map((option, index) => {
           const isSelected = option.id === selectedOptionId;
           const isSelectedCorrect = hasSubmitted && isSelected && option.isCorrect;
@@ -91,10 +96,10 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
               onClick={() => handleSelect(option.id)}
               aria-pressed={isSelected}
               data-result={hasSubmitted && isSelected ? (isSelectedCorrect ? 'correct' : 'incorrect') : undefined}
-              className={`checkpoint-option group flex w-full items-start gap-4 rounded-2xl border p-4 text-left transition-all duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)] ${isSelected ? '' : 'hover:-translate-y-0.5 hover:shadow-md'}`}
+              className="checkpoint-option group flex w-full items-start gap-3 rounded-[var(--radius-control)] border p-3 text-left transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-blue)]"
             >
               <span
-                className="checkpoint-letter mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
+                className="checkpoint-letter mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border text-sm font-semibold transition-colors"
               >
                 {String.fromCharCode(65 + index)}
               </span>
@@ -131,15 +136,18 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
           <button
             type="button"
             onClick={handleNext}
-            className="rounded-full bg-[var(--accent-blue)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md"
+            className="rounded-full bg-[var(--accent-blue)] px-5 py-2 text-sm font-semibold text-white transition-[filter] duration-200 hover:brightness-110"
           >
-            Next Question
+            Next question
           </button>
         </div>
       )}
 
       {hasSubmitted && selectedOption && (
-        <div className="explanation mt-5 rounded-2xl border border-[var(--grid-line)] bg-[var(--bg-primary)] p-4 shadow-sm">
+        <div
+          data-result={isCorrect ? 'correct' : 'incorrect'}
+          className="explanation mt-5 border-l-2 pl-4"
+        >
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
             Explanation
           </p>

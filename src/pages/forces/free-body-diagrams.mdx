@@ -37,19 +37,15 @@ export const unlistedMechanicsPath = {
 
 # Free-Body Diagrams
 
-The [Forces](/forces) page introduced the cast: weight, spring forces, the normal force, and tension. This page is about using them. Before drawing a single arrow, it helps to notice something the cast list hides: a force is never a property of one object. Every force is one half of an **interaction** between two objects.
+The [Forces](/forces) page introduced many of the forces commonly seen in mechanics: gravity, the normal force, spring-like forces, etc.  Although we focused on Newt, a force is not a property of one object. Each force results from an **interaction** between two things.
 
-A falling ball is the simplest case. Earth pulls on the ball, and the ball pulls on Earth. We draw that as two objects joined by one link, labeled with the kind of interaction.
+An **interaction diagram** is a way of visualizing the interactions between several objects. Each object gets a bubble, which are then joined by lines that represent the various interactions.  The only question is *which* objects interact, and *how*.
 
 <InteractiveAnchor id="interaction-diagram" />
 
 <InteractionDiagram client:visible stage="pairs" />
 
-## Interactions
-
-An **interaction diagram** is a map of who is interacting with whom. Each object gets a bubble. Each interaction gets one link, labeled by its type: gravity, normal, tension, friction, or a push. There are no arrows yet, and no sizes. The only question is *which* objects interact, and *how*.
-
-One link always stands for two forces. Tap a link above to see them: one force acts on each object, and the two point in opposite directions. This is **Newton's third law**:
+Note that one interaction link always represents two forces. Tap a link above to see them: one force acts on each object, and the two point in opposite directions. This is **Newton's third law**:
 
 $$
 \vec{F}_{\htmlClass{math-hint math-hint-on}{\text{A on B}}} = -\vec{F}_{\text{B on A}}.
@@ -57,46 +53,41 @@ $$
 
 <MathHint id="on" label="Subscripts">Read "A on B" as the force that object A exerts on object B. Swapping the names gives the partner force.</MathHint>
 
-The two forces in a pair are the same kind of interaction, equal in size, opposite in direction, and they always act on **different objects**. That last fact is why a single link joins two *different* bubbles.
+The two forces in a pair are equal in size, opposite in direction, and they always act on **different objects**. 
 
-Switch to *Newt pushing a box* and tap the friction link between Newt and Earth. Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push from the floor is the only thing that can move Newt, and nothing about it breaks the third law.
+Switch to *Newt pushing a box* and tap the friction link between Newt and Earth. Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push from the floor is the only thing that can move Newt as he exerts his own force on the box.
 
 ## Choosing a System
 
-An interaction diagram shows everything. A free-body diagram shows one piece of it. To pick the piece, draw a dashed **system boundary** around the object or objects you care about.
+An interaction diagram attempts to show everything; a **free-body diagram** shows the forces acting on a particular object or collection of objects. Draw a dashed **system boundary** around the object or objects you care about.
 
-- A link that **crosses** the boundary is an external interaction. Its force on the object inside becomes an arrow on the free-body diagram.
-- A link with **both ends inside** is internal. Both of its forces act on the system, they cancel, and neither goes on the diagram.
+- A link that **crosses** the boundary is an external interaction. Its force on the system becomes an arrow on the free-body diagram.
+- A link with **both ends inside** represents two forces that are internal to the system; neither goes on the diagram.
 
-Tap the bubbles to move them in or out of the system.
+Tap the bubbles below to move them in or out of the system.
 
 <InteractiveAnchor id="system-boundary" />
 
 <InteractionDiagram client:visible stage="system" initialScene="pushing-box" />
 
-With only Newt inside, the box pushes him backward. Add the box to the system and that push vanishes from the diagram. Nothing physical changed; the push just became internal. Choosing a clever system is often the fastest way through a problem, because it hides the forces you do not want to solve for.
+Consider the "Newt pushing a box" scenario.  With only Newt inside the system, the box pushes him backward. If we add the box to the system, that push vanishes from the diagram. Nothing physical changed; the push just became internal. Choosing a clever system is often the fastest way through a problem, because it hides the forces you do not want to solve for.
 
-## Free-Body Diagrams
+For simplicity, the system in a free-body diagram is often drawn as a single dot.  Every external force acting on the system is drawn as a vector arrow.  When using these to analyze a problem, be sure to only draw:
 
-A **free-body diagram** shows the chosen system — often drawn as a single dot — with every external force acting on it as an arrow, and nothing else in the picture. Reading one off an interaction diagram means following three rules:
+- **Forces.** Velocity is not a force. Acceleration is not a force. The quantity $m\vec{a}$ is not a force.
+- **Forces acting now.** The shove that started an object moving is not on the diagram once your hand is gone.
 
-- **Only forces on the system.** The partner of each force acts on the object at the other end of the link, outside the boundary.
-- **Only forces acting now.** The shove that started an object moving is not on the diagram once your hand is gone.
-- **Only forces.** Velocity is not a force. Acceleration is not a force. The quantity $m\vec{a}$ is not a force — it is what the forces add up to.
-
-Try each of these on Newt. Choose the forces you think belong, look at the diagram you just described, then check it.
+Try each of these on Newt. Choose the forces you think belong, look at the diagram you just described, and then check it.
 
 <InteractiveAnchor id="free-body-builder" />
 
 <FreeBodyDiagramBuilder client:visible />
 
-The resting case is worth dwelling on. Newt pushes down on the table and the table pushes up on Newt: those two forces share the *normal* link, so they are a third-law pair, and only one of them acts on Newt. What balances Newt's weight is the normal force from the table — a force from a different link, whose partner lives on the table. The weight's own partner is Newt's pull on Earth, at the far end of the gravity link. If third-law pairs could cancel on one diagram, nothing would ever accelerate.
-
 ## Newton's First and Second Laws
 
-**Newton's first law** says an object's velocity does not change unless a net force acts on it. This is the [force-free motion](/forces#force-free-newt) idea from the previous page: no net force means no acceleration, whether the object is sitting still or already moving.
+**Newton's first law** says an object's velocity does not change unless a net force acts on it. This can be seen in [force-free motion](/forces#force-free-newt) when Newt is traveling between walls.  
 
-**Newton's second law** says the net force sets the acceleration. Once the free-body diagram is drawn, the sum runs over its arrows, and nothing else:
+**Newton's second law** says the combined effect of all forces (i.e. the sum of forces, often called the **net force**) sets the acceleration. 
 
 <ComponentReveal>
   <div slot="vector">
@@ -113,9 +104,9 @@ The resting case is worth dwelling on. Newt pushes down on the table and the tab
   $$
 </ComponentReveal>
 
-The first law is just the special case $\sum \vec{F} = 0$. As in [2D kinematics](/kinematics/two-dimensional), each component equation is independent, provided the axes are perpendicular and stay fixed for the whole problem.
+The first law can be considered a special case of the second $\sum \vec{F} = 0$. As in [2D kinematics](/kinematics/two-dimensional), each component equation is independent, provided the axes are perpendicular and stay fixed for the whole problem.
 
-The sum is a *vector* sum, so it is worth seeing drawn out. Newt stands in an elevator that is speeding up as it rises:
+Note that this sum is a *vector* sum.  Newt stands in an elevator that is speeding up as it rises (accelerating upward):
 
 <ComponentReveal label="Diagram">
   <div slot="vector">
@@ -127,7 +118,7 @@ The sum is a *vector* sum, so it is worth seeing drawn out. Newt stands in an el
   <NetForceDiagram />
 </ComponentReveal>
 
-The normal force has to be longer than the weight. If the two were equal, the arrows would close up with nothing left over, and Newt would not accelerate. The small leftover arrow is the net force, and it points the way Newt is accelerating: up. That is why the floor of a rising elevator feels like it presses harder on your feet.
+The magnitude of the normal force has to be greater than Newt's weight. If the two were equal, the net force would be zero, and Newt would not accelerate. The small leftover arrow in the vector sum diagram represents the net force (be very careful to **not** think of this as a new force).  It points the way Newt is accelerating: up. 
 
 <ProblemSolvingSection intro="Each of these follows the same path: map the interactions, draw a boundary around a system, then write the second law along each axis.">
   <WorkedExampleCard title="Apparent Weight in an Elevator" accent="blue">

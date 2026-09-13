@@ -49,6 +49,7 @@ export {
   type InteractionKind,
   type InteractionObject,
   type InteractionScene,
+  type LabelSpot,
   type SystemClassification,
 } from './interactions.ts';
 

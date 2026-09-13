@@ -8,7 +8,8 @@
 // ones (both ends inside, so the pair cancels and drops off the diagram).
 //
 // Each scene also carries the geometry for its realistic drawing beside the
-// diagram (`inScene`, `applyAt`), so the pair arrows land on the right objects.
+// diagram (`inScene`, `applyAt`, `labelAt`), so the pair arrows land on the
+// right objects and their labels stay clear of the artwork.
 
 import { add, magnitude, scale, subtract, type Vector2 } from '../math/vectors.ts';
 import type { ForceKind } from './freeBody.ts';
@@ -31,6 +32,13 @@ export interface InteractionObject {
   inScene: Vector2;
 }
 
+/** A hand-placed arrow label, for arrows whose tip would crowd the artwork. */
+export interface LabelSpot {
+  x: number;
+  y: number;
+  anchor: 'start' | 'middle' | 'end';
+}
+
 export interface Interaction {
   id: string;
   a: string;
@@ -44,6 +52,8 @@ export interface Interaction {
   pair: string;
   /** Tail of each force's arrow in the scene drawing (SCENE_VIEW units). */
   applyAt: { a: Vector2; b: Vector2 };
+  /** Label positions that override the default spot just past the arrow tip. */
+  labelAt?: { a?: LabelSpot; b?: LabelSpot };
 }
 
 export interface InteractionScene {
@@ -59,8 +69,12 @@ export interface InteractionScene {
 export const BUBBLE_RADIUS = 34;
 export const BOUNDARY_PAD = 12;
 
-/** The realistic scene drawing: its size and the height of Earth's surface. */
-export const SCENE_VIEW = { width: 400, height: 340, ground: 262 };
+/**
+ * The realistic scene drawing: its size, the height of Earth's surface, and the
+ * drawn length of every pair arrow. Only one pair shows at a time and its two
+ * forces are always equal, so one fixed length reads best.
+ */
+export const SCENE_VIEW = { width: 400, height: 340, ground: 262, arrowLength: 36 };
 
 const UP = { x: 0, y: -1 };
 const DOWN = { x: 0, y: 1 };
@@ -70,7 +84,7 @@ const LEFT = { x: -1, y: 0 };
 // Forces on Earth are drawn inside its body, below the surface.
 const EARTH_DEEP = 328;
 const EARTH_SURFACE = SCENE_VIEW.ground + 6;
-const EARTH_LABEL = { x: 360, y: 318 };
+const EARTH_LABEL = { x: 34, y: 326 };
 
 export const interactionScenes: InteractionScene[] = [
   {
@@ -112,6 +126,7 @@ export const interactionScenes: InteractionScene[] = [
         forceOnB: DOWN,
         pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
         applyAt: { a: { x: 220, y: EARTH_DEEP }, b: { x: 220, y: 162 } },
+        labelAt: { b: { x: 172, y: 186, anchor: 'end' } },
       },
       {
         id: 'table-newt-normal',
@@ -142,6 +157,7 @@ export const interactionScenes: InteractionScene[] = [
         forceOnB: scale(UP, 2.4),
         pair: 'The floor pushes up on the table legs, and the legs push down on the floor.',
         applyAt: { a: { x: 315, y: EARTH_SURFACE }, b: { x: 315, y: SCENE_VIEW.ground } },
+        labelAt: { b: { x: 305, y: 238, anchor: 'end' } },
       },
     ],
     defaultSystem: ['newt'],
@@ -150,8 +166,8 @@ export const interactionScenes: InteractionScene[] = [
     id: 'hanging',
     title: 'Newt hanging by his tongue',
     objects: [
-      { id: 'tree', label: 'Tree', name: 'the tree', position: { x: 340, y: 110 }, inScene: { x: 330, y: 60 } },
-      { id: 'newt', label: 'Newt', name: 'Newt', position: { x: 200, y: 190 }, inScene: { x: 200, y: 200 } },
+      { id: 'tree', label: 'Tree', name: 'the tree', position: { x: 340, y: 110 }, inScene: { x: 330, y: 40 } },
+      { id: 'newt', label: 'Newt', name: 'Newt', position: { x: 200, y: 190 }, inScene: { x: 200, y: 205 } },
       { id: 'earth', label: 'Earth', name: 'Earth', position: { x: 270, y: 300 }, inScene: EARTH_LABEL },
     ],
     interactions: [
@@ -163,8 +179,10 @@ export const interactionScenes: InteractionScene[] = [
         label: 'tension',
         forceOnB: UP,
         pair: 'The tongue pulls Newt up toward the branch, and pulls the branch down toward Newt.',
-        // Beside the tongue rather than on top of it, at the mouth and the branch.
-        applyAt: { a: { x: 218, y: 66 }, b: { x: 218, y: 191 } },
+        // Beside the tongue rather than on top of it: at the branch, and where
+        // the tongue leaves the top of Newt's head. Labels sit clear of the tongue.
+        applyAt: { a: { x: 218, y: 46 }, b: { x: 218, y: 167 } },
+        labelAt: { a: { x: 228, y: 64, anchor: 'start' }, b: { x: 228, y: 149, anchor: 'start' } },
       },
       {
         id: 'earth-newt-gravity',
@@ -174,7 +192,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'gravity',
         forceOnB: DOWN,
         pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
-        applyAt: { a: { x: 200, y: EARTH_DEEP }, b: { x: 200, y: 200 } },
+        applyAt: { a: { x: 200, y: EARTH_DEEP }, b: { x: 200, y: 205 } },
+        labelAt: { b: { x: 150, y: 232, anchor: 'end' } },
       },
       {
         id: 'earth-tree-gravity',
@@ -184,7 +203,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'gravity',
         forceOnB: scale(DOWN, 1.6),
         pair: 'Earth pulls down on the tree, and the tree pulls up on Earth.',
-        applyAt: { a: { x: 330, y: EARTH_DEEP }, b: { x: 330, y: 160 } },
+        applyAt: { a: { x: 330, y: EARTH_DEEP }, b: { x: 330, y: 110 } },
+        labelAt: { b: { x: 318, y: 128, anchor: 'end' } },
       },
       {
         id: 'earth-tree-normal',
@@ -203,8 +223,8 @@ export const interactionScenes: InteractionScene[] = [
     id: 'pushing-box',
     title: 'Newt pushing a box',
     objects: [
-      { id: 'newt', label: 'Newt', name: 'Newt', position: { x: 160, y: 130 }, inScene: { x: 146, y: 224 } },
-      { id: 'box', label: 'Box', name: 'the box', position: { x: 380, y: 130 }, inScene: { x: 230, y: 222 } },
+      { id: 'newt', label: 'Newt', name: 'Newt', position: { x: 160, y: 130 }, inScene: { x: 176, y: 224 } },
+      { id: 'box', label: 'Box', name: 'the box', position: { x: 380, y: 130 }, inScene: { x: 260, y: 222 } },
       { id: 'earth', label: 'Earth', name: 'Earth', position: { x: 270, y: 290 }, inScene: EARTH_LABEL },
     ],
     interactions: [
@@ -216,8 +236,9 @@ export const interactionScenes: InteractionScene[] = [
         label: 'push',
         forceOnB: scale(RIGHT, 1.2),
         pair: 'Newt pushes the box forward, and the box pushes Newt backward just as hard.',
-        // Both tails sit at the contact between Newt's hands and the box.
-        applyAt: { a: { x: 188, y: 222 }, b: { x: 192, y: 222 } },
+        // Both tails sit where Newt's hands meet the box; labels go above them.
+        applyAt: { a: { x: 218, y: 222 }, b: { x: 222, y: 222 } },
+        labelAt: { a: { x: 212, y: 170, anchor: 'end' }, b: { x: 228, y: 170, anchor: 'start' } },
       },
       {
         id: 'earth-newt-gravity',
@@ -227,7 +248,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'gravity',
         forceOnB: DOWN,
         pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
-        applyAt: { a: { x: 146, y: EARTH_DEEP }, b: { x: 146, y: 224 } },
+        applyAt: { a: { x: 176, y: EARTH_DEEP }, b: { x: 176, y: 224 } },
+        labelAt: { b: { x: 128, y: 244, anchor: 'end' } },
       },
       {
         id: 'earth-newt-normal',
@@ -237,7 +259,7 @@ export const interactionScenes: InteractionScene[] = [
         label: 'normal',
         forceOnB: UP,
         pair: 'The floor pushes up on Newt, and Newt pushes down on the floor.',
-        applyAt: { a: { x: 146, y: EARTH_SURFACE }, b: { x: 146, y: 224 } },
+        applyAt: { a: { x: 176, y: EARTH_SURFACE }, b: { x: 176, y: 224 } },
       },
       {
         id: 'earth-newt-friction',
@@ -247,7 +269,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'friction',
         forceOnB: scale(RIGHT, 1.5),
         pair: "Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push is what moves him.",
-        applyAt: { a: { x: 170, y: 272 }, b: { x: 112, y: 256 } },
+        applyAt: { a: { x: 186, y: 274 }, b: { x: 150, y: 258 } },
+        labelAt: { b: { x: 128, y: 244, anchor: 'end' } },
       },
       {
         id: 'earth-box-gravity',
@@ -257,7 +280,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'gravity',
         forceOnB: scale(DOWN, 1.3),
         pair: 'Earth pulls down on the box, and the box pulls up on Earth.',
-        applyAt: { a: { x: 230, y: EARTH_DEEP }, b: { x: 230, y: 222 } },
+        applyAt: { a: { x: 260, y: EARTH_DEEP }, b: { x: 260, y: 222 } },
+        labelAt: { b: { x: 306, y: 240, anchor: 'start' } },
       },
       {
         id: 'earth-box-normal',
@@ -267,7 +291,7 @@ export const interactionScenes: InteractionScene[] = [
         label: 'normal',
         forceOnB: scale(UP, 1.3),
         pair: 'The floor pushes up on the box, and the box pushes down on the floor.',
-        applyAt: { a: { x: 230, y: EARTH_SURFACE }, b: { x: 230, y: 222 } },
+        applyAt: { a: { x: 260, y: EARTH_SURFACE }, b: { x: 260, y: 222 } },
       },
       {
         id: 'earth-box-friction',
@@ -277,7 +301,8 @@ export const interactionScenes: InteractionScene[] = [
         label: 'friction',
         forceOnB: scale(LEFT, 0.7),
         pair: 'The floor drags backward on the sliding box, and the box drags the floor forward.',
-        applyAt: { a: { x: 250, y: 272 }, b: { x: 250, y: 256 } },
+        applyAt: { a: { x: 280, y: 274 }, b: { x: 280, y: 258 } },
+        labelAt: { a: { x: 300, y: 294, anchor: 'start' }, b: { x: 306, y: 250, anchor: 'start' } },
       },
     ],
     defaultSystem: ['newt'],

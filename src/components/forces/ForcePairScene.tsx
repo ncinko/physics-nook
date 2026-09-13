@@ -1,16 +1,24 @@
 import { ForceArrow } from './ForceArrow';
 import NewtSprite, { NEWT_MOUTH_OFFSET } from './NewtSprite';
 import { TongueMouthStub, TongueStrand } from './NewtTongue';
-import { add, SCENE_VIEW, thirdLawPair, type Interaction, type InteractionScene, type Vector2 } from '../../lib/forces';
+import {
+  add,
+  normalize,
+  scale,
+  SCENE_VIEW,
+  thirdLawPair,
+  type Interaction,
+  type InteractionScene,
+  type LabelSpot,
+  type Vector2,
+} from '../../lib/forces';
 
 // The realistic drawing beside the interaction diagram. With no link selected
 // it is just the scene; with one selected, its third-law pair is drawn in
-// place, one arrow on each object. Object placement and arrow tails come from
-// `inScene` / `applyAt` in lib/forces/interactions.
+// place, one arrow on each object. Object placement, arrow tails, and any
+// hand-placed labels come from lib/forces/interactions.
 
-const { width: W, height: H, ground: G } = SCENE_VIEW;
-const PAIR_SCALE = 30;
-const PAIR_MAX = 48;
+const { width: W, height: H, ground: G, arrowLength: ARROW } = SCENE_VIEW;
 
 const INK = 'var(--text-primary)';
 const MUTED = 'var(--text-muted)';
@@ -62,7 +70,7 @@ const Tree = ({ joint, branchTip }: { joint: Vector2; branchTip: number }) => (
   <g stroke={MUTED} strokeLinecap="round">
     <line x1={joint.x} y1={G} x2={joint.x} y2={joint.y - 22} strokeWidth={12} />
     <line x1={joint.x} y1={joint.y} x2={branchTip} y2={joint.y} strokeWidth={7} />
-    <line x1={joint.x} y1={joint.y - 8} x2={joint.x + 26} y2={joint.y - 34} strokeWidth={5} />
+    <line x1={joint.x} y1={joint.y - 8} x2={joint.x + 26} y2={joint.y - 30} strokeWidth={5} />
   </g>
 );
 
@@ -117,18 +125,37 @@ const Backdrop = ({ scene }: { scene: InteractionScene }) => {
         </>
       );
     }
-    case 'pushing-box':
+    case 'pushing-box': {
+      const box = at('box');
       return (
         <>
-          <MotionHint from={{ x: 150, y: 150 }} to={{ x: 214, y: 150 }} />
-          <Crate centre={at('box')} />
+          <MotionHint from={{ x: box.x - 60, y: 120 }} to={{ x: box.x + 4, y: 120 }} />
+          <Crate centre={box} />
           <NewtSprite x={at('newt').x} y={at('newt').y} />
         </>
       );
+    }
     default:
       return null;
   }
 };
+
+const PairLabel = ({ spot, color, text }: { spot: LabelSpot; color: string; text: string }) => (
+  <text
+    x={spot.x}
+    y={spot.y}
+    fill={color}
+    textAnchor={spot.anchor}
+    dominantBaseline="middle"
+    fontSize="14"
+    fontWeight="700"
+    paintOrder="stroke"
+    stroke="var(--surface-plot)"
+    strokeWidth="4"
+  >
+    {text}
+  </text>
+);
 
 interface ForcePairSceneProps {
   scene: InteractionScene;
@@ -146,9 +173,14 @@ export default function ForcePairScene({ scene, pair, color = INK }: ForcePairSc
         const a = objectById(pair.a);
         const b = objectById(pair.b);
         return [
-          { key: 'onB', origin: pair.applyAt.b, force: onB, label: `${a.label} on ${b.label}` },
-          { key: 'onA', origin: pair.applyAt.a, force: onA, label: `${b.label} on ${a.label}` },
-        ];
+          { end: 'b' as const, force: onB, text: `${a.label} on ${b.label}` },
+          { end: 'a' as const, force: onA, text: `${b.label} on ${a.label}` },
+        ].map((arrow) => ({
+          ...arrow,
+          origin: pair.applyAt[arrow.end],
+          spot: pair.labelAt?.[arrow.end],
+          vector: scale(normalize(arrow.force), ARROW),
+        }));
       })()
     : [];
 
@@ -162,16 +194,17 @@ export default function ForcePairScene({ scene, pair, color = INK }: ForcePairSc
       {earth && <Earth label={earth.inScene} />}
       <Backdrop scene={scene} />
       {arrows.map((arrow) => (
-        <ForceArrow
-          key={`${pair!.id}-${arrow.key}`}
-          origin={arrow.origin}
-          vector={arrow.force}
-          scale={PAIR_SCALE}
-          maxLength={PAIR_MAX}
-          color={color}
-          label={arrow.label}
-          labelBounds={SCENE_VIEW}
-        />
+        <g key={`${pair!.id}-${arrow.end}`}>
+          <ForceArrow
+            origin={arrow.origin}
+            vector={arrow.vector}
+            maxLength={ARROW}
+            color={color}
+            label={arrow.spot ? '' : arrow.text}
+            labelBounds={SCENE_VIEW}
+          />
+          {arrow.spot && <PairLabel spot={arrow.spot} color={color} text={arrow.text} />}
+        </g>
       ))}
     </svg>
   );

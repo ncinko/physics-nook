@@ -223,6 +223,18 @@ for (const scene of interactionScenes) {
   }
   for (const interaction of scene.interactions) {
     assert.ok(inView(interaction.applyAt.a) && inView(interaction.applyAt.b), `${scene.id}/${interaction.id} has an arrow outside the scene`);
+    // Hand-placed labels must fit inside the drawing. Estimate the width of a
+    // 14px bold label at about 7.5 units per character.
+    const objectLabel = (id: string) => scene.objects.find((object) => object.id === id)!.label;
+    const labelText = { a: `${objectLabel(interaction.b)} on ${objectLabel(interaction.a)}`, b: `${objectLabel(interaction.a)} on ${objectLabel(interaction.b)}` };
+    for (const end of ['a', 'b'] as const) {
+      const spot = interaction.labelAt?.[end];
+      if (!spot) continue;
+      const width = labelText[end].length * 7.5;
+      const left = spot.anchor === 'start' ? spot.x : spot.anchor === 'end' ? spot.x - width : spot.x - width / 2;
+      assert.ok(left >= 0 && left + width <= SCENE_VIEW.width, `${scene.id}/${interaction.id} label ${end} runs off the scene`);
+      assert.ok(spot.y >= 8 && spot.y <= SCENE_VIEW.height - 8, `${scene.id}/${interaction.id} label ${end} is too close to the edge`);
+    }
     // Forces on Earth start at or below its surface, inside its body.
     for (const end of ['a', 'b'] as const) {
       if (interaction[end] === 'earth') {

@@ -51,9 +51,6 @@ export const forcesModule: ModuleMeta = {
           "Draw interaction diagrams, choose a system boundary, build free-body diagrams interactively, and apply Newton's three laws to elevators, pushes, and pulleys.",
         canonicalPath: '/forces/free-body-diagrams',
         image: '/social/physics-nook-card.svg',
-        // Unlisted lesson: reachable only by typing the URL, so keep it out of
-        // the sitemap and site search until it ships.
-        noindex: true,
       },
     },
   ],

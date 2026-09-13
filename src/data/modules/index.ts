@@ -80,11 +80,8 @@ export const mechanicsPath = {
   navVisibility: 'menu',
   pages: [
     ...kinematicsModule.pages,
-    // pages[0] is the published Forces lesson. The Free-Body Diagrams lesson
-    // (pages[1]) is deliberately unlisted: it stays reachable by typing
-    // /forces/free-body-diagrams, but leaving it out here keeps it off the
-    // module hero, the Resources index, the lesson pager, and site search.
-    forcesModule.pages[0],
+    // Forces, then Free-Body Diagrams.
+    ...forcesModule.pages,
     collisionsModule.pages[0],
     energyModule.pages[0],
   ],

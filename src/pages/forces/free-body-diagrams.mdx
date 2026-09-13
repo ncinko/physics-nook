@@ -16,22 +16,8 @@ import InteractionDiagram from '../../components/forces/InteractionDiagram';
 import NetForceDiagram from '../../components/forces/NetForceDiagram.astro';
 import FreeBodyDiagramBuilder from '../../components/forces/FreeBodyDiagramBuilder';
 import { mechanicsPath } from '../../data/modules';
-import { forcesModule } from '../../data/modules/forces';
 
-{/* This lesson is unlisted: it is intentionally left out of `mechanicsPath` so
-it stays off the module hero, the Resources index, the lesson pager, and site
-search, and is reachable only by typing the URL. Splice it back into a local
-copy of the path so the hero on this page still shows where it sits. */}
-export const freeBodyPage = forcesModule.pages.find((page) => page.id === 'forces-free-body-diagrams');
-
-export const unlistedMechanicsPath = {
-  ...mechanicsPath,
-  pages: mechanicsPath.pages.flatMap((page) =>
-    page.id === 'forces-core' && freeBodyPage ? [page, freeBodyPage] : [page],
-  ),
-};
-
-<ModuleHero module={unlistedMechanicsPath} currentPath="/forces/free-body-diagrams" />
+<ModuleHero module={mechanicsPath} currentPath="/forces/free-body-diagrams" />
 
 <div id="page-content"></div>
 
@@ -106,7 +92,7 @@ Try each of these on Newt. Choose the forces you think belong, look at the diagr
 
 The first law can be considered a special case of the second $\sum \vec{F} = 0$. As in [2D kinematics](/kinematics/two-dimensional), each component equation is independent, provided the axes are perpendicular and stay fixed for the whole problem.
 
-Note that this sum is a *vector* sum.  Newt stands in an elevator that is speeding up as it rises (accelerating upward):
+Note that this sum is a *vector* sum.  Let's say Newt stands in an elevator that is speeding up as it rises (accelerating upward).  With Newt as the system, there are two forces to consider in the sum:
 
 <ComponentReveal label="Diagram">
   <div slot="vector">
@@ -120,7 +106,7 @@ Note that this sum is a *vector* sum.  Newt stands in an elevator that is speedi
 
 The magnitude of the normal force has to be greater than Newt's weight. If the two were equal, the net force would be zero, and Newt would not accelerate. The small leftover arrow in the vector sum diagram represents the net force (be very careful to **not** think of this as a new force).  It points the way Newt is accelerating: up. 
 
-<ProblemSolvingSection intro="Each of these follows the same path: map the interactions, draw a boundary around a system, then write the second law along each axis.">
+<ProblemSolvingSection intro="">
   <WorkedExampleCard title="Apparent Weight in an Elevator" accent="blue">
     #### Problem
 

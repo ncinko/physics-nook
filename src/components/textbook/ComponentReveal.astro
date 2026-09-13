@@ -1,0 +1,72 @@
+---
+// Inline disclosure for a vector equation: the equation itself is the toggle,
+// and its x/y component equations unfold beneath it. No panel, so it keeps the
+// reading flow; pass the vector equation in the `vector` slot.
+interface Props {
+  label?: string;
+  defaultOpen?: boolean;
+}
+
+const { label = 'Components', defaultOpen = false } = Astro.props;
+---
+
+<details open={defaultOpen} class="component-reveal not-prose my-5">
+  <summary
+    class="group flex cursor-pointer list-none items-center gap-3 rounded-[var(--radius-control)] px-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)]"
+  >
+    <div class="component-reveal-vector min-w-0 flex-1 overflow-x-auto text-[color:var(--text-primary)]">
+      <slot name="vector" />
+    </div>
+
+    <span class="type-supporting inline-flex flex-shrink-0 items-center gap-1 whitespace-nowrap transition-colors duration-200 group-hover:text-[color:var(--accent-blue)]">
+      <span class="component-reveal-show">{label}</span>
+      <span class="component-reveal-hide">Hide</span>
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        class="component-reveal-chevron h-4 w-4 transition-transform duration-200"
+        aria-hidden="true"
+      >
+        <path
+          fill-rule="evenodd"
+          d="M7.22 4.97a.75.75 0 0 1 1.06 0l4.5 4.5a.75.75 0 0 1 0 1.06l-4.5 4.5a.75.75 0 1 1-1.06-1.06L11.19 10 7.22 6.03a.75.75 0 0 1 0-1.06Z"
+          clip-rule="evenodd"
+        />
+      </svg>
+    </span>
+  </summary>
+
+  <div class="component-reveal-body mx-2 overflow-x-auto border-t border-[var(--grid-line)] text-[color:var(--text-primary)]">
+    <slot />
+  </div>
+</details>
+
+<style>
+  .component-reveal summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .component-reveal summary {
+    list-style: none;
+  }
+
+  .component-reveal[open] .component-reveal-chevron {
+    transform: rotate(90deg);
+  }
+
+  .component-reveal-hide,
+  .component-reveal[open] .component-reveal-show {
+    display: none;
+  }
+
+  .component-reveal[open] .component-reveal-hide {
+    display: inline;
+  }
+
+  .component-reveal-vector :global(.katex-display),
+  .component-reveal-body :global(.katex-display) {
+    margin-top: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+</style>

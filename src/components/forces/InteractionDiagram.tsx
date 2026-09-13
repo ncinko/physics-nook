@@ -11,7 +11,6 @@ import {
   scale,
   subtract,
   systemBoundaryPath,
-  thirdLawPair,
   type Interaction,
   type InteractionKind,
   type InteractionScene,
@@ -19,15 +18,13 @@ import {
 } from '../../lib/forces';
 
 // Interaction diagram: objects as bubbles, one labelled link per interaction.
-// In the "pairs" stage, tapping a link draws its two third-law forces, one on
-// each object. In the "system" stage, tapping bubbles moves them in or out of a
-// dashed boundary, and the links that cross it become a particle free-body
-// diagram. Scene data and the boundary geometry live in lib/forces/interactions.
+// The "map" stage is just the labelled links. In the "system" stage, tapping
+// bubbles moves them in or out of a dashed boundary, and the links that cross
+// it become a particle free-body diagram. Scene data and the boundary geometry
+// live in lib/forces/interactions.
 
 const VIEW = { width: 540, height: 400 };
 const FBD_VIEW = { width: 240, height: 240 };
-const ARROW_SCALE = 34;
-const ARROW_MAX = 60;
 const FBD_SCALE = 40;
 const FBD_MAX = 92;
 const LINK_SPREAD = 34;
@@ -115,23 +112,22 @@ const listJoin = (items: string[]) =>
   items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
 
 interface InteractionDiagramProps {
-  stage?: 'pairs' | 'system';
+  stage?: 'map' | 'system';
   initialScene?: string;
 }
 
-export default function InteractionDiagram({ stage = 'pairs', initialScene }: InteractionDiagramProps) {
+export default function InteractionDiagram({ stage = 'map', initialScene }: InteractionDiagramProps) {
   const [sceneId, setSceneId] = useState(initialScene ?? interactionScenes[0].id);
   const scene = interactionScenes.find((entry) => entry.id === sceneId) ?? interactionScenes[0];
-  const [selectedLink, setSelectedLink] = useState<string | null>(scene.interactions[0].id);
   const [system, setSystem] = useState<string[]>(scene.defaultSystem);
 
   const links = useMemo(() => layoutLinks(scene), [scene]);
   const objectById = (id: string) => scene.objects.find((object) => object.id === id)!;
+  const isSystem = stage === 'system';
 
   const chooseScene = (id: string) => {
     const next = interactionScenes.find((entry) => entry.id === id) ?? interactionScenes[0];
     setSceneId(next.id);
-    setSelectedLink(next.interactions[0].id);
     setSystem(next.defaultSystem);
   };
 
@@ -141,34 +137,13 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
   const classification = classifyForSystem(scene, system);
   const internalIds = new Set(classification.internal.map((interaction) => interaction.id));
   const externalIds = new Set(classification.external.map((force) => force.interaction.id));
-  const boundary = stage === 'system' ? systemBoundaryPath(scene, system) : '';
-
-  const pairLink = stage === 'pairs' ? scene.interactions.find((interaction) => interaction.id === selectedLink) : undefined;
+  const boundary = isSystem ? systemBoundaryPath(scene, system) : '';
 
   const linkOpacity = (interaction: Interaction) => {
-    if (stage === 'pairs') {
-      if (!pairLink) return 1;
-      return interaction.id === pairLink.id ? 0.35 : 0.18;
-    }
+    if (!isSystem) return 1;
     if (internalIds.has(interaction.id)) return 0.3;
     return externalIds.has(interaction.id) || system.length === 0 ? 1 : 0.55;
   };
-
-  // Third-law arrows start at each bubble's edge, pointing along the force.
-  const pairArrows = pairLink
-    ? (() => {
-        const { onA, onB } = thirdLawPair(pairLink);
-        const a = objectById(pairLink.a);
-        const b = objectById(pairLink.b);
-        return [
-          { key: 'onB', target: b, agent: a, force: onB },
-          { key: 'onA', target: a, agent: b, force: onA },
-        ].map((entry) => ({
-          ...entry,
-          origin: add(entry.target.position, scale(normalize(entry.force), BUBBLE_RADIUS + 4)),
-        }));
-      })()
-    : [];
 
   const systemNames = scene.objects.filter((object) => system.includes(object.id)).map((object) => object.name);
 
@@ -230,8 +205,12 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
   const diagram = (
     <svg
       viewBox={`0 0 ${VIEW.width} ${VIEW.height}`}
-      role="group"
-      aria-label={`Interaction diagram for ${scene.title}`}
+      role={isSystem ? 'group' : 'img'}
+      aria-label={`Interaction diagram for ${scene.title}: ${listJoin(
+        scene.interactions.map(
+          (interaction) => `${interaction.label} between ${objectById(interaction.a).name} and ${objectById(interaction.b).name}`,
+        ),
+      )}`}
       className="mx-auto block h-auto w-full max-w-[540px] select-none"
     >
       {boundary && (
@@ -247,34 +226,9 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
 
       {links.map(({ interaction, path, labelPoint }) => {
         const color = COLOR[interaction.kind];
-        const interactive = stage === 'pairs';
-        const pressed = pairLink?.id === interaction.id;
-        const toggle = () => setSelectedLink(pressed ? null : interaction.id);
         return (
-          <g
-            key={interaction.id}
-            {...(interactive
-              ? {
-                  role: 'button',
-                  tabIndex: 0,
-                  'aria-pressed': pressed,
-                  'aria-label': `${interaction.label} interaction between ${objectById(interaction.a).name} and ${objectById(interaction.b).name}`,
-                  onClick: toggle,
-                  onKeyDown: activateOnKey(toggle),
-                  style: { cursor: 'pointer' },
-                  className: 'outline-none focus-visible:outline-2 focus-visible:outline-[var(--accent-blue)]',
-                }
-              : {})}
-          >
-            {interactive && <path d={path} fill="none" stroke="transparent" strokeWidth={22} />}
-            <path
-              d={path}
-              fill="none"
-              stroke={color}
-              strokeWidth={3}
-              strokeLinecap="round"
-              opacity={linkOpacity(interaction)}
-            />
+          <g key={interaction.id} opacity={linkOpacity(interaction)}>
+            <path d={path} fill="none" stroke={color} strokeWidth={3} strokeLinecap="round" />
             <text
               x={round(labelPoint.x)}
               y={round(labelPoint.y)}
@@ -283,7 +237,6 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
               fontSize={14}
               fontWeight={700}
               fill={color}
-              opacity={Math.max(linkOpacity(interaction), pressed ? 1 : 0.45)}
               paintOrder="stroke"
               stroke="var(--bg-primary)"
               strokeWidth={5}
@@ -296,12 +249,11 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
 
       {scene.objects.map((object) => {
         const inside = system.includes(object.id);
-        const interactive = stage === 'system';
         const toggle = () => toggleObject(object.id);
         return (
           <g
             key={object.id}
-            {...(interactive
+            {...(isSystem
               ? {
                   role: 'button',
                   tabIndex: 0,
@@ -319,8 +271,8 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
               cy={object.position.y}
               r={BUBBLE_RADIUS}
               fill="var(--surface-plot)"
-              stroke={interactive && inside ? 'var(--accent-blue)' : 'var(--text-primary)'}
-              strokeWidth={interactive && inside ? 3 : 2}
+              stroke={isSystem && inside ? 'var(--accent-blue)' : 'var(--text-primary)'}
+              strokeWidth={isSystem && inside ? 3 : 2}
             />
             <text
               x={object.position.x}
@@ -336,19 +288,6 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
           </g>
         );
       })}
-
-      {pairArrows.map((arrow) => (
-        <ForceArrow
-          key={arrow.key}
-          origin={arrow.origin}
-          vector={arrow.force}
-          scale={ARROW_SCALE}
-          maxLength={ARROW_MAX}
-          color={COLOR[pairLink!.kind]}
-          label={`${arrow.agent.label} on ${arrow.target.label}`}
-          labelBounds={VIEW}
-        />
-      ))}
     </svg>
   );
 
@@ -363,13 +302,8 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
         />
       </ControlBar>
 
-      {stage === 'pairs' ? (
-        <>
-          {diagram}
-          <p className="m-0 text-center text-sm leading-6 text-[var(--text-muted)]" aria-live="polite">
-            {pairLink ? pairLink.pair : 'Tap a link to see the pair of forces it stands for.'}
-          </p>
-        </>
+      {!isSystem ? (
+        diagram
       ) : (
         <>
           <div className="grid items-center gap-4 md:grid-cols-[minmax(0,1fr)_14rem]">
@@ -402,7 +336,9 @@ export default function InteractionDiagram({ stage = 'pairs', initialScene }: In
                 )}
               </svg>
               <figcaption className="type-label mt-1 text-center">
-                {system.length ? `Free-body diagram: ${listJoin(scene.objects.filter((o) => system.includes(o.id)).map((o) => o.label))}` : 'No system chosen'}
+                {system.length
+                  ? `Free-body diagram: ${listJoin(scene.objects.filter((o) => system.includes(o.id)).map((o) => o.label))}`
+                  : 'No system chosen'}
               </figcaption>
             </figure>
           </div>

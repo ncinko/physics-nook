@@ -31,8 +31,6 @@ export interface Interaction {
   label: string;
   /** Force on object `b` in screen space (y down), in weight-like units. */
   forceOnB: Vector2;
-  /** One sentence describing both halves of the pair. */
-  pair: string;
 }
 
 export interface InteractionScene {
@@ -69,7 +67,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: DOWN,
-        pair: 'Earth pulls down on the ball, and the ball pulls up on Earth just as hard.',
       },
     ],
     defaultSystem: ['ball'],
@@ -90,7 +87,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: DOWN,
-        pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
       },
       {
         id: 'table-newt-normal',
@@ -99,7 +95,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'normal',
         label: 'normal',
         forceOnB: UP,
-        pair: 'The table pushes up on Newt, and Newt pushes down on the table.',
       },
       {
         id: 'earth-table-gravity',
@@ -108,7 +103,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: scale(DOWN, 1.4),
-        pair: 'Earth pulls down on the table, and the table pulls up on Earth.',
       },
       {
         id: 'earth-table-normal',
@@ -117,7 +111,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'normal',
         label: 'normal',
         forceOnB: scale(UP, 2.4),
-        pair: 'The floor pushes up on the table legs, and the legs push down on the floor.',
       },
     ],
     defaultSystem: ['newt'],
@@ -138,7 +131,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'tension',
         label: 'tension',
         forceOnB: UP,
-        pair: 'The tongue pulls Newt up toward the branch, and pulls the branch down toward Newt.',
       },
       {
         id: 'earth-newt-gravity',
@@ -147,7 +139,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: DOWN,
-        pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
       },
       {
         id: 'earth-tree-gravity',
@@ -156,7 +147,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: scale(DOWN, 1.6),
-        pair: 'Earth pulls down on the tree, and the tree pulls up on Earth.',
       },
       {
         id: 'earth-tree-normal',
@@ -165,7 +155,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'normal',
         label: 'normal',
         forceOnB: scale(UP, 2.6),
-        pair: 'The ground pushes up on the tree, and the tree pushes down on the ground.',
       },
     ],
     defaultSystem: ['newt'],
@@ -186,7 +175,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'applied',
         label: 'push',
         forceOnB: scale(RIGHT, 1.2),
-        pair: 'Newt pushes the box forward, and the box pushes Newt backward just as hard.',
       },
       {
         id: 'earth-newt-gravity',
@@ -195,7 +183,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: DOWN,
-        pair: 'Earth pulls down on Newt, and Newt pulls up on Earth.',
       },
       {
         id: 'earth-newt-normal',
@@ -204,7 +191,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'normal',
         label: 'normal',
         forceOnB: UP,
-        pair: 'The floor pushes up on Newt, and Newt pushes down on the floor.',
       },
       {
         id: 'earth-newt-friction',
@@ -213,7 +199,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'friction',
         label: 'friction',
         forceOnB: scale(RIGHT, 1.5),
-        pair: "Newt's feet push the floor backward, so the floor pushes Newt forward. That forward push is what moves him.",
       },
       {
         id: 'earth-box-gravity',
@@ -222,7 +207,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'gravity',
         label: 'gravity',
         forceOnB: scale(DOWN, 1.3),
-        pair: 'Earth pulls down on the box, and the box pulls up on Earth.',
       },
       {
         id: 'earth-box-normal',
@@ -231,7 +215,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'normal',
         label: 'normal',
         forceOnB: scale(UP, 1.3),
-        pair: 'The floor pushes up on the box, and the box pushes down on the floor.',
       },
       {
         id: 'earth-box-friction',
@@ -240,7 +223,6 @@ export const interactionScenes: InteractionScene[] = [
         kind: 'friction',
         label: 'friction',
         forceOnB: scale(LEFT, 0.7),
-        pair: 'The floor drags backward on the sliding box, and the box drags the floor forward.',
       },
     ],
     defaultSystem: ['newt'],

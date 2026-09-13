@@ -15,7 +15,9 @@
  *   squashed in no particular order. Four were kept and reordered into
  *   stretch / mid / squash / mid, scaled up to the walk's size, and the squash
  *   was halved so the bob reads as running rather than as flicker.
- * - Every frame pins the nose tip to one row and the body's centre to the middle
+ * - Shrinking the source smeared the eyes into the dark fur around them, so each
+ *   frame's eyes were redrawn as a clean pair of 2x2 blocks, mirrored about the
+ *   nose (a single row in the blink frame, idle2). * - Every frame pins the nose tip to one row and the body's centre to the middle
  *   of the cell, so the head holds still while the paws and spines move, and the
  *   sprite spins cleanly about its middle.
  *

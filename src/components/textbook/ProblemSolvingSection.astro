@@ -11,14 +11,14 @@ const {
 ---
 
 <section class="problem-solving not-prose my-12">
-  <h2 class="m-0 text-2xl font-semibold tracking-tight text-[color:var(--text-primary)]">{title}</h2>
+  <h2 class="type-label m-0 text-[var(--accent-blue)]">{title}</h2>
   {intro && (
-    <p class="mt-3 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
+    <p class="type-supporting mt-2 mb-0 max-w-3xl">
       {intro}
     </p>
   )}
 
-  <div class="mt-5 border-t border-[var(--grid-line)]">
+  <div class="mt-3 border-t border-[var(--grid-line)]">
     <slot />
   </div>
 </section>

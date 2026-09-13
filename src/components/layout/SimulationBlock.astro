@@ -42,7 +42,7 @@ const breakoutClass =
         type="button"
         data-simulation-fullscreen-toggle
         class:list={[
-          'absolute top-4 right-4 z-20 rounded-[var(--radius-control)] px-3 py-2 text-xs font-semibold uppercase tracking-wide shadow-sm transition-colors',
+          'absolute top-4 right-4 z-20 rounded-[var(--radius-control)] px-3 py-2 text-xs font-semibold uppercase tracking-[0.1em] shadow-sm transition-colors',
           highlightFullscreen
             ? 'border border-[color:color-mix(in_srgb,var(--accent-blue)_45%,var(--grid-line))] bg-[var(--accent-blue)] text-white shadow-md ring-2 ring-[color:color-mix(in_srgb,var(--accent-blue)_25%,transparent)] hover:brightness-110'
             : 'border border-theme-grid bg-[var(--surface-elevated)] text-theme-text hover:border-theme-blue hover:text-theme-blue',
@@ -54,7 +54,7 @@ const breakoutClass =
     )}
     {showHeader && (title || description) && (
       <header class="border-b border-theme-grid bg-[var(--surface-elevated)] px-5 py-4 pr-28 backdrop-blur">
-        {title && <h2 class="m-0 text-lg font-semibold text-theme-text">{title}</h2>}
+        {title && <h2 class="type-title m-0 text-[color:var(--text-primary)]">{title}</h2>}
         {description && <p class="mt-1 mb-0 text-sm text-[var(--text-muted)]">{description}</p>}
       </header>
     )}
@@ -81,7 +81,7 @@ const breakoutClass =
         <button
           type="button"
           data-simulation-reload
-          class="mt-3 rounded-md border border-[var(--grid-line)] bg-[var(--accent-blue)] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-white shadow-sm hover:brightness-110"
+          class="mt-3 rounded-md border border-[var(--grid-line)] bg-[var(--accent-blue)] px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-white shadow-sm hover:brightness-110"
         >
           Reload
         </button>

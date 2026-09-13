@@ -36,6 +36,24 @@ Corners come from two tokens in the same file: `--radius-panel` (1rem) for a box
 
 A lesson ends with its interactive, Problem Solving, the checkpoint, and the previous/next links. Only the interactive is a boxed panel. Problem Solving is a heading over hairline-divided disclosure rows (`WorkedExampleCard`), the checkpoint is a section opened by a top hairline, and the pager is text links under a rule. Separate these with headings and `--grid-line` hairlines, not new panels.
 
+## Typography
+
+The site uses one typeface, Atkinson Hyperlegible Next, self-hosted through `@fontsource-variable/atkinson-hyperlegible-next` and set as Tailwind's `--font-sans` in `src/styles/global.css`. It was chosen because similar characters such as I, l, 1 and 0, O stay distinct for students. Text takes one of five roles. Prose headings get them automatically; outside prose, use the role classes in `global.css`.
+
+| Role | Class | Spec | Color |
+| --- | --- | --- | --- |
+| Heading | `.type-h1` / `.type-h2` / `.type-h3` | `clamp(2rem, 3vw, 2.5rem)` / `1.5rem` / `1.25rem`; 700, 700, 600 | `--text-primary` |
+| Label | `.type-label` | `0.75rem`, 700, `0.1em`, uppercase | `--text-muted`; add `text-[var(--accent-blue)]` when the label names a section or panel |
+| Title | `.type-title` | `1.125rem`, 600 | `--text-primary` |
+| Body | none (inherited) | `1rem`, 400; strong is 600 | `--text-primary` |
+| Supporting | `.type-supporting` | `0.875rem`, 400 | `--text-muted` |
+
+- Uppercase belongs to the Label role only. Prose `h4` is a label, used for worked-example steps.
+- Blue text marks links, section labels, and the pager's next lesson. The exception is a color that carries meaning, like elastic blue and inelastic red.
+- Use weights 400, 600, and 700 only, and no negative letter-spacing.
+- A component section such as Problem Solving or a checkpoint is named by a label. Its example titles and questions use the title role and are the largest text inside it.
+- The homepage hero is exempt.
+
 ## Guardrails
 
 - Do not replace the homepage with a marketing landing page or add explanatory hero copy unless the product direction changes.

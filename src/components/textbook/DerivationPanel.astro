@@ -34,8 +34,8 @@ const chevronBubbleClass = 'border-[color:color-mix(in_srgb,#9bb8ab_52%,var(--gr
     class={`flex cursor-pointer list-none items-start gap-4 px-5 py-4 transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--surface-elevated)_84%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sim-bg)] ${accentStyles.focus}`}
   >
     <div class="min-w-0 flex-1">
-      <h3 class="mt-1 mb-0 text-lg font-semibold tracking-tight text-[color:var(--text-primary)]">{title}</h3>
-      {prompt && <p class="mt-2 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">{prompt}</p>}
+      <h3 class="type-title mt-1 mb-0 text-[color:var(--text-primary)]">{title}</h3>
+      {prompt && <p class="type-supporting mt-2 mb-0 max-w-3xl">{prompt}</p>}
     </div>
 
     <span class={`inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border shadow-sm transition-transform duration-200 derivation-panel-chevron ${chevronBubbleClass}`}>

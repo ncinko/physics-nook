@@ -45,7 +45,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
     <section class="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:py-12">
       <div class="mb-8 flex flex-col gap-5 border-b border-[var(--grid-line)] pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div class="max-w-3xl">
-          <h1 class="mt-3 mb-0 text-4xl font-semibold tracking-tight text-[color:var(--text-primary)] sm:text-5xl">
+          <h1 class="type-h1 mt-3 mb-0 text-[color:var(--text-primary)]">
             Interactives
           </h1>
           <p class="mt-4 mb-0 max-w-2xl text-sm leading-7 text-[color:var(--text-muted)] sm:text-base">
@@ -77,7 +77,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
           <section class="interactive-module" data-module-section>
             <div class="mb-3 flex flex-wrap items-end justify-between gap-3">
               <div>
-                <h2 class="m-0 text-xl font-semibold tracking-tight text-[color:var(--text-primary)]">
+                <h2 class="type-h3 m-0 text-[color:var(--text-primary)]">
                   {module}
                 </h2>
                 <p class="mt-1 mb-0 text-sm text-[color:var(--text-muted)]">
@@ -103,7 +103,7 @@ const countByKind = (entries: InteractiveEntry[], kind: InteractiveKind) =>
                           {entry.title}
                         </h3>
                         {entry.experimental && (
-                          <span class="rounded-[var(--radius-control)] border border-[var(--grid-line)] px-2 py-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-[color:var(--text-muted)]">
+                          <span class="rounded-[var(--radius-control)] border border-[var(--grid-line)] type-label px-2 py-0.5">
                             Experimental
                           </span>
                         )}

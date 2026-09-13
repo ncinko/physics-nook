@@ -26,8 +26,8 @@ const focusClass = accent === 'red'
     class={`group flex cursor-pointer list-none items-start gap-4 rounded-[var(--radius-control)] px-1 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--bg-primary)] ${focusClass}`}
   >
     <div class="min-w-0 flex-1">
-      <h3 class="m-0 text-lg font-semibold tracking-tight text-[color:var(--text-primary)] transition-colors duration-200 group-hover:text-[color:var(--accent-blue)]">{title}</h3>
-      {prompt && <p class="mt-1 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">{prompt}</p>}
+      <h3 class="type-title m-0 text-[color:var(--text-primary)] transition-colors duration-200 group-hover:text-[color:var(--accent-blue)]">{title}</h3>
+      {prompt && <p class="type-supporting mt-1 mb-0 max-w-3xl">{prompt}</p>}
     </div>
 
     <svg

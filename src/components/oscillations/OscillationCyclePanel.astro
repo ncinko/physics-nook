@@ -81,7 +81,7 @@ const phases = [
   <div class="relative min-h-[16rem] overflow-hidden border-b border-[var(--grid-line)] bg-[var(--sim-bg)]">
     <SpringBannerField client:visible />
     <div class="pointer-events-none relative z-10 px-6 py-5">
-      <p class="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--accent-blue)]">One Cycle</p>
+      <p class="type-label mb-2 text-[var(--accent-blue)]">One Cycle</p>
       <p class="mt-3 mb-0 max-w-3xl text-sm leading-7 text-[color:var(--text-muted)]">
         As the system oscillates, kinetic energy is continuously exchanged with spring potential energy. It's helpful to pause and consider the energy and motion at key points in each cycle.
       </p>
@@ -93,10 +93,10 @@ const phases = [
       const massLeft = phase.massCenterX - massWidth / 2;
       return (
         <article class="bg-[var(--bg-primary)] p-5">
-          <p class="m-0 text-xs font-semibold uppercase tracking-[0.18em]" style={`color:${phase.accent}`}>
+          <p class="type-label m-0" style={`color:${phase.accent}`}>
             {phase.label}
           </p>
-          <h4 class="mt-3 mb-2 text-lg font-semibold text-[color:var(--text-primary)]">{phase.title}</h4>
+          <h4 class="type-title mt-3 mb-2 text-[color:var(--text-primary)]">{phase.title}</h4>
           <p class="mt-0 mb-4 text-sm leading-7 text-[color:var(--text-muted)]">{phase.note}</p>
 
           <div class="rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[color-mix(in_srgb,var(--sim-bg)_78%,white)] p-3">

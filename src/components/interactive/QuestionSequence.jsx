@@ -71,16 +71,16 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
 
   return (
     <section className="checkpoint not-prose my-12 border-t border-[var(--grid-line)] pt-6 text-[color:var(--text-primary)]">
-      <p className="mb-4 flex items-baseline gap-3 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+      <p className="type-label mb-4 flex items-baseline gap-3 text-[var(--accent-blue)]">
         {eyebrow}
         {questions.length > 1 && (
-          <span className="font-medium normal-case tracking-normal text-[var(--text-muted)]">
+          <span className="text-[var(--text-muted)]">
             {questionIndex + 1} of {questions.length}
           </span>
         )}
       </p>
 
-      <div ref={questionRef} className="mb-5 text-lg font-semibold leading-relaxed">
+      <div ref={questionRef} className="type-title mb-5">
         {currentQuestion.question}
       </div>
 
@@ -148,7 +148,7 @@ export default function QuestionSequence({ questions = [], eyebrow = 'Concept Ch
           data-result={isCorrect ? 'correct' : 'incorrect'}
           className="explanation mt-5 border-l-2 pl-4"
         >
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--accent-blue)]">
+          <p className="type-label mb-1">
             Explanation
           </p>
           <div ref={explanationRef} className="text-sm leading-7 text-[color:var(--text-primary)]">

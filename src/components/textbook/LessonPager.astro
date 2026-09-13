@@ -12,9 +12,9 @@ const nextEyebrow = progress?.crossesModule ? `Next module: ${next?.group.navLab
 
 const linkClass =
   'group block rounded-[var(--radius-control)] py-1 text-[color:var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--bg-primary)]';
-const eyebrowClass = 'block text-xs font-semibold uppercase tracking-[0.16em] text-[var(--text-muted)]';
+const eyebrowClass = 'type-label block';
 const titleClass =
-  'mt-1 block text-lg font-semibold leading-snug underline-offset-4 transition-colors duration-200 group-hover:text-[color:var(--accent-blue)] group-hover:underline';
+  'type-title mt-1 block underline-offset-4 transition-colors duration-200 group-hover:text-[color:var(--accent-blue)] group-hover:underline';
 ---
 
 {(previous || next) && (

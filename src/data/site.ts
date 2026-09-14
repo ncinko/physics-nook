@@ -51,6 +51,7 @@ export const standalonePages: PageMeta[] = [
       'Watch auroral curtains form along dipole field lines, and use an in-scene spectrometer and altitude probe to see why collisional quenching puts red above green.',
     canonicalPath: '/aurora',
     image: '/social/physics-nook-card.svg',
+    noindex: true,
   },
   {
     title: 'Solar System Explorer',

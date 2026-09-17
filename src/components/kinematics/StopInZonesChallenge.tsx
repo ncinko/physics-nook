@@ -338,6 +338,7 @@ export default function StopInZonesChallenge() {
     runtime.pauseStartedAt = null;
     runtime.gameOn = gameOn;
     runtime.wrapWorld = gameOn ? true : runtime.wrapWorld;
+    runtime.aMax = gameOn ? STOP_ZONE_DEFAULTS.challengeAMax : runtime.aMax;
     runtime.zone = initialZone(now);
     runtime.startedAt = now;
     runtime.timelineStartedAt = now;
@@ -403,7 +404,7 @@ export default function StopInZonesChallenge() {
 
   const setAMax = useCallback((value: number) => {
     const runtime = runtimeRef.current;
-    if (!runtime) {
+    if (!runtime || runtime.gameOn) {
       return;
     }
 
@@ -751,6 +752,7 @@ export default function StopInZonesChallenge() {
               max="10"
               step="0.1"
               value={snapshot.aMax}
+              disabled={snapshot.gameOn}
               aria-label="Maximum acceleration"
               onChange={(event) => setAMax(Number(event.target.value))}
               // Letting go of the slider returns the keyboard to the stage, so a

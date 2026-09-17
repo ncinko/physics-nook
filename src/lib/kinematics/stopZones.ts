@@ -36,6 +36,9 @@ export interface LeaderboardLikeScore {
 
 export const STOP_ZONE_DEFAULTS = {
   aMax: 4,
+  // Challenge runs are locked to this acceleration so every leaderboard time is
+  // comparable; the slider only applies outside challenge mode.
+  challengeAMax: 10,
   worldHalfWidthM: 6,
   startZoneHalfWidthM: 1.2,
   minZoneHalfWidthM: 0.25,
@@ -46,7 +49,9 @@ export const STOP_ZONE_DEFAULTS = {
   zoneTimeIncrementS: 3,
   winStops: 15,
   historySeconds: 12,
-  minScoreTimeMs: 8000,
+  // Perfect play at challengeAMax (instant reactions, shortest paths) bottoms out
+  // near 18.8 s in simulation, so anything under 17 s is not a real run.
+  minScoreTimeMs: 17000,
   maxScoreTimeMs: 10 * 60 * 1000,
   leaderboardLimit: 10,
   localStorageKey: 'physics-nook-kinematics-local-leaderboard-v1',

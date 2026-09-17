@@ -109,6 +109,8 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: R
     );
   }
 
+  // The run must have been open at least as long as the reported time, so a
+  // score cannot claim more speed than the wall clock allowed.
   const runUpdate = await db
     .prepare(
       `UPDATE kinematics_runs
@@ -116,16 +118,17 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: R
        WHERE id = ?
          AND ip_hash = ?
          AND used_at IS NULL
-         AND expires_at >= ?`,
+         AND expires_at >= ?
+         AND created_at <= ?`,
     )
-    .bind(now, runId, ipHash, now)
+    .bind(now, runId, ipHash, now, now - validation.timeMs)
     .run();
 
   if (Number(runUpdate?.meta?.changes ?? 0) !== 1) {
     return jsonResponse(
       {
         ok: false,
-        error: 'Challenge run is missing, expired, or already used.',
+        error: 'Challenge run is missing, expired, already used, or shorter than the reported time.',
       },
       { status: 409 },
     );

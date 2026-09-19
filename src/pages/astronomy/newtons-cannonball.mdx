@@ -20,13 +20,13 @@ import { astronomyPath } from '../../data/modules';
 
 # Newton's Cannonball
 
-A dropped apple falls to the ground. The Moon, as far as anyone could tell, never does. Newton's great leap was to claim these are the *same* pull: the Moon is falling toward Earth all the time, it is just moving sideways fast enough that it keeps missing.
+The motion of a falling apple and the Moon appear to have nothing in common. Newton's great leap was to claim these result from the *same* pull: the Moon is also "falling" toward Earth, while moving fast enough as to never strike the surface.
 
-In [projectile motion](/kinematics/two-dimensional#projectile-motion) we treated gravity as a **constant acceleration** straight down, and every ideal throw traced a parabola. That picture works beautifully for a baseball. This page asks what happens when a throw is no longer small compared to the planet.
+In [projectile motion](/kinematics/two-dimensional#projectile-motion) the effect of gravity is a **constant downward acceleration**, and idealized trajectories were simply parabolas.  That picture works beautifully for a baseball thrown over short distances, but we'll need a slightly different model when the throws are no longer small relative to the size of Earth.
 
 ## Newton's Mountain
 
-Newton made the argument with a thought experiment. Put a cannon on top of a very tall mountain, above the air, and fire it horizontally. A slow shot lands near the foot of the mountain. Fire faster and the ball lands farther away. Since Earth is round, the ground curves away beneath a faster ball as it falls. Fire fast enough and the ground curves away exactly as fast as the ball drops: the ball never lands, and comes back around to the mountain from behind.
+Newton made the argument with a thought experiment. Put a cannon on top of a very tall mountain, above the air, and fire it horizontally. A slow shot lands near the foot of the mountain.  As you increase the launch speed of the cannonball, the parabolic trajectory begins to change. Since Earth is round, the ground curves away beneath a faster ball as it falls. Fire fast enough and the ground curves away exactly as fast as the ball drops: the ball never lands, and comes back around to the mountain from behind.
 
 <HistoricalFigure
   src={newtonSketch}
@@ -38,17 +38,15 @@ Newton made the argument with a thought experiment. Put a cannon on top of a ver
   Newton's own figure. Shots fired from the mountaintop **V** land at **D**, **E**, **F** and **G**, each farther around the Earth; faster still, they circle it.
 </HistoricalFigure>
 
-Here is the same experiment with an Everest-height mountain, no air, and real Earth numbers. The only rule is Newton's gravity: a pull toward Earth's center that weakens with distance. The ball traces its path as it flies, and the view zooms out whenever the ball would leave it. Start slow, then keep turning up the speed.
-
 <InteractiveAnchor id="newtons-cannonball" />
 
 <NewtonsCannonball client:only="react" />
 
 Near $7.9\,\text{km/s}$ the ball never lands: it is in **orbit**. A little faster and the path stretches into an ellipse that swings out and comes back. At about $11.2\,\text{km/s}$, the **escape speed**, the ball leaves for good.
 
-## Gravity Points Somewhere
+## Gravitation
 
-The arrow on the ball shows what "constant acceleration toward the ground" leaves out. Gravity does not point "down" in some fixed direction. It points toward **Earth's center**, so as the ball travels around the planet, "down" swings around with it. It also weakens with distance, following Newton's law of gravitation:
+Gravity does not point "down" in some fixed direction. It points toward **Earth's center**, so as the ball travels around the planet, "down" swings around with it. It also weakens with distance, following Newton's law of gravitation:
 
 $$
 g(r) = \frac{\htmlClass{math-hint math-hint-gm}{GM}}{\htmlClass{math-hint math-hint-r}{r}^2} = g_0\left(\frac{\htmlClass{math-hint math-hint-earth-r}{R}}{r}\right)^2.
@@ -64,17 +62,12 @@ $$
   Earth's radius, about $6371\,\text{km}$. At $r = R$, the formula gives the familiar surface value $g_0 \approx 9.8\,\text{m/s}^2$.
 </MathHint>
 
-Over a short throw, neither change is noticeable. On a slow shot, the arrow keeps pointing straight down at the same length, and the path looks just like a projectile-motion parabola. A ball that travels $40\,\text{km}$ has gone less than $1\%$ of Earth's radius, so "down" has turned by less than half a degree. On an orbit, the arrow swings all the way around with the ball, always pointing at the center.
 
-The weakening with height is gentler than people often expect. The International Space Station orbits about $400\,\text{km}$ up, where gravity is still close to $90\%$ of its surface value. Astronauts float because they and the station are falling together, the way Newton's cannonball falls around the Earth, not because gravity has switched off.
+The weakening with height is gentler than people often expect. The International Space Station orbits about $400\,\text{km}$ up, where gravity is still close to $90\%$ of its surface value. Astronauts float because they and the station are falling together, the way Newton's cannonball falls around the Earth, not because gravity has switched off.  
 
-## The Parabola Hiding in the Ellipse
+In the solar system, [Kepler's first law](/astronomy/orbits#kepler-laws) says planets move on ellipses with the Sun at one focus. The cannonball is a special case of this law.  Every path is a piece of a **conic section** (an ellipse, or a hyperbola for escape) with Earth's center at a focus.
 
-In the solar system, [Kepler's first law](/astronomy/orbits#kepler-laws) says planets move on ellipses with the Sun at one focus. The cannonball follows the same rule: every path is a piece of a **conic section** (an ellipse, or a hyperbola for escape) with Earth's center at a focus.
-
-That includes the slow shots. When the ball hits the ground, the ground just interrupts its ellipse. If all of Earth's mass were squeezed into a point at the center, the ball would keep going, dive around the center and come back up to the cannon. The cannon is the ellipse's highest point, and a slow shot's flight covers only a tiny sliver of the ellipse near that top.
-
-Near the top, that sliver is indistinguishable from a parabola. The ideal parabola from projectile motion is not a different kind of motion. It is an **approximation** to a very narrow ellipse, valid when the trip is short compared to Earth's radius.
+This also includes the slow shots. When the ball hits the ground, the ground is simply interrupting an elliptical trajectory. If all of Earth's mass were squeezed into a point at the center, the ball would keep going, dive around the center and come back up to the cannon. In these short-range cases, the segment of an ellipse is indistinguishable from a parabola. The idealized parabola from projectile motion can be thought of as an **approximation** to a very narrow ellipse, valid when the trajectory is small compared to Earth's radius.
 
 <DerivationPanel title="Why do the parabola and the ellipse agree near the top?">
   At the top of any path, the velocity is horizontal and gravity points straight down, perpendicular to it. All of the acceleration goes into bending the path, like the centripetal acceleration of circular motion. The path's **radius of curvature** $\rho$ at that point satisfies

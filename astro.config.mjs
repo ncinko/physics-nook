@@ -22,6 +22,10 @@ export default defineConfig({
   integrations: [
     react(),
     mdx({
+      // Astro 6.4+ leaves markdown.gfm/smartypants undefined, and @astrojs/mdx 5
+      // inherits that as "off", which drops GFM tables. Set them explicitly.
+      gfm: true,
+      smartypants: true,
       remarkPlugins: [remarkMath],
       rehypePlugins: [
         [

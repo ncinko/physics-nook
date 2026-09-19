@@ -30,7 +30,7 @@ const V_ESCAPE = escapeSpeed(R0) / 1000;
 const SPEED_MIN = 0.1;
 const SPEED_MAX = 12;
 const SPEED_STEP = 0.05;
-const SPEED_DEFAULT = 2;
+const SPEED_DEFAULT = 1;
 /** Slider values this close to a threshold snap onto it, so both are reachable. */
 const SNAP_KMS = 0.06;
 

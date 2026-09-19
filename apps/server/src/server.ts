@@ -59,6 +59,63 @@ const FRAME_MAX_BYTES = 32 * 1024;
 const TICK_INTERVAL_MS = 1000 / GAME_CONFIG.tickRate;
 const SNAPSHOT_INTERVAL_TICKS = Math.max(1, Math.round(GAME_CONFIG.tickRate / GAME_CONFIG.snapshotRate));
 
+// Connection guards shared by every world on this server. The per-IP cap is
+// generous because a whole classroom can share one school NAT address.
+const readPositiveInt = (value: string | undefined, fallback: number): number => {
+  const parsed = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+const MAX_CONNECTIONS = readPositiveInt(process.env.GAME_MAX_CONNECTIONS, 1000);
+const MAX_CONNECTIONS_PER_IP = readPositiveInt(process.env.GAME_MAX_CONNECTIONS_PER_IP, 80);
+// Browsers answer protocol-level pings even in background tabs (where the
+// clients' rAF-driven app pings stop), so silence here means a dead socket.
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEARTBEAT_TIMEOUT_MS = 95_000;
+// Extra exact origins (comma-separated) beyond physicsnook.com, its
+// subdomains (game., www.), Pages previews, and local dev hosts.
+const EXTRA_ALLOWED_ORIGINS = new Set(
+  (process.env.GAME_ALLOWED_ORIGINS ?? '').split(',').map((origin) => origin.trim()).filter(Boolean),
+);
+const SITE_HOST = 'physicsnook.com';
+const PAGES_HOST = 'physics-nook.pages.dev';
+const isHostOrSubdomain = (hostname: string, base: string): boolean =>
+  hostname === base || hostname.endsWith(`.${base}`);
+
+const isLocalDevHost = (hostname: string): boolean =>
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1' ||
+  hostname === '0.0.0.0' ||
+  hostname.startsWith('192.168.') ||
+  hostname.startsWith('10.') ||
+  hostname.endsWith('.local');
+
+// Origin only stops other websites from opening sockets through visitors'
+// browsers; scripted clients can forge it, which is what the caps are for.
+const isAllowedOrigin =(origin: string | undefined): boolean => {
+  if (!origin) return true;
+  if (EXTRA_ALLOWED_ORIGINS.has(origin)) return true;
+
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (isLocalDevHost(hostname)) return true;
+    return protocol === 'https:' && (isHostOrSubdomain(hostname, SITE_HOST) || isHostOrSubdomain(hostname, PAGES_HOST));
+  } catch {
+    return false;
+  }
+};
+
+// The VM sits behind the Cloudflare proxy, so the socket address is a
+// Cloudflare edge; the visitor's address arrives in cf-connecting-ip.
+const getUpgradeClientAddress = (request: import('node:http').IncomingMessage): string => {
+  const header = request.headers['cf-connecting-ip'];
+  const value = Array.isArray(header) ? header[0] : header;
+  return value?.trim() || request.socket.remoteAddress || 'unknown';
+};
+
+const rejectUpgrade = (socket: import('node:stream').Duplex, status: string): void => {
+  socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+};
+
 type ClientConnection = {
   socket: import('node:net').Socket;
   buffer: Buffer;
@@ -1250,14 +1307,55 @@ export const createGameServer = () => {
     rooms.forEach((room) => tickRoom(room));
   }, TICK_INTERVAL_MS);
 
+  const liveSockets = new Map<Socket, { address: string; lastSeenAt: number }>();
+  const connectionsByAddress = new Map<string, number>();
+
+  const heartbeat = setInterval(() => {
+    const now = Date.now();
+    liveSockets.forEach((state, socket) => {
+      if (now - state.lastSeenAt > HEARTBEAT_TIMEOUT_MS) {
+        socket.destroy();
+      } else if (!socket.destroyed) {
+        socket.write(Buffer.from([0x89, 0x00]));
+      }
+    });
+  }, HEARTBEAT_INTERVAL_MS);
+
+  const trackSocket = (socket: Socket, address: string): void => {
+    const state = { address, lastSeenAt: Date.now() };
+    liveSockets.set(socket, state);
+    connectionsByAddress.set(address, (connectionsByAddress.get(address) ?? 0) + 1);
+
+    socket.on('data', () => {
+      state.lastSeenAt = Date.now();
+    });
+    // Upgraded sockets are half-open by default: without this, a client FIN
+    // leaves the socket (and its room slot / IP count) alive until timeout.
+    socket.once('end', () => socket.destroy());
+    socket.once('close', () => {
+      liveSockets.delete(socket);
+      const remaining = (connectionsByAddress.get(address) ?? 1) - 1;
+      if (remaining > 0) {
+        connectionsByAddress.set(address, remaining);
+      } else {
+        connectionsByAddress.delete(address);
+      }
+    });
+  };
+
   server.on('close', () => {
     clearInterval(loop);
+    clearInterval(heartbeat);
     rippleWorld.close();
     solarWorld.close();
     coasterWorld.close();
   });
 
   server.on('upgrade', (request, socket) => {
+    // A reset on a rejected (or not-yet-handed-off) socket must not crash the
+    // whole process via an unhandled 'error' event.
+    socket.on('error', () => socket.destroy());
+
     try {
       const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`);
       const key = request.headers['sec-websocket-key'];
@@ -1266,7 +1364,19 @@ export const createGameServer = () => {
         return;
       }
 
+      if (!isAllowedOrigin(request.headers.origin)) {
+        rejectUpgrade(socket, '403 Forbidden');
+        return;
+      }
+
+      const address = getUpgradeClientAddress(request);
+      if (liveSockets.size >= MAX_CONNECTIONS || (connectionsByAddress.get(address) ?? 0) >= MAX_CONNECTIONS_PER_IP) {
+        rejectUpgrade(socket, '503 Service Unavailable');
+        return;
+      }
+
       const netSocket = socket as Socket;
+      trackSocket(netSocket, address);
       const accept = createHash('sha1').update(key + WEBSOCKET_GUID).digest('base64');
       netSocket.write(
         [

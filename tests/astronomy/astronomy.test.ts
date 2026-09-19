@@ -68,6 +68,23 @@ import {
   turnSurfacePose,
   validLiveEarthCompositeLayerKeys,
 } from '../../src/lib/astronomy/index.ts';
+import {
+  EARTH_RADIUS_M,
+  LAUNCH_RADIUS_M,
+  cannonOrbit,
+  circularSpeed,
+  escapeSpeed,
+  flatGroundRange,
+  gravityAt,
+  launchState,
+  niceLength,
+  orbitPeriod,
+  orbitPointAt,
+  orbitRadiusAt,
+  specificAngularMomentum,
+  specificEnergy,
+  stepVerlet,
+} from '../../src/lib/astronomy/cannonball.ts';
 
 const closeTo = (actual: number, expected: number, epsilon: number) => {
   assert.ok(
@@ -908,4 +925,82 @@ test('eclipse wrapper detects known eclipses and ignores quiet windows', () => {
   assert.equal(lunar?.kind, 'total');
   assert.ok((lunar?.intensity ?? 0) > 0.95);
   assert.equal(quiet, null);
+});
+
+test('cannonball: circular and escape speeds split the family of paths', () => {
+  const r0 = LAUNCH_RADIUS_M;
+  const circular = cannonOrbit(circularSpeed(r0));
+  assert.equal(circular.kind, 'circular');
+  assert.ok(circular.eccentricity < 1e-9);
+  assert.equal(circular.impactAngle, null);
+
+  assert.equal(cannonOrbit(escapeSpeed(r0) * 1.001).kind, 'escape');
+  assert.equal(cannonOrbit(circularSpeed(r0) * 1.2).kind, 'orbit-perigee');
+  assert.equal(cannonOrbit(3000).kind, 'lands');
+  assert.equal(cannonOrbit(circularSpeed(r0) * 0.9).kind, 'lands');
+});
+
+test('cannonball: orbit equation passes through the cannon and meets the ground at impact', () => {
+  for (const v of [300, 2500, 6000, 7800]) {
+    const orbit = cannonOrbit(v);
+    const start = orbitPointAt(orbit, 0);
+    assert.ok(Math.abs(start.x) < 1e-6 && Math.abs(start.y - LAUNCH_RADIUS_M) < 1e-3);
+    assert.ok(orbit.impactAngle !== null);
+    const r = orbitRadiusAt(orbit, orbit.impactAngle);
+    assert.ok(Math.abs(r - EARTH_RADIUS_M) < 1e-3, `landing radius for ${v} m/s`);
+  }
+});
+
+test('cannonball: radius of curvature at launch is v^2 / g, the same as the parabola apex', () => {
+  const v = 4000;
+  const orbit = cannonOrbit(v);
+  const expected = (v * v) / gravityAt(LAUNCH_RADIUS_M);
+  assert.ok(Math.abs(orbit.semiLatusRectum - expected) / expected < 1e-12);
+
+  // Numerical curvature of the drawn path at the cannon from three nearby points.
+  const h = 1e-4;
+  const [a, b, c] = [-h, 0, h].map((phi) => orbitPointAt(orbit, phi));
+  const side = (p: { x: number; y: number }, q: { x: number; y: number }) => Math.hypot(p.x - q.x, p.y - q.y);
+  const area2 = Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y));
+  const radius = (side(a, b) * side(b, c) * side(a, c)) / (2 * area2);
+  assert.ok(Math.abs(radius - expected) / expected < 1e-3);
+});
+
+test('cannonball: slow shots match the flat-ground parabola, fast shots do not', () => {
+  const groundDistance = (v: number) => (cannonOrbit(v).impactAngle ?? NaN) * EARTH_RADIUS_M;
+  for (const v of [100, 500, 1000]) {
+    const ratio = groundDistance(v) / flatGroundRange(v);
+    assert.ok(Math.abs(ratio - 1) < 0.01, `${v} m/s ratio ${ratio}`);
+  }
+  assert.ok(groundDistance(5000) / flatGroundRange(5000) > 1.25);
+  assert.ok(groundDistance(7500) / flatGroundRange(7500) > 3);
+});
+
+test('cannonball: Verlet steps keep energy and angular momentum and follow the conic', () => {
+  const v = circularSpeed(LAUNCH_RADIUS_M) * 1.15;
+  const orbit = cannonOrbit(v);
+  let state = launchState(v);
+  const e0 = specificEnergy(state);
+  const h0 = specificAngularMomentum(state);
+  const dt = 1;
+  const steps = Math.ceil(orbitPeriod(orbit) / dt);
+  let worstRadiusError = 0;
+  for (let i = 0; i < steps; i += 1) {
+    state = stepVerlet(state, dt);
+    const phi = Math.atan2(state.x, state.y);
+    const predicted = orbitRadiusAt(orbit, phi);
+    worstRadiusError = Math.max(worstRadiusError, Math.abs(Math.hypot(state.x, state.y) - predicted) / predicted);
+  }
+  assert.ok(Math.abs((specificEnergy(state) - e0) / e0) < 1e-6);
+  assert.ok(Math.abs((specificAngularMomentum(state) - h0) / h0) < 1e-9);
+  assert.ok(worstRadiusError < 1e-4, `radius error ${worstRadiusError}`);
+  // After one period the ball is back at the cannon.
+  assert.ok(Math.hypot(state.x, state.y - LAUNCH_RADIUS_M) < 20e3);
+});
+
+test('cannonball: scale bar lengths snap to 1-2-5 steps', () => {
+  assert.equal(niceLength(0.9e3), 1e3);
+  assert.equal(niceLength(2.6e4), 2e4);
+  assert.equal(niceLength(4.1e5), 5e5);
+  assert.equal(niceLength(8e6), 1e7);
 });

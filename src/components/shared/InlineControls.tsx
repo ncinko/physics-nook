@@ -1,4 +1,4 @@
-import React, { type ButtonHTMLAttributes, type ChangeEvent, type ReactNode } from 'react';
+import React, { useId, type ButtonHTMLAttributes, type ChangeEvent, type ReactNode } from 'react';
 
 // Themed control primitives for inline interactive islands. They keep the control
 // row visually consistent across the site without imposing a heavy panel: a
@@ -30,10 +30,15 @@ interface SliderProps {
   unit?: ReactNode;
   format?: (value: number) => string;
   disabled?: boolean;
+  /** Values to mark along the track (a native datalist), e.g. thresholds. */
+  ticks?: number[];
+  /** Accessible name when the visible label is abbreviated. */
+  ariaLabel?: string;
 }
 
-export function Slider({ label, min, max, value, onChange, step = 1, unit, format, disabled = false }: SliderProps) {
+export function Slider({ label, min, max, value, onChange, step = 1, unit, format, disabled = false, ticks, ariaLabel }: SliderProps) {
   const display = format ? format(value) : String(value);
+  const ticksId = useId();
   return (
     <label className={`inline-flex items-center gap-2 text-sm ${disabled ? 'opacity-50' : ''}`.trim()}>
       <span className="font-medium">
@@ -47,9 +52,18 @@ export function Slider({ label, min, max, value, onChange, step = 1, unit, forma
         step={step}
         value={value}
         disabled={disabled}
+        list={ticks?.length ? ticksId : undefined}
+        aria-label={ariaLabel}
         onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(Number(e.target.value))}
         className="accent-[var(--accent-blue)]"
       />
+      {ticks?.length ? (
+        <datalist id={ticksId}>
+          {ticks.map((tick) => (
+            <option key={tick} value={tick} />
+          ))}
+        </datalist>
+      ) : null}
       <span className="inline-block min-w-[3ch] text-left font-mono tabular-nums">{display}</span>
     </label>
   );

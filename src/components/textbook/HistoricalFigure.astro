@@ -1,0 +1,50 @@
+---
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+
+interface Props {
+  src: ImageMetadata;
+  alt: string;
+  /** Rendered width in CSS pixels; the image scales down on narrow screens. */
+  width?: number;
+  /** Who made it, and where it was published. */
+  credit: string;
+  /** Link to the source scan. */
+  sourceHref?: string;
+  sourceLabel?: string;
+}
+
+const { src, alt, width = 420, credit, sourceHref, sourceLabel = 'Source' } = Astro.props;
+---
+
+{/*
+  A historical plate or engraving: black ink on white paper. The scan is
+  blended into the page so its paper takes on the theme's surface, and
+  inverted in the dark theme so the ink reads light on dark.
+*/}
+<figure class="historical-figure not-prose mx-auto my-8 flex flex-col items-center gap-3">
+  <Image src={src} alt={alt} width={width} densities={[1, 2]} class="historical-figure-image h-auto w-full" style={`max-width: ${width}px`} />
+  <figcaption class="type-supporting max-w-xl text-center">
+    <slot />
+    <span class="block">
+      {credit}
+      {sourceHref && (
+        <>
+          {' · '}
+          <a href={sourceHref} class="text-[var(--accent-blue)] underline underline-offset-2">{sourceLabel}</a>
+        </>
+      )}
+    </span>
+  </figcaption>
+</figure>
+
+<style>
+  .historical-figure-image {
+    mix-blend-mode: multiply;
+  }
+
+  :global([data-theme='dark']) .historical-figure-image {
+    filter: invert(0.88);
+    mix-blend-mode: screen;
+  }
+</style>

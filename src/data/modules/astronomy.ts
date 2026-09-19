@@ -16,6 +16,7 @@ export const astronomyModule: ModuleMeta = {
   learningObjectives: [
     'Separate what we observe from a moving Earth from what is physically happening',
     'Explain lunar phases, the synodic month, tidal locking, and eclipse timing from geometry',
+    "Treat gravity as pointing toward Earth's center and weakening as 1/r², and see the ideal projectile parabola as a small piece of an orbital ellipse",
     "Use Kepler's laws and the astronomical unit to reason about orbital size, period, and speed",
     'Read retrograde motion as a frame effect rather than a real reversal',
     'Connect heliocentric and parent-relative motion to a moving 3D model of the solar system',
@@ -52,6 +53,20 @@ export const astronomyModule: ModuleMeta = {
         description:
           'The geometry of lunar phases: illumination, waxing and waning, the synodic month, tidal locking, and eclipse alignment. Then walk the Earth–Moon–Sun system in 3D.',
         canonicalPath: '/astronomy/moon-phases',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'astronomy-newtons-cannonball',
+      href: '/astronomy/newtons-cannonball',
+      title: "Newton's Cannonball",
+      description:
+        "Gravity that points toward Earth's center and weakens with distance, orbits as endless falling, and the projectile parabola as a sliver of an ellipse.",
+      seo: {
+        title: "Newton's Cannonball",
+        description:
+          "Newton's mountain thought experiment with his original 1728 sketch: fire a cannon faster until the ball orbits, and see why the ideal projectile parabola is a small piece of an ellipse.",
+        canonicalPath: '/astronomy/newtons-cannonball',
         image: '/social/physics-nook-card.svg',
       },
     },

@@ -69,6 +69,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kepler', 'orbits', 'astronomy'],
   },
   {
+    id: 'newtons-cannonball',
+    title: "Newton's Cannonball",
+    description: 'Fire a cannon from a mountaintop and watch the path trace out, from a short parabola-like arc to a full orbit, with the view zooming out to follow.',
+    href: '/astronomy/newtons-cannonball#newtons-cannonball',
+    module: 'Astronomy',
+    kind: 'inline',
+    tags: ['gravity', 'orbits', 'projectiles'],
+  },
+  {
     id: 'bunny-number-line',
     title: 'Bunny on the Number Line',
     description: 'Hop a bunny along a number line to meet vectors as one-dimensional hops that add up.',

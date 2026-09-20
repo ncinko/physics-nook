@@ -39,7 +39,6 @@ import {
   formatNote,
   frequencyToRow,
   getSpectrogramLayout,
-  harmonicSeries,
   noteFromFrequency,
   rampColorAt,
   renormalizeByte,
@@ -814,11 +813,6 @@ export default function SpectrogramLab() {
     return placed;
   }, [peaks, rowFor, layout.fontSize]);
 
-  const harmonics = useMemo(() => {
-    if (!fundamental || fundamental.confidence < 0.5) return [];
-    return harmonicSeries(fundamental.frequencyHz, maxHz, 10);
-  }, [fundamental, maxHz]);
-
   const legendStops = useMemo(() => {
     const ramp = rampRef.current;
     if (!ramp) return [];
@@ -1087,29 +1081,6 @@ export default function SpectrogramLab() {
                 </g>
               ))}
 
-              {/* Harmonic markers, only when the estimate is worth trusting */}
-              {!layout.compact && harmonics.map((hz, index) => (
-                <g key={`h-${index}`}>
-                  <circle
-                    cx={layout.plot.x + layout.plot.w - 5}
-                    cy={toPlotY(rowFor(hz))}
-                    r={4}
-                    fill="none"
-                    stroke="var(--accent-purple)"
-                    strokeWidth={1.5}
-                  />
-                  <text
-                    x={layout.plot.x + layout.plot.w - 14}
-                    y={toPlotY(rowFor(hz))}
-                    textAnchor="end"
-                    dominantBaseline="middle"
-                    fontSize={layout.fontSize - 1}
-                    fill="var(--accent-purple)"
-                  >
-                    {index === 0 ? 'f' : `${index + 1}f`}
-                  </text>
-                </g>
-              ))}
 
               {/* Peak labels */}
               {peakLabels.map((peak) => {

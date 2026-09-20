@@ -142,9 +142,9 @@ export const CLIP_BASE_PATH = '/audio/spectrograms/';
 export const clipUrl = (clip: RecordedClip): string => `${CLIP_BASE_PATH}${clip.file}`;
 
 /**
- * Whole field recordings, half a minute to a minute and a half each. They are
- * fetched only when a reader picks one, never on page load, which is what
- * makes keeping them intact affordable - roughly a megabyte apiece.
+ * Field recordings, ten seconds to a minute and a half. They are fetched only
+ * when a reader picks one, never on page load, which is what makes keeping
+ * them this long affordable.
  *
  * Processing, in full, so nobody has to guess what the picture has been
  * through: a 24 dB/octave high-pass at 300 Hz, then gain to bring the peak to
@@ -166,13 +166,13 @@ export const RECORDED_CLIPS: RecordedClip[] = [
     id: 'japanese-bush-warbler',
     label: 'Japanese Bush Warbler',
     file: 'japanese-bush-warbler.mp3',
-    durationSeconds: 53,
+    durationSeconds: 27.5,
   },
   {
     id: 'angry-bush-warbler',
     label: 'Angry Bush Warbler',
     file: 'angry-bush-warbler.mp3',
-    durationSeconds: 35,
+    durationSeconds: 10,
   },
   {
     id: 'evening-chorus',

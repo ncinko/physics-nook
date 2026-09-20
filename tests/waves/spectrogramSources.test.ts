@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { existsSync, statSync } from 'node:fs';
 import test from 'node:test';
 import {
   RECORDED_CLIPS,
@@ -129,4 +130,14 @@ test('the clip manifest is well formed and hides what failed', () => {
   assert.deepEqual(availableClips(initialSourceState), RECORDED_CLIPS);
   const withFailure = { ...initialSourceState, failedClips: RECORDED_CLIPS.map((clip) => clip.id) };
   assert.deepEqual(availableClips(withFailure), []);
+});
+
+test('every listed clip has a file behind it', () => {
+  // A renamed or dropped audio file would otherwise only show up as a silent
+  // 404 that disables the entry in the browser, which nobody would notice.
+  for (const clip of RECORDED_CLIPS) {
+    const path = new URL(`../../public${clipUrl(clip)}`, import.meta.url);
+    assert.ok(existsSync(path), `${clip.id}: no file at public${clipUrl(clip)}`);
+    assert.ok(statSync(path).size > 1024, `${clip.id}: the file is suspiciously small`);
+  }
 });

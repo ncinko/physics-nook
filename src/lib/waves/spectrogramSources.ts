@@ -129,9 +129,8 @@ export const sourceStatusMessage = (state: SourceState): string => {
 
 export interface RecordedClip {
   id: string;
+  /** Carries the whole description: it is all the picker shows. */
   label: string;
-  /** What the reader should look for in the picture. */
-  blurb: string;
   /** Filename only; the base path is prepended by `clipUrl`. */
   file: string;
   durationSeconds: number;
@@ -143,11 +142,43 @@ export const CLIP_BASE_PATH = '/audio/spectrograms/';
 export const clipUrl = (clip: RecordedClip): string => `${CLIP_BASE_PATH}${clip.file}`;
 
 /**
- * Empty until licensed audio ships. The lab is complete without it: when this
- * list is empty the recorded-sound group does not render at all, and a clip
- * whose file is missing or undecodable disables only its own entry.
+ * Field recordings, trimmed to four seconds of their densest activity.
+ *
+ * Processing, in full, so nobody has to guess what the picture has been
+ * through: a 24 dB/octave high-pass at 300 Hz, then gain to bring the peak to
+ * -1 dBFS. No compression, no noise reduction, no gating.
+ *
+ * The high-pass earns its place rather than tidying up. Untouched, traffic and
+ * wind rumble below 300 Hz filled the lower half of the display and the peak
+ * readout announced "68 hertz" while the birds went unmentioned - the lesson's
+ * own subject buried under something no one came to look at. Everything above
+ * the cutoff, including the ambient hum around 400 Hz that the readout falls
+ * back to between calls, is exactly as recorded.
+ *
+ * The lab is still complete without these: an empty list hides the picker
+ * entirely, and a file that is missing or undecodable disables only its own
+ * entry.
  */
-export const RECORDED_CLIPS: RecordedClip[] = [];
+export const RECORDED_CLIPS: RecordedClip[] = [
+  {
+    id: 'birdsong-repeated-calls',
+    label: 'Birdsong - repeated calls',
+    file: 'birdsong-repeated-calls.mp3',
+    durationSeconds: 4,
+  },
+  {
+    id: 'birdsong-morning',
+    label: 'Birdsong - a call and a chirp',
+    file: 'birdsong-morning.mp3',
+    durationSeconds: 4,
+  },
+  {
+    id: 'evening-chorus',
+    label: 'Evening chorus',
+    file: 'evening-chorus.mp3',
+    durationSeconds: 4,
+  },
+];
 
 export const availableClips = (state: SourceState): RecordedClip[] =>
   RECORDED_CLIPS.filter((clip) => !state.failedClips.includes(clip.id));

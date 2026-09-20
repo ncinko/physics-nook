@@ -142,7 +142,9 @@ export const CLIP_BASE_PATH = '/audio/spectrograms/';
 export const clipUrl = (clip: RecordedClip): string => `${CLIP_BASE_PATH}${clip.file}`;
 
 /**
- * Field recordings, trimmed to four seconds of their densest activity.
+ * Whole field recordings, half a minute to a minute and a half each. They are
+ * fetched only when a reader picks one, never on page load, which is what
+ * makes keeping them intact affordable - roughly a megabyte apiece.
  *
  * Processing, in full, so nobody has to guess what the picture has been
  * through: a 24 dB/octave high-pass at 300 Hz, then gain to bring the peak to
@@ -161,22 +163,22 @@ export const clipUrl = (clip: RecordedClip): string => `${CLIP_BASE_PATH}${clip.
  */
 export const RECORDED_CLIPS: RecordedClip[] = [
   {
-    id: 'birdsong-repeated-calls',
-    label: 'Birdsong - repeated calls',
-    file: 'birdsong-repeated-calls.mp3',
-    durationSeconds: 4,
+    id: 'japanese-bush-warbler',
+    label: 'Japanese Bush Warbler',
+    file: 'japanese-bush-warbler.mp3',
+    durationSeconds: 53,
   },
   {
-    id: 'birdsong-morning',
-    label: 'Birdsong - a call and a chirp',
-    file: 'birdsong-morning.mp3',
-    durationSeconds: 4,
+    id: 'angry-bush-warbler',
+    label: 'Angry Bush Warbler',
+    file: 'angry-bush-warbler.mp3',
+    durationSeconds: 35,
   },
   {
     id: 'evening-chorus',
     label: 'Evening chorus',
     file: 'evening-chorus.mp3',
-    durationSeconds: 4,
+    durationSeconds: 85,
   },
 ];
 

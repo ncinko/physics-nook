@@ -17,21 +17,15 @@ import { wavesAndOscillationsPath } from '../../data/modules';
 
 # Spectrograms
 
-A waveform tells you how loud a sound is from one instant to the next. It does not tell you what is *in* the sound. A flute and a trumpet playing the same note trace wiggles of the same length, and a recording of rain looks much like a recording of applause.
+A **spectrogram** is a plot that allows us to visualize the time-dependent frequency content of sound.  It shows which frequencies are present, how strong each one is, and how these change over time.
 
-A **spectrogram** is the picture that separates them. It shows which frequencies are present, how strong each one is, and how all of that changes as the sound goes on.
+To build one, the sound is chopped into short slices (windows) and the frequency content of each slice is found through a Fourier transform. Each frequency spectrum is mapped onto a column of colors (encoding the "strength" of each frequency), with low frequencies at the bottom and high ones at the top. These columns then scroll past as time progresses.
 
-## Three Axes on One Picture
-
-Build one like this. Chop the incoming sound into short slices. Work out the spectrum of each slice, which is the list of frequencies it contains and how much of each. Stand that spectrum up as a single column of color, with low frequencies at the bottom and high ones at the top. Then set the columns side by side, newest on the right, and let them scroll.
-
-That gives you three quantities on a flat picture:
+Altogether, we are left with an animated graph:
 
 - **across** is time, with the present moment at the right edge,
 - **up** is frequency, low at the bottom,
 - **color** is level, how strong that frequency was at that moment.
-
-One note on convention before you start reading. Audio tools almost always put frequency up the side, which is what this page does. The spectrogram inside the [Sound Synthesis](/waves/sound-synthesis) lab is rotated the other way, with frequency running across. Neither is wrong, and the same sound produces the same picture turned ninety degrees.
 
 Everything below happens inside your browser. No audio is uploaded, stored, or recorded.
 
@@ -47,40 +41,29 @@ Everything below happens inside your browser. No audio is uploaded, stored, or r
 
 Things worth trying:
 
-- Whistle, and slide your pitch up and down. Watch the single line follow you.
-- Say "ssss", then "ahhh". One is a wash across the whole height; the other is a stack of lines.
-- Play the harmonic stack and count the rungs of the ladder.
-- Play the beats example at the shortest window and then the longest, and watch one thick line split into two.
-- Play a birdsong recording and look at the chirps: each one sweeps across a kilohertz or more in a fraction of a second, far faster than anything you can whistle.
-- Press Freeze, then point at a bright band to read its exact frequency.
+- Whistle, and slide your pitch up and down
+- Say "ssss", then "ahhh"
+- Play the harmonic stack and find the relationship between the prominent frequencies
+- Listen to some birdsong
 
-## A Field Guide to Shapes
 
-Five patterns cover most of what you will see.
+There are many patterns to be found in natural (and synthesized) sounds.  A steady horizontal line is a constant tone with one frequency.  A collection of evenly spaced lines is known as a **harmonic stack**.  A vertical streak is a click, handclap, or some other percussive sound. 
 
-A **steady horizontal line** is a steady tone: one frequency, held. A **stack of evenly spaced lines** is a pitched sound with harmonics, and the vertical spacing between neighbouring lines is the fundamental frequency. A **sloping line** is a glide, and its steepness is how fast the pitch is changing. A **vertical streak** is a click, a handclap, or a drum hit: all frequencies at once, at a single instant. A **featureless wash** filling the height is noise.
+Note that many instruments, including your voice, do not produce a single frequency.  They often produce a harmonic stack: a fundamental frequency $f_1$ together with **harmonics** at integer multiples $2f_1, 3f_1, 4f_1, \ldots$.  A first-year physics course will usually explain the mechanism by which these harmonics are produced.
 
-The second one is worth dwelling on. A pitched instrument does not produce one frequency; it produces a fundamental $f_1$ together with **harmonics** at integer multiples $2f_1, 3f_1, 4f_1, \ldots$ Those are the rungs of the ladder, and because they are spaced by equal numbers of hertz rather than equal ratios, on a logarithmic axis they visibly bunch together as they climb.
-
-## Why Color Means Decibels
-
-The quietest sound you can hear and a sound loud enough to hurt differ in amplitude by a factor of around a million. Spread that across a color scale linearly and everything except the single loudest peak would sit at the dark end, indistinguishable. So the scale is logarithmic, measured in **decibels**:
+The quietest sound you can hear and a sound loud enough to hurt differ in amplitude by a factor of around a million. With a linear "loudness scale", it is difficult to visually distinguish between quiet and loud.  So the scale is logarithmic, measured in **decibels**:
 
 $$
 L = 20\log_{10}\!\left(\frac{A}{A_0}\right).
 $$
 
-Every $20\ \text{dB}$ is a factor of ten in amplitude. The Floor control sets where the color scale bottoms out: raise it and the quiet background of the room drops away, leaving only the strong components.
+Every $20\ \text{dB}$ is a factor of ten in amplitude.  In the spectrogram, the Floor control sets where the color scale bottoms out: raise it to remove background noise, leaving only the strong components.
 
-## Why the Frequency Axis Is Usually Logarithmic
+Likewise, the vertical frequency axis is also logarithmic.  Equal frequency *ratios* take equal space, so every octave is the same height and a musical interval becomes a fixed distance no matter where on the display it sits.
 
-An octave is a doubling of frequency. On a logarithmic axis, equal *ratios* take equal space, so every octave is the same height and a musical interval becomes a fixed distance no matter where on the display it sits.
+## The Gabor Limit
 
-Switch the axis to Linear and play a note. Nearly everything musical crushes into the bottom sliver of the display, because the nine octaves a piano spans occupy less than a fiftieth of the range from zero to twenty kilohertz. Nothing has been thrown away; the linear axis simply chooses to give equal space to equal *differences* in hertz instead.
-
-## The Trade You Cannot Escape
-
-The analyzer does not look at the whole sound at once. It looks at $N$ samples at a time, taken at a sample rate $f_s$. That window lasts
+The spectrogram does not consider the entire data set at once. It looks at $N$ samples (the window) at a time, taken at a sample rate $f_s$. That window lasts
 
 $$
 \Delta t = \frac{N}{f_s},
@@ -98,9 +81,9 @@ $$
 \Delta f\,\Delta t = 1.
 $$
 
-That is the whole story. A short window pins down *when* something happened but smears *what* it was. A long window resolves *what* beautifully but no longer knows exactly *when*. You never get both; you only choose which one to spend.
+A short window pins down *when* something happened at the cost of frequency resolution. A long window better resolves the frequency content but loses temporal resolution. 
 
-This is the **Gabor limit**, and it is not a limitation of this particular analyzer or of computers in general. It is a theorem about Fourier pairs, and it is the same mathematics that reappears later as the uncertainty principle. Move the Window control while the beats example plays and you can watch the trade happen.
+This is the **Gabor limit**, and it is not a limitation of this particular analyzer or of computers in general. It is a theorem about signal processing, and it is the same mathematics that reappears later as the uncertainty principle in quantum mechanics. 
 
 <ProblemSolvingSection>
   <WorkedExampleCard title="Reading a Harmonic Stack" accent="blue">

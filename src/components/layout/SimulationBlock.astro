@@ -217,10 +217,21 @@ const breakoutClass =
   :global(.simulation-shell:fullscreen .simulation-content),
   :global(.simulation-shell.is-fallback-fullscreen .simulation-content) {
     min-height: 0;
-    overflow: auto;
-    /* The header used to carry `pr-28` to keep clear of the Exit Fullscreen
-       button. With it hidden, the content is what has to stay clear. */
-    padding-top: 3.25rem;
+    /* `auto` would reserve a scrollbar gutter and let a tall child push the
+       plot off-screen; fullscreen content is sized to fit instead. */
+    overflow: hidden;
+  }
+
+  /* The button shares the top line with the simulation's own first row of
+     controls rather than reserving a band above them, so it is made small and
+     pulled into the corner. */
+  :global(.simulation-shell:fullscreen) > [data-simulation-fullscreen-toggle],
+  :global(.simulation-shell.is-fallback-fullscreen) > [data-simulation-fullscreen-toggle] {
+    top: 0.375rem;
+    right: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.6875rem;
+    line-height: 1.4;
   }
 
   :global(body.simulation-block-lock) {

@@ -35,7 +35,12 @@ export const DEFAULT_MAX_DECIBELS = -20;
 
 export const PLOT_COLUMNS = 480;
 export const COLUMN_PX = 2;
-export const PLOT_ROWS = 360;
+/**
+ * Rows in the canvas backing store. More than the plot is usually shown at, so
+ * that filling a tall fullscreen window stretches the image by well under 2x
+ * rather than banding. The history's memory does not depend on this.
+ */
+export const PLOT_ROWS = 540;
 export const PLOT_WIDTH_PX = PLOT_COLUMNS * COLUMN_PX;
 /** One column per 60 Hz frame, so the display holds 8 seconds of history. */
 export const HOP_SECONDS = 1 / 60;
@@ -753,33 +758,57 @@ export interface SpectrogramLayout {
   gutterRight: number;
   gutterTop: number;
   gutterBottom: number;
+  /** Where the level legend's bar starts, when `showLegendGutter`. */
+  legendX: number;
   fontSize: number;
   showLegendGutter: boolean;
   compact: boolean;
 }
 
 export const COMPACT_BREAKPOINT_PX = 640;
+/** Enough room beside the plot for "12.5k A4 +3c". */
+const PEAK_LABEL_WIDTH = 82;
+/** The colour bar plus its two end labels. */
+const LEGEND_WIDTH = 48;
+/** The shape of the plot when nothing is telling it how tall to be. */
+export const DEFAULT_PLOT_ASPECT = 2.4;
+/** Narrow screens get a squarer plot, or it is a letterbox slit. */
+export const COMPACT_PLOT_ASPECT = 1.5;
 
-export const getSpectrogramLayout = (containerWidth: number): SpectrogramLayout => {
-  const compact = containerWidth < COMPACT_BREAKPOINT_PX;
-  const gutterLeft = compact ? 46 : 58;
-  const gutterRight = compact ? 10 : 46;
-  const gutterTop = compact ? 14 : 18;
-  const gutterBottom = compact ? 30 : 26;
-  const w = PLOT_WIDTH_PX;
-  const h = PLOT_ROWS;
+/**
+ * Geometry in CSS pixels, not in abstract viewBox units.
+ *
+ * The overlay's viewBox is set to the box's real pixel size so one unit is one
+ * pixel: text never distorts however the plot is stretched, and the plot can
+ * grow to fill a fullscreen window instead of being locked to one aspect
+ * ratio. Everything that positions the canvas, draws the overlay, and converts
+ * a pointer back to (hertz, seconds) comes from here, so the three cannot
+ * disagree.
+ */
+export const getSpectrogramLayout = (width: number, height: number): SpectrogramLayout => {
+  const compact = width < COMPACT_BREAKPOINT_PX;
+  const showLegendGutter = !compact && width >= 900;
+
+  const gutterLeft = compact ? 40 : 52;
+  const gutterRight = compact
+    ? 10
+    : PEAK_LABEL_WIDTH + 6 + (showLegendGutter ? LEGEND_WIDTH : 0);
+  const gutterTop = compact ? 10 : 12;
+  const gutterBottom = compact ? 26 : 24;
+
+  const w = Math.max(width - gutterLeft - gutterRight, 1);
+  const h = Math.max(height - gutterTop - gutterBottom, 1);
 
   return {
-    viewBox: `0 0 ${gutterLeft + w + gutterRight} ${gutterTop + h + gutterBottom}`,
+    viewBox: `0 0 ${Math.max(width, 1)} ${Math.max(height, 1)}`,
     plot: { x: gutterLeft, y: gutterTop, w, h },
     gutterLeft,
     gutterRight,
     gutterTop,
     gutterBottom,
-    // Larger type at narrow widths: 12 viewBox units rendered at 340 px is a
-    // four-pixel label.
-    fontSize: compact ? 17 : 12,
-    showLegendGutter: !compact,
+    legendX: gutterLeft + w + PEAK_LABEL_WIDTH + 6,
+    fontSize: compact ? 13 : 12,
+    showLegendGutter,
     compact,
   };
 };

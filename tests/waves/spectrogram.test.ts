@@ -559,23 +559,56 @@ test('time ticks run backwards from now', () => {
   }
 });
 
-test('the layout keeps the plot inside the viewBox and grows its type when compact', () => {
-  for (const width of [320, 480, 700, 1200]) {
-    const layout = getSpectrogramLayout(width);
+test('the layout keeps everything it draws inside the viewBox', () => {
+  for (const [width, height] of [[320, 240], [480, 300], [700, 420], [1200, 500], [1900, 900]]) {
+    const layout = getSpectrogramLayout(width, height);
     const [, , viewWidth, viewHeight] = layout.viewBox.split(' ').map(Number);
+
+    assert.equal(viewWidth, width, 'the viewBox is the box, in CSS pixels');
+    assert.equal(viewHeight, height);
     assert.ok(layout.plot.x >= 0 && layout.plot.y >= 0);
+    assert.ok(layout.plot.w > 0 && layout.plot.h > 0, `${width}x${height} collapsed the plot`);
     assert.ok(layout.plot.x + layout.plot.w <= viewWidth);
     assert.ok(layout.plot.y + layout.plot.h <= viewHeight);
-    closeTo(layout.plot.w / layout.plot.h, getSpectrogramLayout(1200).plot.w / getSpectrogramLayout(1200).plot.h);
-  }
 
-  const narrow = getSpectrogramLayout(360);
-  const wide = getSpectrogramLayout(900);
+    // The regression this pins: the level legend used to be positioned past
+    // the right edge of the viewBox, so it was clipped away entirely and no
+    // one could see what the colours meant.
+    if (layout.showLegendGutter) {
+      assert.ok(
+        layout.legendX >= layout.plot.x + layout.plot.w,
+        'the legend must not sit on top of the plot',
+      );
+      assert.ok(
+        layout.legendX + 48 <= viewWidth,
+        `the legend runs past the right edge at ${width}x${height}`,
+      );
+    }
+  }
+});
+
+test('the layout fills whatever height it is given', () => {
+  // This is what lets fullscreen hand the plot the space it frees up.
+  const short = getSpectrogramLayout(1200, 400);
+  const tall = getSpectrogramLayout(1200, 900);
+  assert.ok(tall.plot.h > short.plot.h + 400, 'extra height should reach the plot');
+  assert.equal(tall.plot.w, short.plot.w, 'width should not change with height');
+});
+
+test('the layout goes compact on a phone and drops the legend when narrow', () => {
+  const narrow = getSpectrogramLayout(360, 260);
+  const medium = getSpectrogramLayout(800, 400);
+  const wide = getSpectrogramLayout(1200, 500);
+
   assert.equal(narrow.compact, true);
   assert.equal(wide.compact, false);
-  assert.ok(narrow.fontSize > wide.fontSize, 'compact labels have to be bigger, not smaller');
+  assert.ok(narrow.fontSize >= wide.fontSize, 'compact labels must not shrink');
   assert.equal(narrow.showLegendGutter, false);
+  assert.equal(medium.showLegendGutter, false, 'no room for a legend at 800px');
   assert.equal(wide.showLegendGutter, true);
+  // A phone gives the plot nearly the whole width rather than spending it on
+  // labels that will not fit anyway.
+  assert.ok(narrow.plot.w / 360 > 0.85);
 });
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,8 @@ import {
   DEFAULT_FFT_SIZE,
   DEFAULT_MAX_DECIBELS,
   DEFAULT_MIN_DECIBELS,
+  COMPACT_PLOT_ASPECT,
+  DEFAULT_PLOT_ASPECT,
   FFT_SIZES,
   HOP_SECONDS,
   MIN_FREQUENCY_HZ,
@@ -127,7 +129,8 @@ export default function SpectrogramLab() {
   const [floorDb, setFloorDb] = useState(DEFAULT_MIN_DECIBELS);
   const [exampleId, setExampleId] = useState(SYNTH_EXAMPLES[0].id);
   const [sampleRate, setSampleRate] = useState(48000);
-  const [containerWidth, setContainerWidth] = useState(960);
+  const [plotBox, setPlotBox] = useState({ width: 960, height: 400 });
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [probe, setProbe] = useState<Probe | null>(null);
   const [peaks, setPeaks] = useState<SpectralPeak[]>([]);
@@ -142,6 +145,7 @@ export default function SpectrogramLab() {
 
   const frameRef = useRef<HTMLDivElement | null>(null);
   const plotRef = useRef<HTMLDivElement | null>(null);
+  const plotBoxRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const graphRef = useRef<SpectrogramGraph | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
@@ -180,11 +184,10 @@ export default function SpectrogramLab() {
   }, []);
 
   const maxHz = usableMaxFrequency(sampleRate);
-  const layout = useMemo(() => getSpectrogramLayout(containerWidth), [containerWidth]);
-  const [viewWidth, viewHeight] = useMemo(() => {
-    const parts = layout.viewBox.split(' ').map(Number);
-    return [parts[2], parts[3]];
-  }, [layout]);
+  const layout = useMemo(
+    () => getSpectrogramLayout(plotBox.width, plotBox.height),
+    [plotBox.width, plotBox.height],
+  );
 
   const micSupport = useMemo(() => microphoneSupport(), []);
   const clips = availableClips(source);
@@ -337,29 +340,72 @@ export default function SpectrogramLab() {
   // Container width and reduced motion
   // -------------------------------------------------------------------------
 
+  /**
+   * The overlay's geometry is this measurement, so it cannot be allowed to go
+   * stale. ResizeObserver is the right tool but it is not the only one used:
+   * an environment that never delivers a callback would leave the gridlines
+   * drawn for the wrong size, which is worse than a little redundancy.
+   */
+  const measurePlotBox = useCallback(() => {
+    const element = plotBoxRef.current;
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+    setPlotBox((current) =>
+      Math.abs(current.width - rect.width) < 0.5 && Math.abs(current.height - rect.height) < 0.5
+        ? current
+        : { width: rect.width, height: rect.height },
+    );
+  }, []);
+
   useEffect(() => {
-    const element = frameRef.current;
+    const element = plotBoxRef.current;
     if (!element) return undefined;
 
-    // Measured three ways on purpose. ResizeObserver is the right tool, but it
-    // is the only thing deciding whether the layout is compact, and an
-    // environment that does not deliver its initial observation would leave the
-    // lab stuck at desktop metrics on a phone. The explicit first measurement
-    // and the resize listener cost nothing and remove that single point of
-    // failure.
-    const measure = () => {
-      const width = element.getBoundingClientRect().width;
-      if (width > 0) setContainerWidth(width);
-    };
-
-    measure();
-    window.addEventListener('resize', measure);
-    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    measurePlotBox();
+    window.addEventListener('resize', measurePlotBox);
+    const observer =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measurePlotBox) : null;
     observer?.observe(element);
 
     return () => {
-      window.removeEventListener('resize', measure);
+      window.removeEventListener('resize', measurePlotBox);
       observer?.disconnect();
+    };
+  }, [measurePlotBox]);
+
+  // Entering or leaving fullscreen changes the plot's height without
+  // necessarily firing a window resize, so re-measure once the new layout has
+  // settled rather than waiting to be told.
+  useEffect(() => {
+    const id = window.setTimeout(measurePlotBox, 0);
+    const frame = window.requestAnimationFrame(measurePlotBox);
+    return () => {
+      window.clearTimeout(id);
+      window.cancelAnimationFrame(frame);
+    };
+  }, [isFullscreen, measurePlotBox]);
+
+  // Fullscreen is where the plot stops being aspect-locked and fills the
+  // window, so the island has to know about it. Both routes are covered: the
+  // real Fullscreen API, and the class SimulationBlock falls back to.
+  useEffect(() => {
+    const shell = frameRef.current?.closest('[data-simulation-block]');
+    if (!shell) return undefined;
+
+    const sync = () =>
+      setIsFullscreen(
+        document.fullscreenElement === shell || shell.classList.contains('is-fallback-fullscreen'),
+      );
+
+    document.addEventListener('fullscreenchange', sync);
+    const observer = new MutationObserver(sync);
+    observer.observe(shell, { attributes: true, attributeFilter: ['class'] });
+    sync();
+
+    return () => {
+      document.removeEventListener('fullscreenchange', sync);
+      observer.disconnect();
     };
   }, []);
 
@@ -738,9 +784,9 @@ export default function SpectrogramLab() {
   // -------------------------------------------------------------------------
 
   const frequencyTicks = useMemo(
-    () => buildFrequencyTicks({ minHz: MIN_FREQUENCY_HZ, maxHz, scale, rows: PLOT_ROWS,
-      minRowGap: layout.compact ? 30 : 22 }),
-    [maxHz, scale, layout.compact],
+    () => buildFrequencyTicks({ minHz: MIN_FREQUENCY_HZ, maxHz, scale, rows: layout.plot.h,
+      minRowGap: layout.compact ? 26 : 20 }),
+    [maxHz, scale, layout.plot.h, layout.compact],
   );
   const timeTicks = useMemo(
     () => buildTimeTicks({ columns: PLOT_COLUMNS, hopSeconds: HOP_SECONDS,
@@ -748,9 +794,10 @@ export default function SpectrogramLab() {
     [layout.compact],
   );
 
+  /** Frequency to a y offset inside the plot, in pixels. */
   const rowFor = useCallback(
-    (hz: number) => frequencyToRow(hz, MIN_FREQUENCY_HZ, maxHz, scale, PLOT_ROWS),
-    [maxHz, scale],
+    (hz: number) => frequencyToRow(hz, MIN_FREQUENCY_HZ, maxHz, scale, layout.plot.h),
+    [maxHz, scale, layout.plot.h],
   );
 
   /** Push labels apart so two close harmonics do not overprint. */
@@ -805,87 +852,112 @@ export default function SpectrogramLab() {
   const inputMeterPercent =
     inputLevelDb === null ? 0 : clamp(((inputLevelDb + 60) / 54) * 100, 0, 100);
 
-  const toPlotX = (column: number) => layout.plot.x + column * COLUMN_PX;
-  const toPlotY = (row: number) => layout.plot.y + row;
+  // The canvas stretches to the plot rect, so a column or a canvas row is
+  // placed by its fraction of the way across or down, never by raw pixels.
+  const toPlotX = (column: number) =>
+    layout.plot.x + (column / (PLOT_COLUMNS - 1)) * layout.plot.w;
+  const toPlotY = (offset: number) => layout.plot.y + offset;
+  const rowToPlotY = (row: number) =>
+    layout.plot.y + (row / (PLOT_ROWS - 1)) * layout.plot.h;
 
   return (
-    <div ref={frameRef} className="flex flex-col gap-4 px-4 py-5 sm:px-6">
+    <div
+      ref={frameRef}
+      className={`flex flex-col gap-4 px-4 sm:px-6 ${isFullscreen ? 'h-full py-3' : 'py-5'}`}
+    >
       {/* Sources ------------------------------------------------------- */}
-      <ControlBar align="start">
-        <Button onClick={useMicrophone} disabled={insecure || source.micPermission === 'prompting'}>
-          {isLive ? 'Microphone on' : 'Use microphone'}
-        </Button>
+      {/* Shares the top line with the Exit Fullscreen button, so it keeps
+          clear of the corner rather than reserving a band beneath it. */}
+      <ControlBar align="start" className={isFullscreen ? 'pr-28' : ''}>
+        {isLive ? (
+          /* Live, the row belongs to the microphone: the example picker would
+             only be a way to interrupt it, and Stop already does that. */
+          <>
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-red)]">
+              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--accent-red)]" />
+              Microphone is on
+            </span>
+            <Button variant="secondary" onClick={stopEverything}>
+              Stop
+            </Button>
+            <Slider
+              label="Boost"
+              unit="dB"
+              min={0}
+              max={36}
+              step={3}
+              value={micGainDb}
+              onChange={setMicGainDb}
+              ariaLabel="Microphone boost in decibels"
+            />
+            <span className="inline-flex items-center gap-2 text-sm">
+              <span className="font-medium">Input</span>
+              <span
+                aria-hidden="true"
+                className="inline-block h-2 w-24 overflow-hidden rounded-full bg-[var(--surface-elevated)] ring-1 ring-[var(--grid-line)]"
+              >
+                <span
+                  className="block h-full bg-[var(--accent-green)] transition-[width] duration-100"
+                  style={{ width: `${inputMeterPercent}%` }}
+                />
+              </span>
+              <span className="min-w-[7ch] font-mono tabular-nums text-[var(--text-muted)]">
+                {inputLevelDb === null ? 'silent' : formatDecibels(inputLevelDb)}
+              </span>
+            </span>
+          </>
+        ) : (
+          <>
+            <Button onClick={useMicrophone} disabled={insecure || source.micPermission === 'prompting'}>
+              Use microphone
+            </Button>
 
-        <Select
-          label="Example"
-          value={exampleId}
-          onChange={(value) => {
-            setExampleId(value);
-            void playExample(value);
-          }}
-          options={SYNTH_EXAMPLES.map((example) => ({ value: example.id, label: example.label }))}
-        />
-        <Button variant="secondary" onClick={() => void playExample(exampleId)}>
-          Play example
-        </Button>
+            <Select
+              label="Example"
+              value={exampleId}
+              onChange={(value) => {
+                setExampleId(value);
+                void playExample(value);
+              }}
+              options={SYNTH_EXAMPLES.map((example) => ({ value: example.id, label: example.label }))}
+            />
+            <Button variant="secondary" onClick={() => void playExample(exampleId)}>
+              Play
+            </Button>
 
-        {clips.length > 0 && (
-          <Select
-            label="Recording"
-            value=""
-            onChange={(value) => {
-              const clip = clips.find((candidate) => candidate.id === value);
-              if (clip) void playClip(clip);
-            }}
-            options={[
-              { value: '', label: clipLoading ? 'Loading...' : 'Choose a recording' },
-              ...clips.map((clip) => ({ value: clip.id, label: clip.label })),
-            ]}
-          />
-        )}
+            {clips.length > 0 && (
+              <Select
+                label="Recording"
+                value=""
+                onChange={(value) => {
+                  const clip = clips.find((candidate) => candidate.id === value);
+                  if (clip) void playClip(clip);
+                }}
+                options={[
+                  { value: '', label: clipLoading ? 'Loading...' : 'Choose a recording' },
+                  ...clips.map((clip) => ({ value: clip.id, label: clip.label })),
+                ]}
+              />
+            )}
 
-        {isSounding && (
-          <Button variant="secondary" onClick={stopEverything}>
-            Stop
-          </Button>
-        )}
-
-        {isLive && (
-          <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-red)]">
-            <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full bg-[var(--accent-red)]" />
-            Microphone is on
-          </span>
+            {isSounding && (
+              <Button variant="secondary" onClick={stopEverything}>
+                Stop
+              </Button>
+            )}
+          </>
         )}
       </ControlBar>
 
-      {isLive && (
-        <ControlBar align="start">
-          <Slider
-            label="Mic boost"
-            unit="dB"
-            min={0}
-            max={36}
-            step={3}
-            value={micGainDb}
-            onChange={setMicGainDb}
-            ariaLabel="Microphone boost in decibels"
-          />
-          <span className="inline-flex items-center gap-2 text-sm">
-            <span className="font-medium">Input</span>
-            <span
-              aria-hidden="true"
-              className="inline-block h-2 w-28 overflow-hidden rounded-full bg-[var(--surface-elevated)] ring-1 ring-[var(--grid-line)]"
-            >
-              <span
-                className="block h-full bg-[var(--accent-green)] transition-[width] duration-100"
-                style={{ width: `${inputMeterPercent}%` }}
-              />
-            </span>
-            <span className="min-w-[7ch] font-mono tabular-nums text-[var(--text-muted)]">
-              {inputLevelDb === null ? 'silent' : formatDecibels(inputLevelDb)}
-            </span>
-          </span>
-        </ControlBar>
+      {statusMessage && (
+        <p role="status" className="type-supporting m-0 max-w-prose">
+          {statusMessage}
+        </p>
+      )}
+      {insecure && !statusMessage && (
+        <p role="status" className="type-supporting m-0 max-w-prose">
+          The microphone needs a secure (https) connection. The example sounds work here.
+        </p>
       )}
 
       {isLive && (micSilent || inputLevelDb === null) && (
@@ -908,7 +980,17 @@ export default function SpectrogramLab() {
       )}
 
       {/* Plot ----------------------------------------------------------- */}
-      <div className="relative w-full" style={{ aspectRatio: `${viewWidth} / ${viewHeight}` }}>
+      <div
+        ref={plotBoxRef}
+        className="relative w-full"
+        style={
+          isFullscreen
+            // Fullscreen is a request for room: take whatever height is left
+            // rather than staying locked to one shape.
+            ? { flex: '1 1 auto', minHeight: '10rem' }
+            : { aspectRatio: String(layout.compact ? COMPACT_PLOT_ASPECT : DEFAULT_PLOT_ASPECT) }
+        }
+      >
         <div
           ref={plotRef}
           role="img"
@@ -916,10 +998,10 @@ export default function SpectrogramLab() {
           tabIndex={0}
           className="absolute overflow-hidden rounded-[var(--radius-control)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sim-bg)]"
           style={{
-            left: `${(layout.plot.x / viewWidth) * 100}%`,
-            top: `${(layout.plot.y / viewHeight) * 100}%`,
-            width: `${(layout.plot.w / viewWidth) * 100}%`,
-            height: `${(layout.plot.h / viewHeight) * 100}%`,
+            left: `${layout.plot.x}px`,
+            top: `${layout.plot.y}px`,
+            width: `${layout.plot.w}px`,
+            height: `${layout.plot.h}px`,
             // Only the plot: applying this to the island would trap the page
             // scroll on a phone.
             touchAction: showMeasurements ? 'none' : 'auto',
@@ -1063,8 +1145,8 @@ export default function SpectrogramLab() {
                   <line
                     x1={layout.plot.x}
                     x2={layout.plot.x + layout.plot.w}
-                    y1={toPlotY(probe.row)}
-                    y2={toPlotY(probe.row)}
+                    y1={rowToPlotY(probe.row)}
+                    y2={rowToPlotY(probe.row)}
                     stroke="var(--accent-green)"
                     strokeWidth={1}
                   />
@@ -1078,7 +1160,7 @@ export default function SpectrogramLab() {
                   />
                   <circle
                     cx={toPlotX(probe.column)}
-                    cy={toPlotY(probe.row)}
+                    cy={rowToPlotY(probe.row)}
                     r={3.5}
                     fill="var(--accent-green)"
                   />
@@ -1089,7 +1171,7 @@ export default function SpectrogramLab() {
               {layout.showLegendGutter && (
                 <g>
                   <rect
-                    x={layout.plot.x + layout.plot.w + 58}
+                    x={layout.legendX}
                     y={layout.plot.y + 12}
                     width={10}
                     height={layout.plot.h - 24}
@@ -1098,18 +1180,18 @@ export default function SpectrogramLab() {
                     strokeWidth={0.5}
                   />
                   <text
-                    x={layout.plot.x + layout.plot.w + 56}
+                    x={layout.legendX + 14}
                     y={layout.plot.y + 12}
-                    textAnchor="end"
+                    textAnchor="start"
                     fontSize={layout.fontSize - 1}
                     fill="var(--text-muted)"
                   >
                     {DEFAULT_MAX_DECIBELS} dB
                   </text>
                   <text
-                    x={layout.plot.x + layout.plot.w + 56}
+                    x={layout.legendX + 14}
                     y={layout.plot.y + layout.plot.h - 14}
-                    textAnchor="end"
+                    textAnchor="start"
                     fontSize={layout.fontSize - 1}
                     fill="var(--text-muted)"
                   >

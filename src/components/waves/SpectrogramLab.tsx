@@ -74,6 +74,8 @@ import {
   requestMicrophone,
   resumeGraph,
   startExample,
+  streamSampleRate,
+  watchTrack,
   type ActiveSource,
   type SpectrogramGraph,
 } from './spectrogramAudio.ts';
@@ -134,6 +136,9 @@ export default function SpectrogramLab() {
   const [probeMessage, setProbeMessage] = useState('');
   const [clipLoading, setClipLoading] = useState<string | null>(null);
   const [rampVersion, setRampVersion] = useState(0);
+  const [micGainDb, setMicGainDb] = useState(12);
+  const [inputLevelDb, setInputLevelDb] = useState<number | null>(null);
+  const [micSilent, setMicSilent] = useState(false);
 
   const frameRef = useRef<HTMLDivElement | null>(null);
   const plotRef = useRef<HTMLDivElement | null>(null);
@@ -151,6 +156,8 @@ export default function SpectrogramLab() {
   // Explicitly backed by an ArrayBuffer: getByteFrequencyData will not accept
   // the SharedArrayBuffer-capable default.
   const spectrumRef = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(DEFAULT_FFT_SIZE / 2));
+  const waveformRef = useRef<Uint8Array<ArrayBuffer>>(new Uint8Array(DEFAULT_FFT_SIZE));
+  const stopTrackWatchRef = useRef<(() => void) | null>(null);
   const scratchRef = useRef<ImageData | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastColumnTimeRef = useRef(0);
@@ -272,6 +279,7 @@ export default function SpectrogramLab() {
   useEffect(() => {
     const binCount = fftSize / 2;
     spectrumRef.current = new Uint8Array(new ArrayBuffer(binCount));
+    waveformRef.current = new Uint8Array(new ArrayBuffer(fftSize));
     historyRef.current = createSpectrogramHistory(PLOT_COLUMNS, binCount);
     tracksRef.current = [];
     if (graphRef.current) graphRef.current.analyser.fftSize = fftSize;
@@ -411,6 +419,19 @@ export default function SpectrogramLab() {
         const stamp = performance.now();
         if (stamp - lastAnalysisRef.current >= ANALYSIS_INTERVAL_MS) {
           lastAnalysisRef.current = stamp;
+
+          // Time-domain RMS, so "is any sound arriving at all?" has an answer
+          // that does not depend on seeing something in the picture.
+          const wave = waveformRef.current;
+          graph.analyser.getByteTimeDomainData(wave);
+          let sum = 0;
+          for (let i = 0; i < wave.length; i += 1) {
+            const deviation = (wave[i] - 128) / 128;
+            sum += deviation * deviation;
+          }
+          const rms = Math.sqrt(sum / wave.length);
+          setInputLevelDb(rms > 1e-6 ? 20 * Math.log10(rms) : null);
+
           const raw = findSpectralPeaks(frame, { sampleRate, fftSize, maxHz, maxPeaks: 6 });
           tracksRef.current = stabilizePeaks(tracksRef.current, raw);
           const stable = confirmedPeaks(tracksRef.current);
@@ -438,12 +459,13 @@ export default function SpectrogramLab() {
   // Audio sources
   // -------------------------------------------------------------------------
 
-  const ensureGraph = useCallback(async (): Promise<SpectrogramGraph | null> => {
+  const ensureGraph = useCallback(async (preferredSampleRate?: number): Promise<SpectrogramGraph | null> => {
     if (!graphRef.current) {
       const graph = createSpectrogramGraph({
         fftSize,
         minDecibels: floorDb,
         maxDecibels: DEFAULT_MAX_DECIBELS,
+        sampleRate: preferredSampleRate,
       });
       if (!graph) return null;
       graphRef.current = graph;
@@ -466,16 +488,30 @@ export default function SpectrogramLab() {
     const previous = previousSourceRef.current;
     previousSourceRef.current = source;
     if (shouldReleaseMicrophone(previous, source)) {
+      stopTrackWatchRef.current?.();
+      stopTrackWatchRef.current = null;
       micNodeRef.current?.disconnect();
       micNodeRef.current = null;
       releaseMicrophone(micStreamRef.current);
       micStreamRef.current = null;
+      setMicSilent(false);
     }
+    if (source.kind === 'idle') setInputLevelDb(null);
     if (graphRef.current) {
       // Never route the microphone to the speakers. That is an instant howl.
       graphRef.current.monitor.gain.value = source.kind === 'microphone' ? 0 : 1;
     }
   }, [source]);
+
+  // Microphones vary enormously, and a laptop's built-in one with the browser's
+  // processing turned off can sit far below the display floor. The boost is
+  // applied only to the microphone; the example sounds already arrive at a
+  // known level and would only clip.
+  useEffect(() => {
+    if (!graphRef.current) return;
+    graphRef.current.input.gain.value =
+      source.kind === 'microphone' ? 10 ** (micGainDb / 20) : 1;
+  }, [micGainDb, source.kind]);
 
   const resetDisplay = useCallback(() => {
     historyRef.current?.clear();
@@ -490,19 +526,34 @@ export default function SpectrogramLab() {
   const useMicrophone = useCallback(async () => {
     stopActiveSource();
     dispatch({ type: 'request-mic' });
-    const graph = await ensureGraph();
-    if (!graph) {
-      dispatch({ type: 'mic-failed', reason: 'unsupported' });
-      return;
-    }
+
+    // The stream comes first, and the AudioContext is built around its sample
+    // rate. Creating the context first and attaching the microphone to it
+    // afterwards is the classic way to end up with a connected-but-permanently
+    // silent MediaStreamAudioSourceNode when the capture device runs at a
+    // different rate from the output device.
     const result = await requestMicrophone();
     if (!result.ok) {
       dispatch({ type: 'mic-failed', reason: result.reason });
       return;
     }
+
+    const graph = await ensureGraph(streamSampleRate(result.stream));
+    if (!graph) {
+      releaseMicrophone(result.stream);
+      dispatch({ type: 'mic-failed', reason: 'unsupported' });
+      return;
+    }
+
     micStreamRef.current = result.stream;
     micNodeRef.current = graph.context.createMediaStreamSource(result.stream);
     micNodeRef.current.connect(graph.input);
+
+    stopTrackWatchRef.current?.();
+    stopTrackWatchRef.current = watchTrack(result.stream, ({ live, silent }) => {
+      setMicSilent(!live || silent);
+    });
+
     resetDisplay();
     dispatch({ type: 'mic-granted' });
   }, [ensureGraph, resetDisplay, stopActiveSource]);
@@ -552,6 +603,7 @@ export default function SpectrogramLab() {
   useEffect(() => () => {
     if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
     activeSourceRef.current?.stop();
+    stopTrackWatchRef.current?.();
     micNodeRef.current?.disconnect();
     releaseMicrophone(micStreamRef.current);
     micStreamRef.current = null;
@@ -750,6 +802,10 @@ export default function SpectrogramLab() {
     label: `${size} - ${binBandwidth(sampleRate, size).toFixed(1)} Hz bins, ${(windowSeconds(size, sampleRate) * 1000).toFixed(0)} ms`,
   }));
 
+  // -60 dBFS is a quiet room, -6 is close to clipping.
+  const inputMeterPercent =
+    inputLevelDb === null ? 0 : clamp(((inputLevelDb + 60) / 54) * 100, 0, 100);
+
   const toPlotX = (column: number) => layout.plot.x + column * COLUMN_PX;
   const toPlotY = (row: number) => layout.plot.y + row;
 
@@ -802,6 +858,44 @@ export default function SpectrogramLab() {
           </span>
         )}
       </ControlBar>
+
+      {isLive && (
+        <ControlBar align="start">
+          <Slider
+            label="Mic boost"
+            unit="dB"
+            min={0}
+            max={36}
+            step={3}
+            value={micGainDb}
+            onChange={setMicGainDb}
+            ariaLabel="Microphone boost in decibels"
+          />
+          <span className="inline-flex items-center gap-2 text-sm">
+            <span className="font-medium">Input</span>
+            <span
+              aria-hidden="true"
+              className="inline-block h-2 w-28 overflow-hidden rounded-full bg-[var(--surface-elevated)] ring-1 ring-[var(--grid-line)]"
+            >
+              <span
+                className="block h-full bg-[var(--accent-green)] transition-[width] duration-100"
+                style={{ width: `${inputMeterPercent}%` }}
+              />
+            </span>
+            <span className="min-w-[7ch] font-mono tabular-nums text-[var(--text-muted)]">
+              {inputLevelDb === null ? 'silent' : formatDecibels(inputLevelDb)}
+            </span>
+          </span>
+        </ControlBar>
+      )}
+
+      {isLive && (micSilent || inputLevelDb === null) && (
+        <p role="status" className="type-supporting m-0 max-w-prose">
+          {micSilent
+            ? 'The microphone is connected but is not sending any audio. Windows may have it muted, or another app may have taken exclusive control of it. Check the input device in your sound settings.'
+            : 'No sound is reaching the page yet. Try speaking or whistling, raise the mic boost, or check that the right input device is selected in your browser and system settings.'}
+        </p>
+      )}
 
       {statusMessage && (
         <p role="status" className="type-supporting m-0 max-w-prose">

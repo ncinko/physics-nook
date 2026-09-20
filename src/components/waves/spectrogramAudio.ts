@@ -32,13 +32,26 @@ export interface GraphOptions {
   fftSize: number;
   minDecibels: number;
   maxDecibels: number;
+  /**
+   * Match the capture device when one is already open. Chrome can hand back a
+   * permanently silent MediaStreamAudioSourceNode when the context runs at a
+   * different rate from the microphone, so the microphone path asks for the
+   * stream first and builds the context around it.
+   */
+  sampleRate?: number;
 }
 
 export const createSpectrogramGraph = (options: GraphOptions): SpectrogramGraph | null => {
   const Ctor = getAudioContextConstructor();
   if (!Ctor) return null;
 
-  const context = new Ctor();
+  let context: AudioContext;
+  try {
+    context = options.sampleRate ? new Ctor({ sampleRate: options.sampleRate }) : new Ctor();
+  } catch {
+    // Some browsers reject an explicit rate they cannot honour.
+    context = new Ctor();
+  }
   const input = context.createGain();
   const analyser = context.createAnalyser();
   const monitor = context.createGain();
@@ -130,6 +143,43 @@ export const requestMicrophone = async (): Promise<MicrophoneResult> => {
     }
     return { ok: false, reason: 'error' };
   }
+};
+
+/** The rate the capture device is actually running at, when it will say. */
+export const streamSampleRate = (stream: MediaStream): number | undefined => {
+  const settings = stream.getAudioTracks()[0]?.getSettings?.();
+  return typeof settings?.sampleRate === 'number' ? settings.sampleRate : undefined;
+};
+
+/**
+ * Watch for the track going silent or disappearing.
+ *
+ * `muted` on a MediaStreamTrack does not mean the user muted it: it means the
+ * track is not delivering data at all, which is exactly the "connected but
+ * nothing is happening" case. Without this the UI has no way to tell that
+ * apart from a quiet room.
+ */
+export const watchTrack = (
+  stream: MediaStream,
+  onChange: (state: { live: boolean; silent: boolean }) => void,
+): (() => void) => {
+  const track = stream.getAudioTracks()[0];
+  if (!track) {
+    onChange({ live: false, silent: true });
+    return () => {};
+  }
+
+  const report = () => onChange({ live: track.readyState === 'live', silent: track.muted });
+  track.addEventListener('mute', report);
+  track.addEventListener('unmute', report);
+  track.addEventListener('ended', report);
+  report();
+
+  return () => {
+    track.removeEventListener('mute', report);
+    track.removeEventListener('unmute', report);
+    track.removeEventListener('ended', report);
+  };
 };
 
 /**

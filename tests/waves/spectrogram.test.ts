@@ -612,11 +612,11 @@ test('the history ring keeps the newest columns and wraps without tearing', () =
 // Example sounds
 // ---------------------------------------------------------------------------
 
-test('every example has a distinct id and says what to look for', () => {
+test('every example has a distinct id, a label, and a duration', () => {
   const ids = new Set(SYNTH_EXAMPLES.map((example) => example.id));
   assert.equal(ids.size, SYNTH_EXAMPLES.length);
   for (const example of SYNTH_EXAMPLES) {
-    assert.ok(example.blurb.length > 20, `${example.id} needs a blurb`);
+    assert.ok(example.label.length > 0, `${example.id} needs a label`);
     assert.ok(example.durationSeconds > 0);
     assert.equal(exampleById(example.id), example);
   }

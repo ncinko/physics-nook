@@ -795,7 +795,6 @@ export default function SpectrogramLab() {
 
   const statusMessage = sourceStatusMessage(source);
   const insecure = micSupport !== 'ok';
-  const activeExample = exampleById(exampleId);
 
   const windowOptions = FFT_SIZES.map((size) => ({
     value: String(size),
@@ -1162,17 +1161,6 @@ export default function SpectrogramLab() {
           {frozen ? 'Resume' : 'Freeze'}
         </Button>
       </ControlBar>
-
-      {activeExample && (
-        <p className="type-supporting m-0 max-w-prose">{activeExample.blurb}</p>
-      )}
-
-      {reducedMotion && (
-        <p className="type-supporting m-0 max-w-prose">
-          This display scrolls continuously while a sound is playing. Freeze it at any time to read
-          values without motion.
-        </p>
-      )}
 
       {/* Readouts -------------------------------------------------------- */}
       {showMeasurements && (

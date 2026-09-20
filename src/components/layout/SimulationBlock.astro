@@ -206,10 +206,21 @@ const breakoutClass =
     background: var(--bg-primary, #ffffff);
   }
 
+  /* Fullscreen is a request for room. The title and description have already
+     done their job on the page above, so they give their height back to the
+     simulation and return on exit. */
+  :global(.simulation-shell:fullscreen) > header,
+  :global(.simulation-shell.is-fallback-fullscreen) > header {
+    display: none;
+  }
+
   :global(.simulation-shell:fullscreen .simulation-content),
   :global(.simulation-shell.is-fallback-fullscreen .simulation-content) {
     min-height: 0;
     overflow: auto;
+    /* The header used to carry `pr-28` to keep clear of the Exit Fullscreen
+       button. With it hidden, the content is what has to stay clear. */
+    padding-top: 3.25rem;
   }
 
   :global(body.simulation-block-lock) {

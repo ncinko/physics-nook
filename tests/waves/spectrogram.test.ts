@@ -26,6 +26,7 @@ import {
   frequencyToFraction,
   frequencyToRow,
   niceLinearStep,
+  placeLabels,
   getSpectrogramLayout,
   harmonicSeries,
   midiFromFrequency,
@@ -609,6 +610,62 @@ test('the layout goes compact on a phone and drops the legend when narrow', () =
   // A phone gives the plot nearly the whole width rather than spending it on
   // labels that will not fit anyway.
   assert.ok(narrow.plot.w / 360 > 0.85);
+});
+
+test('labels that fit keep their exact height', () => {
+  // The whole point: room to spare means no leader line is bent at all.
+  const ideal = [10, 100, 200, 340];
+  assert.deepEqual(placeLabels(ideal, 16, 0, 400), ideal);
+});
+
+test('a colliding pair is separated by the gap and centred on where it wanted to be', () => {
+  const placed = placeLabels([200, 208], 16, 0, 400);
+  closeTo(placed[1] - placed[0], 16);
+  // Centre of the pair stays at the mean of the two ideals, so neither label
+  // is dragged further than the other.
+  closeTo((placed[0] + placed[1]) / 2, 204);
+});
+
+test('one crowded pair does not drag the labels above it', () => {
+  // The regression: the old one-directional pass pushed every earlier label
+  // up by the accumulated overlap, fanning the leader lines out.
+  const placed = placeLabels([40, 120, 300, 306], 16, 0, 400);
+  assert.equal(placed[0], 40);
+  assert.equal(placed[1], 120);
+  closeTo(placed[3] - placed[2], 16);
+});
+
+test('labels stay inside the plot and keep their order', () => {
+  for (const ideal of [[0, 1, 2, 3, 4], [398, 399, 400], [-20, 0, 5], [200, 200, 200, 200]]) {
+    const placed = placeLabels(ideal, 16, 0, 400);
+    assert.equal(placed.length, ideal.length);
+    for (const y of placed) {
+      assert.ok(y >= 0 && y <= 400, `${y} escaped the plot for ${JSON.stringify(ideal)}`);
+    }
+    const sorted = [...placed].sort((a, b) => a - b);
+    for (let i = 1; i < sorted.length; i += 1) {
+      assert.ok(sorted[i] - sorted[i - 1] >= 16 - 1e-9, 'labels overlap');
+    }
+  }
+});
+
+test('more labels than will fit stack from the top rather than drifting off it', () => {
+  // Five labels needing 30px each cannot fit in 100px. Nothing sensible is
+  // possible, so start at the top and run over the bottom, which at least
+  // keeps the highest-frequency labels where a reader looks first.
+  const placed = placeLabels([50, 51, 52, 53, 54], 30, 0, 100);
+  assert.deepEqual(placed, [0, 30, 60, 90, 120]);
+});
+
+test('input order is preserved regardless of the order of the ideals', () => {
+  const placed = placeLabels([300, 40, 306, 120], 16, 0, 400);
+  assert.equal(placed[1], 40);
+  assert.equal(placed[3], 120);
+  assert.ok(placed[0] < placed[2], 'the earlier ideal should still come first');
+});
+
+test('empty input is handled', () => {
+  assert.deepEqual(placeLabels([], 16, 0, 400), []);
 });
 
 // ---------------------------------------------------------------------------

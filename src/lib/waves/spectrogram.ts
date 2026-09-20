@@ -33,7 +33,14 @@ export const MAX_FREQUENCY_HZ = 16744.04;
 export const DEFAULT_MIN_DECIBELS = -90;
 export const DEFAULT_MAX_DECIBELS = -20;
 
+/** Columns visible at once: 8 seconds at one column per 60 Hz frame. */
 export const PLOT_COLUMNS = 480;
+/**
+ * Columns kept. Three screenfuls, so a frozen display can be dragged back
+ * through nearly half a minute. Without the surplus there is no past to
+ * slide to - the ring would hold exactly what is already on screen.
+ */
+export const HISTORY_COLUMNS = 480 * 3;
 export const COLUMN_PX = 2;
 /**
  * Rows in the canvas backing store. More than the plot is usually shown at, so
@@ -728,19 +735,99 @@ export interface TimeTick {
   label: string;
 }
 
+/**
+ * `offsetSeconds` is how far into the past the right edge has been dragged.
+ * Ticks are placed at round numbers of seconds before *now*, not before the
+ * edge, so a panned display still reads in real recording time rather than
+ * relabelling wherever it happens to have stopped.
+ */
 export const buildTimeTicks = (options: {
   columns: number;
   hopSeconds: number;
   spacingSeconds?: number;
+  offsetSeconds?: number;
 }): TimeTick[] => {
-  const { columns, hopSeconds, spacingSeconds = 1 } = options;
-  const ticks: TimeTick[] = [{ secondsAgo: 0, column: columns - 1, label: 'now' }];
-  for (let seconds = spacingSeconds; ; seconds += spacingSeconds) {
-    const column = columns - 1 - Math.round(seconds / hopSeconds);
+  const { columns, hopSeconds, spacingSeconds = 1, offsetSeconds = 0 } = options;
+  if (!(hopSeconds > 0) || !(spacingSeconds > 0)) return [];
+
+  const ticks: TimeTick[] = [];
+  if (offsetSeconds <= 0) {
+    ticks.push({ secondsAgo: 0, column: columns - 1, label: 'now' });
+  }
+
+  const first = Math.max(
+    Math.ceil(offsetSeconds / spacingSeconds) * spacingSeconds,
+    offsetSeconds <= 0 ? spacingSeconds : 0,
+  );
+
+  for (let seconds = first; ; seconds += spacingSeconds) {
+    const column = columns - 1 - (seconds - offsetSeconds) / hopSeconds;
     if (column < 0) break;
-    ticks.push({ secondsAgo: seconds, column, label: `-${seconds} s` });
+    ticks.push({ secondsAgo: seconds, column, label: `-${Math.round(seconds)} s` });
   }
   return ticks;
+};
+
+/**
+ * Place labels as close to where they belong as the room allows.
+ *
+ * The obvious approach - walk the list and shove anything too close to its
+ * neighbour further along - is one-directional and cumulative: one crowded pair
+ * near the bottom drags every label above it upward, and the leader lines fan
+ * out into long diagonals even though the plot had space to spare. That gets
+ * worse the taller the plot is, because more labels survive to be pushed.
+ *
+ * Instead, only genuinely colliding labels move, and a colliding group is
+ * centred on where its members wanted to be, so the error is shared out and
+ * every label that had room keeps its exact height.
+ *
+ * Returns placements in the same order as `ideal`.
+ */
+export const placeLabels = (
+  ideal: number[],
+  minGap: number,
+  minY: number,
+  maxY: number,
+): number[] => {
+  if (ideal.length === 0) return [];
+
+  const order = ideal.map((_, index) => index).sort((a, b) => ideal[a] - ideal[b]);
+  // Each cluster is a run of labels that will be stacked exactly minGap apart.
+  let clusters = order.map((index) => ({ members: [index], sum: ideal[index] }));
+
+  const top = (cluster: { members: number[]; sum: number }) => {
+    const centre = cluster.sum / cluster.members.length;
+    const span = (cluster.members.length - 1) * minGap;
+    return clamp(centre - span / 2, minY, Math.max(minY, maxY - span));
+  };
+
+  for (let guard = 0; guard < ideal.length; guard += 1) {
+    let merged = false;
+    const next: typeof clusters = [];
+
+    for (const cluster of clusters) {
+      const previous = next[next.length - 1];
+      if (previous && top(previous) + (previous.members.length - 1) * minGap + minGap > top(cluster)) {
+        previous.members = [...previous.members, ...cluster.members];
+        previous.sum += cluster.sum;
+        merged = true;
+      } else {
+        next.push({ members: [...cluster.members], sum: cluster.sum });
+      }
+    }
+
+    clusters = next;
+    if (!merged) break;
+  }
+
+  const placed = new Array<number>(ideal.length);
+  for (const cluster of clusters) {
+    const start = top(cluster);
+    cluster.members.forEach((index, offset) => {
+      placed[index] = start + offset * minGap;
+    });
+  }
+  return placed;
 };
 
 // ---------------------------------------------------------------------------
@@ -820,8 +907,8 @@ export const getSpectrogramLayout = (width: number, height: number): Spectrogram
 // all: pixels are lossy, so the raw frames are retained and the canvas is
 // re-rendered from them rather than resampled from what is already on screen.
 //
-// One flat Uint8Array, not an array of arrays: 960 KB at fftSize 4096 and
-// 1.9 MB at 8192, allocated once and never grown.
+// One flat Uint8Array, not an array of arrays: at HISTORY_COLUMNS that is
+// 2.8 MB at fftSize 4096 and 5.6 MB at 8192, allocated once and never grown.
 // ---------------------------------------------------------------------------
 
 export interface SpectrogramHistory {

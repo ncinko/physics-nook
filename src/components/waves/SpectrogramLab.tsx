@@ -19,6 +19,7 @@ import {
   COMPACT_PLOT_ASPECT,
   DEFAULT_PLOT_ASPECT,
   FFT_SIZES,
+  HISTORY_COLUMNS,
   HOP_SECONDS,
   MIN_FREQUENCY_HZ,
   PLOT_COLUMNS,
@@ -40,6 +41,7 @@ import {
   frequencyToRow,
   getSpectrogramLayout,
   noteFromFrequency,
+  placeLabels,
   rampColorAt,
   renormalizeByte,
   rowToFrequency,
@@ -99,7 +101,8 @@ const LIVE_REGION_INTERVAL_MS = 800;
 
 const PROBE_INSTRUCTIONS =
   'Turn on measurements, then use the arrow keys to move a cursor and read the frequency, ' +
-  'time and level under it. Enter pins the cursor, Escape clears it.';
+  'time and level under it. Enter pins the cursor, Escape clears it. While the display is ' +
+  'frozen it can be dragged, or walked with the arrow keys, back through earlier sound.';
 
 const SUBSCRIPT_ONE = 'ƒ₁';
 
@@ -141,6 +144,8 @@ export default function SpectrogramLab() {
   const [micGainDb, setMicGainDb] = useState(12);
   const [inputLevelDb, setInputLevelDb] = useState<number | null>(null);
   const [micSilent, setMicSilent] = useState(false);
+  /** Columns the frozen view has been dragged back from the newest one. */
+  const [panColumns, setPanColumns] = useState(0);
 
   const frameRef = useRef<HTMLDivElement | null>(null);
   const plotRef = useRef<HTMLDivElement | null>(null);
@@ -175,6 +180,12 @@ export default function SpectrogramLab() {
   // position - holding an arrow key would crawl instead of moving. This ref
   // is the position the keyboard reads and writes; state is for rendering.
   const probeRef = useRef<Probe | null>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startPan: number; moved: boolean } | null>(null);
+  // Read by redrawAll. Keeping the pan out of its dependencies matters: as a
+  // dependency it changed the callback's identity on every pointermove, and
+  // the three effects that hold redrawAll would each fire, repainting the
+  // whole display three times per frame of a drag.
+  const panRef = useRef(0);
 
   /** The one way the probe moves: ref first for auto-repeat, then state. */
   const commitProbe = useCallback((next: Probe | null) => {
@@ -195,6 +206,7 @@ export default function SpectrogramLab() {
 
   frozenRef.current = frozen;
   reducedMotionRef.current = reducedMotion;
+  panRef.current = panColumns;
 
   // -------------------------------------------------------------------------
   // Drawing
@@ -265,9 +277,11 @@ export default function SpectrogramLab() {
     if (!canvas || !context || !history || !scratch) return;
 
     fillBackground(scratch);
-    for (let index = 0; index < history.length; index += 1) {
-      const column = PLOT_COLUMNS - history.length + index;
-      if (column < 0) continue;
+    // The newest column shown is `panRef` back from the newest retained.
+    const newest = history.length - 1 - panRef.current;
+    for (let column = 0; column < PLOT_COLUMNS; column += 1) {
+      const index = newest - (PLOT_COLUMNS - 1 - column);
+      if (index < 0 || index >= history.length) continue;
       const range = history.rangeAt(index);
       paintColumns(scratch, column, 1, history.frameAt(index), range.minDb, range.maxDb);
     }
@@ -282,7 +296,7 @@ export default function SpectrogramLab() {
     const binCount = fftSize / 2;
     spectrumRef.current = new Uint8Array(new ArrayBuffer(binCount));
     waveformRef.current = new Uint8Array(new ArrayBuffer(fftSize));
-    historyRef.current = createSpectrogramHistory(PLOT_COLUMNS, binCount);
+    historyRef.current = createSpectrogramHistory(HISTORY_COLUMNS, binCount);
     tracksRef.current = [];
     if (graphRef.current) graphRef.current.analyser.fftSize = fftSize;
   }, [fftSize]);
@@ -426,6 +440,17 @@ export default function SpectrogramLab() {
   // The render loop
   // -------------------------------------------------------------------------
 
+  // Leaving Freeze snaps back to the live edge; there is nothing sensible a
+  // scrolling display can do with a pan offset.
+  useEffect(() => {
+    if (!frozen) setPanColumns(0);
+  }, [frozen]);
+
+  // The one place a pan is painted.
+  useEffect(() => {
+    redrawAll();
+  }, [panColumns, redrawAll]);
+
   useEffect(() => {
     if (!isSounding) return undefined;
 
@@ -565,6 +590,7 @@ export default function SpectrogramLab() {
     setFundamental(null);
     commitProbe(null);
     setFrozen(false);
+    setPanColumns(0);
     redrawAll();
   }, [commitProbe, redrawAll]);
 
@@ -664,11 +690,11 @@ export default function SpectrogramLab() {
     const history = historyRef.current;
     const plan = planRef.current;
     const frequencyHz = rowToFrequency(point.row, MIN_FREQUENCY_HZ, maxHz, scale, PLOT_ROWS);
-    const secondsAgo = (PLOT_COLUMNS - 1 - point.column) * HOP_SECONDS;
+    const secondsAgo = (PLOT_COLUMNS - 1 - point.column + panColumns) * HOP_SECONDS;
 
     let decibels: number | null = null;
     if (history && plan && history.length > 0) {
-      const index = history.length - (PLOT_COLUMNS - point.column);
+      const index = history.length - 1 - panColumns - (PLOT_COLUMNS - 1 - point.column);
       if (index >= 0 && index < history.length) {
         const range = history.rangeAt(index);
         const raw = sampleRow(history.frameAt(index), plan, Math.round(point.row));
@@ -676,7 +702,7 @@ export default function SpectrogramLab() {
       }
     }
     return { frequencyHz, secondsAgo, decibels };
-  }, [maxHz, scale]);
+  }, [maxHz, scale, panColumns]);
 
   const probeReading = probe ? readProbe(probe) : null;
 
@@ -693,6 +719,14 @@ export default function SpectrogramLab() {
   }, []);
 
   const handlePointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (drag && drag.pointerId === event.pointerId) {
+      const dx = event.clientX - drag.startX;
+      if (Math.abs(dx) > 3) drag.moved = true;
+      // Dragging right reaches backwards, the way a filmstrip would move.
+      setPanColumns(clamp(Math.round(drag.startPan + dx * columnsPerPixel), 0, maxPan));
+      return;
+    }
     // A finger covers the point it is measuring, so touch pins on tap instead
     // of tracking the drag.
     if (!showMeasurements || event.pointerType === 'touch') return;
@@ -701,13 +735,52 @@ export default function SpectrogramLab() {
     if (next) commitProbe(next);
   };
 
+  const maxPan = Math.max(0, (historyRef.current?.length ?? 0) - PLOT_COLUMNS);
+  /** Display columns per CSS pixel, for turning a drag into a pan. */
+  const columnsPerPixel = PLOT_COLUMNS / Math.max(layout.plot.w, 1);
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (frozen) {
+      // Frozen, the drag belongs to the picture. A press that turns out not to
+      // move still sets the cursor on pointerup, so a plain click keeps working.
+      dragRef.current = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startPan: panColumns,
+        moved: false,
+      };
+      // Capture keeps the drag alive past the edge of the plot, but it throws
+      // if the pointer has already gone, and losing it is not worth failing
+      // the gesture over.
+      try {
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+      } catch {
+        // Drag still works, it just stops at the edge.
+      }
+      return;
+    }
     if (!showMeasurements) return;
     const next = probeFromPointer(event);
     if (next) commitProbe(next);
   };
 
+  const handlePointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Already released with the pointer.
+    }
+    if (!drag.moved && showMeasurements) {
+      const next = probeFromPointer(event);
+      if (next) commitProbe({ ...next, pinned: true });
+    }
+  };
+
   const handlePointerLeave = () => {
+    if (dragRef.current) return;
     if (!probeRef.current?.pinned) commitProbe(null);
   };
 
@@ -769,6 +842,18 @@ export default function SpectrogramLab() {
 
     // Only swallow the keys we actually handle, so the page still scrolls.
     event.preventDefault();
+
+    // Walking the cursor off either edge of a frozen display drags the view
+    // instead of stopping dead, so the keyboard reaches the same history the
+    // mouse can drag to.
+    if (frozen) {
+      let pan = panRef.current;
+      if (next.column < 0) pan += -next.column;
+      else if (next.column > PLOT_COLUMNS - 1) pan -= next.column - (PLOT_COLUMNS - 1);
+      pan = clamp(pan, 0, maxPan);
+      if (pan !== panRef.current) setPanColumns(pan);
+    }
+
     const clamped: Probe = {
       column: clamp(Math.round(next.column), 0, PLOT_COLUMNS - 1),
       row: clamp(next.row, 0, PLOT_ROWS - 1),
@@ -789,8 +874,8 @@ export default function SpectrogramLab() {
   );
   const timeTicks = useMemo(
     () => buildTimeTicks({ columns: PLOT_COLUMNS, hopSeconds: HOP_SECONDS,
-      spacingSeconds: layout.compact ? 2 : 1 }),
-    [layout.compact],
+      spacingSeconds: layout.compact ? 2 : 1, offsetSeconds: panColumns * HOP_SECONDS }),
+    [layout.compact, panColumns],
   );
 
   /** Frequency to a y offset inside the plot, in pixels. */
@@ -799,19 +884,21 @@ export default function SpectrogramLab() {
     [maxHz, scale, layout.plot.h],
   );
 
-  /** Push labels apart so two close harmonics do not overprint. */
+  /**
+   * A label sits at its frequency unless it would collide. The gap is one line
+   * of text plus a little air - the old 2.2x font size reserved room for two
+   * lines that were never there, which bent leader lines that had no need to
+   * bend.
+   */
   const peakLabels = useMemo(() => {
-    const minGap = layout.fontSize * 2.2;
-    const placed: { hz: number; row: number; labelY: number }[] = [];
-    for (const peak of [...peaks].sort((a, b) => a.frequencyHz - b.frequencyHz)) {
-      const row = rowFor(peak.frequencyHz);
-      let labelY = row;
-      const previous = placed[placed.length - 1];
-      if (previous && previous.labelY - labelY < minGap) labelY = previous.labelY - minGap;
-      placed.push({ hz: peak.frequencyHz, row, labelY: clamp(labelY, 0, PLOT_ROWS) });
-    }
-    return placed;
-  }, [peaks, rowFor, layout.fontSize]);
+    const rows = peaks.map((peak) => rowFor(peak.frequencyHz));
+    const placed = placeLabels(rows, layout.fontSize * 1.35, 0, layout.plot.h);
+    return peaks.map((peak, index) => ({
+      hz: peak.frequencyHz,
+      row: rows[index],
+      labelY: placed[index],
+    }));
+  }, [peaks, rowFor, layout.fontSize, layout.plot.h]);
 
   const legendStops = useMemo(() => {
     const ramp = rampRef.current;
@@ -998,10 +1085,13 @@ export default function SpectrogramLab() {
             height: `${layout.plot.h}px`,
             // Only the plot: applying this to the island would trap the page
             // scroll on a phone.
-            touchAction: showMeasurements ? 'none' : 'auto',
+            touchAction: showMeasurements || frozen ? 'none' : 'auto',
+            cursor: frozen ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
           }}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
           onPointerLeave={handlePointerLeave}
           onKeyDown={handleKeyDown}
         >

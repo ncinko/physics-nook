@@ -6,7 +6,7 @@ export const wavesModule: ModuleMeta = {
   title: 'Waves',
   navLabel: 'Waves',
   summary:
-    'Compare traveling waves, boundary reflections, standing waves, harmonics, and musical pitch.',
+    'Compare traveling waves, boundary reflections, standing waves, harmonics, musical pitch, and the spectrogram view of sound.',
   audience: 'Self-learners building visual intuition for traveling waves.',
   prerequisites: ['Basic graph reading', 'Ratios', 'Periodic motion vocabulary'],
   learningObjectives: [
@@ -15,6 +15,7 @@ export const wavesModule: ModuleMeta = {
     'Track how the medium moves differently from the wave pattern',
     'Explain how superposition, reflection, and transmission satisfy boundary conditions',
     'Connect standing-wave boundary conditions to harmonics and musical pitch',
+    'Read frequency, time, and level off a spectrogram, and explain why a shorter analysis window blurs frequency',
   ],
   status: 'active',
   navVisibility: 'menu',
@@ -63,6 +64,21 @@ export const wavesModule: ModuleMeta = {
         description:
           'Learn standing waves, harmonics, strings, air columns, and musical pitch with an interactive node-and-antinode explorer.',
         canonicalPath: '/waves/standing-waves',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'waves-spectrograms',
+      href: '/waves/spectrograms',
+      title: 'Spectrograms',
+      shortTitle: 'Spectrograms',
+      description:
+        'Read sound as a picture of frequency against time, and meet the window-length tradeoff every analyzer lives with.',
+      seo: {
+        title: 'Spectrograms',
+        description:
+          'Learn to read a spectrogram with a live microphone display, example sounds, frequency and decibel measurements, and the time-frequency tradeoff.',
+        canonicalPath: '/waves/spectrograms',
         image: '/social/physics-nook-card.svg',
       },
     },

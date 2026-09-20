@@ -1,0 +1,199 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import SpectrogramLab from '../../components/waves/SpectrogramLab';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import { wavesAndOscillationsPath } from '../../data/modules';
+
+<ModuleHero module={wavesAndOscillationsPath} currentPath="/waves/spectrograms" />
+
+<div id="page-content"></div>
+
+# Spectrograms
+
+A waveform tells you how loud a sound is from one instant to the next. It does not tell you what is *in* the sound. A flute and a trumpet playing the same note trace wiggles of the same length, and a recording of rain looks much like a recording of applause.
+
+A **spectrogram** is the picture that separates them. It shows which frequencies are present, how strong each one is, and how all of that changes as the sound goes on.
+
+## Three Axes on One Picture
+
+Build one like this. Chop the incoming sound into short slices. Work out the spectrum of each slice, which is the list of frequencies it contains and how much of each. Stand that spectrum up as a single column of color, with low frequencies at the bottom and high ones at the top. Then set the columns side by side, newest on the right, and let them scroll.
+
+That gives you three quantities on a flat picture:
+
+- **across** is time, with the present moment at the right edge,
+- **up** is frequency, low at the bottom,
+- **color** is level, how strong that frequency was at that moment.
+
+One note on convention before you start reading. Audio tools almost always put frequency up the side, which is what this page does. The spectrogram inside the [Sound Synthesis](/waves/sound-synthesis) lab is rotated the other way, with frequency running across. Neither is wrong, and the same sound produces the same picture turned ninety degrees.
+
+Everything below happens inside your browser. No audio is uploaded, stored, or recorded.
+
+<InteractiveAnchor id="live-spectrogram" />
+
+<SimulationBlock
+  title="Live Spectrogram"
+  description="Sing, whistle, or play an example sound and watch its frequencies scroll past. Turn on measurements to read exact values."
+  width="full"
+>
+  <SpectrogramLab client:only="react" />
+</SimulationBlock>
+
+Things worth trying:
+
+- Whistle, and slide your pitch up and down. Watch the single line follow you.
+- Say "ssss", then "ahhh". One is a wash across the whole height; the other is a stack of lines.
+- Play the harmonic stack and count the rungs of the ladder.
+- Play the beats example at the shortest window and then the longest, and watch one thick line split into two.
+- Press Freeze, then point at a bright band to read its exact frequency.
+
+## A Field Guide to Shapes
+
+Five patterns cover most of what you will see.
+
+A **steady horizontal line** is a steady tone: one frequency, held. A **stack of evenly spaced lines** is a pitched sound with harmonics, and the vertical spacing between neighbouring lines is the fundamental frequency. A **sloping line** is a glide, and its steepness is how fast the pitch is changing. A **vertical streak** is a click, a handclap, or a drum hit: all frequencies at once, at a single instant. A **featureless wash** filling the height is noise.
+
+The second one is worth dwelling on. A pitched instrument does not produce one frequency; it produces a fundamental $f_1$ together with **harmonics** at integer multiples $2f_1, 3f_1, 4f_1, \ldots$ Those are the rungs of the ladder, and because they are spaced by equal numbers of hertz rather than equal ratios, on a logarithmic axis they visibly bunch together as they climb.
+
+## Why Color Means Decibels
+
+The quietest sound you can hear and a sound loud enough to hurt differ in amplitude by a factor of around a million. Spread that across a color scale linearly and everything except the single loudest peak would sit at the dark end, indistinguishable. So the scale is logarithmic, measured in **decibels**:
+
+$$
+L = 20\log_{10}\!\left(\frac{A}{A_0}\right).
+$$
+
+Every $20\ \text{dB}$ is a factor of ten in amplitude. The Floor control sets where the color scale bottoms out: raise it and the quiet background of the room drops away, leaving only the strong components.
+
+## Why the Frequency Axis Is Usually Logarithmic
+
+An octave is a doubling of frequency. On a logarithmic axis, equal *ratios* take equal space, so every octave is the same height and a musical interval becomes a fixed distance no matter where on the display it sits.
+
+Switch the axis to Linear and play a note. Nearly everything musical crushes into the bottom sliver of the display, because the nine octaves a piano spans occupy less than a fiftieth of the range from zero to twenty kilohertz. Nothing has been thrown away; the linear axis simply chooses to give equal space to equal *differences* in hertz instead.
+
+## The Trade You Cannot Escape
+
+The analyzer does not look at the whole sound at once. It looks at $N$ samples at a time, taken at a sample rate $f_s$. That window lasts
+
+$$
+\Delta t = \frac{N}{f_s},
+$$
+
+and it cannot distinguish two frequencies closer together than
+
+$$
+\Delta f = \frac{f_s}{N}.
+$$
+
+Multiply them and the $N$ and $f_s$ both cancel:
+
+$$
+\Delta f\,\Delta t = 1.
+$$
+
+That is the whole story. A short window pins down *when* something happened but smears *what* it was. A long window resolves *what* beautifully but no longer knows exactly *when*. You never get both; you only choose which one to spend.
+
+This is the **Gabor limit**, and it is not a limitation of this particular analyzer or of computers in general. It is a theorem about Fourier pairs, and it is the same mathematics that reappears later as the uncertainty principle. Move the Window control while the beats example plays and you can watch the trade happen.
+
+<ProblemSolvingSection>
+  <WorkedExampleCard title="Reading a Harmonic Stack" accent="blue">
+    #### Problem
+
+    A frozen spectrogram shows bright horizontal lines at $165\ \text{Hz}$, $330\ \text{Hz}$, $495\ \text{Hz}$, and $660\ \text{Hz}$, and nothing below $165\ \text{Hz}$. What note is sounding?
+
+    #### Use
+
+    Harmonics sit at integer multiples of the fundamental,
+
+    $$
+    f_n = n f_1,
+    $$
+
+    so the spacing between neighbouring lines is itself the fundamental.
+
+    #### Solve
+
+    The gaps are $330 - 165 = 165$, $495 - 330 = 165$, and $660 - 495 = 165\ \text{Hz}$. So $f_1 = 165\ \text{Hz}$, and the four lines are $f_1$ through $4f_1$. Converting to a note,
+
+    $$
+    n = 69 + 12\log_2\!\left(\frac{165}{440}\right) \approx 52,
+    $$
+
+    which is E3.
+
+    #### Check
+
+    The lines are equally spaced in hertz but not in ratio, so on the log axis they crowd together going up — the signature of one instrument rather than four unrelated tones.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Choosing a Window" accent="red">
+    #### Problem
+
+    Two tones $4\ \text{Hz}$ apart are playing, slow enough that you hear them beat. The sample rate is $f_s = 48\,000\ \text{Hz}$. Will a $2048$-point window show them as two separate lines?
+
+    #### Use
+
+    $$
+    \Delta f = \frac{f_s}{N}, \qquad \Delta t = \frac{N}{f_s}.
+    $$
+
+    #### Solve
+
+    $$
+    \Delta f = \frac{48\,000}{2048} \approx 23.4\ \text{Hz},
+    $$
+
+    which is far coarser than the $4\ \text{Hz}$ gap, so both tones land in the same resolution cell and paint a single thick line that pulses. Separating them needs
+
+    $$
+    N \gtrsim \frac{f_s}{\Delta f} = \frac{48\,000}{4} = 12\,000
+    $$
+
+    samples, so even the $8192$-point window is not quite enough — and it already spans $8192/48\,000 \approx 0.17\ \text{s}$.
+
+    #### Check
+
+    The pulsing is the beat itself, showing up on the time axis precisely because the frequency axis could not hold it.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Spectrogram Checkpoint"
+  questions={[
+    {
+      id: 'window-length',
+      question: 'You switch the analyzer to a shorter window. What happens to the picture?',
+      options: [
+        { id: 'A', text: 'It gets sharper in time and blurrier in frequency.', isCorrect: true, explanation: 'Right. A short window pins down when a sound happened, but it averages over a wider band of frequencies, because the bin spacing f_s / N grows as N shrinks.' },
+        { id: 'B', text: 'It gets sharper in both time and frequency.', isCorrect: false, explanation: 'That would be a free lunch. The product of the two resolutions is fixed at 1, so buying detail on one axis always spends it on the other.' },
+        { id: 'C', text: 'It gets sharper in frequency and blurrier in time.', isCorrect: false, explanation: 'Backwards. That is what a longer window does: more samples per spectrum means finer frequency detail and a vaguer sense of when.' },
+        { id: 'D', text: 'Only the colors change; the detail stays the same.', isCorrect: false, explanation: 'The window length sets the resolution of the analysis itself, not just how it is colored in.' }
+      ]
+    },
+    {
+      id: 'noise-shape',
+      question: 'A sound paints a solid wash covering the full height of the display instead of separate horizontal lines. What is it most likely to be?',
+      options: [
+        { id: 'A', text: 'A single pure tone.', isCorrect: false, explanation: 'A pure tone is one thin horizontal line at its own frequency, with nothing above or below it.' },
+        { id: 'B', text: 'Noise, such as static or the "sss" in a whisper.', isCorrect: true, explanation: 'Correct. Noise carries energy at essentially every frequency at once, so it fills the height rather than picking out particular lines.' },
+        { id: 'C', text: 'A very quiet sound.', isCorrect: false, explanation: 'Quietness changes the color — everything dims — but it does not spread a sound across every frequency.' }
+      ]
+    },
+    {
+      id: 'log-octaves',
+      question: 'On the logarithmic axis, the gap from 220 Hz to 440 Hz looks the same size as the gap from 440 Hz to 880 Hz. Why?',
+      options: [
+        { id: 'A', text: 'Both gaps span the same number of hertz.', isCorrect: false, explanation: 'They do not: one is 220 Hz wide and the other is 440 Hz. Equal numbers of hertz look equal only on the linear axis.' },
+        { id: 'B', text: 'Each gap is a doubling, and a logarithmic axis gives equal space to equal ratios.', isCorrect: true, explanation: 'Exactly. Both are one octave, a factor of two, and a logarithmic axis turns equal ratios into equal distances — which is why musical intervals stay the same size anywhere on the display.' },
+        { id: 'C', text: 'The display compresses high frequencies because they matter less.', isCorrect: false, explanation: 'Nothing is being discarded. Switch to the linear axis and the same two octaves occupy very different amounts of space; the log axis simply chooses ratios over differences.' }
+      ]
+    }
+  ]}
+/>

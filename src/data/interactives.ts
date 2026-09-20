@@ -518,6 +518,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     experimental: true,
   },
   {
+    id: 'live-spectrogram',
+    title: 'Live Spectrogram',
+    description:
+      'Watch live microphone input or an example sound as frequency against time, with an optional measurement overlay.',
+    href: '/waves/spectrograms#live-spectrogram',
+    module: 'Waves',
+    kind: 'standalone',
+    tags: ['spectrogram', 'frequency', 'sound', 'microphone', 'fft'],
+  },
+  {
     id: 'additive-synthesizer',
     title: 'Additive Synthesizer',
     description: 'Shape harmonics, play notes, and inspect waveform and spectrogram views.',

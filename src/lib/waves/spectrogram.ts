@@ -967,3 +967,29 @@ export const createSpectrogramHistory = (
     },
   };
 };
+
+/**
+ * The peaks the live analysis would have reported when column `index` was the
+ * newest one, recovered from the history.
+ *
+ * Replays the same hysteresis over the frames the live loop analysed on its
+ * way there, one `strideColumns` apart, so a frozen view panned to any column
+ * labels exactly what the moving display would have labelled at that moment:
+ * a peak still has to be present in consecutive analyses to count.
+ */
+export const peaksAtHistoryColumn = (
+  history: SpectrogramHistory,
+  index: number,
+  options: FindPeaksOptions & { strideColumns: number; analyses?: number },
+): SpectralPeak[] => {
+  const { strideColumns, analyses = 3, ...findOptions } = options;
+  if (index < 0 || index >= history.length) return [];
+
+  let tracks: PeakTrack[] = [];
+  for (let step = analyses - 1; step >= 0; step -= 1) {
+    const column = index - step * strideColumns;
+    if (column < 0) continue;
+    tracks = stabilizePeaks(tracks, findSpectralPeaks(history.frameAt(column), findOptions));
+  }
+  return confirmedPeaks(tracks);
+};

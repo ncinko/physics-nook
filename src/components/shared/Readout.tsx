@@ -39,20 +39,21 @@ function ReadoutRoot({ children, variant = 'panel', className = '' }: ReadoutPro
 interface ReadoutGroupProps {
   label?: ReactNode;
   children: ReactNode;
+  className?: string;
 }
 
-export function ReadoutGroup({ label, children }: ReadoutGroupProps) {
+export function ReadoutGroup({ label, children, className = '' }: ReadoutGroupProps) {
   const variant = useContext(VariantContext);
   if (variant === 'inline') {
     return (
-      <span className="inline-flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className={`inline-flex flex-wrap items-baseline gap-x-3 gap-y-1 ${className}`.trim()}>
         {label ? <span className="font-semibold text-[var(--text-muted)]">{label}:</span> : null}
         {children}
       </span>
     );
   }
   return (
-    <section className="min-w-0">
+    <section className={`min-w-0 ${className}`.trim()}>
       {label ? <div className="mb-1 font-semibold">{label}</div> : null}
       {children}
     </section>

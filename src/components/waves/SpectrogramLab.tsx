@@ -35,6 +35,7 @@ import {
   createSpectrogramHistory,
   estimateFundamental,
   findSpectralPeaks,
+  peaksAtHistoryColumn,
   formatDecibels,
   formatFrequencyLabel,
   formatNote,
@@ -96,6 +97,8 @@ interface Probe {
 
 /** How often the peak analysis runs. Sixty times a second is wasted work. */
 const ANALYSIS_INTERVAL_MS = 100;
+/** The same spacing in history columns, for replaying it over a frozen view. */
+const ANALYSIS_STRIDE_COLUMNS = Math.round(ANALYSIS_INTERVAL_MS / 1000 / HOP_SECONDS);
 /** A live region updated at frame rate is a screen-reader denial of service. */
 const LIVE_REGION_INTERVAL_MS = 800;
 
@@ -121,6 +124,8 @@ const describePeaks = (peaks: SpectralPeak[]): string => {
   );
 };
 
+const CLIP_PREFIX = 'clip:';
+
 export default function SpectrogramLab() {
   const [source, dispatch] = useReducer(sourceReducer, initialSourceState);
   const [scale, setScale] = useState<FrequencyScale>('log');
@@ -129,7 +134,9 @@ export default function SpectrogramLab() {
   const [showNoteNames, setShowNoteNames] = useState(true);
   const [frozen, setFrozen] = useState(false);
   const [floorDb, setFloorDb] = useState(DEFAULT_MIN_DECIBELS);
-  const [exampleId, setExampleId] = useState(SYNTH_EXAMPLES[0].id);
+  // One picker for both kinds of sound; recordings carry a prefix so their ids
+  // can never collide with an example's.
+  const [selectedSound, setSelectedSound] = useState('');
   const [sampleRate, setSampleRate] = useState(48000);
   const [plotBox, setPlotBox] = useState({ width: 960, height: 400 });
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -201,6 +208,12 @@ export default function SpectrogramLab() {
 
   const micSupport = useMemo(() => microphoneSupport(), []);
   const clips = availableClips(source);
+  // A recording that failed to load drops out of the list; fall back to the
+  // placeholder rather than leave the picker pointing at nothing.
+  const pickerValue = selectedSound.startsWith(CLIP_PREFIX)
+    && !clips.some((clip) => `${CLIP_PREFIX}${clip.id}` === selectedSound)
+    ? ''
+    : selectedSound;
   const isLive = source.kind === 'microphone';
   const isSounding = source.kind !== 'idle';
 
@@ -451,6 +464,24 @@ export default function SpectrogramLab() {
     redrawAll();
   }, [panColumns, redrawAll]);
 
+  // Frozen, the measurements describe whatever sits at the right edge, so
+  // sliding the picture re-measures it. The live loop is not writing then
+  // (it skips frozen frames), so nothing else is competing for these.
+  useEffect(() => {
+    if (!frozen) return;
+    const history = historyRef.current;
+    if (!history) return;
+    const stable = peaksAtHistoryColumn(history, history.length - 1 - panColumns, {
+      sampleRate,
+      fftSize,
+      maxHz,
+      maxPeaks: 6,
+      strideColumns: ANALYSIS_STRIDE_COLUMNS,
+    });
+    setPeaks(stable);
+    setFundamental(estimateFundamental(stable));
+  }, [frozen, panColumns, sampleRate, fftSize, maxHz]);
+
   useEffect(() => {
     if (!isSounding) return undefined;
 
@@ -666,6 +697,15 @@ export default function SpectrogramLab() {
     });
   }, [ensureGraph, resetDisplay, stopActiveSource]);
 
+  const playSound = useCallback((value: string) => {
+    if (value.startsWith(CLIP_PREFIX)) {
+      const clip = clips.find((candidate) => `${CLIP_PREFIX}${candidate.id}` === value);
+      if (clip) void playClip(clip);
+    } else if (value) {
+      void playExample(value);
+    }
+  }, [clips, playClip, playExample]);
+
   const stopEverything = useCallback(() => {
     stopActiveSource();
     dispatch({ type: 'stop' });
@@ -735,7 +775,10 @@ export default function SpectrogramLab() {
     if (next) commitProbe(next);
   };
 
-  const maxPan = Math.max(0, (historyRef.current?.length ?? 0) - PLOT_COLUMNS);
+  // Far enough back that the oldest retained column reaches the right edge,
+  // where the measurements read from. A sound shorter than the display can
+  // still be slid across it; the empty time before it just shows as blank.
+  const maxPan = Math.max(0, (historyRef.current?.length ?? 0) - 1);
   /** Display columns per CSS pixel, for turning a drag into a pan. */
   const columnsPerPixel = PLOT_COLUMNS / Math.max(layout.plot.w, 1);
 
@@ -994,32 +1037,28 @@ export default function SpectrogramLab() {
             </Button>
 
             <Select
-              label="Example"
-              value={exampleId}
+              ariaLabel="Example sound"
+              value={pickerValue}
               onChange={(value) => {
-                setExampleId(value);
-                void playExample(value);
+                setSelectedSound(value);
+                playSound(value);
               }}
-              options={SYNTH_EXAMPLES.map((example) => ({ value: example.id, label: example.label }))}
+              options={[
+                { value: '', label: 'Choose an example' },
+                ...SYNTH_EXAMPLES.map((example) => ({ value: example.id, label: example.label })),
+                ...clips.map((clip) => ({
+                  value: `${CLIP_PREFIX}${clip.id}`,
+                  label: clipLoading === clip.id ? `${clip.label} (loading...)` : clip.label,
+                })),
+              ]}
             />
-            <Button variant="secondary" onClick={() => void playExample(exampleId)}>
+            <Button
+              variant="secondary"
+              onClick={() => playSound(pickerValue)}
+              disabled={pickerValue === ''}
+            >
               Play
             </Button>
-
-            {clips.length > 0 && (
-              <Select
-                label="Recording"
-                value=""
-                onChange={(value) => {
-                  const clip = clips.find((candidate) => candidate.id === value);
-                  if (clip) void playClip(clip);
-                }}
-                options={[
-                  { value: '', label: clipLoading ? 'Loading...' : 'Choose a recording' },
-                  ...clips.map((clip) => ({ value: clip.id, label: clip.label })),
-                ]}
-              />
-            )}
 
             {isSounding && (
               <Button variant="secondary" onClick={stopEverything}>
@@ -1308,8 +1347,11 @@ export default function SpectrogramLab() {
       {/* Readouts -------------------------------------------------------- */}
       {showMeasurements && (
         <div className="rounded-[var(--radius-control)] border border-theme-grid bg-[var(--bg-primary)] px-3 py-2">
-          <Readout variant="inline">
-            <Readout.Group label="Loudest">
+          {/* Fixed-width sections and tabular digits, so a changing value never
+              shoves its neighbours along. Fundamental keeps its slot even when
+              there is no confident estimate. */}
+          <Readout variant="inline" className="tabular-nums">
+            <Readout.Group label="Loudest" className="w-[27ch] max-w-full">
               {peaks.length === 0 ? (
                 <span className="text-[var(--text-muted)]">no clear peak</span>
               ) : (
@@ -1324,25 +1366,33 @@ export default function SpectrogramLab() {
               )}
             </Readout.Group>
 
-            {fundamental && fundamental.confidence >= 0.5 && (
-              <Readout.Group label="Fundamental">
+            <Readout.Group label="Fundamental" className="w-[23ch] max-w-full">
+              {fundamental && fundamental.confidence >= 0.5 ? (
                 <Readout.Value
                   label={SUBSCRIPT_ONE}
                   value={formatFrequencyLabel(fundamental.frequencyHz)}
                   unit="Hz"
                 />
-              </Readout.Group>
-            )}
+              ) : (
+                <span className="text-[var(--text-muted)]">--</span>
+              )}
+            </Readout.Group>
 
-            <Readout.Group label="Cursor">
+            <Readout.Group label="Cursor" className="min-w-0 flex-1">
               {probeReading ? (
                 <>
-                  <Readout.Value label="f" value={Math.round(probeReading.frequencyHz)} unit="Hz" />
-                  <Readout.Value label="t" value={`-${probeReading.secondsAgo.toFixed(2)}`} unit="s" />
-                  <Readout.Value
-                    label="L"
-                    value={probeReading.decibels === null ? '--' : formatDecibels(probeReading.decibels)}
-                  />
+                  <span className="inline-block w-[11ch]">
+                    <Readout.Value label="f" value={Math.round(probeReading.frequencyHz)} unit="Hz" />
+                  </span>
+                  <span className="inline-block w-[11ch]">
+                    <Readout.Value label="t" value={`-${probeReading.secondsAgo.toFixed(2)}`} unit="s" />
+                  </span>
+                  <span className="inline-block w-[11ch]">
+                    <Readout.Value
+                      label="L"
+                      value={probeReading.decibels === null ? '--' : formatDecibels(probeReading.decibels)}
+                    />
+                  </span>
                 </>
               ) : (
                 <span className="text-[var(--text-muted)]">

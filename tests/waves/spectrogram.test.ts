@@ -26,6 +26,7 @@ import {
   frequencyToFraction,
   frequencyToRow,
   niceLinearStep,
+  peaksAtHistoryColumn,
   placeLabels,
   getSpectrogramLayout,
   harmonicSeries,
@@ -698,6 +699,43 @@ test('the history ring keeps the newest columns and wraps without tearing', () =
   assert.equal(history.length, 0);
 });
 
+test('a frozen column is re-measured from the history, with the live hysteresis', () => {
+  const sampleRate = 48000;
+  const fftSize = 2048;
+  const binCount = fftSize / 2;
+  const toneFrame = (hz: number) => {
+    const frame = new Uint8Array(binCount);
+    const bin = Math.round(frequencyToBin(hz, sampleRate, fftSize));
+    frame[bin - 1] = 150;
+    frame[bin] = 220;
+    frame[bin + 1] = 150;
+    return frame;
+  };
+  const silence = new Uint8Array(binCount);
+  const history = createSpectrogramHistory(100, binCount);
+  // 30 columns of 440 Hz, then 30 of 880 Hz, then 30 of silence.
+  for (let i = 0; i < 90; i += 1) {
+    history.push(i < 30 ? toneFrame(440) : i < 60 ? toneFrame(880) : silence, i / 60, -90, -20);
+  }
+  const options = { sampleRate, fftSize, strideColumns: 6 };
+
+  const early = peaksAtHistoryColumn(history, 20, options);
+  assert.equal(early.length, 1);
+  closeTo(early[0].frequencyHz, 440, 15);
+
+  const later = peaksAtHistoryColumn(history, 50, options);
+  assert.equal(later.length, 1);
+  closeTo(later[0].frequencyHz, 880, 15);
+
+  // One analysis into a new tone is not yet enough to confirm it.
+  const onset = peaksAtHistoryColumn(history, 30, options);
+  assert.ok(onset.every((peak) => Math.abs(peak.frequencyHz - 880) > 15));
+
+  assert.deepEqual(peaksAtHistoryColumn(history, 85, options), []);
+  assert.deepEqual(peaksAtHistoryColumn(history, -1, options), []);
+  assert.deepEqual(peaksAtHistoryColumn(history, 90, options), []);
+});
+
 // ---------------------------------------------------------------------------
 // Example sounds
 // ---------------------------------------------------------------------------
@@ -727,7 +765,6 @@ test('the sweep is geometric and the sawtooth is a harmonic series', () => {
   partials.forEach((hz, index) => closeTo(hz, 110 * (index + 1), 1e-9));
 
   assert.deepEqual(expectedPeaksAt(exampleById('white-noise')!, 1), []);
-  closeTo(expectedPeaksAt(exampleById('siren')!, 0)[0], 800, 1e-9);
 });
 
 const energy = (samples: Float32Array): number =>

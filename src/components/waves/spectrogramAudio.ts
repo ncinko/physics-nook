@@ -270,26 +270,11 @@ export const startExample = (
       } else {
         oscillator.frequency.linearRampToValueAtTime(spec.toHz, endAt);
       }
-      gain.gain.setValueAtTime(0.8, now);
+      // Well below the tones: a sweep climbs into the range the ear is most
+      // sensitive to, so the same amplitude sounds far louder.
+      gain.gain.setValueAtTime(0.4, now);
       oscillator.connect(gain).connect(envelope);
       nodes.push(oscillator);
-      break;
-    }
-
-    case 'fm': {
-      const carrier = context.createOscillator();
-      const modulator = context.createOscillator();
-      const depth = context.createGain();
-      const gain = context.createGain();
-      carrier.type = 'sine';
-      carrier.frequency.setValueAtTime(spec.carrierHz, now);
-      modulator.type = 'sine';
-      modulator.frequency.setValueAtTime(spec.rateHz, now);
-      depth.gain.setValueAtTime(spec.depthHz, now);
-      modulator.connect(depth).connect(carrier.frequency);
-      gain.gain.setValueAtTime(0.8, now);
-      carrier.connect(gain).connect(envelope);
-      nodes.push(carrier, modulator);
       break;
     }
 
@@ -298,7 +283,8 @@ export const startExample = (
       const gain = context.createGain();
       source.buffer = makeNoiseBuffer(context, spec.color);
       source.loop = true;
-      gain.gain.setValueAtTime(spec.color === 'pink' ? 0.9 : 0.5, now);
+      // Broadband sound reads as much louder than a tone of the same peak level.
+      gain.gain.setValueAtTime(spec.color === 'pink' ? 0.45 : 0.2, now);
       source.connect(gain).connect(envelope);
       nodes.push(source);
       break;

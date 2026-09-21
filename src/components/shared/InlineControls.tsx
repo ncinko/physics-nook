@@ -108,14 +108,17 @@ interface SelectProps {
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
+  /** Accessible name when there is no visible label. */
+  ariaLabel?: string;
 }
 
-export function Select({ label, value, onChange, options }: SelectProps) {
+export function Select({ label, value, onChange, options, ariaLabel }: SelectProps) {
   return (
     <label className="inline-flex items-center gap-2 text-sm">
       {label ? <span className="font-medium">{label}</span> : null}
       <select
         value={value}
+        aria-label={ariaLabel}
         onChange={(e: ChangeEvent<HTMLSelectElement>) => onChange(e.target.value)}
         className="rounded-md border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-[var(--text-primary)]"
       >

@@ -10,7 +10,6 @@
 export type ExampleSpec =
   | { kind: 'partials'; partials: { hz: number; gain: number }[] }
   | { kind: 'sweep'; fromHz: number; toHz: number; sweep: 'log' | 'linear' }
-  | { kind: 'fm'; carrierHz: number; depthHz: number; rateHz: number }
   | { kind: 'noise'; color: 'white' | 'pink' };
 
 export interface SynthExample {
@@ -59,12 +58,6 @@ export const SYNTH_EXAMPLES: SynthExample[] = [
     spec: { kind: 'partials', partials: [{ hz: 440, gain: 0.7 }, { hz: 444, gain: 0.7 }] },
   },
   {
-    id: 'siren',
-    label: 'Siren (800 Hz wobble)',
-    durationSeconds: 8,
-    spec: { kind: 'fm', carrierHz: 800, depthHz: 250, rateHz: 0.6 },
-  },
-  {
     id: 'white-noise',
     label: 'White noise',
     durationSeconds: 5,
@@ -101,8 +94,6 @@ export const expectedPeaksAt = (example: SynthExample, tSeconds: number): number
           : spec.fromHz + (spec.toHz - spec.fromHz) * progress,
       ];
     }
-    case 'fm':
-      return [spec.carrierHz + spec.depthHz * Math.sin(2 * Math.PI * spec.rateHz * tSeconds)];
     case 'noise':
       return [];
     default:

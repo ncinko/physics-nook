@@ -194,18 +194,14 @@ export default function PhotogateLaunchDiagram() {
         viewBox="0 0 580 320"
         className="mx-auto block h-auto w-full max-w-[36rem] select-none"
         role="group"
-        aria-labelledby="photogate-launch-diagram-title"
+        // A label rather than an SVG <title>, which browsers show as a hover tooltip.
+        aria-label="A ball rolls down a ramp, through photogates A and B spaced d apart near the table edge, then off a table of height h. How far from the table it lands is unknown."
         style={{ cursor: held ? 'grabbing' : undefined }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <title id="photogate-launch-diagram-title">
-          A ball rolls down a ramp, through photogates A and B spaced d apart near the table edge,
-          then off a table of height h. How far from the table it lands is unknown.
-        </title>
-
         <defs>
           <marker
             id="pgl-arrow"
@@ -364,9 +360,6 @@ export default function PhotogateLaunchDiagram() {
           </g>
         )}
       </svg>
-      <figcaption className="type-supporting mt-1 text-center">
-        Drag the ball anywhere and let go, or click it and click where it should go.
-      </figcaption>
     </figure>
   );
 }

@@ -2291,3 +2291,115 @@ console.log('Motion Match tests passed.');
 }
 
 console.log('Grid dot problem tests passed.');
+
+// --- rolling launch (photogate lab sketch) ----------------------------------
+
+{
+  const {
+    GRAVITY,
+    METERS_PER_UNIT,
+    SCENE,
+    blocksGate,
+    releaseBall,
+    startBall,
+    stepBall,
+  } = await import('../../src/lib/kinematics/rollingLaunch.ts');
+
+  const r = SCENE.radius;
+  const dt = 1 / 240;
+  const close = (actual: number, expected: number, relative: number, label: string) =>
+    assert.ok(
+      Math.abs(actual - expected) <= Math.abs(expected) * relative,
+      `${label}: ${actual} vs ${expected}`,
+    );
+
+  // Released from the top of the ramp, run the whole trip and record it.
+  const start = startBall();
+  assert.equal(start.mode, 'parked');
+  let ball = releaseBall(start);
+  assert.equal(ball.mode, 'ramp', 'a ball put on the ramp starts rolling');
+
+  const modes: string[] = [];
+  const gateOrder: string[] = [];
+  let time = 0;
+  let rampExit: { t: number; v: number; y: number } | null = null;
+  let tableEnd: { v: number } | null = null;
+  let launch: { x: number; y: number; vx: number; vy: number } | null = null;
+  let landing: { x: number; vy: number } | null = null;
+  let firstBounceVy: number | null = null;
+  let previous = ball;
+
+  for (let frame = 0; frame < 2400 && ball.mode !== 'gone' && ball.mode !== 'rest'; frame += 1) {
+    ball = stepBall(ball, dt);
+    time += dt;
+    if (modes.at(-1) !== ball.mode) modes.push(ball.mode);
+    SCENE.gates.forEach((gate) => {
+      if (blocksGate(ball, gate.x) && gateOrder.at(-1) !== gate.label) gateOrder.push(gate.label);
+    });
+    if (previous.mode === 'ramp' && ball.mode === 'table') {
+      rampExit = { t: time, v: ball.vx, y: previous.y };
+    }
+    if (previous.mode === 'table' && ball.mode === 'air') {
+      tableEnd = { v: previous.vx };
+      launch = { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy };
+    }
+    if (!landing && launch && ball.y >= SCENE.floor - r - 1e-9) {
+      landing = { x: ball.x, vy: previous.vy };
+      firstBounceVy = ball.vy;
+    }
+    previous = ball;
+  }
+
+  assert.deepEqual(modes.slice(0, 3), ['ramp', 'table', 'air'], `trip went ${modes.join(' → ')}`);
+  assert.deepEqual(gateOrder, ['A', 'B'], 'the ball cuts Gate A, then Gate B');
+  assert.ok(rampExit && tableEnd && launch && landing && firstBounceVy !== null);
+
+  // Rolling without slipping: v² = (10/7) g Δh down the ramp.
+  const drop = rampExit.y - start.y;
+  close(rampExit.v, Math.sqrt((10 / 7) * GRAVITY * drop), 0.01, 'speed at the foot of the ramp');
+  const sinTheta = (SCENE.rampBottom.y - SCENE.rampTop.y) /
+    Math.hypot(SCENE.rampBottom.x - SCENE.rampTop.x, SCENE.rampBottom.y - SCENE.rampTop.y);
+  const accel = (5 / 7) * GRAVITY * sinTheta;
+  close(rampExit.t, rampExit.v / accel, 0.02, 'time down the ramp');
+
+  // The table barely slows it, and it leaves the edge horizontally.
+  assert.ok(tableEnd.v < rampExit.v && tableEnd.v > rampExit.v * 0.98, 'the table barely slows it');
+  assert.ok(Math.abs(launch.vy) < 1e-6 * GRAVITY, 'launch is horizontal');
+
+  // A plain projectile from there: x = v·√(2h/g).
+  const fall = SCENE.floor - r - launch.y;
+  close(landing.x - launch.x, launch.vx * Math.sqrt((2 * fall) / GRAVITY), 0.01, 'landing distance');
+  close(landing.vy, Math.sqrt(2 * GRAVITY * fall), 0.01, 'impact speed');
+  assert.ok(firstBounceVy < 0, 'it bounces');
+  close(-firstBounceVy, 0.3 * landing.vy, 0.02, 'bounce keeps 30% of the normal speed');
+
+  // At this scale, the whole trip lands a little over a metre out.
+  const rangeMeters = (landing.x - SCENE.edge) * METERS_PER_UNIT;
+  assert.ok(rangeMeters > 0.8 && rangeMeters < 1.3, `range ${rangeMeters} m`);
+
+  // Placing the ball.
+  const onRampFace = releaseBall({ x: 80, y: 110 });
+  assert.equal(onRampFace.mode, 'ramp', 'inside the ramp snaps onto its face');
+  const onTable = releaseBall({ x: 250, y: 125 });
+  assert.equal(onTable.mode, 'rest', 'on the flat table it stays put');
+  assert.equal(onTable.y, SCENE.tableTop - r);
+  assert.equal(releaseBall({ x: 400, y: 300 }).mode, 'rest', 'below the floor lands on it');
+
+  // Dropped a little above the table, it falls, settles, and stays.
+  let dropped = releaseBall({ x: 250, y: SCENE.tableTop - r - 2 });
+  assert.equal(dropped.mode, 'air');
+  for (let frame = 0; frame < 240; frame += 1) dropped = stepBall(dropped, dt);
+  assert.ok(dropped.mode === 'rest' || dropped.mode === 'table', `settled as ${dropped.mode}`);
+  close(dropped.y, SCENE.tableTop - r, 1e-9, 'resting on the tabletop');
+
+  // Dropped beside the table, it falls to the floor.
+  let beside = releaseBall({ x: 450, y: 60 });
+  for (let frame = 0; frame < 480; frame += 1) beside = stepBall(beside, dt);
+  assert.equal(beside.y, SCENE.floor - r);
+  assert.equal(beside.x, 450, 'a straight drop stays where it was dropped');
+
+  // Nothing moves a parked or held ball.
+  assert.deepEqual(stepBall(start, 1), start);
+}
+
+console.log('Rolling launch tests passed.');

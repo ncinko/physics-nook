@@ -206,6 +206,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'graphs', 'motion', 'lab', 'hardware'],
   },
   {
+    id: 'photogate-launch-sketch',
+    title: 'Rolling Launch Sketch',
+    description:
+      'Place a ball anywhere on a ramp-and-table sketch and watch it roll through two photogates and off the edge.',
+    href: '/kinematics/photogate-launch#photogate-launch-sketch',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['kinematics', 'projectile', 'rolling'],
+  },
+  {
     id: 'photogate-launch',
     title: 'Photogate Launch',
     description:

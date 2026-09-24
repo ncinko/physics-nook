@@ -8,7 +8,7 @@ canonicalPath: /kinematics/photogate-launch
 import SimulationBlock from '../../components/layout/SimulationBlock.astro';
 import ModuleHero from '../../components/modules/ModuleHero.astro';
 import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
-import PhotogateLaunchDiagram from '../../components/kinematics/PhotogateLaunchDiagram.astro';
+import PhotogateLaunchDiagram from '../../components/kinematics/PhotogateLaunchDiagram';
 import PhotogateLaunchLab from '../../components/kinematics/PhotogateLaunchLab';
 import { mechanicsPath } from '../../data/modules';
 
@@ -20,7 +20,9 @@ import { mechanicsPath } from '../../data/modules';
 
 A ball rolls across a table and off the edge. Where will it hit the floor? Projectile equations can answer that, but only if you know how fast the ball is moving when it leaves the table. In this lab you measure that speed with two **photogates**, predict the landing spot on paper, and then put a target there and find out how close you got.
 
-<PhotogateLaunchDiagram />
+<InteractiveAnchor id="photogate-launch-sketch" />
+
+<PhotogateLaunchDiagram client:visible />
 
 A photogate is an infrared beam across a small frame. The interface records the instant the beam is blocked, to within a few microseconds. With two gates a known distance $d$ apart, the time between the ball blocking the first beam and blocking the second gives its average speed between them.
 

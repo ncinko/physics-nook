@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { RotateCcw, Trash2 } from 'lucide-react';
+import { RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 import { Button } from '../shared/InlineControls';
 import { fixed } from '../../utils/format';
 import DeviceConnectPanel from '../hardware/DeviceConnectPanel';
 import { useVernierPhotogates, type Beams } from '../hardware/useVernierPhotogates';
 import type { PhotogateWiring } from '../../lib/vernier/ngioSession';
+import { NGIO_CHANNEL_ID } from '../../lib/vernier/ngioPackets';
 import {
   createTransitAssembler,
   gateToGateSeconds,
@@ -25,6 +26,13 @@ import {
 /** A pass slower than this is abandoned. A roll that slow will not leave the table anyway. */
 const MAX_TRANSIT_SECONDS = 3;
 const STORAGE_KEY = 'physics-nook:photogate-launch:v2';
+/**
+ * A beam blocked this long with no ball moving is almost always a gate read
+ * backwards (connected with something in it) or a stalled stream, not a ball.
+ */
+const STUCK_SECONDS = 5;
+
+const GATE_NAMES: Record<keyof Beams, string> = { A: 'Gate A', B: 'Gate B', line: 'The chained gates' };
 
 interface Roll {
   id: number;
@@ -183,13 +191,45 @@ function BeamIndicators({ beams, wiring }: { beams: Beams; wiring: PhotogateWiri
 export default function PhotogateLaunchLab() {
   const [simWiring] = useState(simulatedWiring);
   const device = useVernierPhotogates(simWiring ?? 'two-port');
-  const { wiring, streamId, subscribe, simulated } = device;
+  const { wiring, streamId, subscribe, simulated, confirmPass } = device;
   const connected = device.status.kind === 'streaming';
 
   const [lab, setLab] = useState<LabState>(INITIAL_STATE);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const nextId = useRef(1);
+  const [resetting, setResetting] = useState(false);
+  const [copied, setCopied] = useState<'copied' | 'failed' | null>(null);
+  const [heldA, setHeldA] = useState(false);
+  useEffect(() => setHeldA(simulated?.isHeld(NGIO_CHANNEL_ID.DIGITAL1) ?? false), [simulated]);
+
+  // When each beam went blocked, and which have stayed that way too long.
+  const blockedSince = useRef<Partial<Record<keyof Beams, number>>>({});
+  const [stuck, setStuck] = useState<(keyof Beams)[]>([]);
+
+  useEffect(() => {
+    const now = Date.now();
+    (Object.keys(device.beams) as (keyof Beams)[]).forEach((key) => {
+      if (!device.beams[key]) delete blockedSince.current[key];
+      else blockedSince.current[key] ??= now;
+    });
+    setStuck((current) => current.filter((key) => device.beams[key]));
+  }, [device.beams]);
+
+  useEffect(() => {
+    if (!connected) {
+      setStuck([]);
+      return undefined;
+    }
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const next = (Object.keys(blockedSince.current) as (keyof Beams)[]).filter(
+        (key) => now - (blockedSince.current[key] ?? now) > STUCK_SECONDS * 1000,
+      );
+      setStuck((current) => (current.join() === next.join() ? current : next));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [connected]);
 
   useEffect(() => {
     const stored = loadState();
@@ -224,6 +264,7 @@ export default function PhotogateLaunchLab() {
           return;
         }
         setNotice(null);
+        confirmPass(event.transit);
         const roll = { id: nextId.current++, transit: event.transit };
         setLab((current) => ({ ...current, rolls: [...current.rolls, roll] }));
       });
@@ -245,9 +286,59 @@ export default function PhotogateLaunchLab() {
       unsubscribe();
       if (flushTimer !== null) clearTimeout(flushTimer);
     };
-  }, [wiring, streamId, subscribe]);
+  }, [wiring, streamId, subscribe, confirmPass]);
 
   const update = (patch: Partial<LabState>) => setLab((current) => ({ ...current, ...patch }));
+
+  const resetGates = async () => {
+    setResetting(true);
+    setNotice(null);
+    try {
+      await device.resetGates();
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const copyDiagnostics = async () => {
+    try {
+      await navigator.clipboard.writeText(device.diagnosticsText());
+      setCopied('copied');
+    } catch {
+      setCopied('failed');
+    }
+    setTimeout(() => setCopied(null), 2500);
+  };
+
+  const gateTools = (
+    <div className="flex flex-col gap-2">
+      {stuck.length > 0 && (
+        <p className="m-0 text-sm text-[var(--accent-red)]" role="alert">
+          {stuck.map((key) => GATE_NAMES[key]).join(' and ')}{' '}
+          {stuck.length > 1 ? 'have' : 'has'} read blocked for over {STUCK_SECONDS} seconds. If
+          nothing is in the beam, press Reset gates.
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="secondary" onClick={() => void resetGates()} disabled={resetting}>
+          <RefreshCw aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+          {resetting ? 'Resetting…' : 'Reset gates'}
+        </Button>
+        <span className="type-supporting">Keep both beams clear, then reset.</span>
+        <button
+          type="button"
+          className="type-supporting underline underline-offset-2 hover:text-[var(--text-primary)]"
+          onClick={() => void copyDiagnostics()}
+        >
+          {copied === 'copied'
+            ? 'Copied'
+            : copied === 'failed'
+              ? 'Could not copy'
+              : 'Copy diagnostics'}
+        </button>
+      </div>
+    </div>
+  );
 
   const roll = () => {
     simulated?.roll({
@@ -267,14 +358,26 @@ export default function PhotogateLaunchLab() {
           simulatedLabel="Simulated gates"
         >
           <BeamIndicators beams={device.beams} wiring={wiring} />
+          <div className="mt-3">{gateTools}</div>
           {simulated && (
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap gap-3">
               <Button variant="secondary" onClick={roll}>
                 Roll a simulated ball
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  simulated.setHeld(NGIO_CHANNEL_ID.DIGITAL1, !heldA);
+                  setHeldA(!heldA);
+                }}
+              >
+                {heldA ? 'Take ball out of Gate A' : 'Leave ball in Gate A'}
               </Button>
             </div>
           )}
         </DeviceConnectPanel>
+        {/* The panel hides its reading on error; the way out must not go with it. */}
+        {device.sourceId && device.status.kind === 'error' && <div className="mt-3">{gateTools}</div>}
         <p className="type-supporting mt-2">
           Keep both beams clear while connecting. Gate A goes in DIG 1. Gate B goes in DIG 2, or
           into the daisy-chain port on Gate A.

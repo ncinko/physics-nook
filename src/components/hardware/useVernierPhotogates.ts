@@ -9,8 +9,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatDiagnostics } from '../../lib/vernier/diagnostics';
 import type { PhotogateWiring } from '../../lib/vernier/ngioSession';
-import { createGateInterpreter, type GateTransition } from '../../lib/vernier/photogateTiming';
+import {
+  createGateInterpreter,
+  isPlausiblePass,
+  type GateTransition,
+  type Transit,
+} from '../../lib/vernier/photogateTiming';
 import {
   createSimulatedPhotogateSource,
   type SimulatedPhotogateSource,
@@ -24,6 +30,31 @@ import { createWebUsbPhotogateSource } from '../../lib/vernier/sources/webUsbPho
 import type { ConnectableDevice } from './DeviceConnectPanel';
 
 const IDLE_STATUS: SourceStatus = { kind: 'idle', message: 'Not connected', sensorName: null };
+
+/**
+ * The edge level a photogate reads as clear, once a real pass has proved it.
+ * Polarity is a property of the hardware, not of one gate or one session, so
+ * a value confirmed once holds for every later connect on this browser.
+ */
+const POLARITY_KEY = 'physics-nook:photogate-clear-level';
+
+const readPolarity = (): number | undefined => {
+  try {
+    const stored = window.localStorage.getItem(POLARITY_KEY);
+    const value = stored === null ? Number.NaN : Number(stored);
+    return Number.isInteger(value) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const writePolarity = (value: number) => {
+  try {
+    window.localStorage.setItem(POLARITY_KEY, String(value));
+  } catch {
+    // Without storage, every connect relearns from the start-of-stream report.
+  }
+};
 
 export type Beams = Record<GateTransition['gate'], boolean>;
 
@@ -39,6 +70,14 @@ export interface VernierPhotogatesApi extends ConnectableDevice {
   simulated: SimulatedPhotogateSource | null;
   /** Runs on every transition, outside React state. */
   subscribe: (listener: (transition: GateTransition) => void) => () => void;
+  /** Remembers the polarity in use if `transit` proves it right. */
+  confirmPass: (transit: Transit) => void;
+  /**
+   * The software version of unplugging and replugging: release the interface,
+   * reconnect to it without the picker, and start a fresh session.
+   */
+  resetGates: () => Promise<void>;
+  diagnosticsText: () => string;
 }
 
 export const useVernierPhotogates = (
@@ -97,7 +136,9 @@ export const useVernierPhotogates = (
             const detected = source.wiring();
             setWiring(detected);
             setBeams(CLEAR_BEAMS);
-            interpretRef.current = detected ? createGateInterpreter(detected) : null;
+            interpretRef.current = detected
+              ? createGateInterpreter(detected, { clearValue: readPolarity() })
+              : null;
             setStreamId((value) => value + 1);
           }
           last.kind = next.kind;
@@ -127,12 +168,52 @@ export const useVernierPhotogates = (
     setBeams(CLEAR_BEAMS);
   }, [teardown]);
 
+  const resetGates = useCallback(async () => {
+    const source = sourceRef.current;
+    if (!source || !sourceId) return;
+
+    // The simulator keeps its own state (a ball left in a gate), which a new
+    // instance would forget; restarting its stream is its whole replug.
+    if (source.id === 'simulated') {
+      await source.stop();
+      await source.start();
+      return;
+    }
+    await selectSource(sourceId);
+  }, [selectSource, sourceId]);
+
+  const confirmPass = useCallback((transit: Transit) => {
+    const clearValues = [...(interpretRef.current?.clearValues().values() ?? [])];
+    if (!isPlausiblePass(transit) || clearValues.length === 0) return;
+    if (clearValues.some((value) => value !== clearValues[0])) return;
+    if (readPolarity() !== clearValues[0]) writePolarity(clearValues[0]);
+  }, []);
+
   const subscribe = useCallback((listener: (transition: GateTransition) => void) => {
     listenersRef.current.push(listener);
     return () => {
       listenersRef.current = listenersRef.current.filter((entry) => entry !== listener);
     };
   }, []);
+
+  const diagnosticsText = useCallback(() => {
+    const source = sourceRef.current;
+    if (!source) return 'No source connected.';
+    const snapshot = source.diagnostics();
+    const learned = [...(interpretRef.current?.clearValues() ?? [])]
+      .map(([channel, value]) => `channel ${channel} clear at edge value ${value}`)
+      .join('; ');
+    const stored = readPolarity();
+    return formatDiagnostics({
+      ...snapshot,
+      notes: [
+        ...snapshot.notes,
+        `Photogate wiring: ${wiring ?? 'unknown'}.`,
+        `Clear levels this session: ${learned || 'none seen yet'}.`,
+        `Confirmed clear level on this browser: ${stored ?? 'none yet'}.`,
+      ],
+    });
+  }, [wiring]);
 
   // A page navigated away from must not leave a claimed USB device behind.
   useEffect(() => () => void teardown(), [teardown]);
@@ -150,7 +231,24 @@ export const useVernierPhotogates = (
       selectSource,
       disconnect,
       subscribe,
+      confirmPass,
+      resetGates,
+      diagnosticsText,
     }),
-    [sourceId, status, supportsUsb, wiring, beams, streamId, simulated, selectSource, disconnect, subscribe],
+    [
+      sourceId,
+      status,
+      supportsUsb,
+      wiring,
+      beams,
+      streamId,
+      simulated,
+      selectSource,
+      disconnect,
+      subscribe,
+      confirmPass,
+      resetGates,
+      diagnosticsText,
+    ],
   );
 };

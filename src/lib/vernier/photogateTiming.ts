@@ -59,40 +59,72 @@ export const createTickClock = () => {
  * (Reading the first edge as a blocking instead is what showed every gate as
  * blocked at rest and clear when cut.)
  *
- * The numeric polarity is learned rather than hardcoded, so this holds
- * whichever way round the edge byte is. If the value never alternates, the
- * byte is not a level, and the tracker falls back to toggling.
+ * The trap in that rule is a gate that is *not* clear at connect — the ball
+ * resting in it, a hand, a misaligned beam. Its polarity is then learned
+ * backwards, and it reads blocked at rest until the next connect. So a
+ * polarity confirmed by a real pass (`isPlausiblePass`) can be passed in as
+ * `clearValue`, and then the start-of-stream report is read, not trusted.
+ *
+ * Once a channel's byte has been seen to change, or a `clearValue` is known,
+ * the byte is a level: a repeated value is a repeat, not a change. Only a byte
+ * that has never changed falls back to toggling.
  */
-export const createBeamTracker = () => {
-  const channels = new Map<number, { blocked: boolean; clearValue: number; last: number }>();
+export const createBeamTracker = ({ clearValue }: { clearValue?: number } = {}) => {
+  const channels = new Map<
+    number,
+    { blocked: boolean; clearValue: number; last: number; isLevel: boolean }
+  >();
 
-  return (event: Pick<NgioEdgeEvent, 'channel' | 'edge'>): boolean => {
+  const track = (event: Pick<NgioEdgeEvent, 'channel' | 'edge'>): boolean => {
     const known = channels.get(event.channel);
 
     if (!known) {
-      channels.set(event.channel, { blocked: false, clearValue: event.edge, last: event.edge });
-      return false;
+      const clear = clearValue ?? event.edge;
+      const blocked = event.edge !== clear;
+      channels.set(event.channel, {
+        blocked,
+        clearValue: clear,
+        last: event.edge,
+        isLevel: clearValue !== undefined,
+      });
+      return blocked;
     }
 
-    const blocked =
-      event.edge === known.last ? !known.blocked : event.edge !== known.clearValue;
-    channels.set(event.channel, { ...known, blocked, last: event.edge });
+    const isLevel = known.isLevel || event.edge !== known.last;
+    const blocked = isLevel ? event.edge !== known.clearValue : !known.blocked;
+    channels.set(event.channel, { ...known, blocked, last: event.edge, isLevel });
     return blocked;
   };
+
+  /** The level each channel reads as clear, for confirming and for diagnostics. */
+  const clearValues = (): Map<number, number> =>
+    new Map([...channels].map(([channel, state]) => [channel, state.clearValue]));
+
+  return Object.assign(track, { clearValues });
 };
 
-/** Edges in, gate transitions out. One per session: it carries the clock. */
-export const createGateInterpreter = (wiring: PhotogateWiring) => {
-  const clock = createTickClock();
-  const beam = createBeamTracker();
+export interface GateInterpreterOptions {
+  /** A polarity confirmed on earlier passes; see `createBeamTracker`. */
+  clearValue?: number;
+}
 
-  return (event: NgioEdgeEvent): GateTransition => {
+/** Edges in, gate transitions out. One per session: it carries the clock. */
+export const createGateInterpreter = (
+  wiring: PhotogateWiring,
+  { clearValue }: GateInterpreterOptions = {},
+) => {
+  const clock = createTickClock();
+  const beam = createBeamTracker({ clearValue });
+
+  const interpret = (event: NgioEdgeEvent): GateTransition => {
     const t = clock(event.ticks);
     const blocked = beam(event);
     const gate: GateTransition['gate'] =
       wiring === 'one-port' ? 'line' : event.channel === NGIO_CHANNEL_ID.DIGITAL2 ? 'B' : 'A';
     return { gate, blocked, t };
   };
+
+  return Object.assign(interpret, { clearValues: beam.clearValues });
 };
 
 /** The four moments of one pass through both gates, in device seconds. */
@@ -241,6 +273,27 @@ export const speedsAtGates = (
   a: diameterMeters / (transit.aClear - transit.aBlock),
   b: diameterMeters / (transit.bClear - transit.bBlock),
 });
+
+/** Longest a rolling ball plausibly holds one beam: a 2.5 cm ball at 5 cm/s. */
+export const MAX_PLAUSIBLE_BLOCK_SECONDS = 0.5;
+
+/**
+ * True for a pass that looks like a ball rolling through: each beam cut
+ * briefly. A backwards-learned gate reads its long rest as "blocked", so it
+ * cannot produce one of these — which makes a plausible pass proof that the
+ * polarity in use is right, and worth remembering.
+ */
+export const isPlausiblePass = (transit: Transit): boolean => {
+  const aHeld = transit.aClear - transit.aBlock;
+  const bHeld = transit.bClear - transit.bBlock;
+  return (
+    aHeld > 0 &&
+    bHeld > 0 &&
+    aHeld < MAX_PLAUSIBLE_BLOCK_SECONDS &&
+    bHeld < MAX_PLAUSIBLE_BLOCK_SECONDS &&
+    gateToGateSeconds(transit) > 0
+  );
+};
 
 export interface TrialStats {
   count: number;

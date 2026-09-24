@@ -81,6 +81,7 @@ import {
   createTransitAssembler,
   gateToGateSeconds,
   gateToGateSpeed,
+  isPlausiblePass,
   speedsAtGates,
   trialStats,
   type GateTransition,
@@ -1120,6 +1121,63 @@ const near = (actual: number, expected: number, tolerance = 1e-9, label = '') =>
   assert.equal(flat({ channel: 5, edge: 3 }), false);
   assert.equal(flat({ channel: 5, edge: 3 }), true);
   assert.equal(flat({ channel: 5, edge: 3 }), false);
+
+  // But once a byte has changed it is a level, and a repeated value is only a
+  // repeat. Toggling on it used to leave a gate inverted for the session.
+  const level = createBeamTracker();
+  level({ channel: 5, edge: 1 });
+  assert.equal(level({ channel: 5, edge: 0 }), true);
+  assert.equal(level({ channel: 5, edge: 0 }), true, 'a repeated blocked level stays blocked');
+  assert.equal(level({ channel: 5, edge: 1 }), false);
+  assert.equal(level({ channel: 5, edge: 1 }), false, 'a repeated clear level stays clear');
+  assert.deepEqual([...level.clearValues()], [[5, 1]]);
+}
+
+{
+  // Connected with the ball resting in a gate. Learning from the start report
+  // reads that gate backwards — the "stuck blocked" fault students hit.
+  const learned = createBeamTracker();
+  assert.equal(learned({ channel: 5, edge: 0 }), false, 'blocked report taken as clear');
+  assert.equal(learned({ channel: 5, edge: 1 }), true, 'so the ball leaving reads as blocked');
+
+  // With the polarity already confirmed, the same report is read correctly.
+  const known = createBeamTracker({ clearValue: 1 });
+  assert.equal(known({ channel: 5, edge: 0 }), true, 'the report says blocked, and it is');
+  assert.equal(known({ channel: 5, edge: 1 }), false, 'and it clears when the ball is removed');
+  assert.equal(known({ channel: 6, edge: 1 }), false, 'a clear gate reads clear from the start');
+  assert.deepEqual([...known.clearValues()], [[5, 1], [6, 1]]);
+
+  const interpret = createGateInterpreter('two-port', { clearValue: 1 });
+  assert.equal(interpret({ channel: NGIO_CHANNEL_ID.DIGITAL1, edge: 0, ticks: 0 }).blocked, true);
+  assert.deepEqual([...interpret.clearValues()], [[NGIO_CHANNEL_ID.DIGITAL1, 1]]);
+}
+
+{
+  // A real pass cuts each beam briefly; that is what confirms a polarity.
+  const pass = { aBlock: 1, aClear: 1.03, bBlock: 1.11, bClear: 1.14 };
+  assert.ok(isPlausiblePass(pass));
+
+  // A backwards gate reads its long rest as "blocked".
+  assert.ok(!isPlausiblePass({ aBlock: 1, aClear: 2.4, bBlock: 1.11, bClear: 1.14 }));
+  assert.ok(!isPlausiblePass({ aBlock: 1, aClear: 1.03, bBlock: 1.11, bClear: 2.9 }));
+  assert.ok(!isPlausiblePass({ aBlock: 1, aClear: 1, bBlock: 1.11, bClear: 1.14 }));
+}
+
+{
+  // The simulator reports a held gate as blocked at the start of a stream.
+  const held = initialStateEdges('two-port', new Set([NGIO_CHANNEL_ID.DIGITAL1]));
+  const clear = initialStateEdges('two-port');
+  const a = (edges: typeof held) => edges.find((edge) => edge.channel === NGIO_CHANNEL_ID.DIGITAL1)?.edge;
+  const b = (edges: typeof held) => edges.find((edge) => edge.channel === NGIO_CHANNEL_ID.DIGITAL2)?.edge;
+  assert.notEqual(a(held), a(clear));
+  assert.equal(b(held), b(clear));
+
+  // Read with a confirmed polarity, held Gate A starts blocked and B clear.
+  const interpret = createGateInterpreter('two-port', { clearValue: a(clear) });
+  assert.deepEqual(
+    held.map((edge) => interpret(edge).blocked),
+    [true, false],
+  );
 }
 
 /** The start-of-stream state report, as timed edges at t = 0. */
@@ -1157,6 +1215,7 @@ const runEdges = (
     const atGates = speedsAtGates(events[0].transit, 0.025);
     near(atGates.a, 0.8, 1e-4, 'speed at A');
     near(atGates.b, 0.8, 1e-4, 'speed at B');
+    assert.ok(isPlausiblePass(events[0].transit), 'a real roll confirms the polarity');
   }
 }
 

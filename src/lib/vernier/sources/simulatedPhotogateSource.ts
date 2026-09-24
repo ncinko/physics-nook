@@ -25,6 +25,13 @@ export interface SimulatedRoll {
 
 export interface SimulatedPhotogateSource extends PhotogateSource {
   roll: (roll: SimulatedRoll) => void;
+  /**
+   * Leaves something sitting in a gate's beam, or takes it out. A gate held at
+   * the start of a stream is reported blocked, as hardware does — which is how
+   * the "connected with the ball in Gate A" fault is reproduced.
+   */
+  setHeld: (channel: number, blocked: boolean) => void;
+  isHeld: (channel: number) => boolean;
 }
 
 /** Values the fake edge byte takes. Arbitrary: the beam tracker learns them. */
@@ -71,13 +78,16 @@ export const rollEdges = (
 
 /**
  * The state report a LabQuest sends for each gate when measurements start:
- * one edge per channel at the clear level, before anything has passed.
+ * one edge per channel at its current level, before anything has passed.
  */
-export const initialStateEdges = (wiring: PhotogateWiring): NgioEdgeEvent[] =>
+export const initialStateEdges = (
+  wiring: PhotogateWiring,
+  held: ReadonlySet<number> = new Set(),
+): NgioEdgeEvent[] =>
   (wiring === 'two-port'
     ? [NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2]
     : [NGIO_CHANNEL_ID.DIGITAL1]
-  ).map((channel) => ({ channel, edge: CLEAR, ticks: 0 }));
+  ).map((channel) => ({ channel, edge: held.has(channel) ? BLOCKED : CLEAR, ticks: 0 }));
 
 export const createSimulatedPhotogateSource = (
   wiring: PhotogateWiring = 'two-port',
@@ -86,6 +96,7 @@ export const createSimulatedPhotogateSource = (
   const edges = createEmitter<NgioEdgeEvent>();
   const statuses = createEmitter<SourceStatus>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
+  const held = new Set<number>();
   let started = 0;
   let streaming = false;
   let status: SourceStatus = { kind: 'idle', message: 'Simulated photogates', sensorName: null };
@@ -119,7 +130,7 @@ export const createSimulatedPhotogateSource = (
       started = Date.now();
       streaming = true;
       setStatus({ kind: 'streaming', message: readyMessage, sensorName: 'Photogate' });
-      initialStateEdges(wiring).forEach(edges.emit);
+      initialStateEdges(wiring, held).forEach(edges.emit);
     },
 
     stop: async () => {
@@ -148,6 +159,16 @@ export const createSimulatedPhotogateSource = (
         timers.add(timer);
       });
     },
+
+    setHeld: (channel, blocked) => {
+      if (held.has(channel) === blocked) return;
+      if (blocked) held.add(channel);
+      else held.delete(channel);
+      if (!streaming) return;
+      const ticks = Math.round((Date.now() - started) / 1000 / NGIO_EDGE_TICK_SECONDS) >>> 0;
+      edges.emit({ channel, edge: blocked ? BLOCKED : CLEAR, ticks });
+    },
+    isHeld: (channel) => held.has(channel),
 
     subscribeEdges: edges.subscribe,
     wiring: () => (streaming ? wiring : null),

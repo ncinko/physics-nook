@@ -70,6 +70,21 @@ export const kinematicsModule: ModuleMeta = {
       },
     },
     {
+      id: 'kinematics-photogate-launch',
+      href: '/kinematics/photogate-launch',
+      title: 'Photogate Launch',
+      shortTitle: 'Photogate Launch',
+      description:
+        'Time a rolling ball with two Vernier photogates, predict where it lands, then test it.',
+      seo: {
+        title: 'Photogate Launch',
+        description:
+          'Time a rolling ball with two Vernier photogates, predict where it lands after leaving the table, then test your prediction.',
+        canonicalPath: '/kinematics/photogate-launch',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
       id: 'kinematics-video-analysis',
       href: '/kinematics/video-analysis',
       title: 'Video Analysis',

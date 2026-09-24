@@ -206,6 +206,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['kinematics', 'graphs', 'motion', 'lab', 'hardware'],
   },
   {
+    id: 'photogate-launch',
+    title: 'Photogate Launch',
+    description:
+      'Time a rolling ball through two Vernier photogates, predict where it will land off the table, then test it on the floor.',
+    href: '/kinematics/photogate-launch#photogate-launch',
+    module: 'Mechanics',
+    kind: 'standalone',
+    tags: ['kinematics', 'projectile', 'lab', 'hardware'],
+  },
+  {
     id: 'video-analysis-lab',
     title: 'Video Analysis Lab',
     description:

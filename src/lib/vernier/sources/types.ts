@@ -10,6 +10,8 @@
 import type { MotionSample } from '../motionStream.ts';
 import type { DiagnosticsSnapshot } from '../diagnostics.ts';
 import type { SensorContext } from '../sensorIds.ts';
+import type { NgioEdgeEvent } from '../ngioPackets.ts';
+import type { PhotogateWiring } from '../ngioSession.ts';
 
 export type MotionSourceId = 'webusb' | 'simulated';
 
@@ -31,7 +33,33 @@ export interface StartOptions {
   periodSeconds?: number;
 }
 
-export interface MotionSource {
+/** What every device source shares, whatever it measures. */
+export interface DeviceSource {
+  readonly id: MotionSourceId;
+  readonly label: string;
+  /** True for sources backed by real hardware. */
+  readonly isReal: boolean;
+  isSupported: () => boolean;
+  /** Must be called from a user gesture — WebUSB requires it. */
+  connect: () => Promise<void>;
+  start: (options?: StartOptions) => Promise<void>;
+  stop: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  onStatus: (listener: (status: SourceStatus) => void) => () => void;
+  diagnostics: () => DiagnosticsSnapshot;
+}
+
+/**
+ * A pair of photogates. It delivers raw beam edges, in the device's shape, so
+ * the real and simulated gates meet `photogateTiming.ts` identically.
+ */
+export interface PhotogateSource extends DeviceSource {
+  subscribeEdges: (listener: (edge: NgioEdgeEvent) => void) => () => void;
+  /** Null until the session has seen what is plugged in. */
+  wiring: () => PhotogateWiring | null;
+}
+
+export interface MotionSource extends DeviceSource {
   readonly id: MotionSourceId;
   readonly label: string;
   /**

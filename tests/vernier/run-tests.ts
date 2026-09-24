@@ -72,6 +72,24 @@ import {
   serializeScale,
 } from '../../src/lib/vernier/calibration.ts';
 import { fitPolynomial } from '../../src/lib/math/leastSquares.ts';
+import { photogateWiring } from '../../src/lib/vernier/ngioSession.ts';
+import { isPhotogateSensor } from '../../src/lib/vernier/sensorIds.ts';
+import {
+  createBeamTracker,
+  createGateInterpreter,
+  createTickClock,
+  createTransitAssembler,
+  gateToGateSeconds,
+  gateToGateSpeed,
+  speedsAtGates,
+  trialStats,
+  type GateTransition,
+  type TransitEvent,
+} from '../../src/lib/vernier/photogateTiming.ts';
+import {
+  initialStateEdges,
+  rollEdges,
+} from '../../src/lib/vernier/sources/simulatedPhotogateSource.ts';
 
 // --- device identity ------------------------------------------------------
 
@@ -608,6 +626,139 @@ const reachStreaming = (): SessionState => {
   assert.equal(noise.writes.length, 0);
 }
 
+// --- photogate session -------------------------------------------------------
+
+/**
+ * Drives a photogate handshake, answering GET_SENSOR_ID from `ids` by the
+ * channel each request asks about. Returns the final state and every command
+ * written, so tests can assert on both.
+ */
+const drivePhotogates = (ids: Record<number, number>) => {
+  const opened = startSession({ profile: 'photogate' });
+  let state: SessionState = opened.state;
+  let writes = opened.writes;
+  const sent: Uint8Array[] = [...writes];
+
+  for (let guard = 0; guard < 30 && state.phase !== 'streaming' && state.phase !== 'failed'; guard += 1) {
+    assert.equal(writes.length, 1, `phase ${state.phase} should write one command`);
+    const written = writes[0];
+    const payload =
+      written[4] === NGIO_CMD_ID.GET_SENSOR_ID
+        ? [ids[written[5]] ?? 0, 0, 0, 0, 1, 0, 0, 0]
+        : [NGIO_STATUS.SUCCESS];
+    const result = step(state, { type: 'report', bytes: replyTo(written, payload) });
+    state = result.state;
+    writes = result.writes;
+    sent.push(...writes);
+  }
+
+  return { state, sent };
+};
+
+const PHOTOGATE_ID = 4;
+
+{
+  assert.ok(isPhotogateSensor(PHOTOGATE_ID));
+  assert.equal(describeSensor(PHOTOGATE_ID), 'Photogate');
+  assert.equal(findSensor(PHOTOGATE_ID)?.samplingMode, NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT);
+}
+
+{
+  // Gate A on DIG 1, Gate B on DIG 2: both identified, both enabled, and a
+  // sampling-mode command sent for each.
+  const { state, sent } = drivePhotogates({
+    [NGIO_CHANNEL_ID.DIGITAL1]: PHOTOGATE_ID,
+    [NGIO_CHANNEL_ID.DIGITAL2]: PHOTOGATE_ID,
+  });
+  assert.equal(state.phase, 'streaming', state.error ?? '');
+  assert.deepEqual(state.activeChannels, [NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2]);
+  assert.equal(photogateWiring(state), 'two-port');
+  assert.match(describePhase(state), /DIG 1 and DIG 2/);
+
+  const ofCommand = (command: number) => sent.filter((packet) => packet[4] === command);
+  assert.deepEqual(
+    ofCommand(NGIO_CMD_ID.GET_SENSOR_ID).map((packet) => packet[5]),
+    [NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2],
+  );
+  const mask = ofCommand(NGIO_CMD_ID.SET_SENSOR_CHANNEL_ENABLE_MASK)[0];
+  assert.deepEqual(
+    Array.from(mask.slice(5, 9)),
+    setChannelEnableMaskParams([NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2]),
+  );
+  assert.deepEqual(
+    ofCommand(NGIO_CMD_ID.SET_SAMPLING_MODE).map((packet) => Array.from(packet.slice(5, 7))),
+    [
+      setSamplingModeParams(NGIO_CHANNEL_ID.DIGITAL1, NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT),
+      setSamplingModeParams(NGIO_CHANNEL_ID.DIGITAL2, NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT),
+    ],
+  );
+
+  // Edges pass through untouched, from both channels and nothing else.
+  const streamed = step(state, {
+    type: 'report',
+    bytes: measurementFrame([
+      { edge: 1, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: 500 },
+      { edge: 0, channel: NGIO_CHANNEL_ID.DIGITAL1, ticks: 900 },
+      { edge: 1, channel: NGIO_CHANNEL_ID.DIGITAL2, ticks: 1200 },
+      { edge: 1, channel: NGIO_CHANNEL_ID.ANALOG1, ticks: 1300 },
+    ]),
+  });
+  assert.equal(streamed.samples.length, 0, 'photogates produce no round trips');
+  assert.deepEqual(
+    streamed.edges.map((edge) => [edge.channel, edge.edge, edge.ticks]),
+    [
+      [NGIO_CHANNEL_ID.DIGITAL1, 1, 500],
+      [NGIO_CHANNEL_ID.DIGITAL1, 0, 900],
+      [NGIO_CHANNEL_ID.DIGITAL2, 1, 1200],
+    ],
+  );
+  assert.equal(streamed.state.phase, 'streaming');
+
+  // A retune re-sends a sampling mode for every gate, not just the first.
+  const retune = step(state, { type: 'set-period', periodSeconds: 0.1 });
+  let retuning = retune.state;
+  let retuneWrites = retune.writes;
+  const modeWrites: number[] = [];
+  for (let guard = 0; guard < 10 && retuning.phase !== 'streaming'; guard += 1) {
+    if (retuneWrites[0][4] === NGIO_CMD_ID.SET_SAMPLING_MODE) modeWrites.push(retuneWrites[0][5]);
+    const result = step(retuning, { type: 'report', bytes: replyTo(retuneWrites[0]) });
+    retuning = result.state;
+    retuneWrites = result.writes;
+  }
+  assert.deepEqual(modeWrites, [NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2]);
+}
+
+{
+  // Only DIG 1 occupied: Gate B is daisy-chained, and the session says so.
+  const { state } = drivePhotogates({ [NGIO_CHANNEL_ID.DIGITAL1]: PHOTOGATE_ID });
+  assert.equal(state.phase, 'streaming', state.error ?? '');
+  assert.deepEqual(state.activeChannels, [NGIO_CHANNEL_ID.DIGITAL1]);
+  assert.equal(photogateWiring(state), 'one-port');
+  assert.match(describePhase(state), /daisy-chained/);
+}
+
+{
+  // Nothing on DIG 1 fails, even with a gate on DIG 2: Gate A is required.
+  const empty = drivePhotogates({ [NGIO_CHANNEL_ID.DIGITAL2]: PHOTOGATE_ID });
+  assert.equal(empty.state.phase, 'failed');
+  assert.match(empty.state.error ?? '', /No photogate detected on DIG 1/);
+
+  // A Motion Detector where a gate should be is named.
+  const wrong = drivePhotogates({ [NGIO_CHANNEL_ID.DIGITAL1]: 2 });
+  assert.equal(wrong.state.phase, 'failed');
+  assert.match(wrong.state.error ?? '', /DIG 1 has Motion Detector attached, not a Photogate/);
+
+  const wrongB = drivePhotogates({
+    [NGIO_CHANNEL_ID.DIGITAL1]: PHOTOGATE_ID,
+    [NGIO_CHANNEL_ID.DIGITAL2]: 69,
+  });
+  assert.equal(wrongB.state.phase, 'failed');
+  assert.match(wrongB.state.error ?? '', /DIG 2 has Motion Detector 2 attached/);
+
+  // And the motion profile still turns a photogate away.
+  assert.equal(photogateWiring(reachStreaming()), null);
+}
+
 // --- when to open a stream -------------------------------------------------
 
 // The regression this guards: a source reports `connecting` for the device
@@ -937,6 +1088,191 @@ assert.equal(isUsableScale(Number.NaN), false);
   // A reading at the top of the detector's range, stretched, leaves it.
   const conditioned = conditionSample(null, { t: 0, distance: 5.8 * 1.05 });
   assert.equal(conditioned.quality, 'dropout');
+}
+
+// --- photogate timing -------------------------------------------------------
+
+const TICKS_PER_SECOND = 1 / NGIO_EDGE_TICK_SECONDS;
+const near = (actual: number, expected: number, tolerance = 1e-9, label = '') =>
+  assert.ok(Math.abs(actual - expected) <= tolerance, `${label} ${actual} ≠ ${expected}`);
+
+{
+  // The capture clock wraps at 2^32; time keeps counting forward across it.
+  const clock = createTickClock();
+  const beforeWrap = 0xffffffff - 1000;
+  assert.equal(clock(beforeWrap), 0);
+  near(clock(4000), 5001 * NGIO_EDGE_TICK_SECONDS, 1e-12, 'across the wrap');
+}
+
+{
+  // The LabQuest reports each gate's state when measurements start. With the
+  // gates clear, that first edge is the clear level; anything else is blocked.
+  // Taking it as a blocking instead inverted every gate on real hardware.
+  const tracker = createBeamTracker();
+  assert.equal(tracker({ channel: 5, edge: 1 }), false, 'first edge is the clear state');
+  assert.equal(tracker({ channel: 5, edge: 0 }), true);
+  assert.equal(tracker({ channel: 5, edge: 1 }), false);
+  assert.equal(tracker({ channel: 6, edge: 0 }), false, 'channels learn independently');
+  assert.equal(tracker({ channel: 6, edge: 1 }), true);
+
+  // An edge byte that never changes is not a level; fall back to toggling.
+  const flat = createBeamTracker();
+  assert.equal(flat({ channel: 5, edge: 3 }), false);
+  assert.equal(flat({ channel: 5, edge: 3 }), true);
+  assert.equal(flat({ channel: 5, edge: 3 }), false);
+}
+
+/** The start-of-stream state report, as timed edges at t = 0. */
+const reportAtStart = (wiring: 'two-port' | 'one-port') =>
+  initialStateEdges(wiring).map(({ channel, edge }) => ({ channel, edge, at: 0 }));
+
+/**
+ * Feeds edges (times in seconds) through an interpreter and assembler, after
+ * the state report every real stream opens with. The roll comes a second later.
+ */
+const runEdges = (
+  wiring: 'two-port' | 'one-port',
+  roll: { channel: number; edge: number; at: number }[],
+): TransitEvent[] => {
+  const interpret = createGateInterpreter(wiring);
+  const assembler = createTransitAssembler(wiring);
+  const base = 123_456;
+  const edges = [...reportAtStart(wiring), ...roll.map((edge) => ({ ...edge, at: edge.at + 1 }))];
+  return edges.flatMap((edge) =>
+    assembler.push(
+      interpret({ channel: edge.channel, edge: edge.edge, ticks: base + Math.round(edge.at * TICKS_PER_SECOND) }),
+    ),
+  );
+};
+
+{
+  // Two-port: a 2.5 cm ball at 0.8 m/s through gates 10 cm apart.
+  const roll = { speed: 0.8, spacingMeters: 0.1, diameterMeters: 0.025 };
+  const events = runEdges('two-port', rollEdges(roll, 'two-port'));
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'transit');
+  if (events[0].kind === 'transit') {
+    near(gateToGateSeconds(events[0].transit), 0.125, 1e-6, 'gate-to-gate time');
+    near(gateToGateSpeed(events[0].transit, 0.1), 0.8, 1e-5, 'speed');
+    const atGates = speedsAtGates(events[0].transit, 0.025);
+    near(atGates.a, 0.8, 1e-4, 'speed at A');
+    near(atGates.b, 0.8, 1e-4, 'speed at B');
+  }
+}
+
+{
+  // One-port (daisy chain): order tells the gates apart.
+  const roll = { speed: 1.2, spacingMeters: 0.15, diameterMeters: 0.019 };
+  const edges = rollEdges(roll, 'one-port');
+  assert.equal(edges.length, 4);
+  assert.ok(edges.every((edge) => edge.channel === NGIO_CHANNEL_ID.DIGITAL1));
+  const events = runEdges('one-port', edges);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'transit');
+  if (events[0].kind === 'transit') near(gateToGateSpeed(events[0].transit, 0.15), 1.2, 1e-5);
+}
+
+{
+  // One-port with the gates closer than the ball is wide: the shared line
+  // never clears between them, so only two transitions ever arrive and the
+  // flush says so.
+  const roll = { speed: 1, spacingMeters: 0.02, diameterMeters: 0.025 };
+  const edges = rollEdges(roll, 'one-port');
+  assert.equal(edges.length, 2, 'the beams merge on the shared line');
+
+  const interpret = createGateInterpreter('one-port');
+  const assembler = createTransitAssembler('one-port');
+  const pushed = [...reportAtStart('one-port'), ...edges].flatMap((edge) =>
+    assembler.push(interpret({ ...edge, ticks: Math.round(edge.at * TICKS_PER_SECOND) })),
+  );
+  assert.equal(pushed.length, 0);
+  assert.deepEqual(assembler.flush(), { kind: 'problem', problem: { kind: 'incomplete', seen: 2 } });
+  assert.equal(assembler.flush(), null, 'flushing twice reports nothing new');
+}
+
+{
+  // Two-port with overlapping beams is fine: each gate has its own line.
+  const events = runEdges(
+    'two-port',
+    rollEdges({ speed: 1, spacingMeters: 0.02, diameterMeters: 0.025 }, 'two-port'),
+  );
+  assert.equal(events.length, 1);
+  assert.equal(events[0].kind, 'transit');
+}
+
+{
+  // Rolling backwards through the gates is flagged, and its tail through
+  // Gate A does not start a phantom pass.
+  const roll = { speed: 0.5, spacingMeters: 0.1, diameterMeters: 0.02 };
+  const forward = rollEdges(roll, 'two-port');
+  const backward = forward.map((edge) => ({
+    ...edge,
+    channel: edge.channel === NGIO_CHANNEL_ID.DIGITAL1 ? NGIO_CHANNEL_ID.DIGITAL2 : NGIO_CHANNEL_ID.DIGITAL1,
+  }));
+  const events = runEdges('two-port', backward);
+  assert.deepEqual(events, [{ kind: 'problem', problem: { kind: 'reversed' } }]);
+}
+
+{
+  // A pass abandoned between the gates (ball caught) is reported when the
+  // next roll starts, and the next roll still counts.
+  const interpret = createGateInterpreter('two-port');
+  const assembler = createTransitAssembler('two-port', { maxTransitSeconds: 2 });
+  const at = (seconds: number) => Math.round(seconds * TICKS_PER_SECOND);
+  const push = (channel: number, edge: number, seconds: number) =>
+    assembler.push(interpret({ channel, edge, ticks: at(seconds) }));
+
+  assert.deepEqual(push(NGIO_CHANNEL_ID.DIGITAL1, 0, 0), [], 'the state report starts nothing');
+  assert.deepEqual(push(NGIO_CHANNEL_ID.DIGITAL2, 0, 0), []);
+  assert.equal(assembler.pending(), 0);
+  push(NGIO_CHANNEL_ID.DIGITAL1, 1, 0);
+  push(NGIO_CHANNEL_ID.DIGITAL1, 0, 0.03);
+  assert.equal(assembler.pending(), 2);
+
+  const next = [
+    ...push(NGIO_CHANNEL_ID.DIGITAL1, 1, 10),
+    ...push(NGIO_CHANNEL_ID.DIGITAL1, 0, 10.03),
+    ...push(NGIO_CHANNEL_ID.DIGITAL2, 1, 10.1),
+    ...push(NGIO_CHANNEL_ID.DIGITAL2, 0, 10.13),
+  ];
+  assert.equal(next.length, 2);
+  assert.deepEqual(next[0], { kind: 'problem', problem: { kind: 'incomplete', seen: 2 } });
+  assert.equal(next[1].kind, 'transit');
+  if (next[1].kind === 'transit') near(gateToGateSeconds(next[1].transit), 0.1, 1e-6);
+}
+
+{
+  // Gate transitions carry device time, not arrival time.
+  const interpret = createGateInterpreter('two-port');
+  const first: GateTransition = interpret({ channel: NGIO_CHANNEL_ID.DIGITAL2, edge: 0, ticks: 10 });
+  assert.deepEqual(first, { gate: 'B', blocked: false, t: 0 });
+  const cut: GateTransition = interpret({ channel: NGIO_CHANNEL_ID.DIGITAL2, edge: 1, ticks: 10 + 500_000 });
+  assert.equal(cut.blocked, true);
+  near(cut.t, 0.1, 1e-12, 'device time');
+}
+
+{
+  const stats = trialStats([0.8, 0.82, 0.78]);
+  assert.equal(stats.count, 3);
+  near(stats.mean, 0.8, 1e-12);
+  near(stats.sd, 0.02, 1e-12);
+  assert.ok(Number.isNaN(trialStats([0.8]).sd), 'one trial has no spread');
+  assert.ok(Number.isNaN(trialStats([]).mean));
+}
+
+{
+  // Simulated jitter stays jitter: a 0.8 m/s roll reads 0.8 to within it.
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const roll = { speed: 0.8, spacingMeters: 0.1, diameterMeters: 0.025, jitterSeconds: 0.0001 };
+  for (let trial = 0; trial < 20; trial += 1) {
+    const events = runEdges('two-port', rollEdges(roll, 'two-port', random));
+    assert.equal(events[0]?.kind, 'transit');
+    if (events[0].kind === 'transit') near(gateToGateSpeed(events[0].transit, 0.1), 0.8, 0.001);
+  }
 }
 
 console.log('vernier device layer tests passed');

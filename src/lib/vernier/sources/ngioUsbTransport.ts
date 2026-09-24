@@ -23,6 +23,11 @@
  *
  * The framing this speaks was measured from Graphical Analysis driving this
  * same hardware; see the provenance note in `ngioPackets.ts`.
+ *
+ * This file is the device half only: claiming the interface, the read loop,
+ * the watchdog, and letting go cleanly. What the stream *means* is the
+ * caller's — `webUsbSource.ts` turns it into distances, `webUsbPhotogateSource`
+ * into beam edges — chosen by the session profile passed in.
  */
 
 import {
@@ -36,12 +41,12 @@ import {
   describePhase,
   startSession,
   step,
+  type SessionProfileId,
   type SessionState,
+  type StepResult,
 } from '../ngioSession.ts';
-import { conditionSample, type MotionSample } from '../motionStream.ts';
-import { DEFAULT_SENSOR_CONTEXT, findSensor, type SensorContext } from '../sensorIds.ts';
-import { createTrafficLog } from '../diagnostics.ts';
-import { createEmitter, type MotionSource, type SourceStatus, type StartOptions } from './types.ts';
+import { createTrafficLog, type DiagnosticsSnapshot } from '../diagnostics.ts';
+import { createEmitter, type SourceStatus, type StartOptions } from './types.ts';
 
 // WebUSB is absent from TypeScript's DOM library.
 interface UsbEndpoint {
@@ -144,8 +149,42 @@ const pickEndpoint = (usbInterface: UsbInterface, direction: 'in' | 'out'): UsbE
   return matching.find((endpoint) => endpoint.type === 'bulk') ?? matching[0] ?? null;
 };
 
-export const createWebUsbSource = (): MotionSource => {
-  const samples = createEmitter<MotionSample>();
+export interface NgioUsbTransportOptions {
+  profile: SessionProfileId;
+  /**
+   * Whether silence while streaming means the stream stalled. True for the
+   * Motion Detector, which pings on a fixed period. False for photogates:
+   * edge detection is aperiodic, and a gate nothing passes through may send
+   * nothing at all — the normal idle state, not a fault.
+   */
+  streamingWatchdog: boolean;
+  sourceLabel: string;
+  /** Called each time the stream (re)starts, since a restart re-zeroes the device clock. */
+  onStreamStart: () => void;
+  /** Called with every step taken while streaming. */
+  onStreaming: (result: StepResult, session: SessionState) => void;
+}
+
+export interface NgioUsbTransport {
+  isSupported: () => boolean;
+  /** Must be called from a user gesture — WebUSB requires it. */
+  connect: () => Promise<void>;
+  start: (options?: StartOptions) => Promise<void>;
+  setPeriod: (periodSeconds: number) => Promise<void>;
+  stop: () => Promise<void>;
+  disconnect: () => Promise<void>;
+  onStatus: (listener: (status: SourceStatus) => void) => () => void;
+  session: () => SessionState | null;
+  diagnostics: () => DiagnosticsSnapshot;
+}
+
+export const createNgioUsbTransport = ({
+  profile,
+  streamingWatchdog,
+  sourceLabel,
+  onStreamStart,
+  onStreaming,
+}: NgioUsbTransportOptions): NgioUsbTransport => {
   const statuses = createEmitter<SourceStatus>();
   const traffic = createTrafficLog(80);
 
@@ -154,13 +193,6 @@ export const createWebUsbSource = (): MotionSource => {
   let inEndpoint = 0;
   let outEndpoint = 0;
   let session: SessionState | null = null;
-  let lastGood: MotionSample | null = null;
-  /**
-   * The instrument context every raw tick is converted through. Mutable so the
-   * calibrate screen can change the scale mid-session; the next sample picks it
-   * up and no stream is disturbed.
-   */
-  let sensorContext: SensorContext = DEFAULT_SENSOR_CONTEXT;
   let reading = false;
   let watchdog: ReturnType<typeof setTimeout> | null = null;
   /**
@@ -247,12 +279,13 @@ export const createWebUsbSource = (): MotionSource => {
     }
 
     if (session.phase === 'streaming') {
-      armWatchdog();
+      // The handshake's last reply leaves a watchdog armed; an aperiodic
+      // stream must not inherit it.
+      if (streamingWatchdog) armWatchdog();
+      else if (result.writes.length === 0) clearWatchdog();
+
       if (previousPhase !== 'streaming') {
-        // A restart re-zeroes the device's capture clock, so the last accepted
-        // sample is from a different timeline. Carrying it across would make
-        // the first reading of the new rate a dropout on a negative dt.
-        lastGood = null;
+        onStreamStart();
         setStatus({
           kind: 'streaming',
           message: describePhase(session),
@@ -260,17 +293,7 @@ export const createWebUsbSource = (): MotionSource => {
         });
       }
 
-      const sensor = findSensor(session.sensorId);
-      result.samples.forEach((raw) => {
-        // The one place raw ticks become metres, and therefore the one place
-        // the calibration scale is applied. Everything downstream — the
-        // plausibility gate below, the recorded buffer, derived velocity,
-        // scoring, the submitted samples — sees corrected metres for free.
-        const distance = sensor ? sensor.toPhysical(raw.raw, sensorContext) : Number.NaN;
-        const sample = conditionSample(lastGood, { t: raw.t, distance });
-        if (sample.quality === 'ok') lastGood = sample;
-        samples.emit(sample);
-      });
+      onStreaming(result, session);
       return;
     }
 
@@ -330,9 +353,6 @@ export const createWebUsbSource = (): MotionSource => {
   };
 
   return {
-    id: 'webusb',
-    label: 'LabQuest over USB',
-    isReal: true,
     isSupported: () => usbApi() !== null,
 
     connect: async () => {
@@ -426,8 +446,7 @@ export const createWebUsbSource = (): MotionSource => {
         return;
       }
 
-      lastGood = null;
-      const opened = startSession({ periodSeconds });
+      const opened = startSession({ profile, periodSeconds });
       session = opened.state;
       setStatus({ kind: 'connecting', message: describePhase(session), sensorName: null });
 
@@ -497,22 +516,16 @@ export const createWebUsbSource = (): MotionSource => {
       }
       device = null;
       session = null;
-      lastGood = null;
-      samples.clear();
       setStatus({ kind: 'idle', message: 'Disconnected', sensorName: null });
       statuses.clear();
     },
 
-    setSensorContext: (next: SensorContext) => {
-      sensorContext = next;
-    },
-
-    subscribe: samples.subscribe,
     onStatus: statuses.subscribe,
+    session: () => session,
 
     diagnostics: () => ({
       sourceId: 'webusb',
-      sourceLabel: 'LabQuest over USB (WebUSB)',
+      sourceLabel,
       deviceName: device?.productName ?? null,
       vendorId: device?.vendorId ?? null,
       productId: device?.productId ?? null,

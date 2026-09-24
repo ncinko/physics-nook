@@ -12,7 +12,7 @@
 
 import { NGIO_CHANNEL_ID, NGIO_EDGE_TICK_SECONDS, NGIO_SAMPLING_MODE } from './ngioPackets.ts';
 
-export type SensorKind = 'motion' | 'analog' | 'digital-count' | 'unsupported';
+export type SensorKind = 'motion' | 'photogate' | 'analog' | 'digital-count' | 'unsupported';
 
 export interface VernierSensor {
   sensorId: number;
@@ -67,6 +67,14 @@ export const MOTION_DETECTOR_SENSOR_IDS = [2, 69] as const;
 
 export const MOTION_DETECTOR_RANGE = { minMeters: 0.15, maxMeters: 6.0 } as const;
 
+/**
+ * Photogate (VPG-BTD). UNVERIFIED: 4 is the ID Vernier's sensor map gives the
+ * Photogate, but unlike the Motion Detector's 2 and 69 it has not yet been read
+ * back from real hardware. If a gate is reported as "Unrecognised sensor (ID n)",
+ * n is the number to put here.
+ */
+export const PHOTOGATE_SENSOR_IDS = [4] as const;
+
 const motionToMeters = (raw: number, context: SensorContext): number =>
   ((raw * NGIO_EDGE_TICK_SECONDS * speedOfSound(context.airTemperatureC)) / 2) *
   context.distanceScale;
@@ -90,6 +98,17 @@ export const VERNIER_SENSORS: readonly VernierSensor[] = [
     samplingMode: NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT,
     toPhysical: motionToMeters,
   },
+  {
+    sensorId: 4,
+    name: 'Photogate',
+    kind: 'photogate',
+    unit: 's',
+    channels: [NGIO_CHANNEL_ID.DIGITAL1, NGIO_CHANNEL_ID.DIGITAL2],
+    samplingMode: NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT,
+    // A photogate has no reading of its own, only the moments its beam is cut
+    // and restored; see `photogateTiming.ts`.
+    toPhysical: (raw) => raw * NGIO_EDGE_TICK_SECONDS,
+  },
 ];
 
 export const findSensor = (sensorId: number): VernierSensor | null =>
@@ -97,6 +116,9 @@ export const findSensor = (sensorId: number): VernierSensor | null =>
 
 export const isMotionSensor = (sensorId: number): boolean =>
   (MOTION_DETECTOR_SENSOR_IDS as readonly number[]).includes(sensorId);
+
+export const isPhotogateSensor = (sensorId: number): boolean =>
+  (PHOTOGATE_SENSOR_IDS as readonly number[]).includes(sensorId);
 
 /**
  * Sensor ID 0 means "nothing plugged in" on every Vernier channel. Separating

@@ -1,0 +1,52 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Photogate Launch
+description: Time a rolling ball with two Vernier photogates, predict where it lands after leaving the table, then test your prediction.
+canonicalPath: /kinematics/photogate-launch
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import PhotogateLaunchDiagram from '../../components/kinematics/PhotogateLaunchDiagram.astro';
+import PhotogateLaunchLab from '../../components/kinematics/PhotogateLaunchLab';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/kinematics/photogate-launch" />
+
+<div id="page-content"></div>
+
+# Photogate Launch
+
+A ball rolls across a table and off the edge. Where will it hit the floor? Projectile equations can answer that, but only if you know how fast the ball is moving when it leaves the table. In this lab you measure that speed with two **photogates**, predict the landing spot on paper, and then put a target there and find out how close you got.
+
+<PhotogateLaunchDiagram />
+
+A photogate is an infrared beam across a small frame. The interface records the instant the beam is blocked, to within a few microseconds. With two gates a known distance $d$ apart, the time between the ball blocking the first beam and blocking the second gives its average speed between them.
+
+## What you need
+
+**Vernier LabQuest Mini** (or LabQuest 2 or 3) connected by USB, and **Chrome or Edge**.
+**Two Photogates.** Put Gate A in **DIG 1**. Put Gate B in **DIG 2**, or plug it into the daisy-chain port on Gate A.
+A **ramp** and a **steel ball or marble**, a **metre stick**, a **plumb bob**, **paper**, and **carbon paper**.
+
+## Setting up
+
+1. Put the gates on the table near its edge, with Gate B closest to the edge. Line them up so the ball passes through the middle of each beam.
+2. Build a short ramp before Gate A and mark a release point on it. Release the ball from the same mark every time, so every roll has the same speed.
+3. Measure the gate spacing $d$ from beam to beam, and the table height $h$ from the floor to the tabletop.
+4. Hang the plumb bob from the table edge and mark the spot on the floor directly below. Measure every landing distance from this mark.
+
+Time several rolls and catch the ball each time before it reaches the edge. Once your speeds agree, work out where the ball will land, put a target there, and let the ball fly.
+
+<InteractiveAnchor id="photogate-launch" />
+
+<SimulationBlock
+  height="tall"
+  title="Photogate Launch"
+  description="Time the ball through two photogates, then predict where it will land."
+>
+  <PhotogateLaunchLab client:only="react" />
+</SimulationBlock>
+
+If you get stuck on the prediction, the [2D Kinematics](/kinematics/two-dimensional#projectile-motion) page treats projectile motion one component at a time.

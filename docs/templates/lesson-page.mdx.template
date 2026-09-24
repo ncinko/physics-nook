@@ -19,7 +19,7 @@ layout: ../../layouts/TextbookLayout.astro
 
 <!--
 Import only what this page actually uses. Common imports:
-- ModuleHero: required, gives every lesson its within-module page grid.
+- ModuleHero: required, gives every lesson its compact navigator (title, progress ticks, previous/next, and an "All lessons" grid).
 - InteractiveAnchor: one per mounted interactive, placed immediately before it.
 - Interactive component(s): from src/components/<domain>/.
 - ProblemSolvingSection + WorkedExampleCard: for worked examples (optional).

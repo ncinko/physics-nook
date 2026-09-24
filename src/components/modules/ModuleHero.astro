@@ -1,5 +1,5 @@
 ---
-import type { ModuleMeta } from '../../data/modules';
+import { getLessonNeighbors, type ModuleMeta } from '../../data/modules';
 import { normalizePath } from '../../utils/paths';
 
 type ModulePanel = Pick<ModuleMeta, 'href' | 'cardEyebrow' | 'pages'>;
@@ -12,65 +12,179 @@ interface Props {
 const { module, currentPath = module.href } = Astro.props;
 const normalizedCurrentPath = normalizePath(currentPath);
 const currentPageIndex = module.pages.findIndex((page) => normalizePath(page.href) === normalizedCurrentPath);
+const currentPage = module.pages[currentPageIndex];
+const { previous, next } = getLessonNeighbors(currentPath, module.pages);
+
+const pagerLinkClass =
+  'group block min-w-0 rounded-[var(--radius-control)] py-1 text-[color:var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--surface-elevated)]';
+const pagerTitleClass =
+  'type-title mt-1 block underline-offset-4 transition-colors duration-200 group-hover:text-[color:var(--accent-blue)] group-hover:underline';
+const focusRing =
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--surface-elevated)]';
 ---
 
-<section class="not-prose relative left-1/2 my-10 w-[calc(100vw-2rem)] max-w-7xl -translate-x-1/2 sm:w-screen sm:px-6 lg:px-8">
-  <div class="module-topics-panel overflow-hidden rounded-[var(--radius-panel)] border border-theme-grid bg-[color:var(--surface-elevated)] bg-[image:linear-gradient(145deg,rgba(59,130,246,0.08),transparent_45%)] shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-    <div class="px-5 py-5 lg:px-6 lg:py-5">
-      <p class="type-label text-[var(--accent-blue)]">
-        {module.cardEyebrow}
-      </p>
+<nav
+  aria-label={`${module.cardEyebrow} lessons`}
+  class="not-prose relative left-1/2 mt-6 mb-8 w-[calc(100vw-2rem)] max-w-4xl -translate-x-1/2"
+>
+  <div class="module-topics-panel rounded-[var(--radius-panel)] border border-theme-grid bg-[color:var(--surface-elevated)] bg-[image:linear-gradient(145deg,rgba(59,130,246,0.08),transparent_45%)] px-5 py-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur lg:px-6">
+    <div class="flex items-center justify-between gap-4">
+      <p class="type-label m-0 text-[var(--accent-blue)]">{module.cardEyebrow}</p>
 
-      <section id="module-path" class="mt-4 border-t border-theme-grid pt-4">
-        <div
-          class:list={[
-            'grid gap-3',
-            module.pages.length >= 4 ? 'lg:grid-cols-2 xl:grid-cols-4' : 'lg:grid-cols-3',
-          ]}
+      {currentPage && (
+        <button
+          type="button"
+          data-module-path-toggle
+          aria-expanded="false"
+          aria-controls="module-path"
+          aria-label="All lessons"
+          class={`module-path-toggle flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[var(--grid-line)] bg-[var(--surface-elevated)] text-[color:var(--text-primary)] transition-colors duration-200 hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] ${focusRing}`}
         >
-          {module.pages.map((page, index) => {
-            const isCurrent = normalizePath(page.href) === normalizedCurrentPath;
-            const linkHref = isCurrent ? '#page-content' : page.href;
-            const stateLabel = isCurrent ? 'Here' : index === 0 ? 'Start' : currentPageIndex >= 0 && index === currentPageIndex + 1 ? 'Next' : undefined;
+          <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4">
+            <path d="M3 4.75A1.75 1.75 0 0 1 4.75 3h2.5A1.75 1.75 0 0 1 9 4.75v2.5A1.75 1.75 0 0 1 7.25 9h-2.5A1.75 1.75 0 0 1 3 7.25v-2.5ZM11 4.75A1.75 1.75 0 0 1 12.75 3h2.5A1.75 1.75 0 0 1 17 4.75v2.5A1.75 1.75 0 0 1 15.25 9h-2.5A1.75 1.75 0 0 1 11 7.25v-2.5ZM3 12.75A1.75 1.75 0 0 1 4.75 11h2.5A1.75 1.75 0 0 1 9 12.75v2.5A1.75 1.75 0 0 1 7.25 17h-2.5A1.75 1.75 0 0 1 3 15.25v-2.5ZM11 12.75A1.75 1.75 0 0 1 12.75 11h2.5A1.75 1.75 0 0 1 17 12.75v2.5A1.75 1.75 0 0 1 15.25 17h-2.5A1.75 1.75 0 0 1 11 15.25v-2.5Z" />
+          </svg>
+        </button>
+      )}
+    </div>
 
+    {currentPage && (
+      <>
+        {/* 80% of the type-h1 size: the panel names the page without shouting over the lesson. */}
+        <p class="m-0 mt-2 text-[clamp(1.6rem,2.4vw,2rem)] font-bold leading-[1.15] text-[color:var(--text-primary)]" aria-hidden="true">{currentPage.title}</p>
+
+        <ol class="m-0 mt-3 flex list-none gap-1.5 p-0">
+          {module.pages.map((page, index) => {
+            const isCurrent = index === currentPageIndex;
+            // Anchor the tooltip toward the panel's middle so edge ticks don't push it off-screen.
+            const tooltipAlign =
+              index < module.pages.length / 3
+                ? 'left-0'
+                : index >= (module.pages.length * 2) / 3
+                  ? 'right-0'
+                  : 'left-1/2 -translate-x-1/2';
             return (
-              <a
-                href={linkHref}
-                title={page.description}
-                class:list={[
-                  'module-page-card block min-w-0 rounded-[var(--radius-control)] border px-4 py-3 transition-all duration-200',
-                  isCurrent
-                    ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color:color-mix(in_srgb,var(--accent-blue)_10%,transparent)] shadow-sm'
-                    : 'border-theme-grid bg-[color:color-mix(in_srgb,var(--bg-primary)_82%,transparent)] hover:-translate-y-0.5 hover:border-[var(--accent-blue)]',
-                ]}
-                aria-current={isCurrent ? 'step' : undefined}
-              >
-                <div class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2">
-                  <div class="min-w-0">
-                    <h2 class="m-0 break-words text-base font-semibold leading-6 text-theme-text">{page.title}</h2>
-                  </div>
-                  {stateLabel && <span
+              <li class="relative min-w-0 flex-1">
+                <span
+                  aria-hidden="true"
+                  class={`module-tick-tooltip pointer-events-none absolute bottom-full z-10 mb-0.5 whitespace-nowrap rounded-[var(--radius-control)] bg-[var(--text-primary)] px-2 py-1 text-[0.8125rem] font-semibold leading-5 text-[color:var(--bg-primary)] shadow-md ${tooltipAlign}`}
+                >
+                  {page.title}
+                </span>
+                <a
+                  href={isCurrent ? '#page-content' : page.href}
+                  aria-label={`Lesson ${index + 1}: ${page.title}`}
+                  aria-current={isCurrent ? 'page' : undefined}
+                  class={`module-tick group block rounded-full py-2.5 ${focusRing}`}
+                >
+                  <span
                     class:list={[
-                      'shrink-0 rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.1em] sm:px-2.5',
+                      'block h-1.5 rounded-full transition-colors duration-200',
                       isCurrent
-                        ? 'bg-[var(--accent-blue)] text-white'
-                        : 'border border-theme-grid text-[var(--text-muted)]',
+                        ? 'bg-[var(--accent-blue)]'
+                        : 'bg-[var(--grid-line)] group-hover:bg-[color:color-mix(in_srgb,var(--accent-blue)_55%,var(--grid-line))]',
                     ]}
-                  >
-                    {stateLabel}
-                  </span>}
-                  <p class="col-span-2 m-0 min-w-0 truncate text-sm leading-6 text-[var(--text-muted)]">{page.description}</p>
-                </div>
-              </a>
+                  ></span>
+                </a>
+              </li>
             );
           })}
-        </div>
-      </section>
+        </ol>
+      </>
+    )}
+
+    <div id="module-path" hidden={Boolean(currentPage)} class="mt-4">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {module.pages.map((page, index) => {
+          const isCurrent = index === currentPageIndex;
+          const stateLabel = isCurrent ? 'Here' : index === 0 ? 'Start' : currentPageIndex >= 0 && index === currentPageIndex + 1 ? 'Next' : undefined;
+
+          return (
+            <a
+              href={isCurrent ? '#page-content' : page.href}
+              title={page.description}
+              class:list={[
+                'module-page-card block min-w-0 rounded-[var(--radius-control)] border px-4 py-3 transition-all duration-200',
+                focusRing,
+                isCurrent
+                  ? 'border-[color:color-mix(in_srgb,var(--accent-blue)_40%,var(--grid-line))] bg-[color:color-mix(in_srgb,var(--accent-blue)_10%,transparent)] shadow-sm'
+                  : 'border-theme-grid bg-[color:color-mix(in_srgb,var(--bg-primary)_82%,transparent)] hover:-translate-y-0.5 hover:border-[var(--accent-blue)]',
+              ]}
+              aria-current={isCurrent ? 'page' : undefined}
+            >
+              <span class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2">
+                <span class="block min-w-0 break-words text-base font-semibold leading-6 text-[color:var(--text-primary)]">
+                  <span class="text-[var(--text-muted)]">{index + 1}.</span> {page.title}
+                </span>
+                {stateLabel && <span
+                  class:list={[
+                    'shrink-0 rounded-full px-2 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.1em] sm:px-2.5',
+                    isCurrent
+                      ? 'bg-[var(--accent-blue)] text-white'
+                      : 'border border-theme-grid text-[var(--text-muted)]',
+                  ]}
+                >
+                  {stateLabel}
+                </span>}
+                <span class="col-span-2 block min-w-0 truncate text-sm leading-6 text-[var(--text-muted)]">{page.description}</span>
+              </span>
+            </a>
+          );
+        })}
+      </div>
     </div>
+
+    {currentPage && (previous || next) && (
+      <div class="mt-4 grid grid-cols-2 gap-4 border-t border-[var(--grid-line)] pt-4">
+        {previous ? (
+          <a href={previous.href} class={pagerLinkClass} aria-label={`Go to previous lesson: ${previous.title}`}>
+            <span class="type-label block">← {previous.eyebrow}</span>
+            <span class={pagerTitleClass}>{previous.shortTitle ?? previous.title}</span>
+          </a>
+        ) : (
+          <span aria-hidden="true"></span>
+        )}
+
+        {next && (
+          <a href={next.href} class={`${pagerLinkClass} text-right`} aria-label={`Go to next lesson: ${next.title}`}>
+            <span class="type-label block">{next.eyebrow} →</span>
+            <span class:list={[pagerTitleClass, 'text-[color:var(--accent-blue)]']}>{next.shortTitle ?? next.title}</span>
+          </a>
+        )}
+      </div>
+    )}
   </div>
-</section>
+</nav>
+
+<script>
+  document.querySelectorAll<HTMLButtonElement>('[data-module-path-toggle]').forEach((button) => {
+    const panel = document.getElementById(button.getAttribute('aria-controls') ?? '');
+    if (!panel) return;
+
+    button.addEventListener('click', () => {
+      const expanded = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(expanded));
+      panel.hidden = !expanded;
+    });
+  });
+</script>
 
 <style>
+  .module-path-toggle[aria-expanded='true'] {
+    border-color: var(--accent-blue);
+    background: color-mix(in srgb, var(--accent-blue) 12%, var(--surface-elevated));
+    color: var(--accent-blue);
+  }
+
+  /* Shown with no delay, unlike a native title tooltip. */
+  .module-tick-tooltip {
+    display: none;
+  }
+
+  li:hover > .module-tick-tooltip,
+  li:has(> .module-tick:focus-visible) > .module-tick-tooltip {
+    display: block;
+  }
+
   :global([data-theme='paper']) .module-topics-panel {
     background: color-mix(in srgb, var(--surface-elevated) 88%, transparent);
   }

@@ -285,3 +285,63 @@ export const getTextbookProgressByPath = (path: string): TextbookProgression | u
     crossesModuleBackward: Boolean(previous && previous.group.id !== current.group.id),
   };
 };
+
+export interface LessonNeighbor {
+  href: string;
+  title: string;
+  shortTitle?: string;
+  eyebrow: string;
+}
+
+export interface LessonNeighbors {
+  previous?: LessonNeighbor;
+  next?: LessonNeighbor;
+}
+
+const toNeighbor = (page: ModulePage, eyebrow: string): LessonNeighbor => ({
+  href: page.href,
+  title: page.title,
+  shortTitle: page.shortTitle,
+  eyebrow,
+});
+
+// Shared by the top navigator and the bottom pager so both always agree. Pages
+// in the textbook progression step across modules; hidden groups (drafts that
+// aren't in the progression) fall back to neighbors within their own pages.
+export const getLessonNeighbors = (
+  path: string,
+  fallbackPages: ModulePage[] = [],
+): LessonNeighbors => {
+  const progress = getTextbookProgressByPath(path);
+
+  if (progress) {
+    const { previous, next } = progress;
+    return {
+      previous:
+        previous &&
+        toNeighbor(
+          previous.page,
+          progress.crossesModuleBackward
+            ? `Previous module: ${previous.group.navLabel}`
+            : 'Previous lesson',
+        ),
+      next:
+        next &&
+        toNeighbor(
+          next.page,
+          progress.crossesModule ? `Next module: ${next.group.navLabel}` : 'Next lesson',
+        ),
+    };
+  }
+
+  const normalizedPath = normalizePath(path);
+  const index = fallbackPages.findIndex((page) => normalizePath(page.href) === normalizedPath);
+  if (index === -1) return {};
+
+  const previous = fallbackPages[index - 1];
+  const next = fallbackPages[index + 1];
+  return {
+    previous: previous && toNeighbor(previous, 'Previous lesson'),
+    next: next && toNeighbor(next, 'Next lesson'),
+  };
+};

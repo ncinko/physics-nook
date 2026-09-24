@@ -1,14 +1,7 @@
 ---
-import { getTextbookProgressByPath } from '../../data/modules';
+import { getLessonNeighbors } from '../../data/modules';
 
-const progress = getTextbookProgressByPath(Astro.url.pathname);
-const previous = progress?.previous;
-const next = progress?.next;
-
-const previousEyebrow = progress?.crossesModuleBackward
-  ? `Previous module: ${previous?.group.navLabel}`
-  : 'Previous lesson';
-const nextEyebrow = progress?.crossesModule ? `Next module: ${next?.group.navLabel}` : 'Next lesson';
+const { previous, next } = getLessonNeighbors(Astro.url.pathname);
 
 const linkClass =
   'group block rounded-[var(--radius-control)] py-1 text-[color:var(--text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-4 focus-visible:ring-offset-[var(--bg-primary)]';
@@ -22,12 +15,12 @@ const titleClass =
     <div class="grid gap-6 sm:grid-cols-2">
       {previous ? (
         <a
-          href={previous.page.href}
+          href={previous.href}
           class={linkClass}
-          aria-label={`Go to previous lesson: ${previous.page.title}`}
+          aria-label={`Go to previous lesson: ${previous.title}`}
         >
-          <span class={eyebrowClass}>← {previousEyebrow}</span>
-          <span class={titleClass}>{previous.page.title}</span>
+          <span class={eyebrowClass}>← {previous.eyebrow}</span>
+          <span class={titleClass}>{previous.title}</span>
         </a>
       ) : (
         <span class="hidden sm:block" aria-hidden="true"></span>
@@ -35,12 +28,12 @@ const titleClass =
 
       {next && (
         <a
-          href={next.page.href}
+          href={next.href}
           class:list={[linkClass, 'sm:text-right']}
-          aria-label={`Go to next lesson: ${next.page.title}`}
+          aria-label={`Go to next lesson: ${next.title}`}
         >
-          <span class={eyebrowClass}>{nextEyebrow} →</span>
-          <span class:list={[titleClass, 'text-[color:var(--accent-blue)]']}>{next.page.title}</span>
+          <span class={eyebrowClass}>{next.eyebrow} →</span>
+          <span class:list={[titleClass, 'text-[color:var(--accent-blue)]']}>{next.title}</span>
         </a>
       )}
     </div>

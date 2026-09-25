@@ -392,6 +392,20 @@ export default function PhotogateLaunchLab() {
             onChange={(value) => update({ spacingCm: value })}
             hint="beam to beam"
           />
+          {/* A spacing measured frame to frame instead of beam to beam is the
+              likeliest source of a consistent overshoot: 4 mm on 10 cm is 4%
+              on every prediction. */}
+          <details className="text-sm sm:ml-[9.5rem]">
+            <summary className="cursor-pointer font-semibold text-[var(--accent-blue)]">
+              How to find the beams
+            </summary>
+            <p className="mt-1 mb-0">
+              The beam is not always where the frame suggests. Slowly slide the edge of a card
+              into each gate until its indicator in step 1 turns to <em>blocked</em>, and mark
+              that spot. Measure mark to mark. Keep both gates square to the ball’s path, with
+              their beams at the same height.
+            </p>
+          </details>
           <LengthField
             label="Table height"
             value={lab.heightCm}
@@ -509,8 +523,9 @@ export default function PhotogateLaunchLab() {
       <Step index={4} title="Predict the landing" locked={!enoughRolls}>
         <p className="m-0 text-sm">
           Use your mean speed and the table height to work out how far from the table the ball
-          will land. Measure from the point on the floor directly below the table edge (use a
-          plumb bob to find it). Then place a target there and launch the ball.
+          will land. Measure from the point on the floor directly below where the ball leaves the
+          table (use a plumb bob to find it). On a rounded edge, that is where the flat top ends,
+          not the outermost lip. Then place a target there and launch the ball.
         </p>
         <details className="mt-2 text-sm">
           <summary className="cursor-pointer font-semibold text-[var(--accent-blue)]">

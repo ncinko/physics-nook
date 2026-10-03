@@ -144,11 +144,19 @@ export const deltaChiInterval = (
   points: readonly FitPoint[],
   bestTau: number,
   rise = 1,
+): TauInterval | null =>
+  deltaChiIntervalFor(
+    (tau) => chiSquareAt(points, bestV0ForTau(points, tau), tau),
+    bestTau,
+    rise,
+  );
+
+/** The same search for any profiled χ²(τ), e.g. one that also re-optimizes t0. */
+export const deltaChiIntervalFor = (
+  chiAt: (tau: number) => number,
+  bestTau: number,
+  rise = 1,
 ): TauInterval | null => {
-  const chiAt = (tau: number) => {
-    const v0 = bestV0ForTau(points, tau);
-    return chiSquareAt(points, v0, tau);
-  };
   const minimum = chiAt(bestTau);
   const target = minimum + rise;
 
@@ -180,6 +188,140 @@ export const deltaChiInterval = (
   if (low === null || high === null) return null;
   return { low, high, minimum };
 };
+
+// --- A run that starts recording before the switch closes -------------------
+//
+// The same circuit, but the voltmeter was started early: the first few readings
+// sit at zero, and the capacitor only begins charging at the (unknown) time t0.
+// V(t) = 0 for t ≤ t0, then V0 (1 − e^(−(t − t0)/τ)). That is a third parameter,
+// and it is correlated with τ, which is why τ's uncertainty grows when it is free.
+
+/** The "truth" for the delayed run: the switch closes at t0 = 1.25 s. */
+export const RC_DELAYED_TRUTH = { v0: 5, tau: 2.2, t0: 1.25 } as const;
+
+/** Reading times for the delayed run: 0 to 10 s, so three readings precede t0. */
+export const RC_DELAYED_TIMES: readonly number[] = Array.from({ length: 21 }, (_, i) => 0.5 * i);
+
+/** The seed behind the delayed dataset the by-hand island starts from. */
+export const RC_DELAYED_SEED = 10;
+
+export const delayedVoltage = (t: number, v0: number, tau: number, t0: number): number =>
+  t <= t0 ? 0 : v0 * (1 - Math.exp(-(t - t0) / tau));
+
+export const generateDelayedRcData = (seed: number): FitPoint[] => {
+  const rng = createRng(scrambleSeed(seed));
+  return RC_DELAYED_TIMES.map((t) => ({
+    x: t,
+    y:
+      delayedVoltage(t, RC_DELAYED_TRUTH.v0, RC_DELAYED_TRUTH.tau, RC_DELAYED_TRUTH.t0) +
+      RC_SIGMA * gaussian(rng.next),
+    sigma: RC_SIGMA,
+  }));
+};
+
+const delayedModel = (t: number, p: readonly number[]) => delayedVoltage(t, p[0], p[1], p[2]);
+
+/** Best-fit V0, τ and t0, in that order (uncertainties line up). */
+export const fitDelayedRc = (points: readonly FitPoint[]): RcFitResult => {
+  const finite = points.filter((point) => Number.isFinite(point.y));
+  if (finite.length < 4) return { ok: false };
+  const peak = Math.max(...finite.map((point) => point.y), 1e-3);
+  const rising = finite.find((point) => point.y > 0.25 * peak);
+  const guessT0 = rising ? Math.max(0, rising.x - 0.75) : 0;
+  const guessTau = Math.max(...finite.map((point) => point.x), 1) / 4;
+  const result = fitNonlinear(points, delayedModel, [peak, guessTau, guessT0]);
+  return result.ok ? { ok: true, fit: result.fit } : { ok: false };
+};
+
+export const delayedResiduals = (
+  points: readonly FitPoint[],
+  v0: number,
+  tau: number,
+  t0: number,
+): number[] => points.map((point) => point.y - delayedVoltage(point.x, v0, tau, t0));
+
+export const delayedChiSquareAt = (
+  points: readonly FitPoint[],
+  v0: number,
+  tau: number,
+  t0: number,
+): number =>
+  points.reduce((sum, point) => {
+    const sigma = point.sigma ?? 1;
+    return sum + ((point.y - delayedVoltage(point.x, v0, tau, t0)) / sigma) ** 2;
+  }, 0);
+
+/** The V0 that minimizes χ² at fixed τ and t0 (still linear in V0). */
+const bestV0ForDelay = (points: readonly FitPoint[], tau: number, t0: number): number => {
+  let numerator = 0;
+  let denominator = 0;
+  for (const point of points) {
+    const weight = 1 / (point.sigma ?? 1) ** 2;
+    const f = delayedVoltage(point.x, 1, tau, t0);
+    numerator += weight * f * point.y;
+    denominator += weight * f * f;
+  }
+  return denominator > 0 ? numerator / denominator : Number.NaN;
+};
+
+export interface DelayedBest {
+  v0: number;
+  t0: number;
+  chiSquare: number;
+}
+
+const T0_SEARCH: readonly [number, number] = [0, 3];
+
+/**
+ * With τ held fixed, the V0 and t0 that minimize χ²: what "move τ, then re-adjust
+ * V0 and t0 until it looks as good as it can" does by hand. V0 has a closed form,
+ * so only t0 is searched: a coarse scan to find the right valley, then
+ * golden-section refinement inside it.
+ */
+export const bestDelayedForTau = (points: readonly FitPoint[], tau: number): DelayedBest => {
+  const chiAtT0 = (t0: number) => delayedChiSquareAt(points, bestV0ForDelay(points, tau, t0), tau, t0);
+  const [lo, hi] = T0_SEARCH;
+  const steps = 60;
+  const width = (hi - lo) / steps;
+  let bestIndex = 0;
+  let bestChi = Infinity;
+  for (let i = 0; i <= steps; i += 1) {
+    const chi = chiAtT0(lo + i * width);
+    if (chi < bestChi) {
+      bestChi = chi;
+      bestIndex = i;
+    }
+  }
+  let a = Math.max(lo, lo + (bestIndex - 1) * width);
+  let b = Math.min(hi, lo + (bestIndex + 1) * width);
+  const ratio = (Math.sqrt(5) - 1) / 2;
+  for (let i = 0; i < 60; i += 1) {
+    const c = b - ratio * (b - a);
+    const d = a + ratio * (b - a);
+    if (chiAtT0(c) < chiAtT0(d)) b = d;
+    else a = c;
+  }
+  const t0 = (a + b) / 2;
+  const v0 = bestV0ForDelay(points, tau, t0);
+  return { v0, t0, chiSquare: delayedChiSquareAt(points, v0, tau, t0) };
+};
+
+export interface DelayedProfilePoint extends DelayedBest {
+  tau: number;
+}
+
+/** χ² as a function of τ alone, with V0 and t0 re-optimized at every τ. */
+export const profileDelayedChiSquare = (
+  points: readonly FitPoint[],
+  taus: readonly number[],
+): DelayedProfilePoint[] => taus.map((tau) => ({ tau, ...bestDelayedForTau(points, tau) }));
+
+export const deltaChiIntervalDelayed = (
+  points: readonly FitPoint[],
+  bestTau: number,
+  rise = 1,
+): TauInterval | null =>
+  deltaChiIntervalFor((tau) => bestDelayedForTau(points, tau).chiSquare, bestTau, rise);
 
 export interface TrialSummary {
   taus: number[];

@@ -75,7 +75,7 @@ export function LineVsCurveFit() {
           onChange={(value) => setModel(value as ModelKind)}
           options={[
             { value: 'line', label: 'Straight line: V = a + bt' },
-            { value: 'exp', label: 'Exponential: V = V₀(1 − e^(−t/τ))' },
+            { value: 'exp', label: 'Exponential: V = V_b(1 − e^(−t/τ))' },
           ]}
         />
         <Toggle label="Zoom residuals to the noise" checked={zoom} onChange={setZoom} />
@@ -90,7 +90,7 @@ export function LineVsCurveFit() {
           </>
         ) : (
           <>
-            V₀ = {formatMeasurement({ value: v0, uncertainty: exp.uncertainties[0] })} V,
+            V<sub>b</sub> = {formatMeasurement({ value: v0, uncertainty: exp.uncertainties[0] })} V,
             {' '}τ = {formatMeasurement({ value: tau, uncertainty: exp.uncertainties[1] })} s.
             
           </>

@@ -13,11 +13,21 @@ import {
 } from '../../src/lib/measurement/uncertainty.ts';
 import {
   RC_DEFAULT_SEED,
+  RC_DELAYED_SEED,
+  RC_DELAYED_TRUTH,
   RC_SIGMA,
   RC_TRUTH,
+  bestDelayedForTau,
   bestV0ForTau,
   chiSquareAt,
+  delayedChiSquareAt,
+  delayedResiduals,
+  delayedVoltage,
   deltaChiInterval,
+  deltaChiIntervalDelayed,
+  fitDelayedRc,
+  generateDelayedRcData,
+  profileDelayedChiSquare,
   fitRc,
   fitRcLine,
   generateRcData,
@@ -384,6 +394,66 @@ console.log('Chicken-count leaderboard tests passed.');
   assert.equal(trials.taus.length, 200);
   near(trials.mean, RC_TRUTH.tau, 0.02);
   if (single.ok) near(trials.scatter, single.fit.uncertainties[1], 0.25 * single.fit.uncertainties[1]);
+}
+
+// --- Delayed start: a third parameter, t0 ---
+
+// Three readings precede the switch closing, and they sit near zero.
+{
+  const data = generateDelayedRcData(RC_DELAYED_SEED);
+  assert.deepEqual(data, generateDelayedRcData(RC_DELAYED_SEED));
+  assert.equal(data.length, 21);
+  const before = data.filter((point) => point.x < RC_DELAYED_TRUTH.t0);
+  assert.equal(before.length, 3);
+  assert.ok(before.every((point) => Math.abs(point.y) < 5 * RC_SIGMA));
+  near(delayedVoltage(0.5, 5, 2.2, 1.25), 0, 0);
+  near(delayedVoltage(1.25, 5, 2.2, 1.25), 0, 0);
+  near(delayedVoltage(3.45, 5, 2.2, 1.25), 5 * (1 - Math.exp(-1)), 1e-12);
+}
+
+// The three-parameter fit recovers V0, tau and t0, and the profiled chi-square
+// (V0 and t0 re-optimized at each tau) bottoms out at the full fit's minimum.
+{
+  const data = generateDelayedRcData(RC_DELAYED_SEED);
+  const result = fitDelayedRc(data);
+  assert.ok(result.ok);
+  if (result.ok) {
+    const [v0, tau, t0] = result.fit.parameters;
+    const [dv0, dtau, dt0] = result.fit.uncertainties;
+    near(v0, RC_DELAYED_TRUTH.v0, 4 * dv0);
+    near(tau, RC_DELAYED_TRUTH.tau, 4 * dtau);
+    near(t0, RC_DELAYED_TRUTH.t0, 4 * dt0);
+    assert.equal(result.fit.degreesOfFreedom, 18);
+    assert.ok(result.fit.reducedChiSquare > 0.4 && result.fit.reducedChiSquare < 2.5);
+
+    const atBest = bestDelayedForTau(data, tau);
+    near(atBest.chiSquare, result.fit.chiSquare, 1e-6);
+    near(atBest.t0, t0, 1e-3);
+    near(delayedChiSquareAt(data, v0, tau, t0), result.fit.chiSquare, 1e-9);
+
+    const taus = Array.from({ length: 41 }, (_, i) => tau - 0.4 + i * 0.02);
+    const profile = profileDelayedChiSquare(data, taus);
+    assert.ok(profile.every((entry) => entry.chiSquare >= result.fit.chiSquare - 1e-6));
+
+    // Freeing t0 widens tau's uncertainty relative to the two-parameter model, and
+    // the chi-square+1 interval still matches the covariance matrix.
+    const interval = deltaChiIntervalDelayed(data, tau);
+    assert.ok(interval !== null);
+    if (interval) {
+      assert.ok(interval.low < tau && tau < interval.high);
+      near((interval.high - interval.low) / 2, dtau, 0.15 * dtau);
+    }
+    const twoParameter = fitRc(generateRcData(RC_DEFAULT_SEED));
+    assert.ok(twoParameter.ok);
+    if (twoParameter.ok) assert.ok(dtau > 1.3 * twoParameter.fit.uncertainties[1]);
+
+    const residuals = delayedResiduals(data, v0, tau, t0);
+    near(
+      residuals.reduce((sum, value) => sum + value * value, 0) / RC_SIGMA ** 2,
+      result.fit.chiSquare,
+      1e-6,
+    );
+  }
 }
 
 console.log('RC fitting tests passed.');

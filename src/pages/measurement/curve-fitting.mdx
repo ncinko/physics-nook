@@ -63,7 +63,13 @@ It is tempting to dodge this by *straightening* the data. Since $V_b - V = V_b e
 
 Your best-fit $\tau$ is not a perfect number. Slightly different values of $\tau$ would have described the data almost as well. The uncertainty in $\tau$ should quantify the range of values that still describe the data acceptably, and you can find it directly: leave the best fit, increase $\tau$ until the residuals clearly develop a pattern, and note where that happened. Then do the same in the other direction. Half the distance between these two extreme values is a reasonable estimate of uncertainty.
 
-One wrinkle: the fit parameters $V_b$ and $\tau$ are linked. A larger $\tau$ makes the curve rise more slowly, which can be partly compensated by a larger $V_b$. If you move $\tau$ and leave $V_b$ alone, the fit will look worse than it needs to and you will underestimate how much $\tau$ can wander. So each time you move $\tau$, **re-adjust $V_b$ to its best value** before judging the residuals. 
+
+Real data rarely start at the instant the switch closes. In the run below, recording began early, so the first few readings sit at zero until the capacitor starts charging at some time $t_0$. The model gains a third parameter:
+
+$$
+V(t) = \begin{cases} 0 & t \le t_0 \\ V_b\left(1 - e^{-(t - t_0)/\tau}\right) & t > t_0 \end{cases}
+$$
+Note that the three fit parameters are linked. A larger $\tau$ makes the curve rise more slowly, which can be partly compensated by a larger $V_b$.  Delaying the start time also has a similar effect on the curve as a larger $\tau$.  When adjusting $\tau$ to estimate the uncertainty, you should also re-adjust the other free parameters before judging the residuals. 
 
 If you find this process tedious, you are not alone!  Luckily, there are ways of automating this with a computer.  A common method uses the so-called **chi-square** statistic, which is discussed below.
 

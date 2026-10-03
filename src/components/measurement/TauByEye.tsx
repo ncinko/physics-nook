@@ -3,32 +3,37 @@ import { Button, ControlBar, Slider, Toggle } from '../shared/InlineControls';
 import { FitPlot } from './FitPlot';
 import { formatMeasurement } from '../../lib/measurement/uncertainty';
 import {
-  RC_DEFAULT_SEED,
+  RC_DELAYED_SEED,
   RC_SIGMA,
-  bestV0ForTau,
-  chargingVoltage,
-  chiSquareAt,
-  deltaChiInterval,
-  fitRc,
-  generateRcData,
-  profileChiSquare,
-  rcResiduals,
+  bestDelayedForTau,
+  delayedChiSquareAt,
+  delayedResiduals,
+  delayedVoltage,
+  deltaChiIntervalDelayed,
+  fitDelayedRc,
+  generateDelayedRcData,
+  profileDelayedChiSquare,
 } from '../../lib/measurement/rcFit';
 
 // The by-hand method, made explicit. Drag the parameters, watch the residuals,
 // and mark the τ values where the fit has visibly stopped working. A reveal then
 // lays the formal χ² answer over the student's own range.
+//
+// This run starts recording before the switch closes, so the model has a third
+// parameter, the start time t0. Three parameters make the "re-adjust the others"
+// step matter more: τ, V0 and t0 are all correlated.
 
-const DATA = generateRcData(RC_DEFAULT_SEED);
-const BEST = fitRc(DATA);
+const DATA = generateDelayedRcData(RC_DELAYED_SEED);
+const BEST = fitDelayedRc(DATA);
 
-const TAU_MIN = 1.0;
-const TAU_MAX = 3.0;
-const CHI_RISE_SHOWN = 25;
+const TAU_MIN = 1.7;
+const TAU_MAX = 2.7;
+const TAU_TICKS = [1.8, 2.0, 2.2, 2.4, 2.6];
+const CHI_RISE_SHOWN = 16;
 
-const PROFILE = profileChiSquare(
+const PROFILE = profileDelayedChiSquare(
   DATA,
-  Array.from({ length: 121 }, (_, i) => TAU_MIN + ((TAU_MAX - TAU_MIN) * i) / 120),
+  Array.from({ length: 101 }, (_, i) => TAU_MIN + ((TAU_MAX - TAU_MIN) * i) / 100),
 );
 
 const VIEW_WIDTH = 640;
@@ -40,8 +45,9 @@ const PAD_BOTTOM = 44;
 
 export function TauByEye() {
   const [v0, setV0] = useState(4.7);
-  const [tau, setTau] = useState(2.45);
-  const [autoV0, setAutoV0] = useState(false);
+  const [tau, setTau] = useState(2.55);
+  const [t0, setT0] = useState(0.9);
+  const [autoRest, setAutoRest] = useState(false);
   const [low, setLow] = useState<number | null>(null);
   const [high, setHigh] = useState<number | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -49,13 +55,20 @@ export function TauByEye() {
   if (!BEST.ok) return null;
   const best = BEST.fit;
   const bestTau = best.parameters[1];
-  const interval = deltaChiInterval(DATA, bestTau);
+  const interval = deltaChiIntervalDelayed(DATA, bestTau);
 
-  const effectiveV0 = autoV0 ? bestV0ForTau(DATA, tau) : v0;
-  const residuals = rcResiduals(DATA, effectiveV0, tau);
+  // With "re-adjust" on, Vb and t0 are whatever minimize χ² at this τ.
+  const tuned = autoRest ? bestDelayedForTau(DATA, tau) : null;
+  const effectiveV0 = tuned ? tuned.v0 : v0;
+  const effectiveT0 = tuned ? tuned.t0 : t0;
+  const residuals = delayedResiduals(DATA, effectiveV0, tau, effectiveT0);
 
+  // The by-eye statement appears as soon as either edge is marked; an unmarked
+  // edge reads "?" so a click always visibly does something.
+  const hasMark = low !== null || high !== null;
   const marks = low !== null && high !== null ? [Math.min(low, high), Math.max(low, high)] : null;
   const byEye = marks ? { value: (marks[0] + marks[1]) / 2, uncertainty: (marks[1] - marks[0]) / 2 } : null;
+  const edge = (value: number | null) => (value === null ? '?' : value.toFixed(2));
 
   // χ² profile geometry.
   const chiMin = best.chiSquare;
@@ -68,31 +81,43 @@ export function TauByEye() {
   const xPix = (value: number) => plotLeft + ((value - TAU_MIN) / (TAU_MAX - TAU_MIN)) * (plotRight - plotLeft);
   const yPix = (value: number) => plotBottom - ((value - yLow) / (yHigh - yLow)) * (plotBottom - plotTop);
   const profilePath = PROFILE.map((entry) => `${xPix(entry.tau).toFixed(1)},${yPix(entry.chiSquare).toFixed(1)}`).join(' ');
-  const currentChi = chiSquareAt(DATA, effectiveV0, tau);
+  const currentChi = delayedChiSquareAt(DATA, effectiveV0, tau, effectiveT0);
 
   return (
     <div className="not-prose mx-auto my-8 flex max-w-[680px] flex-col gap-3 text-[var(--text-primary)]">
       <div className="overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--surface-plot)]">
         <FitPlot
           points={DATA}
-          curves={[{ fn: (t) => chargingVoltage(t, effectiveV0, tau), color: 'var(--accent-red)' }]}
+          curves={[{ fn: (t) => delayedVoltage(t, effectiveV0, tau, effectiveT0), color: 'var(--accent-red)' }]}
           residuals={residuals}
-          residualExtent={0.5}
+          residualExtent={0.6}
           residualBand={RC_SIGMA}
           xRange={[0, 10.5]}
-          yRange={[0, 5.5]}
+          yRange={[-0.3, 5.5]}
           xTicks={[0, 2, 4, 6, 8, 10]}
           yTicks={[0, 1, 2, 3, 4, 5]}
           xLabel="time t (s)"
           yLabel="capacitor voltage V (V)"
-          summary={`Exponential charging curve with V0 = ${effectiveV0.toFixed(2)} V and tau = ${tau.toFixed(2)} s drawn over the data, with residuals below.`}
+          summary={`Delayed exponential charging curve with V0 = ${effectiveV0.toFixed(2)} V, tau = ${tau.toFixed(2)} s and start time t0 = ${effectiveT0.toFixed(2)} s drawn over the data, with residuals below.`}
         />
       </div>
 
       <ControlBar>
-        <Slider label="V₀" unit="V" min={4.0} max={6.0} step={0.01} value={effectiveV0} onChange={setV0} disabled={autoV0} format={(value) => value.toFixed(2)} />
+        <Slider label={<>V<sub>b</sub></>} ariaLabel="V b" unit="V" min={4.5} max={5.5} step={0.01} value={effectiveV0} onChange={setV0} disabled={autoRest} format={(value) => value.toFixed(2)} />
+        <Slider label={<>t<sub>0</sub></>} ariaLabel="t 0" unit="s" min={0.5} max={2} step={0.01} value={effectiveT0} onChange={setT0} disabled={autoRest} format={(value) => value.toFixed(2)} />
         <Slider label="τ" unit="s" min={TAU_MIN} max={TAU_MAX} step={0.01} value={tau} onChange={setTau} format={(value) => value.toFixed(2)} />
-        
+        <Toggle
+          label={<>Re-adjust V<sub>b</sub> and t<sub>0</sub> for me</>}
+          checked={autoRest}
+          onChange={(checked) => {
+            // Hand control back where the automatic values left off.
+            if (!checked) {
+              setV0(Math.min(5.5, Math.max(4.5, effectiveV0)));
+              setT0(Math.min(2, Math.max(0.5, effectiveT0)));
+            }
+            setAutoRest(checked);
+          }}
+        />
       </ControlBar>
 
       <ControlBar>
@@ -110,14 +135,15 @@ export function TauByEye() {
       </ControlBar>
 
       <p className="m-0 text-center text-sm leading-6 text-[var(--text-muted)]">
-        {byEye ? (
+        {hasMark ? (
           <>
-            By eye: τ from {marks![0].toFixed(2)} to {marks![1].toFixed(2)} s, so τ = {formatMeasurement(byEye)} s.
+            By eye: τ from {marks ? edge(marks[0]) : edge(low)} to {marks ? edge(marks[1]) : edge(high)} s, so τ ={' '}
+            {byEye ? formatMeasurement(byEye) : '?'} s.
           </>
         ) : (
           <>
             Slide τ until the residuals stop looking like random scatter, and mark that edge. Then slide
-            the other way.
+            the other way. Re-tune V<sub>b</sub> and t<sub>0</sub> each time.
           </>
         )}
       </p>
@@ -140,7 +166,7 @@ export function TauByEye() {
                   <rect x={plotLeft} y={plotTop} width={plotRight - plotLeft} height={plotBottom - plotTop} />
                 </clipPath>
               </defs>
-              {[1.9, 2.0, 2.1, 2.2, 2.3, 2.4, 2.5].map((tick) => (
+              {TAU_TICKS.map((tick) => (
                 <g key={tick}>
                   <line x1={xPix(tick)} y1={plotTop} x2={xPix(tick)} y2={plotBottom} stroke="var(--grid-line)" strokeWidth={0.5} opacity={0.5} />
                   <text x={xPix(tick)} y={plotBottom + 18} textAnchor="middle" fill="var(--text-muted)" fontSize="12">
@@ -178,8 +204,8 @@ export function TauByEye() {
           <p className="m-0 text-center text-sm leading-6 text-[var(--text-muted)]">
             χ² is smallest at τ = {bestTau.toFixed(2)} s and has risen by 1 at {interval.low.toFixed(2)} and{' '}
             {interval.high.toFixed(2)} s: τ = {formatMeasurement({ value: bestTau, uncertainty: (interval.high - interval.low) / 2 })} s.
-            {byEye ? (
-              <> Your marks (red) bracket {marks![0].toFixed(2)} to {marks![1].toFixed(2)} s. The red dot follows your τ slider.</>
+            {marks ? (
+              <> Your marks (red) bracket {marks[0].toFixed(2)} to {marks[1].toFixed(2)} s. The red dot follows your τ slider.</>
             ) : (
               <> The red dot follows your τ slider.</>
             )}

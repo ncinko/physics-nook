@@ -159,15 +159,6 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['fitting', 'uncertainty', 'chi-square', 'RC circuit'],
   },
   {
-    id: 'repeat-trials',
-    title: 'Run It Again',
-    description: 'Repeat the RC experiment with fresh voltmeter noise and watch the spread of fitted time constants match the single-run uncertainty.',
-    href: '/measurement/curve-fitting#repeat-trials',
-    module: 'Measurement',
-    kind: 'inline',
-    tags: ['fitting', 'uncertainty', 'repeat trials', 'RC circuit'],
-  },
-  {
     id: 'si-unit-definitions',
     title: 'SI Unit Definitions',
     description: 'Click through the seven SI base units to compare their modern constant-based definitions with everyday scales.',

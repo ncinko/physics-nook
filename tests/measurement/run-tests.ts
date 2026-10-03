@@ -12,6 +12,20 @@ import {
   type Measurement,
 } from '../../src/lib/measurement/uncertainty.ts';
 import {
+  RC_DEFAULT_SEED,
+  RC_SIGMA,
+  RC_TRUTH,
+  bestV0ForTau,
+  chiSquareAt,
+  deltaChiInterval,
+  fitRc,
+  fitRcLine,
+  generateRcData,
+  profileChiSquare,
+  rcResiduals,
+  runTrials,
+} from '../../src/lib/measurement/rcFit.ts';
+import {
   CHICKEN_ROUNDS,
   chickenCountForRound,
   chickenCountGameScore,
@@ -294,5 +308,84 @@ console.log('Chicken-count scoring tests passed.');
 }
 
 console.log('Chicken-count leaderboard tests passed.');
+
+// --- RC fitting page ---
+
+// The generator is deterministic: same seed, same data; different seed, different data.
+{
+  const a = generateRcData(RC_DEFAULT_SEED);
+  const b = generateRcData(RC_DEFAULT_SEED);
+  const c = generateRcData(RC_DEFAULT_SEED + 1);
+  assert.deepEqual(a, b);
+  assert.notDeepEqual(a, c);
+  assert.equal(a.length, 20);
+  assert.ok(a.every((point) => point.sigma === RC_SIGMA));
+}
+
+// The exponential fit recovers the truth to within a few of its own uncertainties,
+// and the straight line is hopelessly worse on the same data.
+{
+  const data = generateRcData(RC_DEFAULT_SEED);
+  const result = fitRc(data);
+  assert.ok(result.ok);
+  if (result.ok) {
+    const [v0, tau] = result.fit.parameters;
+    const [dv0, dtau] = result.fit.uncertainties;
+    near(v0, RC_TRUTH.v0, 4 * dv0);
+    near(tau, RC_TRUTH.tau, 4 * dtau);
+    assert.ok(result.fit.reducedChiSquare > 0.4 && result.fit.reducedChiSquare < 2.5);
+
+    const line = fitRcLine(data);
+    assert.ok(line !== null);
+    if (line) assert.ok(line.reducedChiSquare > 20 * result.fit.reducedChiSquare);
+  }
+}
+
+// Profiled χ²: V0 is re-optimized at each τ, the minimum sits at the best-fit τ,
+// and the best V0 for the best-fit τ is the best-fit V0.
+{
+  const data = generateRcData(RC_DEFAULT_SEED);
+  const result = fitRc(data);
+  assert.ok(result.ok);
+  if (result.ok) {
+    const [v0, tau] = result.fit.parameters;
+    near(bestV0ForTau(data, tau), v0, 1e-6);
+    near(chiSquareAt(data, v0, tau), result.fit.chiSquare, 1e-9);
+
+    const taus = Array.from({ length: 81 }, (_, i) => tau - 0.4 + i * 0.01);
+    const profile = profileChiSquare(data, taus);
+    const lowest = profile.reduce((best, entry) => (entry.chiSquare < best.chiSquare ? entry : best));
+    near(lowest.tau, tau, 0.011);
+    assert.ok(profile.every((entry) => entry.chiSquare >= result.fit.chiSquare - 1e-9));
+
+    // The χ²_min + 1 interval brackets τ and has the width the covariance predicts.
+    const interval = deltaChiInterval(data, tau);
+    assert.ok(interval !== null);
+    if (interval) {
+      assert.ok(interval.low < tau && tau < interval.high);
+      near((interval.high - interval.low) / 2, result.fit.uncertainties[1], 0.15 * result.fit.uncertainties[1]);
+      near(interval.minimum, result.fit.chiSquare, 1e-9);
+    }
+
+    const residuals = rcResiduals(data, v0, tau);
+    near(
+      residuals.reduce((sum, value) => sum + value * value, 0) / RC_SIGMA ** 2,
+      result.fit.chiSquare,
+      1e-6,
+    );
+  }
+}
+
+// Repeating the experiment: the scatter of fitted τ matches the single-run uncertainty.
+{
+  const single = fitRc(generateRcData(RC_DEFAULT_SEED));
+  assert.ok(single.ok);
+  const trials = runTrials(RC_DEFAULT_SEED, 200);
+  assert.equal(trials.taus.length, 200);
+  near(trials.mean, RC_TRUTH.tau, 0.02);
+  if (single.ok) near(trials.scatter, single.fit.uncertainties[1], 0.25 * single.fit.uncertainties[1]);
+}
+
+console.log('RC fitting tests passed.');
 
 console.log('All measurement tests passed.');

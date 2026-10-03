@@ -43,6 +43,7 @@ import {
   predictPolynomial,
   type FitPoint,
 } from '../../src/lib/math/leastSquares.ts';
+import { fitNonlinear } from '../../src/lib/math/nonlinearFit.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
@@ -400,3 +401,77 @@ assert.deepEqual(fitPolynomial([{ x: 0, y: 1 }], 1), { ok: false, reason: 'too-f
 }
 
 console.log('Least squares tests passed.');
+
+// --- Nonlinear least squares ---
+
+const expModel = (x: number, p: readonly number[]) => p[0] * (1 - Math.exp(-x / p[1]));
+
+// Noiseless data from a known curve is recovered essentially exactly.
+{
+  const points: FitPoint[] = Array.from({ length: 12 }, (_, i) => ({
+    x: 0.5 * (i + 1),
+    y: expModel(0.5 * (i + 1), [5, 2.2]),
+    sigma: 0.05,
+  }));
+  const result = fitNonlinear(points, expModel, [4, 1]);
+  assert.ok(result.ok);
+  if (result.ok) {
+    near(result.fit.parameters[0], 5, 1e-6);
+    near(result.fit.parameters[1], 2.2, 1e-6);
+    assert.ok(result.fit.chiSquare < 1e-9);
+    assert.equal(result.fit.degreesOfFreedom, 10);
+    assert.equal(result.fit.weighted, true);
+  }
+}
+
+// A linear model through the nonlinear engine agrees with the closed-form fit,
+// coefficients and uncertainties both — the covariance (JᵀWJ)⁻¹ is the same matrix.
+{
+  const points: FitPoint[] = [0, 1, 2, 3, 4, 5, 6].map((x, i) => ({
+    x,
+    y: 1.5 + 0.8 * x + (i % 2 === 0 ? 0.07 : -0.05),
+    sigma: 0.1,
+  }));
+  const closed = fitPolynomial(points, 1);
+  const iterated = fitNonlinear(points, (x, p) => p[0] + p[1] * x, [0, 0]);
+  assert.ok(closed.ok && iterated.ok);
+  if (closed.ok && iterated.ok) {
+    near(iterated.fit.parameters[0], closed.fit.coefficients[0], 1e-6);
+    near(iterated.fit.parameters[1], closed.fit.coefficients[1], 1e-6);
+    near(iterated.fit.uncertainties[0], closed.fit.uncertainties[0], 1e-6);
+    near(iterated.fit.uncertainties[1], closed.fit.uncertainties[1], 1e-6);
+    near(iterated.fit.chiSquare, closed.fit.chiSquare, 1e-6);
+  }
+}
+
+// Missing sigmas fall back to unit weights; scatter uncertainties still exist.
+{
+  const points: FitPoint[] = [1, 2, 3, 4, 5].map((x, i) => ({
+    x,
+    y: 2 * x + (i % 2 === 0 ? 0.2 : -0.2),
+  }));
+  const result = fitNonlinear(points, (x, p) => p[0] * x, [1]);
+  assert.ok(result.ok);
+  if (result.ok) {
+    assert.equal(result.fit.weighted, false);
+    assert.ok(Number.isFinite(result.fit.scatterUncertainties[0]));
+  }
+}
+
+// Fewer points than parameters is refused; zero degrees of freedom gives NaN scatter.
+{
+  const one = fitNonlinear([{ x: 1, y: 1, sigma: 0.1 }], expModel, [1, 1]);
+  assert.deepEqual(one, { ok: false, reason: 'too-few-points' });
+  const exact = fitNonlinear(
+    [
+      { x: 1, y: expModel(1, [5, 2]), sigma: 0.1 },
+      { x: 4, y: expModel(4, [5, 2]), sigma: 0.1 },
+    ],
+    expModel,
+    [4, 1.5],
+  );
+  assert.ok(exact.ok);
+  if (exact.ok) assert.ok(Number.isNaN(exact.fit.reducedChiSquare));
+}
+
+console.log('Nonlinear least squares tests passed.');

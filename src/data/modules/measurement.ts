@@ -6,7 +6,7 @@ export const measurementModule: ModuleMeta = {
   title: 'Measurement & Uncertainty',
   navLabel: 'Measurement',
   summary:
-    'SI units, scientific notation, measurement uncertainty, and error propagation.',
+    'SI units, scientific notation, measurement uncertainty, error propagation, and fitting data.',
   audience: 'Self-learners and intro-lab students who want the algebra-level toolkit every experiment reuses.',
   prerequisites: ['Decimals and percentages', 'Rounding', 'Basic algebra'],
   learningObjectives: [
@@ -17,6 +17,8 @@ export const measurementModule: ModuleMeta = {
     'Propagate uncertainty with the high–low bracket and the add/multiply shortcut rules',
     'Round an uncertainty to one significant figure and match the value to it',
     'Decide whether a theoretical value is consistent with a measurement using its error bar',
+    'Distinguish a straight-line fit from a functional fit and use residuals to judge whether a model fits',
+    'Estimate the uncertainty in a best-fit parameter by hand, with chi-square, and by repeating the experiment',
   ],
   status: 'active',
   navVisibility: 'menu',
@@ -54,6 +56,20 @@ export const measurementModule: ModuleMeta = {
         image: '/social/physics-nook-card.svg',
       },
     },
-    
+    {
+      id: 'measurement-curve-fitting',
+      href: '/measurement/curve-fitting',
+      title: 'Fitting Data',
+      shortTitle: 'Fitting Data',
+      description:
+        'Compare a straight-line fit with a functional fit, read the residuals, and estimate the uncertainty in a best-fit parameter.',
+      seo: {
+        title: 'Fitting Data',
+        description:
+          'Fit a charging RC circuit to find its time constant: straight-line versus exponential fits, reading residuals, estimating parameter uncertainty by hand, and a first look at chi-square.',
+        canonicalPath: '/measurement/curve-fitting',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
   ],
 };

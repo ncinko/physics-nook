@@ -16,10 +16,10 @@ type SceneState = {
 };
 
 export default function GaussLawExplorer() {
-  const [preset, setPreset] = useState('centered');
+  const [preset, setPreset] = useState('dipole');
   const [shape, setShape] = useState<GaussianShape>('sphere');
   const [radius, setRadius] = useState(1.2);
-  const [charges, setCharges] = useState<Charge3D[]>(() => gaussPreset('centered'));
+  const [charges, setCharges] = useState<Charge3D[]>(() => gaussPreset('dipole'));
   const [selected, setSelected] = useState(1);
   const [arrows, setArrows] = useState(true), [normals, setNormals] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);

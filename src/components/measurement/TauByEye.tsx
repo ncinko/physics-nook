@@ -26,8 +26,8 @@ import {
 const DATA = generateDelayedRcData(RC_DELAYED_SEED);
 const BEST = fitDelayedRc(DATA);
 
-const TAU_MIN = 1.7;
-const TAU_MAX = 2.7;
+const TAU_MIN = 1.0;
+const TAU_MAX = 3.0;
 const TAU_TICKS = [1.8, 2.0, 2.2, 2.4, 2.6];
 const CHI_RISE_SHOWN = 16;
 

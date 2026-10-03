@@ -35,7 +35,7 @@ A good fit leaves small residuals. A *useful* fit also leaves residuals with no 
 
 The first model most of us reach for is a straight line, $V = a + bt$. Fitting a line has real advantages: the best $a$ and $b$ come from a formula, no guessing required, and the uncertainties in $a$ and $b$ do too. For data that really are linear, such as distance against time at constant speed, nothing more is needed.
 
-Try it on the capacitor data. Everything here comes from one experiment: twenty voltmeter readings, each uncertain by $\pm 0.05\ \text{V}$.
+Try it on the capacitor data. Everything here comes from one experiment: twenty voltmeter readings, each uncertain by $\pm 0.1\ \text{V}$.
 
 <InteractiveAnchor id="line-vs-curve-fit" />
 
@@ -51,7 +51,7 @@ $$
 V(t) = V_0\left(1 - e^{-t/\tau}\right),
 $$
 
-which has two parameters with physical meaning: $V_0$, the voltage the capacitor is heading toward, and $\tau$, the time it takes to cover about $63\%$ of the remaining distance. Switch the plot above to the exponential and the residuals lose their arch, scattering about zero mostly inside the $\pm 0.05\ \text{V}$ band.
+which has two parameters with physical meaning: $V_0$, the voltage the capacitor is heading toward, and $\tau$, the time it takes to cover about $63\%$ of the remaining distance. Switch the plot above to the exponential and the residuals lose their arch, scattering about zero mostly inside the $\pm 0.1\ \text{V}$ band.
 
 There is no formula that hands you the best $V_0$ and $\tau$. Instead the computer (or you, in Desmos) adjusts them iteratively until the curve can't be improved. The idea is the same as the line fit's, with one extra step: guess, compare to the data, adjust, repeat.
 
@@ -109,7 +109,7 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
   >
     #### Problem
 
-    Fitting $V_0\left(1-e^{-t/\tau}\right)$ to a charging curve and re-adjusting $V_0$ at each step, you find the residuals still look random for $\tau$ from $2.15\ \text{s}$ to $2.21\ \text{s}$. Report $\tau$.
+    Fitting $V_0\left(1-e^{-t/\tau}\right)$ to a charging curve and re-adjusting $V_0$ at each step, you find the residuals still look random for $\tau$ from $2.10\ \text{s}$ to $2.24\ \text{s}$. Report $\tau$.
 
     #### Use
 
@@ -118,14 +118,14 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
     #### Solve
 
     $$
-    \tau = \frac{2.15 + 2.21}{2} = 2.18\ \text{s}, \qquad \delta\tau = \frac{2.21 - 2.15}{2} = 0.03\ \text{s}.
+    \tau = \frac{2.10 + 2.24}{2} = 2.17\ \text{s}, \qquad \delta\tau = \frac{2.24 - 2.10}{2} = 0.07\ \text{s}.
     $$
 
-    So $\tau = 2.18 \pm 0.03\ \text{s}$.
+    So $\tau = 2.17 \pm 0.07\ \text{s}$.
 
     #### Check
 
-    The uncertainty is rounded to one significant figure and the value to the same decimal place, as before. An uncertainty of $0.03\ \text{s}$ is about $1.4\%$ of $\tau$, plausible for twenty points with $\pm 0.05\ \text{V}$ error bars.
+    The uncertainty is rounded to one significant figure and the value to the same decimal place, as before. An uncertainty of $0.07\ \text{s}$ is about $3\%$ of $\tau$, plausible for twenty points with $\pm 0.1\ \text{V}$ error bars.
   </WorkedExampleCard>
 
   <WorkedExampleCard
@@ -134,7 +134,7 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
   >
     #### Problem
 
-    The circuit used $R = 100 \pm 5\ \text{k}\Omega$ and $C = 22 \pm 2\ \mu\text{F}$. Does the fitted $\tau = 2.18 \pm 0.03\ \text{s}$ agree with $\tau = RC$?
+    The circuit used $R = 100 \pm 5\ \text{k}\Omega$ and $C = 22 \pm 2\ \mu\text{F}$. Does the fitted $\tau = 2.17 \pm 0.07\ \text{s}$ agree with $\tau = RC$?
 
     #### Use
 
@@ -147,11 +147,11 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
     \frac{\delta(RC)}{RC} = \frac{5}{100} + \frac{2}{22} = 5.0\% + 9.1\% = 14\%,
     $$
 
-    so $RC = 2.2 \pm 0.3\ \text{s}$. The two ranges, $[2.15,\ 2.21]$ and $[1.9,\ 2.5]$, overlap, and the discrepancy is $\tfrac{|2.18 - 2.2|}{0.3} \approx 0.1$ uncertainties.
+    so $RC = 2.2 \pm 0.3\ \text{s}$. The two ranges, $[2.10,\ 2.24]$ and $[1.9,\ 2.5]$, overlap, and the discrepancy is $\tfrac{|2.17 - 2.2|}{0.3} \approx 0.1$ uncertainties.
 
     #### Verdict
 
-    **Consistent** — but notice which uncertainty is doing the limiting. The fit pins $\tau$ down ten times better than the component tolerances do, so this test can only be as sharp as the parts you used. Measuring $R$ and $C$ more carefully, rather than collecting more voltage readings, is what would sharpen the comparison.
+    **Consistent** — but notice which uncertainty is doing the limiting. The fit pins $\tau$ down about four times better than the component tolerances do, so this test can only be as sharp as the parts you used. Measuring $R$ and $C$ more carefully, rather than collecting more voltage readings, is what would sharpen the comparison.
   </WorkedExampleCard>
 </ProblemSolvingSection>
 
@@ -188,7 +188,7 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
     },
     {
       id: 'repeat-trials',
-      question: 'You repeat the experiment 10 times and find the fitted $\\tau$ values have a standard deviation of $0.03\\ \\text{s}$. A single-run fit reported $\\delta\\tau = 0.03\\ \\text{s}$. What does this suggest?',
+      question: 'You repeat the experiment 10 times and find the fitted $\\tau$ values have a standard deviation of $0.07\\ \\text{s}$. A single-run fit reported $\\delta\\tau = 0.07\\ \\text{s}$. What does this suggest?',
       options: [
         { id: 'A', text: 'The single-run uncertainty is realistic.', isCorrect: true, explanation: 'The scatter between runs is a direct measurement of how much $\\tau$ varies. Agreement with the fit-reported value supports it.' },
         { id: 'B', text: 'One of the two numbers must be wrong.', isCorrect: false, explanation: 'They estimate the same thing in different ways. Agreement is the expected outcome for a good model with honest error bars.' },

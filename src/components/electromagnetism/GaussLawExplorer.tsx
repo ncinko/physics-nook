@@ -12,6 +12,7 @@ type SceneState = {
   measurement: ReturnType<typeof measureFlux>;
   arrows: boolean;
   normals: boolean;
+  inspectPatches: boolean;
 };
 
 export default function GaussLawExplorer() {
@@ -21,6 +22,8 @@ export default function GaussLawExplorer() {
   const [charges, setCharges] = useState<Charge3D[]>(() => gaussPreset('centered'));
   const [selected, setSelected] = useState(1);
   const [arrows, setArrows] = useState(true), [normals, setNormals] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [inspectPatches, setInspectPatches] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [hover, setHover] = useState<{ x: number; y: number; density: number } | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -144,7 +147,7 @@ export default function GaussLawExplorer() {
         if (hit) moveCharge.current(dragging, hit.toArray().map(x => Math.max(-3, Math.min(3, x))) as unknown as Vector3);
         return;
       }
-      if (event.buttons || !surfaceMesh || latest?.measurement.onBoundary) { setHover(null); return; }
+      if (event.buttons || !surfaceMesh || !latest?.inspectPatches || latest.measurement.onBoundary) { setHover(null); return; }
       const hit = ray.intersectObject(surfaceMesh)[0];
       if (hit && hit.faceIndex !== undefined && hit.faceIndex !== null && latest) {
         setHover({ x: Math.max(6, Math.min(rect.width - 170, event.clientX - rect.left + 12)),
@@ -180,7 +183,10 @@ export default function GaussLawExplorer() {
     };
   }, []);
 
-  useEffect(() => { updateScene.current({ charges, surface, measurement, arrows, normals }); }, [charges, surface, measurement, arrows, normals]);
+  useEffect(() => {
+    updateScene.current({ charges, surface, measurement, arrows,
+      normals: detailsOpen && normals, inspectPatches: detailsOpen && inspectPatches });
+  }, [charges, surface, measurement, arrows, normals, detailsOpen, inspectPatches]);
   const selectedCharge = charges.find(c => c.id === selected);
   const setCoordinate = (index: number, value: number) => {
     if (!selectedCharge) return;
@@ -208,12 +214,11 @@ export default function GaussLawExplorer() {
     </ControlBar>
     {unavailable ? <p className="my-8 text-center" role="status">The 3D scene needs WebGL. The controls and flux readouts below still work.</p> :
       <div ref={hostRef} className="relative my-2 aspect-[3/2] min-h-[280px] max-h-[520px] w-full overflow-hidden rounded-lg bg-[var(--surface-plot)]">
-        {hover && <div role="tooltip" className="pointer-events-none absolute rounded border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-xs"
+        {detailsOpen && inspectPatches && hover && <div role="tooltip" className="pointer-events-none absolute rounded border border-theme-grid bg-[var(--surface-elevated)] px-2 py-1 text-xs"
           style={{ left: hover.x, top: hover.y }}>E · n̂ ≈ {formatFlux(hover.density)} N/C</div>}
       </div>}
     <ControlBar className="mb-3">
       <Toggle label="Field arrows" checked={arrows} onChange={setArrows} />
-      <Toggle label="Outward normals" checked={normals} onChange={setNormals} />
       <Button variant="secondary" onClick={() => resetCamera.current()}>Reset view</Button>
     </ControlBar>
     <Readout>
@@ -223,18 +228,31 @@ export default function GaussLawExplorer() {
     {measurement.onBoundary && <p role="status" className="my-2 text-center text-sm">Move the charge clear of the surface to measure its flux.</p>}
     <p className="my-3 text-center text-sm text-[var(--text-muted)]"><span className="text-[var(--accent-red)]">Red: outward flux.</span>{' '}
       <span className="text-[var(--accent-blue)]">Blue: inward flux.</span> Drag a charge to move it; drag empty space to rotate.</p>
-    <ControlBar className="mb-3">
-      {charges.length > 0 && <Select label="Charge" value={String(selected)} onChange={v => setSelected(Number(v))}
-        options={charges.map(c => ({ value: String(c.id), label: `${c.id}: ${c.q > 0 ? '+' : '−'}1 nC` }))} />}
-      <Button variant="secondary" disabled={charges.length >= 4} onClick={() => addCharge(1e-9)}>Add +</Button>
-      <Button variant="secondary" disabled={charges.length >= 4} onClick={() => addCharge(-1e-9)}>Add −</Button>
-      <Button variant="secondary" disabled={!selectedCharge} onClick={() => {
-        const remaining = charges.filter(c => c.id !== selected); setCharges(remaining); setSelected(remaining[0]?.id ?? 0); setPreset('custom');
-      }}>Remove</Button>
-    </ControlBar>
-    {selectedCharge && <ControlBar>
-      {['x', 'y', 'z'].map((axis, index) => <Slider key={axis} label={axis} unit="m" min={-3} max={3} step={0.05}
-        value={selectedCharge.position[index]} onChange={v => setCoordinate(index, v)} format={v => v.toFixed(2)} />)}
-    </ControlBar>}
+    <details className="my-3 overflow-hidden rounded-[var(--radius-panel)] border border-[var(--grid-line)] bg-[var(--surface-elevated)]"
+      onToggle={event => { setDetailsOpen(event.currentTarget.open); setHover(null); }}>
+      <summary className="type-title cursor-pointer px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-blue)]">
+        Inspect patches and edit charges
+      </summary>
+      <div className="border-t border-[var(--grid-line)] p-3">
+        <ControlBar className="mb-3">
+          <Toggle label="Outward normals" checked={normals} onChange={setNormals} />
+          <Toggle label="Inspect patches" checked={inspectPatches} onChange={setInspectPatches} />
+        </ControlBar>
+        {inspectPatches && <p className="mb-3 text-sm text-[var(--text-muted)]">Hover over the surface to read the signed field component perpendicular to a patch, E · n̂. Red points outward; blue points inward.</p>}
+        <ControlBar className="mb-3">
+          {charges.length > 0 && <Select label="Charge" value={String(selected)} onChange={v => setSelected(Number(v))}
+            options={charges.map(c => ({ value: String(c.id), label: `${c.id}: ${c.q > 0 ? '+' : '−'}1 nC` }))} />}
+          <Button variant="secondary" disabled={charges.length >= 4} onClick={() => addCharge(1e-9)}>Add +</Button>
+          <Button variant="secondary" disabled={charges.length >= 4} onClick={() => addCharge(-1e-9)}>Add −</Button>
+          <Button variant="secondary" disabled={!selectedCharge} onClick={() => {
+            const remaining = charges.filter(c => c.id !== selected); setCharges(remaining); setSelected(remaining[0]?.id ?? 0); setPreset('custom');
+          }}>Remove</Button>
+        </ControlBar>
+        {selectedCharge && <ControlBar>
+          {['x', 'y', 'z'].map((axis, index) => <Slider key={axis} label={axis} unit="m" min={-3} max={3} step={0.05}
+            value={selectedCharge.position[index]} onChange={v => setCoordinate(index, v)} format={v => v.toFixed(2)} />)}
+        </ControlBar>}
+      </div>
+    </details>
   </div>;
 }

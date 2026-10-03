@@ -9,9 +9,9 @@ import { RC_DEFAULT_SEED, RC_TRUTH, fitRc, generateRcData, runTrials } from '../
 // directly, with no formula at all.
 
 const MAX_RUNS = 200;
-const AXIS_MIN = 2.05;
-const AXIS_MAX = 2.35;
-const BIN_WIDTH = 0.01;
+const AXIS_MIN = 1.9;
+const AXIS_MAX = 2.5;
+const BIN_WIDTH = 0.02;
 
 const VIEW_WIDTH = 640;
 const VIEW_HEIGHT = 230;
@@ -60,11 +60,11 @@ export function RepeatTrials() {
             />
           )}
           <line x1={PAD_LEFT} y1={BASELINE} x2={VIEW_WIDTH - PAD_RIGHT} y2={BASELINE} stroke="var(--grid-line)" />
-          {[2.1, 2.15, 2.2, 2.25, 2.3].map((tick) => (
+          {[2.0, 2.1, 2.2, 2.3, 2.4].map((tick) => (
             <g key={tick}>
               <line x1={xPix(tick)} y1={BASELINE} x2={xPix(tick)} y2={BASELINE + 5} stroke="var(--grid-line)" />
               <text x={xPix(tick)} y={BASELINE + 19} textAnchor="middle" fill="var(--text-muted)" fontSize="12">
-                {tick.toFixed(2)}
+                {tick.toFixed(1)}
               </text>
             </g>
           ))}

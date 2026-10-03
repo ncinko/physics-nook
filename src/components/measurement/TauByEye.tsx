@@ -77,7 +77,7 @@ export function TauByEye() {
           points={DATA}
           curves={[{ fn: (t) => chargingVoltage(t, effectiveV0, tau), color: 'var(--accent-red)' }]}
           residuals={residuals}
-          residualExtent={0.25}
+          residualExtent={0.5}
           residualBand={RC_SIGMA}
           xRange={[0, 10.5]}
           yRange={[0, 5.5]}

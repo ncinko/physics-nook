@@ -23,13 +23,38 @@ import { electromagnetismPath } from '../../data/modules';
 
 # Gauss’ Law
 
-When representing the electric field using a field line diagram, we can imagine the field lines "flowing out of" positive charges and "flowing into" negative charges.  If you then enclose a region of space with a box, you can then begin counting the number of field lines flowing into/out of the box.  It turns out this counting procedure is deeply connected to the charges within the box.
+**Gauss’ law** connects the electric field on a closed boundary to the net charge inside it. Picture field lines passing out of or into an imaginary box: the net amount passing outward depends only on the net enclosed charge. We will explore that big-picture relationship before giving it a mathematical definition.
 
 
-**Gauss’ law** makes this flowy analogy formal by connecting **electric flux** through a closed surface to the net charge inside the surface.
+Gauss’ law can be difficult because it asks us to make two layers of abstraction. First, we move from the usually intuitive Coulomb interaction between charges to a field defined throughout space, describing the force a charge would feel there. Then we make statements about the structure of that field using imaginary surfaces. The field is physically meaningful; the arrows and field lines we draw are representations of it, and the surfaces are boundaries we imagine for our calculation.
 
 
-**Electric flux** measures how much electric field "passes through" a surface.  The field itself is not a flowing substance; we are actually determining the field component perpendicular to the surface.
+Before continuing, be comfortable reading the electric field as both a **vector field** (an arrow giving the field at each point) and a **field-line sketch** (curves whose tangents follow its direction). If either picture still feels unfamiliar, revisit the [Electric Field lesson](/electromagnetism) and its [explorer](/electromagnetism#electric-field-explorer).
+
+## Explore the Big Picture
+
+A **Gaussian surface** is an imaginary closed boundary surrounding a volume, such as the surface of a sphere or all six faces of a box. It is not a conducting shell: drawing or resizing it does not change the physical field.
+
+For now, read **electric flux** as a signed measure of how much field passes through a surface. The field is not a flowing substance. The explorer’s total flux adds outward contributions and subtracts inward ones across the entire boundary. Red shading marks outward contributions; blue marks inward ones. We will define the quantity and its units precisely below.
+
+<InteractiveAnchor id="gauss-law-explorer" />
+
+<SimulationBlock title="Gauss’ Law Explorer" description="Move charges and change the Gaussian surface. Compare enclosed charge with total electric flux.">
+  <GaussLawExplorer client:only="react" />
+</SimulationBlock>
+
+Try these comparisons, watching both the field arrows and the two totals:
+
+- Compare **Centered charge** and **Off-center charge**. The field pattern and surface shading change, but the enclosed charge and total flux stay the same.
+- Change the surface’s shape and size while keeping the same charge enclosed. The boundary samples different parts of the field, yet its total flux stays fixed.
+- Compare **External charge** and **Enclosed dipole**. Both have zero net enclosed charge and zero total flux, even though the field is nonzero. Inward and outward contributions cancel.
+- Drag a charge across the boundary. The enclosed charge and total flux change. Close to the boundary, the explorer asks you to move the charge clearly inside or outside before reading the totals.
+
+The details under **Inspect patches and edit charges** are available when you are ready. First, let’s develop the language for describing what each small piece of the surface contributes.
+
+## Surface Normals and Electric Flux
+
+To measure how much field passes through a surface, we need its component perpendicular to that surface. A **normal vector** is an arrow perpendicular to a surface; a **unit normal**, $\hat{\mathbf n}$, has magnitude one and specifies its orientation. A flat surface has two possible normal directions. Choose one: field along that direction contributes positive flux, and field opposing it contributes negative flux.
 
 For a flat surface in a uniform field,
 
@@ -37,7 +62,7 @@ $$
 \Phi_E = EA\cos\theta,
 $$
 
-where $A$ is the area and $\theta$ is the angle between the electric field and the surface’s **normal** — an arrow perpendicular to the surface. Flux has units of $\text{N}\cdot\text{m}^2/\text{C}$.
+where $E$ is the field magnitude, $A$ is the area, $\theta$ is the angle between the field and the chosen normal, and $\Phi_E$ denotes electric flux. Flux has units of $\text{N}\cdot\text{m}^2/\text{C}$.
 
 <InteractiveAnchor id="electric-flux-patch" />
 
@@ -63,7 +88,7 @@ $$
 \Phi_E=\int_S \mathbf E\cdot d\mathbf A.
 $$
 
-The integral is the limit of that sum as the patches become small.
+Here $\mathbf E_i$ is the field at patch $i$, $\hat{\mathbf n}_i$ is its unit normal, and $\Delta A_i$ is its area. The integral over the surface $S$ is the limit of that sum as the patches become small, with $d\mathbf A=\hat{\mathbf n}\,dA$ the infinitesimal area vector and $\mathbf E$ the field at that point.
 
 </DerivationPanel>
 
@@ -90,7 +115,7 @@ $$
 
 The circle on the integral reminds us to include the entire closed surface. $Q_{\mathrm{enclosed}}$ is the *net* charge inside, including both signs, and $\varepsilon_0\approx8.85\times10^{-12}\ \text{C}^2/(\text{N}\cdot\text{m}^2)$ is the vacuum permittivity. It is related to Coulomb’s constant by $k=1/(4\pi\varepsilon_0)$.
 
-The **Gaussian surface** is an imaginary boundary used for this calculation. It is not a conducting shell, and drawing or resizing it does not change the field.
+This is the precise version of the relationship you explored above. Return to the [explorer](#gauss-law-explorer), expand **Inspect patches and edit charges**, and switch on **Outward normals** and **Inspect patches**. The shading and patch readout describe the signed normal component $\mathbf E\cdot\hat{\mathbf n}$, not the flux of an entire patch; that contribution also depends on its area. A point charge exactly on the boundary makes the ordinary surface integral singular, so move it clearly inside or outside before reading the total.
 
 <DerivationPanel title="How does this agree with Coulomb’s law?">
 
@@ -115,18 +140,6 @@ An external charge can produce a strong field on a Gaussian surface. Its contrib
 By superposition, every charge contributes to the field $\mathbf E$ on the left side of Gauss’ law. Only enclosed charges contribute to the net flux on the right side. Two equal and opposite enclosed charges also give zero net flux, despite producing a nonzero field.
 
 </DerivationPanel>
-
-## Gauss’ Law Explorer
-
-Start with a centered charge, then move it off-center. The field and surface shading change, but the total flux stays the same. Try an external charge, an enclosed dipole, and different surface shapes. A charge crossing the boundary changes the enclosed charge and the total flux.
-
-<InteractiveAnchor id="gauss-law-explorer" />
-
-<SimulationBlock title="Gauss’ Law Explorer" description="Move charges and change the Gaussian surface. Compare enclosed charge with total electric flux.">
-  <GaussLawExplorer client:only="react" />
-</SimulationBlock>
-
-The surface shading represents the signed normal component $\mathbf E\cdot\hat{\mathbf n}$. Hover over a patch to inspect it. A point charge exactly on the boundary makes the ordinary surface integral singular, so move it clearly inside or outside before reading the total.
 
 ## Using Symmetry
 
@@ -245,6 +258,11 @@ For positive $\lambda$, the field points away from the line; for negative $\lamb
 </ProblemSolvingSection>
 
 <QuestionSequence client:load eyebrow="Gauss’ Law Checkpoint" questions={[
+  { id: 'gauss-field-and-surface', question: 'What happens when you draw a different Gaussian surface around the same fixed charges?', options: [
+    { id: 'A', text: 'The physical electric field stays the same; the imaginary boundary samples it in different places.', isCorrect: true, explanation: 'The charges determine the field. Arrows and field lines represent it, while the Gaussian surface is a boundary chosen for measuring flux.' },
+    { id: 'B', text: 'The electric field rearranges itself to match the new surface.', isCorrect: false, explanation: 'An imaginary boundary does not change the charges or their field. Its shape changes where we evaluate the field.' },
+    { id: 'C', text: 'The surface acts like a conducting shell and blocks the field.', isCorrect: false, explanation: 'A Gaussian surface is not a material object. Drawing it introduces no conductor and does not block the field.' },
+  ]},
   { id: 'gauss-flux-angle', question: 'A uniform electric field lies parallel to a flat surface. What is the flux through it?', options: [
     { id: 'A', text: 'Zero.', isCorrect: true, explanation: 'The field is perpendicular to the surface normal, so the cosine is zero.' },
     { id: 'B', text: 'EA.', isCorrect: false, explanation: 'EA is the maximum positive flux, when the field points along the normal, not along the surface.' },

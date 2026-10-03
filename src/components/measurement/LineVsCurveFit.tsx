@@ -28,7 +28,7 @@ const EXPONENTIAL = fitRc(DATA);
 const LINE_EXTENT = LINE
   ? Math.ceil(Math.max(...LINE.residuals.map((value) => Math.abs(value))) * 10) / 10
   : 0.5;
-const ZOOM_EXTENT = 0.15;
+const ZOOM_EXTENT = 0.3;
 
 export function LineVsCurveFit() {
   const [model, setModel] = useState<ModelKind>('line');

@@ -23,7 +23,7 @@ import { createRng } from '../shared/rng.ts';
 export const RC_TRUTH = { v0: 5, tau: 2.2 } as const;
 
 /** Voltmeter uncertainty on every reading, in volts. */
-export const RC_SIGMA = 0.05;
+export const RC_SIGMA = 0.1;
 
 /** Reading times, in seconds. */
 export const RC_TIMES: readonly number[] = Array.from({ length: 20 }, (_, i) => 0.5 * (i + 1));

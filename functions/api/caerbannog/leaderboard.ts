@@ -6,11 +6,16 @@ import {
   parseJsonBody,
 } from '../../../src/lib/kinematics/leaderboardApi';
 import {
+  caerbannogScore,
   normalizeCaerbannogScoreRow,
   validateCaerbannogScoreSubmission,
 } from '../../../src/lib/caerbannog/leaderboard';
+import { FIXED_STEP_MS, REPLAY_VERSION, replayRun } from '../../../src/lib/caerbannog/replay';
+import { isBlockedLeaderboardName } from '../../../src/lib/kinematics/stopZones';
 
-const SCORE_SUBMITS_PER_HOUR = 20;
+const SCORE_SUBMITS_PER_HOUR = 5;
+// Network and timer jitter between the run being minted and the first frame.
+const REPLAY_CLOCK_SLACK_MS = 5_000;
 
 const fetchTopScores = async (db: any, limit: number) => {
   const result = await db
@@ -80,16 +85,29 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: R
     );
   }
 
+  // The score is never read from the request. The client sends its input log;
+  // the server re-plays it from the seed it issued and scores the result.
   const body = payload as Record<string, unknown>;
   const runId = typeof body.runId === 'string' ? body.runId.trim() : '';
-  const validation = validateCaerbannogScoreSubmission(body);
 
-  if (!runId || !validation.ok) {
+  if (!runId || !Array.isArray(body.log)) {
+    return jsonResponse({ ok: false, error: 'Invalid score payload.' }, { status: 400 });
+  }
+
+  if (body.version !== REPLAY_VERSION) {
+    return jsonResponse(
+      { ok: false, error: 'This game build is out of date. Please reload and play again.' },
+      { status: 409 },
+    );
+  }
+
+  // Checked before the run is redeemed so a rejected name doesn't burn the run.
+  if (isBlockedLeaderboardName(body.name)) {
     return jsonResponse(
       {
         ok: false,
         error: 'Invalid score payload.',
-        errors: validation.errors,
+        errors: ['name is not allowed. Please choose a different display name.'],
       },
       { status: 400 },
     );
@@ -113,25 +131,58 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: R
     );
   }
 
-  const runUpdate = await db
+  // Redeem the run atomically and read back the seed and start time in one go.
+  // Runs minted before seeds existed have a NULL seed and can't be replayed.
+  const run = await db
     .prepare(
       `UPDATE caerbannog_runs
        SET used_at = ?
        WHERE id = ?
          AND ip_hash = ?
          AND used_at IS NULL
-         AND expires_at >= ?`,
+         AND expires_at >= ?
+         AND seed IS NOT NULL
+       RETURNING seed, created_at`,
     )
     .bind(now, runId, ipHash, now)
-    .run();
+    .first();
 
-  if (Number(runUpdate?.meta?.changes ?? 0) !== 1) {
+  if (!run) {
     return jsonResponse(
       {
         ok: false,
         error: 'Siege run is missing, expired, or already used.',
       },
       { status: 409 },
+    );
+  }
+
+  const replay = replayRun(Number(run.seed), body.log);
+  if (!replay.ok) {
+    return jsonResponse({ ok: false, error: 'Invalid score payload.', errors: [replay.error] }, { status: 400 });
+  }
+
+  // The game can only be played in real time, so a run that took longer to play
+  // than the wall clock allowed was simulated offline.
+  const playedMs = replay.totalSteps * FIXED_STEP_MS;
+  if (playedMs > now - Number(run.created_at) + REPLAY_CLOCK_SLACK_MS) {
+    return jsonResponse(
+      { ok: false, error: 'Invalid score payload.', errors: ['run finished faster than real time allows.'] },
+      { status: 400 },
+    );
+  }
+
+  const validation = validateCaerbannogScoreSubmission({
+    name: body.name,
+    score: caerbannogScore(replay.state.wave, replay.state.score, replay.state.goldEarned),
+    wave: replay.state.wave,
+    enemiesSlain: replay.state.score,
+    goldCollected: replay.state.goldEarned,
+  });
+  if (!validation.ok) {
+    return jsonResponse(
+      { ok: false, error: 'Invalid score payload.', errors: validation.errors },
+      { status: 400 },
     );
   }
 

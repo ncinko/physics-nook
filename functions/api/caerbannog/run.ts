@@ -4,6 +4,7 @@ import {
   hashClientAddress,
   jsonResponse,
 } from '../../../src/lib/kinematics/leaderboardApi';
+import { REPLAY_VERSION } from '../../../src/lib/caerbannog/replay';
 
 const RUNS_PER_HOUR = 60;
 // A defense run can stretch across many waves, so give the token a long life.
@@ -45,18 +46,22 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: R
 
   const runId = crypto.randomUUID();
   const expiresAt = now + RUN_TTL_MS;
+  // The server picks the seed, so a player cannot shop for a favourable siege.
+  const seed = crypto.getRandomValues(new Uint32Array(1))[0] % 1_000_000_000;
 
   await db
     .prepare(
-      `INSERT INTO caerbannog_runs (id, ip_hash, user_agent, created_at, expires_at, used_at)
-       VALUES (?, ?, ?, ?, ?, NULL)`,
+      `INSERT INTO caerbannog_runs (id, ip_hash, user_agent, created_at, expires_at, used_at, seed)
+       VALUES (?, ?, ?, ?, ?, NULL, ?)`,
     )
-    .bind(runId, ipHash, getUserAgent(request), now, expiresAt)
+    .bind(runId, ipHash, getUserAgent(request), now, expiresAt, seed)
     .run();
 
   return jsonResponse({
     ok: true,
     runId,
+    seed,
+    version: REPLAY_VERSION,
     expiresAt,
   });
 };

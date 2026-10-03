@@ -67,8 +67,16 @@ import {
 } from '../../../lib/kinematics/stopZones';
 import { generateLeaderboardName } from '../../../lib/shared/leaderboardNames';
 import { Cloud, Dices, Trophy, WifiOff } from 'lucide-react';
+import {
+  FIXED_STEP_MS,
+  MAX_THROW_SPEED,
+  REPLAY_VERSION,
+  ReplayRecorder,
+} from '../../../lib/caerbannog/replay';
 import { BunnySprite, KILLER_PALETTE } from '../BunnySprite';
 import {
+  EXPLOSION_FRAMES,
+  EXPLOSION_GRID,
   GRENADE_SPRITE,
   KEEP_SPRITE,
   KNIGHT_COLS,
@@ -96,7 +104,7 @@ const SY = PLOT_H / (W_MAX_Y - W_MIN_Y); // screen px per world unit (y)
 const sx = (wx: number) => MARGIN + (wx - W_MIN_X) * SX;
 const sy = (wy: number) => MARGIN + (W_MAX_Y - wy) * SY;
 
-const MAX_POWER = 80; // clamp on the launch velocity (same reach as before)
+const MAX_POWER = MAX_THROW_SPEED; // clamp on the launch velocity (the server refuses stronger throws)
 // The slingshot maps full launch power to a short pull-back, so the cursor
 // never has to travel far enough to leave the viewport while aiming.
 const MAX_DRAW = 8; // world units of draw-back that reach MAX_POWER
@@ -217,6 +225,9 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
   // Cloud leaderboard, shown on the game-over screen. A run token is minted
   // server-side when a siege begins and redeemed once when the score is posted.
   const runIdRef = useRef<string | null>(null);
+  // Every input is logged so the server can re-play the run and score it itself.
+  const recorderRef = useRef(new ReplayRecorder());
+  const startingRef = useRef(false);
   const submittedRef = useRef(false);
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking');
   const [cloudScores, setCloudScores] = useState<CaerbannogScoreEntry[]>([]);
@@ -299,21 +310,30 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     }
   }, []);
 
-  const createServerRun = useCallback(async () => {
+  // Ask the server for a run token and its seed. The siege must be played from
+  // that seed for the cloud score to replay, so a failed request just means an
+  // offline (local-only) run on a random seed.
+  const createServerRun = useCallback(async (): Promise<number> => {
     try {
       const response = await fetch('/api/caerbannog/run', {
         method: 'POST',
         headers: { accept: 'application/json' },
+        signal: AbortSignal.timeout(4000), // don't leave the player staring at Begin
       });
       if (!response.ok) {
         throw new Error(`Caerbannog run request failed: ${response.status}`);
       }
       const body = await response.json();
-      runIdRef.current = typeof body.runId === 'string' ? body.runId : null;
-      setApiStatus(runIdRef.current ? 'online' : 'offline');
+      if (typeof body.runId === 'string' && Number.isInteger(body.seed)) {
+        runIdRef.current = body.runId;
+        setApiStatus('online');
+        return body.seed as number;
+      }
+      throw new Error('Caerbannog run response was missing its seed');
     } catch {
       runIdRef.current = null;
       setApiStatus('offline');
+      return Math.floor(Math.random() * 1e9);
     }
   }, []);
 
@@ -354,13 +374,12 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
       const response = await fetch('/api/caerbannog/leaderboard', {
         method: 'POST',
         headers: { accept: 'application/json', 'content-type': 'application/json' },
+        // No score fields: the server derives them by replaying the log.
         body: JSON.stringify({
           runId: runIdRef.current,
           name: score.name,
-          score: score.score,
-          wave: score.wave,
-          enemiesSlain: score.enemiesSlain,
-          goldCollected: score.goldCollected,
+          version: REPLAY_VERSION,
+          log: recorderRef.current.ops,
         }),
       });
       if (!response.ok) {
@@ -391,10 +410,26 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     }
     let raf = 0;
     let last = performance.now();
+    let pending = 0;
+    // Fixed timestep: the simulation advances in constant slices however fast
+    // frames arrive, which is what lets the server re-play a run exactly. A
+    // stalled tab is capped so it can't owe an unbounded backlog of steps.
+    const MAX_STEPS_PER_FRAME = 5;
     const tick = (now: number) => {
-      const dt = now - last;
+      pending = Math.min(pending + (now - last), FIXED_STEP_MS * MAX_STEPS_PER_FRAME);
       last = now;
-      setGame((prev) => step(prev, dt));
+      const steps = Math.floor(pending / FIXED_STEP_MS);
+      if (steps > 0) {
+        pending -= steps * FIXED_STEP_MS;
+        recorderRef.current.steps(steps);
+        setGame((prev) => {
+          let next = prev;
+          for (let i = 0; i < steps; i += 1) {
+            next = step(next, FIXED_STEP_MS);
+          }
+          return next;
+        });
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -431,6 +466,7 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
     if (target) {
       const velocity = pullToVelocity(target);
       if (magnitude(velocity) > 1) {
+        recorderRef.current.push(['t', velocity.x, velocity.y]);
         setGame((prev) => throwGrenade(prev, velocity));
       }
     }
@@ -438,30 +474,59 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
 
   // Mint a fresh server run token and clear the previous submission state so the
   // new siege can post exactly one score when (if) the keep eventually falls.
-  const armRun = () => {
+  // The siege begins only once the server has handed back its seed, so the run
+  // it later replays is the run that was played. Offline, a random seed is used.
+  const startSiege = async () => {
+    if (startingRef.current) {
+      return;
+    }
+    startingRef.current = true;
     submittedRef.current = false;
     runIdRef.current = null;
     setSubmitted(false);
     setPlayerName('');
-    void createServerRun();
+    try {
+      seedRef.current = await createServerRun();
+      recorderRef.current.reset();
+      recorderRef.current.push(['g']);
+      setGame(() => startGame(createGame(seedRef.current)));
+    } finally {
+      startingRef.current = false;
+    }
   };
-  const begin = () => {
-    armRun();
-    setGame((prev) => startGame(prev));
+  const begin = () => void startSiege();
+  const restart = () => void startSiege();
+  const pickBlessing = (id: BlessingId) => {
+    recorderRef.current.push(['b', id]);
+    setGame((prev) => chooseBlessing(prev, id));
   };
-  const pickBlessing = (id: BlessingId) => setGame((prev) => chooseBlessing(prev, id));
-  const pickSpecial = (weapon: SpecialWeapon) => setGame((prev) => chooseSpecial(prev, weapon));
-  const pickEnhancement = (weapon: SpecialWeapon) =>
+  const pickSpecial = (weapon: SpecialWeapon) => {
+    if (weapon !== 'none') {
+      recorderRef.current.push(['p', weapon]);
+    }
+    setGame((prev) => chooseSpecial(prev, weapon));
+  };
+  const pickEnhancement = (weapon: SpecialWeapon) => {
+    if (weapon !== 'none') {
+      recorderRef.current.push(['e', weapon]);
+    }
     setGame((prev) => chooseEnhancement(prev, weapon));
-  const amplifySpecial = (id: SpecialId, track: SpecialTrack) =>
+  };
+  const amplifySpecial = (id: SpecialId, track: SpecialTrack) => {
+    recorderRef.current.push(['u', id, track]);
     setGame((prev) => upgradeSpecial(prev, id, track));
-  const purchase = (id: ShopId) => setGame((prev) => buyDefense(prev, id));
-  const repair = () => setGame((prev) => repairKeep(prev));
-  const continueSiege = () => setGame((prev) => nextWave(prev));
-  const restart = () => {
-    seedRef.current = Math.floor(Math.random() * 1e9);
-    armRun();
-    setGame(() => startGame(createGame(seedRef.current)));
+  };
+  const purchase = (id: ShopId) => {
+    recorderRef.current.push(['y', id]);
+    setGame((prev) => buyDefense(prev, id));
+  };
+  const repair = () => {
+    recorderRef.current.push(['r']);
+    setGame((prev) => repairKeep(prev));
+  };
+  const continueSiege = () => {
+    recorderRef.current.push(['n']);
+    setGame((prev) => nextWave(prev));
   };
 
   const stats = state.stats;
@@ -517,19 +582,26 @@ export default function CaerbannogDefense({ onExit }: { onExit?: () => void }) {
               Drawn at the TRUE kill radius from frame one — a world circle, which
               is an ellipse on screen because x/y use different scales — so the
               visible blast matches exactly what took damage at detonation. The
-              outer ring marks the kill boundary; the whole thing just fades out. */}
+              pixel frames swap with age (no alpha fades) to match the other sprites. */}
           {state.explosions.map((boom) => {
-            const t = boom.age / boom.ttl;
-            const cx = sx(boom.pos.x);
-            const cy = sy(boom.pos.y);
-            const rx = boom.radius * SX;
-            const ry = boom.radius * SY;
-            const ring = 1 + 0.18 * t; // a shockwave that expands slightly as it fades
+            const t = Math.min(0.999, boom.age / boom.ttl);
+            const frame = EXPLOSION_FRAMES[Math.floor(t * EXPLOSION_FRAMES.length)];
+            const cw = (boom.radius * SX * 2) / EXPLOSION_GRID;
+            const ch = (boom.radius * SY * 2) / EXPLOSION_GRID;
+            const left = sx(boom.pos.x) - boom.radius * SX;
+            const top = sy(boom.pos.y) - boom.radius * SY;
             return (
-              <g key={boom.id}>
-                <ellipse cx={cx} cy={cy} rx={rx * ring} ry={ry * ring} fill="none" stroke={COLORS.blast} strokeWidth={2.5} opacity={(1 - t) * 0.85} />
-                <ellipse cx={cx} cy={cy} rx={rx} ry={ry} fill={COLORS.blast} opacity={(1 - t) * 0.5} />
-                <ellipse cx={cx} cy={cy} rx={rx * 0.5} ry={ry * 0.5} fill="#fde68a" opacity={1 - t} />
+              <g key={boom.id} shapeRendering="crispEdges">
+                {frame.map((run, i) => (
+                  <rect
+                    key={i}
+                    x={left + run.x * cw}
+                    y={top + run.y * ch}
+                    width={run.w * cw}
+                    height={ch}
+                    fill={run.fill}
+                  />
+                ))}
               </g>
             );
           })}

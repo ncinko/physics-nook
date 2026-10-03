@@ -39,7 +39,7 @@
     "test:ripple": "node --experimental-strip-types tests/ripple/run-tests.ts",
     "test:solar": "node --experimental-strip-types tests/solar/run-tests.ts",
     "test:astronomy": "node --experimental-strip-types tests/astronomy/run-tests.ts",
-    "test:caerbannog": "node --experimental-strip-types tests/caerbannog/run-tests.ts",
+    "test:caerbannog": "node --experimental-strip-types tests/caerbannog/run-tests.ts && node --experimental-strip-types tests/caerbannog/replay-tests.ts",
     "test:electromagnetism": "node --experimental-strip-types tests/electromagnetism/run-tests.ts",
     "test:rotation": "node --experimental-strip-types tests/rotation/run-tests.ts",
     "test:hamlet": "node --experimental-strip-types tests/hamlet/run-tests.ts",

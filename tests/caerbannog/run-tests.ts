@@ -11,6 +11,7 @@ import {
 import { isBlessingWave, waveConfig } from '../../src/lib/caerbannog/waves.ts';
 import {
   CAERBANNOG_DEFAULTS,
+  caerbannogRunLimits,
   caerbannogScore,
   selectBestCaerbannogScoresByUniqueName,
   validateCaerbannogScoreSubmission,
@@ -408,6 +409,17 @@ console.log('Caerbannog game step tests passed.');
   });
   const afterBruteTim = step(bruteDefended, 16);
   near(afterBruteTim.rabbits[0].hp, 10 - timStats(1).damage * 0.35);
+
+  // Tim hits only the frontmost rabbit; a rabbit right behind it is untouched.
+  const packed = playing({
+    rabbits: [rabbitAt(50, 10), rabbitAt(51, 10)],
+    stats: { ...startGame(createGame(7)).stats, timLevel: 1, timCooldown: 0 },
+  });
+  const afterPack = step(packed, 16);
+  const front = afterPack.rabbits.reduce((a, b) => (a.x < b.x ? a : b));
+  const behind = afterPack.rabbits.reduce((a, b) => (a.x < b.x ? b : a));
+  near(front.hp, 10 - timStats(1).damage);
+  assert.equal(behind.hp, 10, 'Tim does not splash onto rabbits behind the target');
 }
 
 // --- Fixed archetype schedule and milestone tuning ---
@@ -521,13 +533,13 @@ console.log('Caerbannog game step tests passed.');
   assert.equal(specialChance(0), 0);
   near(specialChance(1), 0.25);
   assert.ok(specialChance(2) > specialChance(1));
-  assert.ok(specialChance(99) <= 0.9);
+  assert.ok(specialChance(99) <= 0.75);
   assert.ok(specialUpgradeCost(2) > specialUpgradeCost(1));
 
   // Power tracks: cluster scatters more bomblets, lightning sears a larger share.
   assert.equal(clusterBomblets(0), 0);
-  assert.equal(clusterBomblets(1), 5);
-  assert.equal(clusterBomblets(2), 6);
+  assert.equal(clusterBomblets(1), 3);
+  assert.equal(clusterBomblets(2), 4);
   assert.equal(lightningPct(0), 0);
   near(lightningPct(1), 0.15);
   assert.ok(lightningPct(2) > lightningPct(1));
@@ -820,7 +832,7 @@ console.log('Caerbannog game step tests passed.');
     rabbits: [rabbitAt(40, 10)],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
   });
-  near(step(burning, 50).rabbits[0].hp, 10 - 0.35 * 0.05, 1e-6);
+  near(step(burning, 50).rabbits[0].hp, 10 - 0.28 * 0.05, 1e-6);
   const safe = playing({
     rabbits: [rabbitAt(80, 10)],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
@@ -833,13 +845,13 @@ console.log('Caerbannog game step tests passed.');
     rabbits: [rabbitAt(40, 10)],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
   });
-  near(step(lateBurning, 50).rabbits[0].hp, 10 - 0.35 * 0.05 * 0.75, 1e-6);
+  near(step(lateBurning, 50).rabbits[0].hp, 10 - 0.28 * 0.05 * 0.75, 1e-6);
   const bossBurning = playing({
     wave: 40,
     rabbits: [rabbitAt(40, 10, 'boss')],
     firePatches: [{ id: 1, x: 40, radius: 6, age: 0, ttl: 2.5 }],
   });
-  near(step(bossBurning, 50).rabbits[0].hp, 10 - 0.35 * 0.05 * 0.375, 1e-6);
+  near(step(bossBurning, 50).rabbits[0].hp, 10 - 0.28 * 0.05 * 0.375, 1e-6);
 
   // Spent patches burn out.
   const fading = playing({ firePatches: [{ id: 1, x: 40, radius: 6, age: 2.49, ttl: 2.5 }] });
@@ -880,10 +892,12 @@ const runUntilPhaseChange = (initial: GameState, maxSeconds = 120): GameState =>
   return state;
 };
 
-// Maxed static defenses still dispose of the ordinary late-game line, but the
+// Maxed static defenses still dispose of the ordinary mid-game line, but the
 // real milestone composition eventually overwhelms a player who never fires.
+// Tim is single-target, so statics alone no longer carry the tightly packed
+// wave-20 line; that now takes grenades.
 {
-  const wave = 20;
+  const wave = 15;
   const cfg = waveConfig(wave);
   const spacing = cfg.speed * cfg.spawnInterval;
   const commons = Array.from({ length: cfg.count }, (_, i): Rabbit => ({
@@ -1051,6 +1065,35 @@ console.log('Caerbannog progression tests passed.');
     goldCollected: CAERBANNOG_DEFAULTS.maxScore - 1,
   });
   assert.equal(overMax.ok, false, 'scores beyond the cap are rejected');
+
+  // Plausibility: the wave cap is the real game length, and kills/gold are held
+  // to what the wave could actually yield.
+  const submit = (wave: number, enemiesSlain: number, goldCollected: number) =>
+    validateCaerbannogScoreSubmission({
+      name: 'x',
+      score: caerbannogScore(wave, enemiesSlain, goldCollected),
+      wave,
+      enemiesSlain,
+      goldCollected,
+    });
+  assert.equal(submit(FINAL_WAVE + 1, 10, 10).ok, false, 'waves past the siege are rejected');
+  assert.equal(submit(2000, 500_000, 5_000_000).ok, false, 'the old forged maximum is rejected');
+
+  const limits10 = caerbannogRunLimits(10);
+  assert.ok(submit(10, limits10.maxEnemiesSlain, 0).ok, 'felling every rabbit is possible');
+  assert.equal(submit(10, limits10.maxEnemiesSlain + 1, 0).ok, false, 'more kills than rabbits sent');
+  assert.ok(submit(10, 0, limits10.maxGoldCollected).ok, 'the gold ceiling itself is reachable');
+  assert.equal(submit(10, 0, limits10.maxGoldCollected + 1).ok, false, 'gold above the ceiling');
+  assert.ok(caerbannogRunLimits(20).maxGoldCollected > limits10.maxGoldCollected);
+  assert.ok(caerbannogRunLimits(20).minElapsedMs > limits10.minElapsedMs, 'deeper runs take longer');
+  assert.equal(caerbannogRunLimits(1).minElapsedMs, 0, 'wave 1 has no cleared waves behind it');
+
+  // A genuine all-defenses playthrough never exceeds its own ceiling.
+  let honest = startGame(createGame(5));
+  honest = step(honest, 50);
+  const honestLimits = caerbannogRunLimits(honest.wave);
+  assert.ok(honest.goldEarned <= honestLimits.maxGoldCollected);
+  assert.ok(honest.score <= honestLimits.maxEnemiesSlain);
 }
 
 // --- Leaderboard ranking: best-per-name, highest score first ---

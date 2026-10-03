@@ -100,9 +100,10 @@ export type SpecialTrack = 'freq' | 'power';
 export const SPECIAL_IDS: SpecialId[] = ['cluster', 'lightning'];
 
 export const MAX_SPECIAL_LEVEL = 6;
-const CLUSTER_BOMBLETS_BASE = 5; // bomblets at the first (level-1) power tier
+export const CLUSTER_BOMBLETS_BASE = 3; // bomblets at the first (level-1) power tier
 const CLUSTER_RADIUS_SCALE = 0.55; // bomblet blast radius vs the main grenade
-const CLUSTER_DAMAGE_SCALE = 0.6; // bomblet damage vs the main grenade
+export const CLUSTER_DAMAGE_SCALE = 0.45; // bomblet damage vs the main grenade
+const SPECIAL_CHANCE_CAP = 0.75;
 const LIGHTNING_SKY_Y = 40; // world height the bolt descends from
 
 // Wave-30 enhancement choices (flat, unleveled effects on one owned special):
@@ -110,7 +111,7 @@ export const LIGHTNING_ARC_RANGE = 16; // world units a bolt will chain across
 export const LIGHTNING_ARC_MAX_TARGETS = 2; // extra rabbits a single bolt arcs to
 const LIGHTNING_ARC_FALLOFF = 0.5; // arced rabbits take this share of the strike %
 const CLUSTER_FIRE_TTL = 2.5; // seconds a scorched patch keeps burning
-const CLUSTER_FIRE_DPS_SCALE = 0.35; // burn dps as a share of base grenade damage
+const CLUSTER_FIRE_DPS_SCALE = 0.28; // burn dps as a share of base grenade damage
 
 // Elemental damage is deliberately steady through wave 20, then loses some of
 // its bite as the horde adapts. At wave 50, ordinary late-game rabbits take 65%
@@ -135,7 +136,7 @@ export interface SpecialState {
 
 /** Chance (0–1) a special triggers after a blast, by its frequency level. */
 export const specialChance = (level: number): number =>
-  level <= 0 ? 0 : Math.min(0.9, 0.25 + (level - 1) * 0.15);
+  level <= 0 ? 0 : Math.min(SPECIAL_CHANCE_CAP, 0.25 + (level - 1) * 0.15);
 
 /** Bomblets a cluster scatters when it triggers, by its power level. */
 export const clusterBomblets = (level: number): number =>
@@ -146,7 +147,7 @@ export const lightningPct = (level: number): number =>
   level <= 0 ? 0 : Math.min(0.5, 0.15 + (level - 1) * 0.07);
 
 /** Gold to advance one special track from its current level to the next. */
-export const specialUpgradeCost = (level: number): number => 35 + Math.max(0, level - 1) * 30;
+export const specialUpgradeCost = (level: number): number => 45 + Math.max(0, level - 1) * 35;
 
 export interface RabbitTraits {
   hpMultiplier: number;
@@ -322,11 +323,10 @@ export const caltropsSlow = (level: number): number =>
 /** Caltrops damage-over-time (hp/sec) dealt to rabbits standing in the zone. */
 export const caltropsDps = (level: number): number => level * 0.7;
 
-/** Tim's cast cadence, per-hit damage, and splash radius at a given level. */
-export const timStats = (level: number): { interval: number; damage: number; splash: number } => ({
+/** Tim's cast cadence and per-hit damage (single target) at a given level. */
+export const timStats = (level: number): { interval: number; damage: number } => ({
   interval: Math.max(0.7, 2.4 - level * 0.45),
   damage: 1 + level,
-  splash: 4,
 });
 
 /** Fixed archetype tuning. Wave is used only for the milestone boss bounty. */
@@ -915,11 +915,7 @@ export const step = (state: GameState, dtMs: number): GameState => {
           target = r;
         }
       }
-      for (const r of rabbits) {
-        if (Math.abs(r.x - target.x) <= tim.splash) {
-          r.hp -= tim.damage * rabbitTraits(r.kind, state.wave).staticDamageMultiplier;
-        }
-      }
+      target.hp -= tim.damage * rabbitTraits(target.kind, state.wave).staticDamageMultiplier;
       zaps.push({
         id: nextId,
         from: { ...WORLD.tim },

@@ -122,6 +122,37 @@ KINEMATICS_DB
 
 After creating the database, update `database_id` in `wrangler.toml`. `LEADERBOARD_SALT` must be private and at least 16 characters.
 
+### Caerbannog score verification
+
+The Caerbannog board does not trust client-submitted scores. `/api/caerbannog/run`
+issues a seed with each run token (`migrations/0008_caerbannog_run_seed.sql`), the
+game plays at a fixed 60 Hz step and logs every input, and
+`/api/caerbannog/leaderboard` re-plays that log through `src/lib/caerbannog/game.ts`
+(`src/lib/caerbannog/replay.ts`) to compute wave, kills, and gold itself. A log is
+also refused if it claims more game time than real time has passed since the run
+was minted. Apply the migration before deploying, and deploy the Function and the
+client together: an old client posting the previous payload gets a 409/400.
+
+Bump `REPLAY_VERSION` in `replay.ts` whenever game rules or balance change, so logs
+from a stale cached build are refused instead of replaying to a different result.
+
+Replaying costs roughly 4 µs per step locally (about 5k steps in under 20 ms); a
+full 40-wave run is on the order of 100k steps, so extrapolate to several hundred
+milliseconds of CPU. That is well over the Workers free plan's 10 ms limit, so
+measure it on the deployed Function and plan on the Paid plan (or a raised CPU
+limit) for long runs.
+
+Scores posted before this change were client-reported and unverifiable. Review them
+before the next deploy; anything past the 40-wave siege is provably forged, and
+other outliers are worth a look at the top of the board:
+
+```sql
+SELECT id, name, score, wave, enemies_slain, gold_collected FROM caerbannog_scores
+WHERE wave > 40 ORDER BY score DESC;
+-- after reviewing, delete the forged rows by id:
+-- DELETE FROM caerbannog_scores WHERE id IN (...);
+```
+
 Motion Match (`/kinematics/motion-game`) rides on the same database, binding, and
 salt; its tables come from `migrations/0006_kinematics_motion_game_leaderboard.sql`
 and `0007_kinematics_motion_game_seed.sql`, so applying migrations is the whole of

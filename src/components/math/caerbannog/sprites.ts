@@ -1,7 +1,6 @@
 // Extra pixel-art sprites for the hidden Caerbannog defense game, authored in
 // the same 1-char-per-cell style as BunnySprite so everything on screen matches.
-// (Killer rabbits reuse BunnySprite itself with KILLER_PALETTE; explosions are
-// drawn procedurally in the component.)
+// (Killer rabbits reuse BunnySprite itself with KILLER_PALETTE.)
 
 export interface PixelSprite {
   cols: number;
@@ -123,6 +122,80 @@ const TIM_PALETTE: Record<string, string> = {
   F: '#fbbf24', // inner flame
   W: '#fff7ae', // flame core
 };
+
+// --- Explosion frames ------------------------------------------------------
+// A square grid of hard-edged cells (no alpha fades), generated once. The grid
+// edge is the true blast radius, so the component stretches it to the kill
+// ellipse. Jitter only ever pulls the silhouette inward, so a frame never draws
+// past the area that actually took damage.
+export const EXPLOSION_GRID = 21;
+
+export interface ExplosionRun {
+  x: number;
+  y: number;
+  w: number;
+  fill: string;
+}
+
+const EX = {
+  white: '#fff7d6',
+  yellow: '#fde68a',
+  orange: '#f97316',
+  red: '#c2410c',
+  outline: '#78350f',
+  smoke: '#6b7280',
+};
+
+type ExplosionShade = (d: number, x: number, y: number) => string | null;
+
+const buildExplosionFrame = (shade: ExplosionShade): ExplosionRun[] => {
+  const c = (EXPLOSION_GRID - 1) / 2;
+  const runs: ExplosionRun[] = [];
+  for (let y = 0; y < EXPLOSION_GRID; y += 1) {
+    let current: ExplosionRun | null = null;
+    for (let x = 0; x < EXPLOSION_GRID; x += 1) {
+      const dx = (x - c) / (c + 0.5);
+      const dy = (y - c) / (c + 0.5);
+      const d = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+      // Ragged rim: up to ~14% inward bite, deterministic per angle.
+      const rim = 1 - 0.14 * Math.abs(Math.sin(angle * 5 + 1.3) * Math.cos(angle * 3));
+      const fill = d <= rim ? shade(d / rim, x, y) : null;
+      if (fill && current && current.fill === fill) {
+        current.w += 1;
+      } else {
+        current = fill ? { x, y, w: 1, fill } : null;
+        if (current) {
+          runs.push(current);
+        }
+      }
+    }
+  }
+  return runs;
+};
+
+const checker = (x: number, y: number): boolean => (x + y) % 2 === 0;
+
+export const EXPLOSION_FRAMES: ExplosionRun[][] = [
+  // 1. Flash: a pale disc with a yellow rim.
+  buildExplosionFrame((d) => (d > 0.8 ? EX.yellow : EX.white)),
+  // 2. Fireball: stepped colour bands, dark outline.
+  buildExplosionFrame((d) =>
+    d < 0.3 ? EX.white : d < 0.55 ? EX.yellow : d < 0.82 ? EX.orange : d < 0.93 ? EX.red : EX.outline,
+  ),
+  // 3. Hollowing: the core cools to orange and starts to break up.
+  buildExplosionFrame((d, x, y) =>
+    d < 0.4 ? (checker(x, y) ? EX.orange : EX.red) : d < 0.8 ? EX.red : EX.outline,
+  ),
+  // 4. Shell: a thin burning ring around dithered smoke.
+  buildExplosionFrame((d, x, y) =>
+    d < 0.55 ? (checker(x, y) ? EX.smoke : null) : d < 0.85 ? (checker(x, y) ? EX.red : EX.outline) : EX.outline,
+  ),
+  // 5. Embers: sparse smoke and cinders.
+  buildExplosionFrame((d, x, y) =>
+    d > 0.35 && (x * x * 3 + y * y * 5 + x * y * 2) % 7 === 0 ? (d > 0.75 ? EX.outline : EX.smoke) : null,
+  ),
+];
 
 export const GRENADE_SPRITE = buildSprite(GRENADE, GRENADE_PALETTE);
 export const KEEP_SPRITE = buildSprite(KEEP, KEEP_PALETTE);

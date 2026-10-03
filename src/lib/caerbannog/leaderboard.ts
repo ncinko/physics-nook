@@ -17,6 +17,8 @@ import {
   isBlockedLeaderboardName,
   sanitizeLeaderboardName,
 } from '../kinematics/stopZones.ts';
+import { FINAL_WAVE, goldForKill, goldInterest, rabbitKindForSpawn, waveClearGold } from './game.ts';
+import { waveConfig } from './waves.ts';
 
 export interface CaerbannogValidationResult {
   ok: boolean;
@@ -47,6 +49,47 @@ export const CAERBANNOG_DEFAULTS = {
   localStorageKey: 'physics-nook-caerbannog-local-leaderboard-v1',
 } as const;
 
+export interface CaerbannogRunLimits {
+  maxEnemiesSlain: number;
+  maxGoldCollected: number;
+  /** Shortest wall-clock time (ms) a run could take to reach this wave. */
+  minElapsedMs: number;
+}
+
+/**
+ * The most a run that ended on `wave` could possibly have, derived from the
+ * game's own rules: every rabbit of every wave felled, every kill a precision
+ * kill, and not one coin ever spent (so interest compounds). A real run is far
+ * below this, but a fabricated one is not held back by the loose static caps.
+ */
+export const caerbannogRunLimits = (wave: number): CaerbannogRunLimits => {
+  let maxEnemiesSlain = 0;
+  let banked = 0;
+  let minElapsedSeconds = 0;
+  for (let w = 1; w <= wave; w += 1) {
+    const cfg = waveConfig(w);
+    let earned = 0;
+    for (let i = 0; i < cfg.count; i += 1) {
+      earned += goldForKill(rabbitKindForSpawn(w, i, cfg.count), w, true);
+    }
+    maxEnemiesSlain += cfg.count;
+    banked += earned;
+    if (w < wave) {
+      // Wave cleared: flat reward, then interest on the whole bank.
+      banked += waveClearGold(w);
+      banked += goldInterest(banked);
+      // Spawns are paced, so clearing the wave takes at least this long.
+      minElapsedSeconds += (cfg.count - 1) * cfg.spawnInterval;
+    }
+  }
+  return {
+    maxEnemiesSlain,
+    maxGoldCollected: banked,
+    // Game time never exceeds real time (frame dt is clamped), so allow some slack.
+    minElapsedMs: Math.floor(minElapsedSeconds * 1000 * 0.9),
+  };
+};
+
 /** The run score: deeper waves and richer, deadlier play all push it up. */
 export const caerbannogScore = (wave: number, enemiesSlain: number, goldCollected: number): number =>
   wave * enemiesSlain + goldCollected;
@@ -73,14 +116,17 @@ export const validateCaerbannogScoreSubmission = (payload: {
   const enemiesSlain = Number(payload.enemiesSlain);
   const goldCollected = Number(payload.goldCollected);
 
-  if (!Number.isInteger(wave) || wave < 1 || wave > CAERBANNOG_DEFAULTS.maxWave) {
+  const waveOk = Number.isInteger(wave) && wave >= 1 && wave <= FINAL_WAVE;
+  if (!waveOk) {
     errors.push('wave is outside the accepted range.');
   }
+  // Per-wave caps only mean anything once the wave itself is sane.
+  const limits = waveOk ? caerbannogRunLimits(wave) : null;
 
   if (
     !Number.isInteger(enemiesSlain) ||
     enemiesSlain < 0 ||
-    enemiesSlain > CAERBANNOG_DEFAULTS.maxEnemiesSlain
+    enemiesSlain > (limits?.maxEnemiesSlain ?? CAERBANNOG_DEFAULTS.maxEnemiesSlain)
   ) {
     errors.push('enemiesSlain is outside the accepted range.');
   }
@@ -88,7 +134,7 @@ export const validateCaerbannogScoreSubmission = (payload: {
   if (
     !Number.isInteger(goldCollected) ||
     goldCollected < 0 ||
-    goldCollected > CAERBANNOG_DEFAULTS.maxGoldCollected
+    goldCollected > (limits?.maxGoldCollected ?? CAERBANNOG_DEFAULTS.maxGoldCollected)
   ) {
     errors.push('goldCollected is outside the accepted range.');
   }

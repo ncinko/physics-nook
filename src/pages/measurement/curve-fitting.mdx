@@ -29,48 +29,43 @@ $$
 r_i = V_i - V_\text{model}(t_i).
 $$
 
-A good fit leaves small residuals. A *useful* fit also leaves residuals with no pattern, and that second requirement is what the rest of this page leans on.
+Whatever the model, plot the residuals and check for two things:
 
-## A line is the simplest model
+- **Random scatter about zero**, with a size comparable to the error bars
+- **A systematic pattern** (an arch, a trend, a run of points all on one side): the model is wrong, or the parameters are not at their best values.
 
-The first model most of us reach for is a straight line, $V = a + bt$. Fitting a line has real advantages: the best $a$ and $b$ come from a formula, no guessing required, and the uncertainties in $a$ and $b$ do too. For data that really are linear, such as distance against time at constant speed, nothing more is needed.
+The first model most of us reach for is a straight line, $V = a + bt$. Fitting a line has real advantages: the best-fit $a$ and $b$ come from a closed-form formula, and the uncertainties in $a$ and $b$ do too. For data that really are linear, such as distance against time at constant speed, nothing more is needed.
 
-Try it on the capacitor data. Everything here comes from one experiment: twenty voltmeter readings, each uncertain by $\pm 0.1\ \text{V}$.
+Try it on the data below. Each voltmeter reading has an uncertainty of $\pm 0.1\ \text{V}$ (shown with error bars).
 
 <InteractiveAnchor id="line-vs-curve-fit" />
 
 <LineVsCurveFit client:visible />
 
-The line passes through the middle of the cloud and the software reports confident-looking values of $a$ and $b$, but the residuals arch from negative to positive and back. Every point isn't far off, but the *errors lean the same way together*. That is the signature of a wrong model. Charging slows down as the capacitor fills; a line cannot slow down.
+The line follows the overall trend in rising voltage, and the software reports confident-looking values of $a$ and $b$.  However, many residuals are much larger than the reported uncertainties, and they do not appear randomly scattered about zero. This indicates that we have the wrong model. Charging slows down as the capacitor fills, so we need a different fitting function.
 
 ## A functional fit
 
-Physics tells us what shape to expect. A capacitor charging toward the battery voltage follows
+In the ideal theoretical case, a capacitor charging toward the battery voltage follows
 
 $$
-V(t) = V_0\left(1 - e^{-t/\tau}\right),
+V(t) = V_b\left(1 - e^{-t/\tau}\right),
 $$
 
-which has two parameters with physical meaning: $V_0$, the voltage the capacitor is heading toward, and $\tau$, the time it takes to cover about $63\%$ of the remaining distance. Switch the plot above to the exponential and the residuals lose their arch, scattering about zero mostly inside the $\pm 0.1\ \text{V}$ band.
+which has two parameters with physical meaning: $V_b$, the battery voltage the capacitor is heading toward, and $\tau$, the time it takes to cover about $63\%$ of the remaining "distance". If you switch the fit model above, and the residuals scatter about zero and lie mostly inside the $\pm 0.1\ \text{V}$ band.
 
-There is no formula that hands you the best $V_0$ and $\tau$. Instead the computer (or you, in Desmos) adjusts them iteratively until the curve can't be improved. The idea is the same as the line fit's, with one extra step: guess, compare to the data, adjust, repeat.
+There is no formula that hands you the best $V_b$ and $\tau$. Instead the computer (or you, in Desmos) adjusts them iteratively until the curve can't be improved. 
 
-It is tempting to dodge this by *straightening* the data. Since $V_0 - V = V_0 e^{-t/\tau}$, a graph of $\ln(V_0 - V)$ against $t$ is a straight line with slope $-1/\tau$. This works, but poorly. You need $V_0$ before you can plot anything, even though it is one of the things you are trying to fit. Late in the charge, $V_0 - V$ is tiny, so the same voltmeter noise becomes a huge relative error (and can even make the logarithm undefined). Taking the log also distorts the error bars, so a plain line fit gives those noisy late points the same say as the good early ones. Fitting the original curve avoids all of this.
+It is tempting to dodge this by *straightening* the data. Since $V_b - V = V_b e^{-t/\tau}$, a graph of $\ln(V_b - V)$ against $t$ is a straight line with slope $-1/\tau$. This works, but poorly. You need $V_b$ before you can plot anything, even though it is one of the things you are trying to fit. Late in the charge, $V_b - V$ is tiny, so the same voltmeter noise becomes a huge relative error (and can even make the logarithm undefined). Taking the log also distorts the error bars.  Fitting the original curve avoids all of this.
 
-## Reading residuals
-
-Whatever the model, plot the residuals against $t$ and ask whether they look like **noise**:
-
-- **Random scatter about zero**, with a size comparable to the error bars: the model is doing its job.
-- **A systematic pattern** (an arch, a trend, a run of points all on one side): the model is wrong, or the parameters are not at their best values.
-
-That second line is the key to estimating uncertainty.
 
 ## Uncertainty by hand
 
-Your best-fit $\tau$ is not a perfect number. Slightly different values of $\tau$ would have described the data almost as well. The uncertainty in $\tau$ is the range of values that still describe the data acceptably, and you can find it directly: leave the best fit, increase $\tau$ until the residuals clearly develop a pattern, and note where that happened. Then do the same in the other direction. Half the distance between the two edges is the uncertainty.
+Your best-fit $\tau$ is not a perfect number. Slightly different values of $\tau$ would have described the data almost as well. The uncertainty in $\tau$ should quantify the range of values that still describe the data acceptably, and you can find it directly: leave the best fit, increase $\tau$ until the residuals clearly develop a pattern, and note where that happened. Then do the same in the other direction. Half the distance between these two extreme values is a reasonable estimate of uncertainty.
 
-One wrinkle: $V_0$ and $\tau$ are linked. A larger $\tau$ makes the curve rise more slowly, which can be partly compensated by a larger $V_0$. If you move $\tau$ and leave $V_0$ alone, the fit will look worse than it needs to and you will underestimate how much $\tau$ can wander. So each time you move $\tau$, **re-adjust $V_0$ to its best value** before judging the residuals. Turn on "Re-adjust $V_0$ for me" to see what a fully re-tuned fit looks like.
+One wrinkle: the fit parameters $V_b$ and $\tau$ are linked. A larger $\tau$ makes the curve rise more slowly, which can be partly compensated by a larger $V_b$. If you move $\tau$ and leave $V_b$ alone, the fit will look worse than it needs to and you will underestimate how much $\tau$ can wander. So each time you move $\tau$, **re-adjust $V_b$ to its best value** before judging the residuals. 
+
+If you find this process tedious, you are not alone!  Luckily, there are ways of automating this with a computer.  A common method uses the so-called **chi-square** statistic, which is discussed below.
 
 <InteractiveAnchor id="tau-by-eye" />
 
@@ -78,27 +73,16 @@ One wrinkle: $V_0$ and $\tau$ are linked. A larger $\tau$ makes the curve rise m
 
 ## A first look at $\chi^2$
 
-Judging "clearly develops a pattern" by eye works, but it is subjective, and different people mark different edges. The **chi-square** statistic gives the same judgment a number. For each point, measure the residual in units of that point's own uncertainty $\sigma_i$, square it so that positive and negative misses both count, and add them up:
+Manually adjusting fit parameters by hand is subjective, and as the number of free parameters increases beyond two, this process can get rather unwieldy. The **chi-square** statistic allows us to make this fitting process more objective. For each point, measure the residual in units of that point's own uncertainty $\sigma_i$, square it so that positive and negative residuals do not cancel, and add them up:
 
 $$
 \chi^2 = \sum_i \left(\frac{V_i - V_\text{model}(t_i)}{\sigma_i}\right)^2.
 $$
 
-A point that misses by about one $\sigma$ adds about $1$, so a good fit to $N$ points with $p$ parameters has $\chi^2 \approx N - p$. The best-fit parameters are the ones that make $\chi^2$ as small as possible, and the uncertainty has a clean rule: **the uncertainty in a parameter is how far you can move it, re-optimizing the others, before $\chi^2$ rises by $1$ above its minimum.** That is your by-hand procedure with an exact stopping point. Reveal the answer in the plot above and compare it with your own marks.
+This reframes the fitting process into an optimization problem: the best-fit parameters (contained in the model function) are the ones that make $\chi^2$ as small as possible.  Furthermore, we can make some quantitative statements about uncertainty.  A data point that "misses" by about one $\sigma$ adds about $1$ to this sum, so we expect a good fit to $N$ points with $p$ parameters has $(\chi^2)_\text{min} \approx N - p$ (the minus p requires a bit of thought).  
 
-We will use $\chi^2$ more carefully later. For now, notice that nothing new is being measured. The residuals and error bars are the same ones you have been reading by eye.
+The uncertainty in each best-fit parameter has a clean rule: **the uncertainty in a parameter is how far you can adjust it, re-optimizing the others, before $\chi^2$ rises by $1$ above its minimum.** 
 
-## Other ways to get an uncertainty
-
-Fitting software reports an uncertainty for every parameter, and for good fits it agrees with the $\chi^2$ rule. But there is a more direct, assumption-free check: **do the experiment again.** Each run has its own voltmeter noise, so each run yields a slightly different $\tau$. The spread of those values is the uncertainty, measured directly.
-
-<InteractiveAnchor id="repeat-trials" />
-
-<RepeatTrials client:visible />
-
-The scatter across many runs matches the uncertainty from fitting a single run. In the lab, three or four repeats are all you can usually afford, so the single-run methods carry most of the weight. But a repeat is the best test of whether you believe them.
-
-Finally, a fitted $\tau$ is something you can compare with theory, exactly as you compared your value of $\pi$ in [Uncertainty](/measurement/uncertainty). Here, theory is $\tau = RC$ from the measured resistor and capacitor, where the physics of both is on the [Capacitance](/electromagnetism/capacitance) page, and a [circuit simulation](/electromagnetism/current#circuit-kit) lets you watch the same charging curve form.
 
 <ProblemSolvingSection
   title="Problem Solving"
@@ -109,7 +93,7 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
   >
     #### Problem
 
-    Fitting $V_0\left(1-e^{-t/\tau}\right)$ to a charging curve and re-adjusting $V_0$ at each step, you find the residuals still look random for $\tau$ from $2.10\ \text{s}$ to $2.24\ \text{s}$. Report $\tau$.
+    Fitting $V_b\left(1-e^{-t/\tau}\right)$ to a charging curve and re-adjusting $V_b$ at each step, you find the residuals still look random for $\tau$ from $2.10\ \text{s}$ to $2.24\ \text{s}$. Report $\tau$.
 
     #### Use
 
@@ -170,11 +154,11 @@ Finally, a fitted $\tau$ is something you can compare with theory, exactly as yo
     },
     {
       id: 'readjust-v0',
-      question: 'While estimating the uncertainty in $\\tau$ by hand, why should you re-adjust $V_0$ every time you change $\\tau$?',
+      question: 'While estimating the uncertainty in $\\tau$ by hand, why should you re-adjust $V_b$ every time you change $\\tau$?',
       options: [
-        { id: 'B', text: 'Because $V_0$ is the quantity you are really after.', isCorrect: false, explanation: 'Here $\\tau$ is the target. $V_0$ is a nuisance parameter that still has to be fitted.' },
-        { id: 'A', text: 'Because the parameters are linked: a change in $\\tau$ can be partly compensated by $V_0$.', isCorrect: true, explanation: 'Leaving $V_0$ fixed makes the fit look worse than necessary and shrinks the range of acceptable $\\tau$, underestimating the uncertainty.' },
-        { id: 'C', text: 'Because $V_0$ changes with time.', isCorrect: false, explanation: '$V_0$ is a constant of the fit — the voltage the capacitor is approaching — not a function of time.' }
+        { id: 'B', text: 'Because $V_b$ is the quantity you are really after.', isCorrect: false, explanation: 'Here $\\tau$ is the target. $V_b$ is a nuisance parameter that still has to be fitted.' },
+        { id: 'A', text: 'Because the parameters are linked: a change in $\\tau$ can be partly compensated by $V_b$.', isCorrect: true, explanation: 'Leaving $V_0$ fixed makes the fit look worse than necessary and shrinks the range of acceptable $\\tau$, underestimating the uncertainty.' },
+        { id: 'C', text: 'Because $V_b$ changes with time.', isCorrect: false, explanation: '$V_b$ is a constant of the fit — the voltage the capacitor is approaching — not a function of time.' }
       ]
     },
     {

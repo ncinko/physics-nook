@@ -22,8 +22,8 @@ import {
 const DATA = generateRcData(RC_DEFAULT_SEED);
 const BEST = fitRc(DATA);
 
-const TAU_MIN = 1.9;
-const TAU_MAX = 2.5;
+const TAU_MIN = 1.0;
+const TAU_MAX = 3.0;
 const CHI_RISE_SHOWN = 25;
 
 const PROFILE = profileChiSquare(
@@ -90,17 +90,9 @@ export function TauByEye() {
       </div>
 
       <ControlBar>
-        <Slider label="V₀" unit="V" min={4.5} max={5.5} step={0.01} value={effectiveV0} onChange={setV0} disabled={autoV0} format={(value) => value.toFixed(2)} />
+        <Slider label="V₀" unit="V" min={4.0} max={6.0} step={0.01} value={effectiveV0} onChange={setV0} disabled={autoV0} format={(value) => value.toFixed(2)} />
         <Slider label="τ" unit="s" min={TAU_MIN} max={TAU_MAX} step={0.01} value={tau} onChange={setTau} format={(value) => value.toFixed(2)} />
-        <Toggle
-          label="Re-adjust V₀ for me"
-          checked={autoV0}
-          onChange={(checked) => {
-            // Hand control back where the automatic V₀ left off.
-            if (!checked) setV0(Math.min(5.5, Math.max(4.5, effectiveV0)));
-            setAutoV0(checked);
-          }}
-        />
+        
       </ControlBar>
 
       <ControlBar>

@@ -86,15 +86,13 @@ export function LineVsCurveFit() {
           <>
             a = {formatMeasurement({ value: LINE.coefficients[0], uncertainty: LINE.uncertainties[0] })} V,
             {' '}b = {formatMeasurement({ value: LINE.coefficients[1], uncertainty: LINE.uncertainties[1] })} V/s.
-            The fit reports tidy uncertainties, but the residuals arch above and below zero: the line is
-            the wrong shape, no matter how precisely it is pinned down.
+            
           </>
         ) : (
           <>
             V₀ = {formatMeasurement({ value: v0, uncertainty: exp.uncertainties[0] })} V,
             {' '}τ = {formatMeasurement({ value: tau, uncertainty: exp.uncertainties[1] })} s.
-            The residuals now scatter about zero, mostly inside the shaded ±{RC_SIGMA} V band that marks the
-            voltmeter's own uncertainty.
+            
           </>
         )}
       </p>

@@ -177,7 +177,7 @@ Entropy survives across so many areas because it is not only about heat. It is a
     },
     {
       id: 'landauer-temperature',
-      question: 'According to Landauer\\\'s principle, what happens to the minimum erasure cost per bit when temperature increases?',
+      question: 'According to Landauer\'s principle, what happens to the minimum erasure cost per bit when temperature increases?',
       options: [
         { id: 'B', text: 'It decreases because warmer systems already have more entropy.', isCorrect: false, explanation: 'The bound is proportional to $T$, so a warmer thermal environment raises the minimum heat cost per erased bit.' },
         { id: 'A', text: 'It increases in proportion to $T$.', isCorrect: true, explanation: 'Right. $E_{\\min} = k_B T \\ln 2$, so doubling the temperature doubles the minimum per-bit erasure cost.' },
@@ -189,7 +189,7 @@ Entropy survives across so many areas because it is not only about heat. It is a
       question: 'Why does bit erasure connect information to thermodynamics?',
       options: [
         { id: 'C', text: 'Because all information is stored only in hot gases.', isCorrect: false, explanation: 'Information can be stored in many physical systems. The point is that logical state changes must be implemented physically.' },
-        { id: 'B', text: 'Because erasure creates energy from nothing.', isCorrect: false, explanation: 'Landauer\\\'s principle does not create energy. It sets a minimum dissipated energy cost for a logically irreversible operation.' },
+        { id: 'B', text: 'Because erasure creates energy from nothing.', isCorrect: false, explanation: 'Landauer\'s principle does not create energy. It sets a minimum dissipated energy cost for a logically irreversible operation.' },
         { id: 'A', text: 'Because resetting unknown logical states reduces logical possibilities and requires entropy to be exported to the environment.', isCorrect: true, explanation: 'Exactly. Erasure maps multiple possible inputs to one output, so the missing logical entropy must be balanced by physical entropy production elsewhere.' }
       ]
     }

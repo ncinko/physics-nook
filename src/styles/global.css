@@ -261,7 +261,10 @@
     max-width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
-    padding-bottom: 0.15rem;
+    /* overflow-y: hidden clips glyphs that rise above KaTeX's line box (tall
+       fraction numerators), so pad the top as well as the bottom. */
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
   }
 }
 

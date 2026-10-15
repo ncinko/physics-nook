@@ -37,7 +37,7 @@ $$
 
 The coefficients $\mu_s$ and $\mu_k$ describe the pair of surfaces, and typically $\mu_k < \mu_s$. Both laws scale with the **normal force** $N$, which quantifies how hard the surfaces press together.  Note that the contact area of the surfaces does not appear in either case, and kinetic friction does not depend on how quickly the surfaces slide past each other.
 
-Press and drag to push Newt in either direction; the farther you drag, the harder the push. While he sits still, friction exactly cancels your push. Once your push beats the static maximum he starts to slide, and the friction drops to its kinetic value. Check *unlock angle* to also push Newt down into the floor or lift Newt upward: the normal force changes, along with the corresponding friction.
+Click and drag to pull Newt.  While he sits still, friction exactly balances your applied force. When the static maximum is reached, Newt begins to slide, and the friction drops to its kinetic value. Check *unlock angle* to also push Newt down into the floor or lift Newt upward: the normal force changes, along with the corresponding friction.
 
 <InteractiveAnchor id="friction-force-newt" />
 
@@ -60,10 +60,10 @@ $$
 
 <ContactAsperities client:visible />
 
-Now narrow the block at a fixed load. There are fewer asperities in contact, and the block presses harder into these. That is why the apparent contact area is missing from the friction laws: it is the load (usually the weight), not the size of the block, that sets how much surface actually touches.
+Note that the actual area of the block doesn't matter.  If it decreases in size, there are fewer asperities in contact, and the higher pressure flattens them more. 
 
 
-At some point, the atoms in the two surfaces are close enough to bond.  As with the normal force and tension, we'll model this bond interaction with imaginary springs. As we begin to slide the surfaces, these temporary bonds will stretch until breaking. 
+Along this effective area, the atoms in the two surfaces are close enough to temporarily bond.  As with the normal force and tension, we'll model this bond interaction with imaginary springs. As we begin to slide the surfaces, these temporary bonds will stretch until breaking. 
 
 Below, a block is held against the floor while the floor is dragged along beneath it. Each bond stretches as the floor moves, and eventually breaks at some limit. New bonds may form when a floor atom passes under a block atom, so a freshly formed bond starts out unstretched. The block feels the sum of all the bonds' pulls.
 
@@ -71,14 +71,13 @@ Below, a block is held against the floor while the floor is dragged along beneat
 
 <AtomicStickSlip client:visible />
 
-The trace shows two different numbers.
+The above trace illustrates the difference between static and sliding friction:
 
-- **The static peak.** A block that has been resting has all of its bonds formed and unstretched. They are stretched together until the weakest begin to give, and the total force reaches a maximum just before the bonds start letting go. Past that, the force falls.
-- **The sliding average.** Once sliding, the bonds are in different stages: some freshly formed and barely stretched, some about to break, and some waiting for the next atom to arrive. On average they carry less than they did when all were fresh and in place together. This is why kinetic friction is smaller than static friction.
+- **The static peak.** A block that has been resting has all of its bonds formed and unstretched. They are stretched together until the weakest begin to give, and the total force reaches a maximum just before the bonds start letting go. 
+- **The sliding average.** Once sliding, the bonds are in different stages: some freshly formed and barely stretched, some about to break.  On average they carry less than they did when all were fresh and in place together. This is why kinetic friction is smaller than static friction.
 
-Raise the number of bonds in contact and the peak rises in proportion, because the load is carried by those same bonds. More load means more bonds, and more bonds means more bonds to break. This is the origin of $f \propto N$.
 
-Finally, let's combine the ideas of real contact are and atomic adhesion.  The shear strength $\tau$ depends on how easily these bonds break, and the maximum friction is given by:
+Finally, let's combine the ideas of real contact are and atomic adhesion.  The shear strength (per unit of contact area) $\tau$ depends on how easily these bonds break.  The maximum friction is given by:
 
 $$
 f_{\max} = \tau A_{\text{real}} = \tau \frac{N}{H} = \mu_s N,
@@ -86,7 +85,7 @@ f_{\max} = \tau A_{\text{real}} = \tau \frac{N}{H} = \mu_s N,
 \mu_s \approx \frac{\tau}{H}.
 $$
 
-So the coefficient of friction compares two properties of the interface: the **shear strength** $\tau$ of the bonds between the two surfaces, and the **hardness** $H$ of the softer one.  A clean, strongly bonding pair of metals has a large $\tau$ and a large $\mu$. Ice, Teflon, or a layer of lubricant gives weak bonds and a small $\mu$. A soft material flattens more under a given load, increasing the contact and so the friction.
+So the coefficient of friction depends on two properties of the interface: the strength of bonds between the two surfaces, and the hardness of the softer one.  A clean, strongly bonding pair of metals has a large $\tau$ and a large $\mu$. Ice, Teflon, or a layer of lubricant gives weak bonds and a small $\mu$. A soft material flattens more under a given load, increasing the contact and so the friction.
 
 A few cautions go with the model:
 

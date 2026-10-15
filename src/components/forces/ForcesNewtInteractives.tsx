@@ -8,7 +8,6 @@ import {
 import NewtSprite, { NEWT_MOUTH_OFFSET, NEWT_RADIUS } from './NewtSprite';
 import { TongueMouthStub, TongueStrand } from './NewtTongue';
 import { ForceArrow, FORCE_COLORS, type ForceVector } from './ForceArrow';
-import { Button } from '../shared/InlineControls';
 import {
   add,
   clamp,
@@ -56,7 +55,7 @@ interface TimedVector extends ForceVector {
 
 interface ForcePanelProps {
   title: string;
-  prompt: string;
+  prompt?: string;
   children: ReactNode;
   controls?: ReactNode;
 }
@@ -89,7 +88,7 @@ const ForcePanel = ({ title, prompt, children, controls }: ForcePanelProps) => (
     <div className="flex flex-col gap-3 border-b border-[var(--grid-line)] bg-[color:var(--surface-elevated)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div>
         <h3 className="m-0 text-base font-semibold text-[color:var(--text-primary)]">{title}</h3>
-        <p className="mt-1 mb-0 text-sm leading-6 text-[color:var(--text-muted)]">{prompt}</p>
+        {prompt && <p className="mt-1 mb-0 text-sm leading-6 text-[color:var(--text-muted)]">{prompt}</p>}
       </div>
       {controls && <div className="flex flex-wrap items-center gap-2">{controls}</div>}
     </div>
@@ -1116,18 +1115,25 @@ export function GravityForceNewt() {
   );
 }
 
-// The friction demo runs taller than the other panels: the track on top, and
-// below it the same four forces laid out tip to tail, so "net force" reads as
+// The friction demo runs taller than the other panels: the track on top showing
+// only the two horizontal forces, and below it two columns. The standard
+// free-body diagram (all four forces from one dot) sits on the left; the same
+// four forces laid out tip to tail sit on the right, so "net force" reads as
 // the sum of the arrows rather than a fifth arrow that appeared from nowhere.
-const FRICTION_VIEW = { width: 760, height: 540 };
+const FRICTION_VIEW = { width: 760, height: 590 };
 const FRICTION_SCENE_HEIGHT = 336;
 // One scale for every arrow in the sum, or the addition would be a lie.
-const SUM_SCALE = 2.8;
-const SUM_ORIGIN = { x: 340, y: 430 };
-const SUM_NET_Y = 388;
+const SUM_SCALE = 2.3;
+const SUM_ORIGIN = { x: 560, y: 430 };
+const FBD_ORIGIN = { x: 210, y: 468 };
+const COLUMN_DIVIDER_X = 380;
+const SUM_NET_Y = 394;
 // How far apart the two vertical arrows need to sit before their 4px bodies
 // stop covering each other.
 const SUM_MIN_SEPARATION = 11;
+// Drag distance (SVG units) to applied force: 180 px of drag reaches the cap.
+const MAX_PUSH = 18;
+const NEWTONS_PER_DRAG_PIXEL = MAX_PUSH / 180;
 
 export function FrictionForceNewt() {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -1135,16 +1141,27 @@ export function FrictionForceNewt() {
   const pointerHeldRef = useRef(false);
   const lastTimeRef = useRef<number | null>(null);
   const [body, setBody] = useState(bodyRef.current);
-  const [pushStrength, setPushStrength] = useState(9);
-  const [pushDirection, setPushDirection] = useState(0);
+  // Raw drag, in newtons per axis. Whether the vertical part counts is decided
+  // below, so flipping the checkbox mid-push takes effect immediately.
+  const [pushRaw, setPushRaw] = useState<Vector2>({ x: 0, y: 0 });
+  const [unlocked, setUnlocked] = useState(false);
+  const [dragAnchor, setDragAnchor] = useState<Vector2 | null>(null);
   const [roughness, setRoughness] = useState(0.45);
   const [paused, setPaused] = useState(false);
-  const mass = 2;
-  const applied = pushDirection * pushStrength;
+  const [weightNewtons, setWeightNewtons] = useState(20);
+  const mass = weightNewtons / 9.8;
   const weight = gravityForce(mass, 9.8);
-  const normalMagnitude = magnitude(weight);
-  const normal = { x: 0, y: -magnitude(weight) };
-  const appliedForce = { x: applied, y: 0 };
+  // Locked: a purely horizontal push. Unlocked: the drag sets both components
+  // (SVG y points down, so dragging down pushes Newt into the floor), capped at
+  // the same total strength. An upward push can at most cancel his weight, at
+  // which point the floor no longer touches him and the normal force is zero.
+  const pushScale = unlocked ? Math.min(1, MAX_PUSH / Math.max(Math.hypot(pushRaw.x, pushRaw.y), 1e-6)) : 1;
+  const appliedForce = {
+    x: pushRaw.x * pushScale,
+    y: unlocked ? Math.max(pushRaw.y * pushScale, -weightNewtons) : 0,
+  };
+  const normalMagnitude = weightNewtons + appliedForce.y;
+  const normal = { x: 0, y: -normalMagnitude };
   const friction = frictionForce({
     normalMagnitude,
     velocity: { x: body.vx, y: 0 },
@@ -1153,8 +1170,10 @@ export function FrictionForceNewt() {
     muKinetic: roughness,
     restSpeedThreshold: 2,
   });
-  const total = netForce([appliedForce, friction.force]);
+  const total = netForce([weight, appliedForce, normal, friction.force]);
   const newtY = 238;
+  // Hatch depth tracks roughness: 12 px at the 0.8 maximum, inside the 28 px slab.
+  const hatchLength = roughness * 15;
 
   useEffect(() => {
     let frame = 0;
@@ -1168,22 +1187,26 @@ export function FrictionForceNewt() {
         const currentFriction = frictionForce({
           normalMagnitude,
           velocity: { x: bodyRef.current.vx, y: 0 },
-          appliedForce: { x: applied, y: 0 },
+          appliedForce: { x: appliedForce.x, y: 0 },
           muStatic: roughness + 0.12,
           muKinetic: roughness,
           restSpeedThreshold: 2,
         });
-        const horizontalForce = applied + currentFriction.force.x;
+        const horizontalForce = appliedForce.x + currentFriction.force.x;
         let vx = bodyRef.current.vx;
         let x = bodyRef.current.x;
 
-        if (currentFriction.mode === 'static') {
+        // 'none' means slow enough to count as at rest with nothing pushing.
+        if (currentFriction.mode === 'static' || currentFriction.mode === 'none') {
           vx = 0;
         } else {
-          vx += (horizontalForce / mass) * 42 * dt;
-          if (Math.abs(vx) < 0.15 && Math.abs(applied) < 0.2) {
-            vx = 0;
-          }
+          const stepped = vx + (horizontalForce / mass) * 42 * dt;
+          // A frame is long enough for kinetic friction to carry vx past zero.
+          // Without this clamp the velocity lands on the far side, friction
+          // flips to oppose it, and the arrow flickers between directions until
+          // the speed happens to fall inside the rest threshold. Stop at zero
+          // instead and let the next frame decide static vs. kinetic.
+          vx = Math.sign(stepped) !== Math.sign(vx) && vx !== 0 ? 0 : stepped;
           x += vx * dt;
         }
 
@@ -1202,11 +1225,11 @@ export function FrictionForceNewt() {
     frame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(frame);
-  }, [applied, normalMagnitude, paused, roughness]);
+  }, [appliedForce.x, mass, normalMagnitude, paused, roughness]);
 
   useEffect(() => {
     if (!paused && !pointerHeldRef.current) {
-      setPushDirection(0);
+      setPushRaw({ x: 0, y: 0 });
     }
   }, [paused]);
 
@@ -1236,19 +1259,35 @@ export function FrictionForceNewt() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Press and hold on the side you want Newt pushed toward. Letting go removes
-  // the force -- the point being that the push is something someone is doing,
-  // not a property Newt carries around.
+  // Press, then drag: the applied force is proportional to how far the pointer
+  // has moved from where it went down. Letting go removes the force -- the point
+  // being that the push is something someone is doing, not a property Newt
+  // carries around.
   const beginPush = (event: ReactPointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
-    if (!svg) {
+    // The push is frozen while paused.
+    if (!svg || paused) {
       return;
     }
 
     const point = getSvgPoint(svg, event);
     pointerHeldRef.current = true;
-    setPushDirection(point.x < bodyRef.current.x ? -1 : 1);
+    setDragAnchor({ x: point.x, y: point.y });
+    setPushRaw({ x: 0, y: 0 });
     event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const movePush = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg || paused || !pointerHeldRef.current || !dragAnchor) {
+      return;
+    }
+
+    const point = getSvgPoint(svg, event);
+    setPushRaw({
+      x: clamp((point.x - dragAnchor.x) * NEWTONS_PER_DRAG_PIXEL, -MAX_PUSH, MAX_PUSH),
+      y: clamp((point.y - dragAnchor.y) * NEWTONS_PER_DRAG_PIXEL, -MAX_PUSH, MAX_PUSH),
+    });
   };
 
   const endPush = (event: ReactPointerEvent<SVGSVGElement>) => {
@@ -1257,8 +1296,9 @@ export function FrictionForceNewt() {
     // to release the pointer to reach the pause control, and the whole point of
     // pausing is to study all four forces at once.
     if (!paused) {
-      setPushDirection(0);
+      setPushRaw({ x: 0, y: 0 });
     }
+    setDragAnchor(null);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
@@ -1279,8 +1319,8 @@ export function FrictionForceNewt() {
   // coasting on kinetic friction alone. Nudge just the drawn arrows apart by
   // the few pixels their bodies need; every vertex, and so the resultant and
   // its guides, stays exactly where the arithmetic puts it.
-  const nudge = Math.max(0, SUM_MIN_SEPARATION - Math.abs(applied) * SUM_SCALE) / 2;
-  const nudgeSign = applied < 0 ? -1 : 1;
+  const nudge = Math.max(0, SUM_MIN_SEPARATION - Math.abs(appliedForce.x) * SUM_SCALE) / 2;
+  const nudgeSign = appliedForce.x < 0 ? -1 : 1;
   const weightStart = { x: SUM_ORIGIN.x - nudgeSign * nudge, y: SUM_ORIGIN.y };
   const normalStart = { x: afterApplied.x + nudgeSign * nudge, y: afterApplied.y };
   const netLength = Math.abs(total.x);
@@ -1288,15 +1328,20 @@ export function FrictionForceNewt() {
 
   return (
     <ForcePanel
-      title="Friction and the Net Force"
-      prompt="Press and hold to the side you want Newt pushed toward. Static friction can exactly cancel a small push; kinetic friction opposes sliding."
+      title="Friction"
       controls={
         <>
-          <RangeControl label="push" value={pushStrength} min={0} max={18} step={1} unit=" N" onChange={setPushStrength} />
           <RangeControl label="roughness" value={roughness} min={0.08} max={0.8} step={0.02} onChange={setRoughness} />
-          <Button variant="secondary" onClick={() => setPaused((value) => !value)} aria-pressed={paused}>
-            {paused ? 'Play' : 'Pause'}
-          </Button>
+          <RangeControl label="weight" value={weightNewtons} min={5} max={25} step={1} unit=" N" onChange={setWeightNewtons} />
+          <label className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+            <input
+              type="checkbox"
+              checked={unlocked}
+              onChange={(event) => setUnlocked(event.currentTarget.checked)}
+              className="accent-[var(--accent-blue)]"
+            />
+            unlock angle
+          </label>
         </>
       }
     >
@@ -1304,9 +1349,10 @@ export function FrictionForceNewt() {
         ref={svgRef}
         viewBox={`0 0 ${FRICTION_VIEW.width} ${FRICTION_VIEW.height}`}
         role="img"
-        aria-label="Friction force diagram with Newt, and the same forces added tip to tail below"
+        aria-label="Newt on a rough floor with applied and friction forces, a free-body diagram of all four forces, and their vector sum below"
         className="block h-auto w-full cursor-pointer touch-none select-none"
         onPointerDown={beginPush}
+        onPointerMove={movePush}
         onPointerUp={endPush}
         onPointerCancel={endPush}
       >
@@ -1315,26 +1361,18 @@ export function FrictionForceNewt() {
         {Array.from({ length: 22 }, (_, index) => (
           <line
             key={index}
-            x1={96 + index * 26}
+            x1={107 + index * 26}
             y1="268"
-            x2={107 + index * 26}
-            y2="253"
+            x2={107 + index * 26 - hatchLength * (11 / 15)}
+            y2={268 + hatchLength}
             stroke="#94a3b8"
             strokeWidth="2"
             strokeLinecap="round"
           />
         ))}
         <NewtSprite x={body.x} y={newtY} />
-        <ForceArrow origin={{ x: body.x, y: newtY - 44 }} vector={appliedForce} color={FORCE_COLORS.applied} label="applied" scale={5.1} maxLength={96} labelBounds={FRICTION_VIEW} />
-        <ForceArrow origin={{ x: body.x, y: newtY - 8 }} vector={friction.force} color={FORCE_COLORS.friction} label="friction" scale={5.1} maxLength={96} labelBounds={FRICTION_VIEW} />
-        <ForceArrow origin={{ x: body.x - 42, y: newtY }} vector={weight} color={FORCE_COLORS.gravity} label="weight" scale={3.1} maxLength={78} labelBounds={FRICTION_VIEW} />
-        <ForceArrow origin={{ x: body.x + 42, y: newtY }} vector={normal} color={FORCE_COLORS.normal} label="normal" scale={3.1} maxLength={78} labelBounds={FRICTION_VIEW} />
-
-        {(paused || pushDirection === 0) && (
-          <text x={FRICTION_VIEW.width / 2} y="60" textAnchor="middle" fill="var(--text-muted)" fontSize="15" fontWeight="600">
-            {paused ? 'paused — press space to resume' : 'press and hold beside Newt to push'}
-          </text>
-        )}
+        <ForceArrow origin={{ x: body.x, y: newtY }} vector={appliedForce} color={FORCE_COLORS.applied} label="applied" scale={5.1} maxLength={96} labelBounds={FRICTION_VIEW} />
+        <ForceArrow origin={{ x: body.x, y: newtY + NEWT_RADIUS }} vector={friction.force} color={FORCE_COLORS.friction} label="friction" scale={5.1} maxLength={96} labelBounds={FRICTION_VIEW} />
 
         <foreignObject x="514" y="88" width="174" height="56">
           <div className="grid gap-2">
@@ -1342,10 +1380,22 @@ export function FrictionForceNewt() {
           </div>
         </foreignObject>
 
-        {/* The same forces, added tip to tail. */}
         <line x1="40" y1={FRICTION_SCENE_HEIGHT} x2={FRICTION_VIEW.width - 40} y2={FRICTION_SCENE_HEIGHT} stroke="var(--grid-line)" strokeWidth="2" />
+        <line x1={COLUMN_DIVIDER_X} y1={FRICTION_SCENE_HEIGHT + 16} x2={COLUMN_DIVIDER_X} y2={FRICTION_VIEW.height - 66} stroke="var(--grid-line)" strokeWidth="1.5" />
+
+        {/* Left column: the standard free-body diagram, every force from one dot. */}
         <text x="40" y={FRICTION_SCENE_HEIGHT + 26} fill="var(--text-muted)" fontSize="14" fontWeight="700">
-          The same four forces, tip to tail
+          Free-body diagram
+        </text>
+        <ForceArrow origin={FBD_ORIGIN} vector={weight} color={FORCE_COLORS.gravity} label="weight" scale={SUM_SCALE} maxLength={999} labelBounds={FRICTION_VIEW} />
+        <ForceArrow origin={FBD_ORIGIN} vector={normal} color={FORCE_COLORS.normal} label="normal" scale={SUM_SCALE} maxLength={999} labelBounds={FRICTION_VIEW} />
+        <ForceArrow origin={FBD_ORIGIN} vector={appliedForce} color={FORCE_COLORS.applied} label="applied" scale={SUM_SCALE} maxLength={999} labelBounds={FRICTION_VIEW} />
+        <ForceArrow origin={FBD_ORIGIN} vector={friction.force} color={FORCE_COLORS.friction} label="friction" scale={SUM_SCALE} maxLength={999} labelBounds={FRICTION_VIEW} />
+        <circle cx={FBD_ORIGIN.x} cy={FBD_ORIGIN.y} r="6" fill="var(--text-primary)" />
+
+        {/* Right column: the same forces, added tip to tail. */}
+        <text x={COLUMN_DIVIDER_X + 20} y={FRICTION_SCENE_HEIGHT + 26} fill="var(--text-muted)" fontSize="14" fontWeight="700">
+          Vector sum of forces
         </text>
 
         {netVisible && (

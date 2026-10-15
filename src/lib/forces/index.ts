@@ -24,6 +24,21 @@ export {
 } from '../math/vectors.ts';
 
 export { solveIncline, type InclineInput, type InclineSolution } from './incline.ts';
+export {
+  advanceStickSlip,
+  createRng,
+  createStickSlip,
+  generateAsperities,
+  maxInterfaceFriction,
+  solveContacts,
+  totalBondForce,
+  type Asperity,
+  type Contact,
+  type ContactSolution,
+  type StickSlipBond,
+  type StickSlipParams,
+  type StickSlipState,
+} from './frictionMicro.ts';
 
 export {
   evaluateFreeBodySelection,

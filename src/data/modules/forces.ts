@@ -16,6 +16,8 @@ export const forcesModule: ModuleMeta = {
     'Draw interaction diagrams and use a system boundary to find the forces on a system',
     'Isolate a single system and draw a complete free-body diagram for it',
     'Tell third-law partners apart from forces that balance on one diagram',
+    'Distinguish static from kinetic friction and use f = μN',
+    'Explain friction as the shearing of bonds across the small real contact area, and why f is proportional to N and not to area',
   ],
   status: 'active',
   navVisibility: 'hidden',
@@ -50,6 +52,21 @@ export const forcesModule: ModuleMeta = {
         description:
           "Draw interaction diagrams, choose a system boundary, build free-body diagrams interactively, and apply Newton's three laws to elevators, pushes, and pulleys.",
         canonicalPath: '/forces/free-body-diagrams',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'forces-friction',
+      href: '/forces/friction',
+      title: 'Friction',
+      shortTitle: 'Friction',
+      description:
+        'Why friction is proportional to the normal force and what the coefficients of friction say about the surfaces, from touching tips to atomic bonds.',
+      seo: {
+        title: 'Friction',
+        description:
+          'Learn static and kinetic friction, then see why friction scales with the normal force: real contact at the tips of surface asperities, atomic bonds that stick and slip, and what the coefficient of friction measures.',
+        canonicalPath: '/forces/friction',
         image: '/social/physics-nook-card.svg',
       },
     },

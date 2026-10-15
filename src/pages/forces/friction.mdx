@@ -1,0 +1,233 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Friction
+description: "Why friction is proportional to the normal force, and what the coefficients of friction say about the surfaces: touching tips, atomic bonds, and stick-slip."
+canonicalPath: /forces/friction
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import { FrictionForceNewt } from '../../components/forces/ForcesNewtInteractives';
+import ContactAsperities from '../../components/forces/ContactAsperities';
+import AtomicStickSlip from '../../components/forces/AtomicStickSlip';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/forces/friction" />
+
+<div id="page-content"></div>
+
+
+
+**Friction** is the contact force a surface exerts parallel to the surface. It always opposes the *sliding* (or attempted sliding) between the two surfaces, and it comes in two kinds.  
+
+**Static friction** acts while the surfaces are not slipping. It is not a fixed number: it adjusts to balance other forces, up to a maximum.
+
+$$
+f_s \le \mu_s N.
+$$
+
+**Kinetic friction** acts once the surfaces are sliding, and has a single value:
+
+$$
+f_k = \mu_k N.
+$$
+
+The coefficients $\mu_s$ and $\mu_k$ describe the pair of surfaces, and typically $\mu_k < \mu_s$. Both laws scale with the **normal force** $N$, which quantifies how hard the surfaces press together.  Note that the contact area of the surfaces does not appear in either case, and kinetic friction does not depend on how quickly the surfaces slide past each other.
+
+Press and drag to push Newt in either direction; the farther you drag, the harder the push. While he sits still, friction exactly cancels your push. Once your push beats the static maximum he starts to slide, and the friction drops to its kinetic value. Check *unlock angle* to also push Newt down into the floor or lift Newt upward: the normal force changes, along with the corresponding friction.
+
+<InteractiveAnchor id="friction-force-newt" />
+
+<FrictionForceNewt client:visible />
+
+These are empirical rules, found by measuring various surfaces sliding (or almost sliding) past each other.  Really understanding how friction arises is a rather deep rabbit hole.  If you're interested in peeking down it, the remainder of this page uses a similar microscopic picture used for the [normal force and tension](/forces).  Consider the following: Why should friction depend on $N$? Why should it not depend on area? And what physical property of the two surfaces is a number like $\mu$ measuring?
+
+## Microscopic Modeling
+
+Many apparently smooth surfaces are rough when magnified. A surface is a landscape of tiny peaks, called **asperities**, and when two solids meet, they touch only where peaks from one meet the other. For ordinary solids the **real contact area** is a tiny fraction (often well under 1%) of the apparent area of contact. The picture below is magnified, and exaggerates the touching fraction so that you can see it.  For simplicity, we'll leave the top surface as smooth.
+
+Where the peaks touch, the atoms are pressed together like the springs in the normal-force picture, but these peaks carry a lot of load across a very small area. The pressure can be large enough to flatten them. A solid can only withstand so much pressure before it yields, and that limit is the **hardness** $H$ of the softer material. Each tip therefore flattens until it just supports its share of the load. The real contact area is proportional to the load and inversely proportional to the hardness:
+
+$$
+A_{\text{real}} = \frac{N}{H}.
+$$
+
+
+<InteractiveAnchor id="contact-asperities" />
+
+<ContactAsperities client:visible />
+
+Now narrow the block at a fixed load. There are fewer asperities in contact, and the block presses harder into these. That is why the apparent contact area is missing from the friction laws: it is the load (usually the weight), not the size of the block, that sets how much surface actually touches.
+
+
+At some point, the atoms in the two surfaces are close enough to bond.  As with the normal force and tension, we'll model this bond interaction with imaginary springs. As we begin to slide the surfaces, these temporary bonds will stretch until breaking. 
+
+Below, a block is held against the floor while the floor is dragged along beneath it. Each bond stretches as the floor moves, and eventually breaks at some limit. New bonds may form when a floor atom passes under a block atom, so a freshly formed bond starts out unstretched. The block feels the sum of all the bonds' pulls.
+
+<InteractiveAnchor id="atomic-stick-slip" />
+
+<AtomicStickSlip client:visible />
+
+The trace shows two different numbers.
+
+- **The static peak.** A block that has been resting has all of its bonds formed and unstretched. They are stretched together until the weakest begin to give, and the total force reaches a maximum just before the bonds start letting go. Past that, the force falls.
+- **The sliding average.** Once sliding, the bonds are in different stages: some freshly formed and barely stretched, some about to break, and some waiting for the next atom to arrive. On average they carry less than they did when all were fresh and in place together. This is why kinetic friction is smaller than static friction.
+
+Raise the number of bonds in contact and the peak rises in proportion, because the load is carried by those same bonds. More load means more bonds, and more bonds means more bonds to break. This is the origin of $f \propto N$.
+
+Finally, let's combine the ideas of real contact are and atomic adhesion.  The shear strength $\tau$ depends on how easily these bonds break, and the maximum friction is given by:
+
+$$
+f_{\max} = \tau A_{\text{real}} = \tau \frac{N}{H} = \mu_s N,
+\qquad
+\mu_s \approx \frac{\tau}{H}.
+$$
+
+So the coefficient of friction compares two properties of the interface: the **shear strength** $\tau$ of the bonds between the two surfaces, and the **hardness** $H$ of the softer one.  A clean, strongly bonding pair of metals has a large $\tau$ and a large $\mu$. Ice, Teflon, or a layer of lubricant gives weak bonds and a small $\mu$. A soft material flattens more under a given load, increasing the contact and so the friction.
+
+A few cautions go with the model:
+
+- The rules $f_s \le \mu_s N$ and $f_k = \mu_k N$ are approximations. Rubber and other soft polymers, lubricated and very clean or very smooth surfaces, and high speeds all depart from them.
+- The model gives $\mu$ a deeper physical meaning, but $\mu$ is still an empirical value, measured for a given pair of surfaces in given conditions.
+- The static peak depends on how long the surfaces have been at rest, since bonds can strengthen with time. 
+
+<ProblemSolvingSection intro="">
+  <WorkedExampleCard title="Starting and Keeping a Crate Moving" accent="blue">
+    #### Problem
+
+    A $25\ \text{kg}$ crate rests on a level floor with $\mu_s = 0.40$ and $\mu_k = 0.30$. What horizontal push is needed to start it moving? What push keeps it moving at constant speed? Use $g = 9.8\ \text{m/s}^2$.
+
+    #### Use
+
+    The vertical forces balance, so $N = mg$. To start the crate, the push must just exceed the maximum static friction. Once it slides at constant velocity, $\sum F_x = 0$ and the push equals the kinetic friction.
+
+    $$
+    F_{\text{start}} = \mu_s N,
+    \qquad
+    F_{\text{steady}} = \mu_k N.
+    $$
+
+    #### Solve
+
+    With $N = (25)(9.8) = 245\ \text{N}$,
+
+    $$
+    F_{\text{start}} = (0.40)(245) = 98\ \text{N},
+    \qquad
+    F_{\text{steady}} = (0.30)(245) = 73.5\ \text{N}.
+    $$
+
+    #### Check
+
+    Starting takes more than keeping going, as it should since $\mu_s > \mu_k$. If you keep pushing at $98\ \text{N}$ after it slips, the net force is $24.5\ \text{N}$ and the crate speeds up at $1.0\ \text{m/s}^2$.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Pressing a Block Against a Wall" accent="red">
+    #### Problem
+
+    You hold a $2.0\ \text{kg}$ block against a vertical wall by pushing on it horizontally. The coefficient of static friction between the block and the wall is $0.50$. What is the smallest push that keeps the block from sliding down?
+
+    #### Use
+
+    Draw the block as the system. Horizontally, the wall's normal force balances your push, so $N = F$. Vertically, static friction must hold up the weight:
+
+    $$
+    f_s = mg,
+    \qquad
+    f_s \le \mu_s N = \mu_s F.
+    $$
+
+    #### Solve
+
+    The least push has friction at its maximum, $\mu_s F = mg$:
+
+    $$
+    F = \frac{mg}{\mu_s} = \frac{(2.0)(9.8)}{0.50} = 39\ \text{N}.
+    $$
+
+    #### Check
+
+    The weight is not what sets $N$ here. The push is, which is why a harder squeeze is what stops the block from slipping. At $39\ \text{N}$ the friction is $19.6\ \text{N}$, equal to the weight, so the net force is zero.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Same Weight, Different Face" accent="blue">
+    #### Problem
+
+    A $3.0\ \text{kg}$ brick sits on a table with $\mu_s = 0.40$. How much horizontal force is needed to start it sliding when it lies flat? When it stands on its small end?
+
+    #### Use
+
+    In both positions the vertical forces balance, $N = mg$, so the same relation applies to both:
+
+    $$
+    F_{\text{start}} = \mu_s N = \mu_s mg.
+    $$
+
+    #### Solve
+
+    $$
+    F_{\text{start}} = (0.40)(3.0)(9.8) = 12\ \text{N}
+    $$
+
+    for either face.
+
+    #### Check
+
+    Standing the brick on its end puts the same load on a smaller area, so the asperities are squeezed harder and flatten more. The real contact area, and so the friction, is unchanged.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Friction Checkpoint"
+  questions={[
+    {
+      id: 'friction-static-adjusts',
+      question: 'A heavy box sits on the floor while you push on it with $20\\ \\text{N}$, and it does not move. What is the friction force on it?',
+      options: [
+        { id: 'A', text: '$\\mu_s N$, the maximum static friction.', isCorrect: false, explanation: '$\\mu_s N$ is only a ceiling. Static friction takes whatever value is needed to cancel the push, up to that limit.' },
+        { id: 'B', text: '$20\\ \\text{N}$, opposite the push.', isCorrect: true, explanation: 'Right. The box is not accelerating, so the horizontal forces cancel and static friction equals the push for as long as it can.' },
+        { id: 'C', text: 'Zero, because the box is not moving.', isCorrect: false, explanation: 'Friction acts to oppose attempted sliding, not just actual sliding. Without it the box would accelerate under your push.' }
+      ]
+    },
+    {
+      id: 'friction-more-load',
+      question: 'Why does pressing a block harder against a surface increase the friction on it?',
+      options: [
+        { id: 'A', text: 'The harder contact flattens more of the surface tips, so more of the surfaces actually touch and bond.', isCorrect: true, explanation: 'Right. Real contact grows in proportion to the load, so there are more bonds to break before the block can slide.' },
+        { id: 'B', text: 'Pressing harder makes the surfaces rougher.', isCorrect: false, explanation: 'The surfaces do not become rougher. The tips are flattened, which increases the area that touches.' },
+        { id: 'C', text: 'Pressing harder increases the mass of the block.', isCorrect: false, explanation: 'The mass does not change. What changes is the normal force, which is what the friction limit depends on.' }
+      ]
+    },
+    {
+      id: 'friction-area',
+      question: 'A brick is pulled across a table, first lying flat and then standing on its small end. Compared with lying flat, how large is the maximum static friction on the end?',
+      options: [
+        { id: 'A', text: 'Smaller, because less of the brick is touching the table.', isCorrect: false, explanation: 'Less apparent area does not mean less real contact. The smaller face is squeezed harder, so the tips flatten more.' },
+        { id: 'B', text: 'Larger, because the pressure on the table is greater.', isCorrect: false, explanation: 'The pressure is larger, but the total real contact is the load divided by the hardness, which does not change.' },
+        { id: 'C', text: 'The same, because the real contact is set by the load and the hardness.', isCorrect: true, explanation: 'Exactly. $A_{\\text{real}} = N/H$ is the same for both faces, and so is $\\tau A_{\\text{real}}$.' }
+      ]
+    },
+    {
+      id: 'friction-softer',
+      question: 'In the model $\\mu \\approx \\tau / H$, what happens to $\\mu$ if the softer of the two surfaces is replaced by an even softer material, with the bonding between them unchanged?',
+      options: [
+        { id: 'A', text: '$\\mu$ increases: the tips flatten more under the same load, giving more contact and more bonds.', isCorrect: true, explanation: 'Right. A smaller $H$ means a larger $A_{\\text{real}} = N/H$, so the same load must shear more bonds.' },
+        { id: 'B', text: '$\\mu$ decreases, because softer materials are more slippery.', isCorrect: false, explanation: 'Softness alone does not make a surface slippery. In this model it increases the real contact, which raises friction.' },
+        { id: 'C', text: '$\\mu$ is unchanged, because it only depends on the weight.', isCorrect: false, explanation: '$\\mu$ is a property of the pair of surfaces, not of the load, and the hardness is part of it.' }
+      ]
+    },
+    {
+      id: 'friction-kinetic-smaller',
+      question: 'Why is the friction while sliding usually smaller than the largest friction just before sliding starts?',
+      options: [
+        { id: 'A', text: 'Sliding reduces the normal force.', isCorrect: false, explanation: 'On a level surface the normal force is the same whether the block is sliding or not.' },
+        { id: 'B', text: 'While sliding, at any moment some bonds are newly formed and barely stretched, or waiting to re-form, so on average they carry less.', isCorrect: true, explanation: 'Right. At rest, all of the bonds are in place together and are stretched up to their limit. When sliding, they are at different stages, which lowers the average.' },
+        { id: 'C', text: 'The surfaces melt as soon as they begin to slide.', isCorrect: false, explanation: 'Heating happens, but it is not what usually accounts for the difference between static and kinetic friction.' }
+      ]
+    }
+  ]}
+/>

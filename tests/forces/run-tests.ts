@@ -12,15 +12,21 @@ import {
   contactNormalForce,
   evaluateFreeBodySelection,
   freeBodyScenarios,
+  advanceStickSlip,
+  createStickSlip,
   frictionForce,
+  generateAsperities,
   gravityForce,
   hookeForce,
   inverseSquareRelativeStrength,
   magnitude,
+  maxInterfaceFriction,
   netForce,
   resolveWallBounce,
+  solveContacts,
   solveIncline,
   tongueTensionForce,
+  totalBondForce,
 } from '../../src/lib/forces/index.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
@@ -276,5 +282,65 @@ assert.ok(floorOnNewt.force.x > 0);
 // Links with neither end inside are ignored entirely.
 assert.equal(classifyForSystem(pushScene, ['box']).external.some((force) => force.interaction.id === 'earth-newt-gravity'), false);
 assert.equal(systemBoundaryPath(pushScene, []), '');
+
+// --- Microscopic friction ---------------------------------------------------
+
+{
+  const slope = 0.3;
+  const hardness = 1.2;
+  const shear = 0.5;
+  const asperities = generateAsperities(7, 4000, 4000, 8);
+  const loads = [50, 100, 200, 400, 800];
+  const solutions = loads.map((load) => solveContacts(asperities, load, hardness, slope));
+
+  // The load is carried exactly by the contacts, and the touching length is N / H.
+  solutions.forEach((solution, index) => {
+    near(solution.contacts.reduce((sum, contact) => sum + contact.load, 0), loads[index], 1e-6);
+    near(solution.area, loads[index] / hardness, 1e-6);
+    assert.ok(solution.contacts.every((contact) => contact.depth > 0));
+  });
+
+  // More load, more tips touching, in proportion (exponential height statistics).
+  const perLoad = solutions.map((solution, index) => solution.contacts.length / loads[index]);
+  assert.ok(Math.max(...perLoad) / Math.min(...perLoad) < 1.15, `contacts should scale with load: ${perLoad}`);
+
+  // Friction limit is tau * A = (tau / H) * N, whatever the load.
+  solutions.forEach((solution, index) => near(maxInterfaceFriction(solution, shear) / loads[index], shear / hardness, 1e-9));
+
+  // A smaller block (half of the tips) at the same load touches the same number of tips.
+  const half = asperities.slice(0, 2000);
+  const wide = solveContacts(asperities, 400, hardness, slope);
+  const narrow = solveContacts(half, 400, hardness, slope);
+  assert.ok(Math.abs(wide.contacts.length - narrow.contacts.length) / wide.contacts.length < 0.12);
+  near(maxInterfaceFriction(wide, shear), maxInterfaceFriction(narrow, shear), 1e-6);
+
+  // Softer material touches over more length.
+  assert.ok(solveContacts(asperities, 400, 0.6, slope).area > wide.area);
+  assert.equal(solveContacts(asperities, 0, hardness, slope).contacts.length, 0);
+}
+
+{
+  const params = { breakStretch: 10, latticeSpacing: 10 };
+  const bondCount = 200;
+  const state = createStickSlip(3, bondCount, params);
+  let peak = 0;
+  const sliding: number[] = [];
+
+  for (let frame = 0; frame < 2400; frame += 1) {
+    const force = advanceStickSlip(state, 30 / 60, 1 / 60, params);
+    peak = Math.max(peak, force);
+    if (state.x > 40) {
+      sliding.push(force);
+    }
+  }
+
+  const mean = sliding.reduce((sum, value) => sum + value, 0) / sliding.length;
+  // Weakest-link peak: thresholds spread over [0.6, 1] of the break stretch, so
+  // the bonds hold together up to about 0.6 of it.
+  assert.ok(Math.abs(peak - 0.6 * bondCount * 10) / (0.6 * bondCount * 10) < 0.1, `static peak ${peak}`);
+  assert.ok(mean < 0.8 * peak && mean > 0.1 * peak, `kinetic mean ${mean} vs peak ${peak}`);
+  near(totalBondForce(state, params), totalBondForce(state, params));
+  assert.ok(state.bonds.some((bond) => !bond.attached) || state.bonds.every((bond) => bond.attached));
+}
 
 console.log('Forces helper tests passed.');

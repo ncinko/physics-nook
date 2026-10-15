@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react';
 import { ControlBar, Slider } from '../shared/InlineControls';
-import { Readout } from '../shared/Readout';
 import { ForceArrow, FORCE_COLORS } from './ForceArrow';
 import { generateAsperities, maxInterfaceFriction, solveContacts } from '../../lib/forces';
 
@@ -27,7 +26,7 @@ const format = (value: number, digits = 1) => value.toFixed(digits);
 export default function ContactAsperities() {
   const [load, setLoad] = useState(40);
   const [hardness, setHardness] = useState(1);
-  const [shear, setShear] = useState(0.5);
+  const shear = 0.5;
   const [widthPercent, setWidthPercent] = useState(100);
 
   const floor = useMemo(() => generateAsperities(11, COUNT, FLOOR_SPAN, LAMBDA), []);
@@ -141,16 +140,8 @@ export default function ContactAsperities() {
       <ControlBar>
         <Slider label="load N" min={LOAD_RANGE.min} max={LOAD_RANGE.max} step={1} value={load} onChange={setLoad} />
         <Slider label="hardness" min={0.6} max={2.5} step={0.1} value={hardness} onChange={setHardness} format={(v) => v.toFixed(1)} />
-        <Slider label="shear strength" min={0.1} max={1.5} step={0.05} value={shear} onChange={setShear} format={(v) => v.toFixed(2)} />
         <Slider label="block width" unit="%" min={40} max={100} step={5} value={widthPercent} onChange={setWidthPercent} />
       </ControlBar>
-
-      <Readout variant="inline" className="justify-center">
-        <Readout.Value label="tips touching" value={String(solution.contacts.length)} />
-        <Readout.Value label="touching length" value={format((solution.area / blockLength) * 100)} unit="%" />
-        <Readout.Value label="friction limit" value={format(fMax)} />
-        <Readout.Value label="μ" value={format(mu, 2)} />
-      </Readout>
     </div>
   );
 }

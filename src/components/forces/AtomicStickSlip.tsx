@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ControlBar, Slider } from '../shared/InlineControls';
-import { Readout } from '../shared/Readout';
+import { useEffect, useRef, useState } from 'react';
 import { ForceArrow, FORCE_COLORS } from './ForceArrow';
 import { advanceStickSlip, createStickSlip, type StickSlipParams, type StickSlipState } from '../../lib/forces';
 
@@ -18,16 +16,17 @@ const FLOOR_ATOM_Y = 190;
 const ATOM_RADIUS = 6;
 const PLOT = { x: 60, y: 268, width: 640, height: 92 };
 const WINDOW_SECONDS = 12;
-const LOAD_PER_BOND = 12;
 const SEED = 5;
+const BOND_COUNT = 12;
+const STRENGTH = 10;
+const SPEED = 30;
+const PARAMS: StickSlipParams = { breakStretch: STRENGTH, latticeSpacing: LATTICE };
 
 interface Sample {
   t: number;
   x: number;
   force: number;
 }
-
-const format = (value: number, digits = 1) => value.toFixed(digits);
 
 /** A zigzag spring between two points, as in the other force demos. */
 const springPath = (from: { x: number; y: number }, to: { x: number; y: number }, coils = 5, amplitude = 4) => {
@@ -51,35 +50,18 @@ const springPath = (from: { x: number; y: number }, to: { x: number; y: number }
 };
 
 export default function AtomicStickSlip() {
-  const [bondCount, setBondCount] = useState(12);
-  const [strength, setStrength] = useState(10);
-  const [speed, setSpeed] = useState(30);
-  const [runId, setRunId] = useState(0);
+  const bondCount = BOND_COUNT;
+  const strength = STRENGTH;
   const [, setFrame] = useState(0);
 
-  const params = useMemo<StickSlipParams>(() => ({ breakStretch: strength, latticeSpacing: LATTICE }), [strength]);
   const stateRef = useRef<StickSlipState | null>(null);
   if (stateRef.current === null) {
-    stateRef.current = createStickSlip(SEED, bondCount, params);
+    stateRef.current = createStickSlip(SEED, bondCount, PARAMS);
   }
   const samplesRef = useRef<Sample[]>([]);
   const peakRef = useRef(0);
   const forceRef = useRef(0);
   const lastTimeRef = useRef<number | null>(null);
-  const speedRef = useRef(speed);
-  speedRef.current = speed;
-  const paramsRef = useRef(params);
-  paramsRef.current = params;
-
-  // Any change to the interface starts a fresh pull from rest.
-  useEffect(() => {
-    stateRef.current = createStickSlip(SEED, bondCount, params);
-    samplesRef.current = [];
-    peakRef.current = 0;
-    forceRef.current = 0;
-    lastTimeRef.current = null;
-    setFrame((value) => value + 1);
-  }, [bondCount, params, runId]);
 
   useEffect(() => {
     let frame = 0;
@@ -94,7 +76,7 @@ export default function AtomicStickSlip() {
         frame = window.requestAnimationFrame(tick);
         return;
       }
-      const force = advanceStickSlip(state, speedRef.current * dt, dt, paramsRef.current);
+      const force = advanceStickSlip(state, SPEED * dt, dt, PARAMS);
       forceRef.current = force;
       peakRef.current = Math.max(peakRef.current, force);
       const samples = samplesRef.current;
@@ -113,7 +95,6 @@ export default function AtomicStickSlip() {
 
   const state = stateRef.current;
   const samples = samplesRef.current;
-  const load = bondCount * LOAD_PER_BOND;
   const firstX = CENTER_X - ((bondCount - 1) * BLOCK_SPACING) / 2;
   const blockLeft = firstX - 34;
   const blockRight = firstX + (bondCount - 1) * BLOCK_SPACING + 34;
@@ -185,6 +166,7 @@ export default function AtomicStickSlip() {
           maxLength={150}
           color={FORCE_COLORS.friction}
           label="friction"
+          labelAt={{ x: blockLeft - 8, y: 70, anchor: 'end' }}
           labelBounds={VIEW}
         />
 
@@ -215,23 +197,6 @@ export default function AtomicStickSlip() {
         )}
         <polyline points={trace} fill="none" stroke={FORCE_COLORS.applied} strokeWidth="2" strokeLinejoin="round" />
       </svg>
-
-      <ControlBar>
-        <Slider label="bonds in contact" min={4} max={20} step={1} value={bondCount} onChange={setBondCount} />
-        <Slider label="bond strength" min={6} max={16} step={1} value={strength} onChange={setStrength} />
-        <Slider label="pull speed" min={10} max={60} step={5} value={speed} onChange={setSpeed} />
-        <Button variant="secondary" onClick={() => setRunId((value) => value + 1)}>
-          Pull again
-        </Button>
-      </ControlBar>
-
-      <Readout variant="inline" className="justify-center">
-        <Readout.Value label="load N" value={format(load, 0)} />
-        <Readout.Value label="static peak" value={format(peak, 0)} />
-        <Readout.Value label="sliding average" value={kineticMean === null ? '–' : format(kineticMean, 0)} />
-        <Readout.Value label="μs" value={format(peak / load, 2)} />
-        <Readout.Value label="μk" value={kineticMean === null ? '–' : format(kineticMean / load, 2)} />
-      </Readout>
     </div>
   );
 }

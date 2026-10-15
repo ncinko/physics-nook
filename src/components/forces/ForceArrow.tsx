@@ -30,6 +30,8 @@ export interface ForceVector {
   labelBounds?: { width: number; height: number };
   /** Draw the shaft dashed, for weight components resolved onto axes. */
   dashed?: boolean;
+  /** Pin the label here instead of at the arrow tip; it then stays put even when the arrow is too short to draw. */
+  labelAt?: { x: number; y: number; anchor?: 'start' | 'middle' | 'end' };
 }
 
 export const ForceArrow = ({
@@ -42,13 +44,31 @@ export const ForceArrow = ({
   opacity = 1,
   labelBounds = DEFAULT_LABEL_BOUNDS,
   dashed = false,
+  labelAt,
 }: ForceVector) => {
   const raw = scale(vector, arrowScale);
   const display = clampMagnitude(raw, maxLength);
   const length = magnitude(display);
 
+  const pinnedLabel = labelAt && (
+    <text
+      x={labelAt.x}
+      y={labelAt.y}
+      fill={color}
+      textAnchor={labelAt.anchor ?? 'end'}
+      dominantBaseline="middle"
+      fontSize="14"
+      fontWeight="700"
+      paintOrder="stroke"
+      stroke="var(--surface-plot)"
+      strokeWidth="4"
+    >
+      {label}
+    </text>
+  );
+
   if (length < 2) {
-    return null;
+    return pinnedLabel ? <g opacity={opacity}>{pinnedLabel}</g> : null;
   }
 
   const end = add(origin, display);
@@ -85,6 +105,7 @@ export const ForceArrow = ({
         stroke={color}
         strokeLinejoin="round"
       />
+      {pinnedLabel ?? (
       <text
         x={labelX}
         y={labelY}
@@ -99,6 +120,7 @@ export const ForceArrow = ({
       >
         {label}
       </text>
+      )}
     </g>
   );
 };

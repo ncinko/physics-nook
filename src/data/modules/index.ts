@@ -82,7 +82,8 @@ export const mechanicsPath = {
     ...kinematicsModule.pages,
     // Forces, then Free-Body Diagrams.
     ...forcesModule.pages,
-    collisionsModule.pages[0],
+    // Collisions is being reworked; re-add `collisionsModule.pages[0]` here
+    // (and its entries in interactives.ts) when it is ready to show again.
     energyModule.pages[0],
   ],
 } satisfies ModulePathGroup;

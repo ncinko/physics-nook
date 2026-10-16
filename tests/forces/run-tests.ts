@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
 import {
+  accelerationFromForce,
+  advanceMotion,
+  advanceWithDots,
+  netForce1D,
+  START_STATE,
+  type MotionDot,
   BOUNDARY_PAD,
   BUBBLE_RADIUS,
   classifyForSystem,
@@ -341,6 +347,79 @@ assert.equal(systemBoundaryPath(pushScene, []), '');
   assert.ok(mean < 0.8 * peak && mean > 0.1 * peak, `kinetic mean ${mean} vs peak ${peak}`);
   near(totalBondForce(state, params), totalBondForce(state, params));
   assert.ok(state.bonds.some((bond) => !bond.attached) || state.bonds.every((bond) => bond.attached));
+}
+
+{
+  // Second law: a = net force / mass, signed along the track.
+  near(netForce1D(6, 2), 4);
+  near(netForce1D(2, 6), -4);
+  near(netForce1D(5, 5), 0);
+  near(accelerationFromForce(6, 2), 3);
+  near(accelerationFromForce(-6, 2), -3);
+  // Doubling the mass at fixed net force halves the acceleration.
+  near(accelerationFromForce(6, 4), accelerationFromForce(6, 2) / 2);
+  // Doubling the force at fixed mass doubles it.
+  near(accelerationFromForce(12, 2), 2 * accelerationFromForce(6, 2));
+
+  // Cancelling pushes: no acceleration, so velocity stays whatever it was.
+  const coasting = advanceMotion({ t: 0, x: 0, v: 3 }, netForce1D(4, 4), 2, 2);
+  near(coasting.v, 3);
+  near(coasting.x, 6);
+  near(coasting.t, 2);
+
+  // Constant net force from rest: v = at, x = at^2 / 2.
+  const pushed = advanceMotion(START_STATE, 6, 2, 2);
+  near(pushed.v, 6);
+  near(pushed.x, 6);
+
+  // Stepping in many small pieces matches one exact step.
+  let stepped = START_STATE;
+  for (let index = 0; index < 120; index += 1) {
+    stepped = advanceMotion(stepped, 6, 2, 1 / 60);
+  }
+  near(stepped.x, 6, 1e-9);
+  near(stepped.v, 6, 1e-9);
+}
+
+{
+  const run = (net: number, mass: number, seconds: number, frame = 1 / 60) => {
+    let state = START_STATE;
+    let dots: MotionDot[] = [{ t: 0, x: 0 }];
+    for (let index = 0; index < Math.round(seconds / frame); index += 1) {
+      ({ state, dots } = advanceWithDots(state, dots, net, mass, frame, 1));
+    }
+    return { state, dots };
+  };
+  const gaps = (dots: MotionDot[]) => dots.slice(1).map((dot, index) => dot.x - dots[index].x);
+
+  // One dot per second, placed at the exact crossing.
+  const accelerating = run(6, 2, 4);
+  assert.equal(accelerating.dots.length, 5);
+  accelerating.dots.forEach((dot, second) => {
+    near(dot.t, second);
+    near(dot.x, 0.5 * 3 * second * second, 1e-6);
+  });
+  // Constant acceleration: gaps grow by a fixed step (a * interval^2 = 3 m).
+  const spacing = gaps(accelerating.dots);
+  spacing.slice(1).forEach((gap, index) => near(gap - spacing[index], 3, 1e-6));
+
+  // No net force and no initial velocity: the dots never leave the start.
+  gaps(run(0, 3, 4).dots).forEach((gap) => near(gap, 0));
+
+  // Net force to the left puts the dots on the negative side.
+  assert.ok(run(-4, 2, 3).dots.every((dot) => dot.x <= 0));
+
+  // Coasting after a push: equal time, equal distance.
+  let state = START_STATE;
+  let dots: MotionDot[] = [{ t: 0, x: 0 }];
+  for (let index = 0; index < 120; index += 1) {
+    ({ state, dots } = advanceWithDots(state, dots, 6, 2, 1 / 60, 1));
+  }
+  for (let index = 0; index < 180; index += 1) {
+    ({ state, dots } = advanceWithDots(state, dots, 0, 2, 1 / 60, 1));
+  }
+  const coastGaps = gaps(dots).slice(2);
+  coastGaps.forEach((gap) => near(gap, 6, 1e-6));
 }
 
 console.log('Forces helper tests passed.');

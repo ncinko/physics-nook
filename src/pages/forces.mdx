@@ -17,6 +17,7 @@ import {
   SpringForceNewt,
   TongueTensionNewt,
 } from '../components/forces/ForcesNewtInteractives';
+import SecondLawNewt from '../components/forces/SecondLawNewt';
 import { mechanicsPath } from '../data/modules';
 
 <ModuleHero module={mechanicsPath} currentPath="/forces" />
@@ -25,33 +26,37 @@ import { mechanicsPath } from '../data/modules';
 
 # Forces
 
-A **force** is a push or pull that can change motion. More precisely, the sum of all forces acting on an object determines its acceleration:
+A **force** is a push or pull that can change the motion of an object. Newt the physics frog will help us build the idea from the ground up: first with no forces at all, and then with some of the most common forces.
 
-$$
-\sum \vec{F} = m\vec{a}.
-$$
+Forces are vector quantities.  If vector arrows or component addition feel rusty, start with the [Vectors](/math/vectors) page first. 
 
-Newt the physics frog will help us build the idea from the ground up: first with no forces at all, then with spring-like forces and weight, and finally with the everyday contact forces that show up in free-body diagrams.
+If no force acts on an object, its velocity remains constant.  A short push will change Newt's velocity, but otherwise Newt moves at constant velocity until the next push.
 
-If vector arrows or component addition feel rusty, start with the [Vectors](/math/vectors) page first. Free-body diagrams depend on adding force vectors, not just listing force names.
-
-## Force-Free Motion
-
-If no force acts on an object, its velocity does not need to be zero.  Zero acceleration simply means the velocity remains as it was.  A short push can change Newt's velocity, but otherwise Newt moves at constant velocity until the next force is applied.
-
-$$
-\sum \vec{F} = 0 \ \Rightarrow \ \vec{v} = \text{constant}.
-$$
 
 <InteractiveAnchor id="force-free-newt" />
 
 <ForceFreeNewt client:visible />
 
+## Newton's Second Law
 
+The **net force** $\sum \vec{F}$ is the vector sum of every force acting on the object.  If the forces are perfectly balanced, we again have constant velocity motion.  Otherwise, the object accelerates in the same direction as the net force:
+
+$$
+\vec{a} = \frac{\sum \vec{F}}{m}.
+$$
+
+The denominator is the **mass** of the object.  If we're being philosophically precise, this is also called **inertial mass**.  For the same net force, a more massive object accelerates less, i.e. it has more inertia. Mass is measured in kilograms, and force is measured in newtons: $1\ \text{N} = 1\ \text{kg}\cdot\text{m/s}^2$.
+
+To see the combined effect of two individual forces, let's place Newt on frictionless ice. He and the sled have a mass of $1\ \text{kg}$, and each crate adds another kilogram. Drag the rope handles to pull him left or right (or both).
+<InteractiveAnchor id="second-law-newt" />
+
+<SecondLawNewt client:visible />
+
+Only the *net* force matters: either push alone could be large, yet the acceleration depends on their difference. Continue playing with Newt below to see some of the other common forces.
 
 ## Springs
 
-Springs are a clean place to start because their force depends on displacement. In the ideal model, the force points back toward the relaxed position:
+Springs can be compressed or stretched.  In both cases, it's as if springs are attempting to return to their natural length.  An ideal spring exerts a force that is proportional to the displacement from its natural length, $\vec{x} = L - L_0$,
 
 $$
 \vec{F}_s = -k\vec{x}.
@@ -67,13 +72,13 @@ This spring picture will become our microscopic model for contact forces. Atoms 
 
 ## Gravity
 
-Gravity does not require contact. Near Earth's surface, we usually model it as a steady downward force:
+Gravity is rather complicated and quite magical; the Earth doesn't need to be touching you to an exert a force.  Near Earth's surface, we usually model it as a steady downward force:
 
 $$
 \vec{F}_g = m\vec{g}.
 $$
 
-The magnitude of this force $mg$ is known as the **weight** of the object.  In the following diagrams, the force of gravity is then drawn as a weight arrow.
+The magnitude of this force $mg$ is known as the **weight** of the object.  In the following diagrams, the force of gravity is then drawn as a weight arrow.  When you speak of "gravity", you should now be specific: do you mean the acceleration due to gravity, the force due to gravity, or just the general phenomena known as gravity?
 
 <InteractiveAnchor id="gravity-force-newt" />
 
@@ -83,19 +88,13 @@ The magnitude of this force $mg$ is known as the **weight** of the object.  In t
 
 ## Normal Force
 
-The **normal force** is the contact force perpendicular to a surface.  Newt compresses the surface very slightly, and the surface's microscopic spring-like structure pushes back.
+The **normal force** is the contact force perpendicular to a surface.  Unfortunately, there is no corresponding abnormal force.  *Normal* just means perpendicular.  Newt compresses the surface very slightly, and the surface's microscopic spring-like structure pushes back.
 
 <InteractiveAnchor id="normal-force-newt" />
 
 <NormalForceNewt client:visible />
 
-On a flat surface with no vertical acceleration, the normal force usually balances weight:
-
-$$
-N = mg.
-$$
-
-On a ramp or in an accelerating system, the normal force may be smaller or larger than $mg$. What stays true is the direction: the normal force is perpendicular to the contact surface.
+On a flat surface with no vertical acceleration, the normal force usually balances weight.  On a ramp or in an accelerating system, the normal force may be smaller or larger than $mg$. 
 
 ## Tension
 
@@ -107,7 +106,7 @@ Newt has an unusually useful rope: his tongue.
 
 <TongueTensionNewt client:visible />
 
-A slack rope, string, cable, or tongue does not apply a tension force.  Once it becomes taut, it can pull only along its own length. That is why tension arrows in free-body diagrams point away from the object along the rope.
+A slack rope, string, cable, or tongue does not apply a tension force.  Once it becomes taut, it can pull only along its own length. 
 
 <ProblemSolvingSection>
   <WorkedExampleCard title="Weight and Normal Force" accent="blue">

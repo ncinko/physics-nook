@@ -41,6 +41,16 @@ export {
 } from './frictionMicro.ts';
 
 export {
+  accelerationFromForce,
+  advanceMotion,
+  advanceWithDots,
+  netForce1D,
+  START_STATE,
+  type MotionDot,
+  type MotionState,
+} from './secondLaw.ts';
+
+export {
   evaluateFreeBodySelection,
   freeBodyScenarios,
   type ForceKind,

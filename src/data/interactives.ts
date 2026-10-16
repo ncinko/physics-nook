@@ -347,6 +347,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['forces', 'newton', 'free-body diagrams'],
   },
   {
+    id: 'second-law-newt',
+    title: "Newton's Second Law",
+    description: 'Set two opposing pushes and the mass of Newt\'s sled, then watch a motion map show how net force and mass set the acceleration.',
+    href: '/forces#second-law-newt',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['forces', 'newton', 'second law', 'acceleration'],
+  },
+  {
     id: 'interaction-diagram',
     title: 'Interaction Diagram',
     description: 'Tap a link between two objects to see its third-law force pair drawn in the scene: a falling ball, Newt on a table, hanging by his tongue, or pushing a box.',

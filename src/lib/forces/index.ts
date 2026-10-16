@@ -41,6 +41,14 @@ export {
 } from './frictionMicro.ts';
 
 export {
+  dampingRatio,
+  formatMagnitude,
+  logSliderToValue,
+  stableSubsteps,
+  valueToLogSlider,
+} from './stiffness.ts';
+
+export {
   accelerationFromForce,
   advanceMotion,
   advanceWithDots,

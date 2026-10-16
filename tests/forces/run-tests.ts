@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
 import {
+  dampingRatio,
+  formatMagnitude,
+  logSliderToValue,
+  stableSubsteps,
+  valueToLogSlider,
   accelerationFromForce,
   advanceMotion,
   advanceWithDots,
@@ -420,6 +425,41 @@ assert.equal(systemBoundaryPath(pushScene, []), '');
   }
   const coastGaps = gaps(dots).slice(2);
   coastGaps.forEach((gap) => near(gap, 6, 1e-6));
+}
+
+{
+  // Log-scaled stiffness sliders.
+  near(logSliderToValue(0, 55, 100000), 55);
+  near(logSliderToValue(1, 55, 100000), 100000, 1e-6);
+  near(logSliderToValue(0.5, 1, 100), 10, 1e-9);
+  [55, 90, 720, 5000, 100000].forEach((value) => {
+    near(logSliderToValue(valueToLogSlider(value, 55, 100000), 55, 100000), value, 1e-6);
+  });
+  near(valueToLogSlider(10, 55, 100000), 0);
+  near(valueToLogSlider(1e9, 55, 100000), 1);
+
+  assert.equal(formatMagnitude(0.7), '0.7');
+  assert.equal(formatMagnitude(90), '90');
+  assert.equal(formatMagnitude(480.4), '480');
+  assert.equal(formatMagnitude(1500), '1.5k');
+  assert.equal(formatMagnitude(100000), '100k');
+
+  // Substeps keep omega * h under the stability phase, until the cap.
+  assert.equal(stableSubsteps(0, 1, 0.033), 1);
+  for (const [stiffness, mass] of [[720, 2.2], [8e4, 1], [8e5, 4]]) {
+    const steps = stableSubsteps(stiffness, mass, 0.033);
+    assert.ok(Math.sqrt(stiffness / mass) * (0.033 / steps) <= 0.2 + 1e-9, `${stiffness}/${mass}: ${steps} steps`);
+  }
+  assert.equal(stableSubsteps(1e12, 1, 0.033), 240);
+
+  // Damping ratio: base value at the base stiffness, critical well above it, never below base.
+  near(dampingRatio(720, 720, 0.22), 0.22);
+  near(dampingRatio(72, 720, 0.22), 0.22);
+  near(dampingRatio(72000, 720, 0.22), 1);
+  near(dampingRatio(1e9, 720, 0.22), 1);
+  assert.ok(dampingRatio(7200, 720, 0.22) > 0.22 && dampingRatio(7200, 720, 0.22) < 1);
+  near(dampingRatio(72000, 720, 0.22, 2, 2.5), 2.5);
+  near(dampingRatio(720, 720, 0.22, 2, 2.5), 0.22);
 }
 
 console.log('Forces helper tests passed.');

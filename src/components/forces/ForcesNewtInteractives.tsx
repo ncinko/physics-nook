@@ -13,7 +13,12 @@ import {
   clamp,
   clampMagnitude,
   contactNormalForce,
+  dampingRatio,
   dot,
+  formatMagnitude,
+  logSliderToValue,
+  stableSubsteps,
+  valueToLogSlider,
   frictionForce,
   gravityForce,
   hookeForce,
@@ -41,13 +46,33 @@ const NORMAL_HARD_BOUNDS = {
   top: NORMAL_SURFACES.top - NORMAL_MATTRESS_THICKNESS,
   bottom: NORMAL_SURFACES.bottom + NORMAL_MATTRESS_THICKNESS,
 };
-const TENSION_VIEW = { width: 760, height: 440 };
+// The normal arrow is linear up to NORMAL_ARROW_LINEAR px (about Newt's resting
+// weight), then grows only logarithmically, so shoving Newt into a stiff
+// surface visibly lengthens it without running off the stage.
+const NORMAL_ARROW_PIXELS_PER_UNIT = 3.3;
+const NORMAL_ARROW_LINEAR = 90;
+const NORMAL_ARROW_MAX = 150;
+const normalArrowLength = (force: number) => {
+  const linear = force * NORMAL_ARROW_PIXELS_PER_UNIT;
+  return linear <= NORMAL_ARROW_LINEAR
+    ? linear
+    : Math.min(NORMAL_ARROW_MAX, NORMAL_ARROW_LINEAR + 30 * Math.log(linear / NORMAL_ARROW_LINEAR));
+};
+const NORMAL_STIFFNESS_RANGE ={ min: 55, max: 100000 };
+const TONGUE_STIFFNESS_RANGE = { min: 0.35, max: 1000 };
+// Tension at which the tongue's length limit takes over. A soft tongue reaches
+// this only past the edge of the stage, so it never meets a hard boundary; a
+// stiff tongue (whose real stretch is tiny) hits it only when dragged taut,
+// which keeps a release from flinging Newt.
+const TONGUE_LIMIT_FORCE = 8000;
+const TENSION_VIEW ={ width: 760, height: 440 };
 const TENSION_BOUNDS = { left: 34, right: TENSION_VIEW.width - 34, top: 34, bottom: TENSION_VIEW.height - 34 };
 const TENSION_DYNAMICS_FORCE_SCALE = 82;
 const TENSION_PIXEL_GRAVITY = 620;
 const TENSION_WEIGHT_ARROW_SCALE = 2.7;
 const TENSION_REST_LENGTH = 200;
-const TENSION_START = { x: 210, y: 292 };
+const TENSION_ANCHOR = { x: TENSION_VIEW.width / 2, y: 78 };
+const TENSION_START = { x: TENSION_ANCHOR.x, y: 292 };
 
 interface TimedVector extends ForceVector {
   ttl: number;
@@ -114,6 +139,27 @@ const RangeControl = ({ label, value, min, max, step, unit = '', onChange }: Ran
       step={step}
       value={value}
       onChange={(event) => onChange(Number(event.currentTarget.value))}
+      className="w-full accent-[var(--accent-blue)]"
+    />
+  </label>
+);
+
+// A slider that sweeps several decades, so a soft spring and a nearly rigid one
+// are both within reach.
+const LogRangeControl = ({ label, value, min, max, onChange }: Omit<RangeControlProps, 'step' | 'unit'>) => (
+  <label className="grid min-w-[9.5rem] gap-1 text-xs font-semibold uppercase tracking-wide text-[color:var(--text-muted)]">
+    <span className="flex items-center justify-between gap-2">
+      <span>{label}</span>
+      <span className="font-mono text-[color:var(--text-primary)]">{formatMagnitude(value)}</span>
+    </span>
+    <input
+      type="range"
+      min={0}
+      max={1}
+      step={0.001}
+      value={valueToLogSlider(value, min, max)}
+      aria-valuetext={formatMagnitude(value)}
+      onChange={(event) => onChange(logSliderToValue(Number(event.currentTarget.value), min, max))}
       className="w-full accent-[var(--accent-blue)]"
     />
   </label>
@@ -553,7 +599,6 @@ export function SpringForceNewt() {
             min={0.15}
             max={0.8}
             step={0.05}
-            unit=" k"
             onChange={setStiffness}
           />
         </>
@@ -660,11 +705,24 @@ export function NormalForceNewt() {
         const activeContact = Object.values(currentCompressions).some((compression) => compression > 0);
         const bottomContact = currentCompressions.bottom > 0;
         const gravity = { x: 0, y: mass * 680 };
-        const contacts = normalContactForces(bodyRef.current.position, bodyRef.current.velocity, NORMAL_SURFACES, stiffness * 8, 18);
         const wallDamping = activeContact ? 0.988 : 0.999;
-        const force = netForce([gravity, ...contacts]);
-        const advanced = integrateBody(bodyRef.current, force, mass, dt);
-        let next = resolveWallBounce(advanced, NEWT_RADIUS, NORMAL_HARD_BOUNDS, 0.22).state;
+
+        // A very stiff surface oscillates far faster than a frame, so each frame
+        // is split into enough substeps to keep the integrator stable. Damping
+        // climbs toward critical with stiffness, which makes a stiff surface
+        // stop Newt instead of throwing him back like a perfect spring.
+        const contactStiffness = stiffness * 8;
+        const contactDamping = Math.max(
+          18,
+          2 * dampingRatio(contactStiffness, 720, 0.22, 2, 2.5) * Math.sqrt(contactStiffness * mass),
+        );
+        const steps = stableSubsteps(contactStiffness, mass, dt);
+        let next = bodyRef.current;
+        for (let step = 0; step < steps; step += 1) {
+          const contacts = normalContactForces(next.position, next.velocity, NORMAL_SURFACES, contactStiffness, contactDamping);
+          const advanced = integrateBody(next, netForce([gravity, ...contacts]), mass, dt / steps);
+          next = resolveWallBounce(advanced, NEWT_RADIUS, NORMAL_HARD_BOUNDS, 0.22).state;
+        }
         next = {
           ...next,
           velocity: {
@@ -714,7 +772,7 @@ export function NormalForceNewt() {
       controls={
         <>
           <RangeControl label="mass" value={mass} min={1} max={4} step={0.1} unit=" kg" onChange={setMass} />
-          <RangeControl label="surface k" value={stiffness} min={55} max={150} step={5} onChange={setStiffness} />
+          <LogRangeControl label="surface k" value={stiffness} min={NORMAL_STIFFNESS_RANGE.min} max={NORMAL_STIFFNESS_RANGE.max} onChange={setStiffness} />
         </>
       }
     >
@@ -759,7 +817,15 @@ export function NormalForceNewt() {
         <FlexibleWall side="right" bounds={NORMAL_SURFACES} center={newt.y} compression={compressions.right} />
         <NewtSprite x={newt.x} y={newt.y} angle={body.angle ?? 0} />
         <ForceArrow origin={{ x: newt.x - 42, y: newt.y }} vector={weight} color={FORCE_COLORS.gravity} label="weight" scale={3.3} maxLength={90} labelBounds={NORMAL_VIEW} />
-        <ForceArrow origin={{ x: newt.x + 42, y: newt.y }} vector={normal} color={FORCE_COLORS.normal} label="normal" scale={3.3} maxLength={90} labelBounds={NORMAL_VIEW} />
+        <ForceArrow
+          origin={{ x: newt.x + 42, y: newt.y }}
+          vector={normalize(normal)}
+          color={FORCE_COLORS.normal}
+          label="normal"
+          scale={normalArrowLength(magnitude(normal))}
+          maxLength={NORMAL_ARROW_MAX}
+          labelBounds={NORMAL_VIEW}
+        />
 
 
       </svg>
@@ -780,12 +846,13 @@ export function TongueTensionNewt() {
   const [body, setBody] = useState(bodyRef.current);
   const [stiffness, setStiffness] = useState(0.7);
   const restLength = TENSION_REST_LENGTH;
-  const anchor = { x: 210, y: 78 };
-  const maxTongueStretch = 24;
+  const anchor = TENSION_ANCHOR;
+  const tongueStiffness = stiffness * TENSION_DYNAMICS_FORCE_SCALE;
+  const maxTongueStretch = TONGUE_LIMIT_FORCE / tongueStiffness;
   const newt = body.position;
   const mouth = add(newt, NEWT_MOUTH_OFFSET);
   const tension = tongueTensionForce(mouth, anchor, restLength, stiffness);
-  const displayedTension = tongueTensionForce(mouth, anchor, restLength, stiffness * TENSION_DYNAMICS_FORCE_SCALE);
+  const displayedTension = tongueTensionForce(mouth, anchor, restLength, tongueStiffness);
   const gravity = gravityForce(2, 9.8);
   const tensionArrowScale = (magnitude(gravity) * TENSION_WEIGHT_ARROW_SCALE) / (2 * TENSION_PIXEL_GRAVITY);
   const tongueMouthAngle =
@@ -794,34 +861,56 @@ export function TongueTensionNewt() {
   useEffect(() => {
     let frame = 0;
 
+    // Hard limit on how far the tongue can stretch, with the outward velocity removed.
+    const limitStretch = (state: BodyState): BodyState => {
+      const fromAnchor = subtract(add(state.position, NEWT_MOUTH_OFFSET), anchor);
+      const distance = magnitude(fromAnchor);
+      const maxLength = restLength + maxTongueStretch;
+
+      if (distance <= maxLength || distance === 0) {
+        return state;
+      }
+
+      const radial = scale(fromAnchor, 1 / distance);
+      const constrainedMouth = add(anchor, scale(radial, maxLength));
+      const outwardSpeed = Math.max(0, state.velocity.x * radial.x + state.velocity.y * radial.y);
+      return {
+        ...state,
+        position: subtract(constrainedMouth, NEWT_MOUTH_OFFSET),
+        velocity: subtract(state.velocity, scale(radial, outwardSpeed * 1.08)),
+      };
+    };
+
+    // Raising k mid-hang shortens the stretch limit; take up the slack at once.
+    bodyRef.current = limitStretch(bodyRef.current);
+
+    // The default tongue has a damping ratio of about 0.035. A stiffer tongue
+    // rings much faster, so its damping along the tongue climbs toward critical
+    // and it goes taut like a rope instead of bouncing like a perfect spring.
+    const radialDamping =
+      2 * dampingRatio(tongueStiffness, 57, 0.035) * Math.sqrt(tongueStiffness * 2);
+    const extraRadialDamping = Math.max(0, radialDamping - 0.75);
+
     const tick = (time: number) => {
       const last = lastTimeRef.current ?? time;
       const dt = Math.min((time - last) / 1000, 0.033);
       lastTimeRef.current = time;
 
       if (!dragRef.current.active) {
-        const currentMouth = add(bodyRef.current.position, NEWT_MOUTH_OFFSET);
-        const currentTension = tongueTensionForce(currentMouth, anchor, restLength, stiffness * TENSION_DYNAMICS_FORCE_SCALE);
         const gravityForcePx = { x: 0, y: 2 * TENSION_PIXEL_GRAVITY };
-        const damping = scale(bodyRef.current.velocity, -0.75);
-        const force = netForce([currentTension.force, gravityForcePx, damping]);
-        let next = integrateBody(bodyRef.current, force, 2, dt);
-        next = resolveWallBounce(next, NEWT_RADIUS, TENSION_BOUNDS, 0.35).state;
+        const steps = stableSubsteps(tongueStiffness, 2, dt);
+        let next = bodyRef.current;
 
-        const mouthAfterStep = add(next.position, NEWT_MOUTH_OFFSET);
-        const fromAnchor = subtract(mouthAfterStep, anchor);
-        const distance = magnitude(fromAnchor);
-        const maxLength = restLength + maxTongueStretch;
-
-        if (distance > maxLength && distance > 0) {
-          const radial = scale(fromAnchor, 1 / distance);
-          const constrainedMouth = add(anchor, scale(radial, maxLength));
-          const outwardSpeed = Math.max(0, next.velocity.x * radial.x + next.velocity.y * radial.y);
-          next = {
-            ...next,
-            position: subtract(constrainedMouth, NEWT_MOUTH_OFFSET),
-            velocity: subtract(next.velocity, scale(radial, outwardSpeed * 1.08)),
-          };
+        for (let step = 0; step < steps; step += 1) {
+          const currentMouth = add(next.position, NEWT_MOUTH_OFFSET);
+          const currentTension = tongueTensionForce(currentMouth, anchor, restLength, tongueStiffness);
+          const along = normalize(subtract(currentMouth, anchor), { x: 0, y: 1 });
+          const alongDamping = currentTension.taut ? scale(along, -extraRadialDamping * dot(next.velocity, along)) : { x: 0, y: 0 };
+          const damping = scale(next.velocity, -0.75);
+          const force = netForce([currentTension.force, gravityForcePx, damping, alongDamping]);
+          next = integrateBody(next, force, 2, dt / steps);
+          next = resolveWallBounce(next, NEWT_RADIUS, TENSION_BOUNDS, 0.35).state;
+          next = limitStretch(next);
         }
 
         next = {
@@ -868,7 +957,7 @@ export function TongueTensionNewt() {
       prompt="Drag Newt and release. His tongue swings like a rope made from tiny stretched spring-like segments."
       controls={
         <>
-          <RangeControl label="tongue k" value={stiffness} min={0.35} max={1.25} step={0.05} onChange={setStiffness} />
+          <LogRangeControl label="tongue k" value={stiffness} min={TONGUE_STIFFNESS_RANGE.min} max={TONGUE_STIFFNESS_RANGE.max} onChange={setStiffness} />
         </>
       }
     >
@@ -914,7 +1003,6 @@ export function TongueTensionNewt() {
       >
         <Grid width={TENSION_VIEW.width} height={TENSION_VIEW.height} />
         <circle cx={anchor.x} cy={anchor.y} r="16" fill="#f59e0b" stroke="#92400e" strokeWidth="3" />
-        <circle cx={anchor.x} cy={anchor.y} r={restLength} fill="none" stroke="var(--grid-line)" strokeDasharray="7 8" strokeWidth="2" />
         <text x={anchor.x + 22} y={anchor.y - 18} fill="var(--text-muted)" fontSize="13" fontWeight="700">
           anchor
         </text>
@@ -926,7 +1014,7 @@ export function TongueTensionNewt() {
         <ForceArrow origin={{ x: newt.x - 42, y: newt.y + 6 }} vector={gravity} color={FORCE_COLORS.gravity} label="weight" scale={TENSION_WEIGHT_ARROW_SCALE} maxLength={76} />
         <foreignObject x="540" y="42" width="170" height="124">
           <div className="grid gap-2">
-            <Readout label="stretch" value={`${format(tension.stretch, 0)} px`} />
+            <Readout label="stretch" value={`${format(tension.stretch, tension.stretch < 1 ? 2 : 0)} px`} />
             <Readout label="state" value={tension.taut ? 'taut' : 'slack'} />
           </div>
         </foreignObject>

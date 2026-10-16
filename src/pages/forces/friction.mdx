@@ -47,12 +47,12 @@ These are empirical rules, found by measuring various surfaces sliding (or almos
 
 ## Microscopic Modeling
 
-Many apparently smooth surfaces are rough when magnified. A surface is a landscape of tiny peaks, called **asperities**, and when two solids meet, they touch only where peaks from one meet the other. For ordinary solids the **real contact area** is a tiny fraction (often well under 1%) of the apparent area of contact. The picture below is magnified, and exaggerates the touching fraction so that you can see it.  For simplicity, we'll leave the top surface as smooth.
+Many apparently smooth surfaces are rough when magnified. A surface is a landscape of tiny peaks, called **asperities**, and when two solids meet, they touch only where peaks from one meet the other. For ordinary solids the **true contact area** is a tiny fraction (often well under 1%) of the apparent area of contact. The picture below is magnified, and exaggerates the touching fraction so that you can see it.  For simplicity, we'll leave the top surface as smooth.
 
-Where the peaks touch, the atoms are pressed together like the springs in the normal-force picture, but these peaks carry a lot of load across a very small area. The pressure can be large enough to flatten them. A solid can only withstand so much pressure before it yields, and that limit is the **hardness** $H$ of the softer material. Each tip therefore flattens until it just supports its share of the load. The real contact area is proportional to the load and inversely proportional to the hardness:
+Where the peaks touch, the atoms are pressed together like the springs in the normal-force picture, but these peaks carry a lot of load across a very small area. The pressure can be large enough to flatten them. A solid can only withstand so much pressure before it yields, and that limit is the **hardness** $H$ of the softer material. Each tip therefore flattens until it just supports its share of the load. The true contact area is proportional to the load and inversely proportional to the hardness:
 
 $$
-A_{\text{real}} = \frac{N}{H}.
+A_{\text{true}} = \frac{N}{H}.
 $$
 
 
@@ -77,10 +77,10 @@ The above trace illustrates the difference between static and sliding friction:
 - **The sliding average.** Once sliding, the bonds are in different stages: some freshly formed and barely stretched, some about to break.  On average they carry less than they did when all were fresh and in place together. This is why kinetic friction is smaller than static friction.
 
 
-Finally, let's combine the ideas of real contact are and atomic adhesion.  The shear strength (per unit of contact area) $\tau$ depends on how easily these bonds break.  The maximum friction is given by:
+Finally, let's combine the ideas of true contact area and atomic adhesion.  The shear strength (per unit of contact area) $\tau$ depends on how easily these bonds break.  The maximum friction is given by:
 
 $$
-f_{\max} = \tau A_{\text{real}} = \tau \frac{N}{H} = \mu_s N,
+f_{\max} = \tau A_{\text{true}} = \tau \frac{N}{H} = \mu_s N,
 \qquad
 \mu_s \approx \frac{\tau}{H}.
 $$
@@ -175,7 +175,7 @@ A few cautions go with the model:
 
     #### Check
 
-    Standing the brick on its end puts the same load on a smaller area, so the asperities are squeezed harder and flatten more. The real contact area, and so the friction, is unchanged.
+    Standing the brick on its end puts the same load on a smaller area, so the asperities are squeezed harder and flatten more. The true contact area, and so the friction, is unchanged.
   </WorkedExampleCard>
 </ProblemSolvingSection>
 
@@ -196,7 +196,7 @@ A few cautions go with the model:
       id: 'friction-more-load',
       question: 'Why does pressing a block harder against a surface increase the friction on it?',
       options: [
-        { id: 'A', text: 'The harder contact flattens more of the surface tips, so more of the surfaces actually touch and bond.', isCorrect: true, explanation: 'Right. Real contact grows in proportion to the load, so there are more bonds to break before the block can slide.' },
+        { id: 'A', text: 'The harder contact flattens more of the surface tips, so more of the surfaces actually touch and bond.', isCorrect: true, explanation: 'Right. True contact area grows in proportion to the load, so there are more bonds to break before the block can slide.' },
         { id: 'B', text: 'Pressing harder makes the surfaces rougher.', isCorrect: false, explanation: 'The surfaces do not become rougher. The tips are flattened, which increases the area that touches.' },
         { id: 'C', text: 'Pressing harder increases the mass of the block.', isCorrect: false, explanation: 'The mass does not change. What changes is the normal force, which is what the friction limit depends on.' }
       ]
@@ -205,17 +205,17 @@ A few cautions go with the model:
       id: 'friction-area',
       question: 'A brick is pulled across a table, first lying flat and then standing on its small end. Compared with lying flat, how large is the maximum static friction on the end?',
       options: [
-        { id: 'A', text: 'Smaller, because less of the brick is touching the table.', isCorrect: false, explanation: 'Less apparent area does not mean less real contact. The smaller face is squeezed harder, so the tips flatten more.' },
-        { id: 'B', text: 'Larger, because the pressure on the table is greater.', isCorrect: false, explanation: 'The pressure is larger, but the total real contact is the load divided by the hardness, which does not change.' },
-        { id: 'C', text: 'The same, because the real contact is set by the load and the hardness.', isCorrect: true, explanation: 'Exactly. $A_{\\text{real}} = N/H$ is the same for both faces, and so is $\\tau A_{\\text{real}}$.' }
+        { id: 'A', text: 'Smaller, because less of the brick is touching the table.', isCorrect: false, explanation: 'Less apparent area does not mean less true contact. The smaller face is squeezed harder, so the tips flatten more.' },
+        { id: 'B', text: 'Larger, because the pressure on the table is greater.', isCorrect: false, explanation: 'The pressure is larger, but the total true contact is the load divided by the hardness, which does not change.' },
+        { id: 'C', text: 'The same, because the true contact area is set by the load and the hardness.', isCorrect: true, explanation: 'Exactly. $A_{\\text{true}} = N/H$ is the same for both faces, and so is $\\tau A_{\\text{true}}$.' }
       ]
     },
     {
       id: 'friction-softer',
       question: 'In the model $\\mu \\approx \\tau / H$, what happens to $\\mu$ if the softer of the two surfaces is replaced by an even softer material, with the bonding between them unchanged?',
       options: [
-        { id: 'A', text: '$\\mu$ increases: the tips flatten more under the same load, giving more contact and more bonds.', isCorrect: true, explanation: 'Right. A smaller $H$ means a larger $A_{\\text{real}} = N/H$, so the same load must shear more bonds.' },
-        { id: 'B', text: '$\\mu$ decreases, because softer materials are more slippery.', isCorrect: false, explanation: 'Softness alone does not make a surface slippery. In this model it increases the real contact, which raises friction.' },
+        { id: 'A', text: '$\\mu$ increases: the tips flatten more under the same load, giving more contact and more bonds.', isCorrect: true, explanation: 'Right. A smaller $H$ means a larger $A_{\\text{true}} = N/H$, so the same load must shear more bonds.' },
+        { id: 'B', text: '$\\mu$ decreases, because softer materials are more slippery.', isCorrect: false, explanation: 'Softness alone does not make a surface slippery. In this model it increases the true contact, which raises friction.' },
         { id: 'C', text: '$\\mu$ is unchanged, because it only depends on the weight.', isCorrect: false, explanation: '$\\mu$ is a property of the pair of surfaces, not of the load, and the hardness is part of it.' }
       ]
     },

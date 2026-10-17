@@ -38,6 +38,13 @@ import {
   solveIncline,
   tongueTensionForce,
   totalBondForce,
+  advanceSpringChain,
+  chainAcceleration,
+  chainNodeCount,
+  createSpringChain,
+  springForces,
+  steadyCutForce,
+  steadySpringForces,
 } from '../../src/lib/forces/index.ts';
 
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
@@ -460,6 +467,60 @@ assert.equal(systemBoundaryPath(pushScene, []), '');
   assert.ok(dampingRatio(7200, 720, 0.22) > 0.22 && dampingRatio(7200, 720, 0.22) < 1);
   near(dampingRatio(72000, 720, 0.22, 2, 2.5), 2.5);
   near(dampingRatio(720, 720, 0.22, 2, 2.5), 0.22);
+}
+
+{
+  // Three 10 kg blocks pushed by 96 N: a = 3.2 m/s², 64 N and 32 N between blocks.
+  near(chainAcceleration(96, 30), 3.2);
+  near(steadyCutForce(96, 20, 30), 64);
+  near(steadyCutForce(96, 10, 30), 32);
+
+  const chain = createSpringChain();
+  const count = chainNodeCount(chain.params);
+  assert.equal(count, 24);
+  const expected = steadySpringForces(chain.params, 96);
+  near(expected[7], 64); // block 1 | block 2 contact
+  near(expected[15], 32); // block 2 | block 3 contact
+  near(expected[0], 92); // first spring: 96 N minus one node's m·a (4 N)
+  near(expected[22], 4);
+
+  // Pushed from rest: the leading edge compresses first, the far block hasn't felt it yet.
+  for (let i = 0; i < 6; i += 1) advanceSpringChain(chain, 96, 1 / 120);
+  const early = springForces(chain);
+  assert.ok(early[0] > 10 * Math.abs(early[20]), `leading ${early[0]} vs far ${early[20]}`);
+
+  // Settle: every spring carries (mass ahead) × a, and the centre of mass stays put in this frame.
+  for (let i = 0; i < 120 * 40; i += 1) advanceSpringChain(chain, 96, 1 / 120);
+  const settled = springForces(chain);
+  settled.forEach((force, index) => {
+    assert.ok(Math.abs(force - expected[index]) < 0.5, `spring ${index}: ${force} vs ${expected[index]}`);
+  });
+  near(chain.acceleration, 3.2);
+  near(chain.u.reduce((sum, value) => sum + value, 0), 0, 1e-6);
+
+  // Force falls linearly through a block: equal steps of m·a per node.
+  for (let j = 1; j < 7; j += 1) near(settled[j - 1] - settled[j], 4, 0.3);
+
+  // Net force on every node matches m·a (the squeeze supplies exactly what each slice needs).
+  const nodeMass = 10 / 8;
+  for (let i = 1; i < count - 1; i += 1) near(settled[i - 1] - settled[i], nodeMass * 3.2, 0.3);
+
+  // Contact springs only push, even while a stiff chain rings after a hard shove.
+  const stiff = createSpringChain({ stiffness: 4000, contactStiffness: 4000 });
+  let minContact = Infinity;
+  for (let i = 0; i < 120 * 5; i += 1) {
+    advanceSpringChain(stiff, 192, 1 / 60);
+    const forces = springForces(stiff);
+    for (const j of [7, 15]) minContact = Math.min(minContact, forces[j]);
+    assert.ok(forces.every(Number.isFinite), 'stiff chain blew up');
+  }
+  assert.ok(minContact >= 0, `contact pulled with ${minContact}`);
+
+  // Doubling the push doubles every force and the acceleration.
+  const strong = createSpringChain();
+  for (let i = 0; i < 120 * 40; i += 1) advanceSpringChain(strong, 192, 1 / 120);
+  near(springForces(strong)[7], 128, 1);
+  near(strong.acceleration, 6.4);
 }
 
 console.log('Forces helper tests passed.');

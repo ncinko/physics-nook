@@ -41,6 +41,22 @@ export {
 } from './frictionMicro.ts';
 
 export {
+  advanceSpringChain,
+  chainAcceleration,
+  chainNodeCount,
+  chainNodeMass,
+  chainTotalMass,
+  createSpringChain,
+  DEFAULT_SPRING_CHAIN,
+  isContactSpring,
+  springForces,
+  steadyCutForce,
+  steadySpringForces,
+  type SpringChainParams,
+  type SpringChainState,
+} from './springChain.ts';
+
+export {
   dampingRatio,
   formatMagnitude,
   logSliderToValue,

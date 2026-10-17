@@ -15,6 +15,7 @@ import MathHint from '../../components/textbook/MathHint.astro';
 import InteractionDiagram from '../../components/forces/InteractionDiagram';
 import NetForceDiagram from '../../components/forces/NetForceDiagram.astro';
 import FreeBodyDiagramBuilder from '../../components/forces/FreeBodyDiagramBuilder';
+import BlockChainSoftBody from '../../components/forces/BlockChainSoftBody';
 import { mechanicsPath } from '../../data/modules';
 
 <ModuleHero module={mechanicsPath} currentPath="/forces/free-body-diagrams" />
@@ -105,6 +106,20 @@ Note that this sum is a *vector* sum.  Let's say Newt stands in an elevator that
 </ComponentReveal>
 
 The magnitude of the normal force has to be greater than Newt's weight. If the two were equal, the net force would be zero, and Newt would not accelerate. The small leftover arrow in the vector sum diagram represents the net force (be very careful to **not** think of this as a new force).  It points the way Newt is accelerating: up. 
+
+## Pushing Blocks Together
+
+Push three identical $10\ \text{kg}$ blocks, side by side on a frictionless table, with $96\ \text{N}$. Treating the stack as one system, $a = 96/30 = 3.2\ \text{m/s}^2$.  By applying Newton's second law to individual or pairs of blocks, we can determine that the first block pushes the second with only $64\ \text{N}$, and the second pushes the third with $32\ \text{N}$. 
+
+Every kilogram is accelerating at $3.2\ \text{m/s}^2$, so in some sense, each kilogram *needs* a net force of $3.2\ \text{N}$. Intuitively, one of the contact forces between each pair of blocks must push **all the mass ahead of it**: $20\ \text{kg}$ is ahead of the first contact, $20 \times 3.2 = 64\ \text{N}$, and $10\ \text{kg}$ is ahead of the second, $10 \times 3.2 = 32\ \text{N}$.
+
+All of this can be reasoned through formally with careful force diagrams and applications of the second law, but how does a block *know* how hard to push?  Again, we turn to a microscopic spring model.  Each block is a lattice of atoms held together by spring-like bonds.  When the push begins, only the front edge is squeezed. That squeeze travels through the stack as a wave, and eventually settles where every thin slice has just the push from behind needed to keep up with the slice ahead. 
+
+<InteractiveAnchor id="block-chain-soft-body" />
+
+<BlockChainSoftBody client:visible />
+
+
 
 <ProblemSolvingSection intro="">
   <WorkedExampleCard title="Apparent Weight in an Elevator" accent="blue">

@@ -374,6 +374,15 @@ export const interactiveEntries: InteractiveEntry[] = [
     tags: ['forces', 'free-body diagrams', 'systems'],
   },
   {
+    id: 'block-chain-soft-body',
+    title: 'Pushing Blocks Together',
+    description: 'Model three pushed blocks as chains of springs, and move a cut through the stack to see that the force there is the mass ahead times the acceleration.',
+    href: '/forces/free-body-diagrams#block-chain-soft-body',
+    module: 'Mechanics',
+    kind: 'inline',
+    tags: ['forces', 'contact forces', 'springs', 'microscopic'],
+  },
+  {
     id: 'free-body-builder',
     title: 'Free-Body Diagram Builder',
     description: 'Choose the forces acting on Newt in four situations, see the diagram you described, and check it against the real one.',

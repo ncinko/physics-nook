@@ -216,7 +216,7 @@ export default function CartLab() {
     [addRun],
   );
 
-  const recorder = useCartRecorder(handleFinished);
+  const recorder = useCartRecorder(handleFinished, calibrating);
   const { recording, live, rateHz } = recorder;
 
   const updateRun = useCallback((id: number, patch: Partial<CartRun>) => {
@@ -354,7 +354,7 @@ export default function CartLab() {
 
   const toggleRecording = () => {
     if (recording) recorder.stop();
-    else if (recorder.connected && recorder.hasEcho) recorder.start();
+    else if (recorder.connected && recorder.hasEcho && !recorder.preparing) void recorder.start();
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -413,9 +413,9 @@ export default function CartLab() {
             type="button"
             className="btn-lg"
             onClick={toggleRecording}
-            disabled={!recording && !canCollect}
+            disabled={!recording && (!canCollect || recorder.preparing)}
           >
-            {recording ? 'Stop' : 'Collect'}
+            {recording ? 'Stop' : recorder.preparing ? 'Starting…' : 'Collect'}
           </Button>
           <Select
             label="Rate"
@@ -432,7 +432,7 @@ export default function CartLab() {
               label: `${seconds} s`,
             }))}
           />
-          <Button variant="secondary" type="button" onClick={addSimulatedRun} disabled={recording}>
+          <Button variant="secondary" type="button" onClick={addSimulatedRun} disabled={recording || recorder.preparing}>
             Add a simulated run
           </Button>
           {notice && (
@@ -443,15 +443,17 @@ export default function CartLab() {
         </ControlBar>
 
         <p role="status" className="m-0 text-sm text-[var(--text-muted)]">
-          {recording
-            ? `Recording… ${fixed(recorder.elapsed, 1)} of ${recorder.durationSeconds} s. Release the cart, catch it, then press Stop.`
+          {recorder.preparing
+            ? 'Starting the detector…'
+            : recording
+              ? `Recording… ${fixed(recorder.elapsed, 1)} of ${recorder.durationSeconds} s. Release the cart, catch it, then press Stop.`
             : recorder.problem
               ? recorder.problem
               : !recorder.connected
                 ? 'Connect a LabQuest to record, or add a simulated run to try the page.'
                 : !recorder.hasEcho
                   ? 'The detector has no echo. Check that it is aimed along the track at the cart.'
-                  : 'Ready. Press Collect (or Space), release the cart without pushing, and press Stop after you catch it.'}
+                  : 'Ready. The detector only pings about once a second until you press Collect (or Space). Release the cart without pushing, and press Stop after you catch it.'}
         </p>
       </div>
 

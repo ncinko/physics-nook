@@ -8,12 +8,15 @@
  * through React state, because a 20 Hz stream routed through re-renders drops
  * samples under load.
  *
- * One departure from the game. The game idles the detector between rounds and
- * retunes it for each recording, which re-zeroes the device's capture clock. A
- * lab recording is started by a person watching the cart, so here the stream
- * simply runs at the chosen rate whenever a detector is connected. Starting a
- * run is then only a flag, with no retune for the first samples to race, and
- * Disconnect is what silences the detector.
+ * The detector's duty cycle follows what the page is doing, as the game's does.
+ * A lab period is mostly waiting, setting up the next release, so it pings once
+ * a second while idle (enough for a live reading and the aim check), a little
+ * faster while calibrating, and at the chosen rate only while recording.
+ *
+ * Each retune re-zeroes the device's capture clock, so a recording cannot just
+ * start counting samples when Collect is pressed: the first few could still be
+ * on the old clock. Collect retunes first and waits for the retune to finish,
+ * and the capture treats a clock that runs backwards as a fresh start.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -32,6 +35,11 @@ export const SAMPLE_RATES_HZ = [10, 20, 30] as const;
 export const DEFAULT_RATE_HZ = 20;
 export const DURATIONS_SECONDS = [3, 5, 8, 10] as const;
 export const DEFAULT_DURATION_SECONDS = 5;
+
+/** Seconds between pings when nothing is being recorded or calibrated. */
+const IDLE_PERIOD_SECONDS = 1;
+/** Calibrating wants a settled average, not resolution. */
+const CALIBRATING_PERIOD_SECONDS = 0.25;
 
 /** How often the live graph refreshes while recording. */
 const LIVE_REFRESH_MS = 100;
@@ -55,6 +63,8 @@ export interface CartRecorder {
   setDurationSeconds: (seconds: number) => void;
   connected: boolean;
   hasEcho: boolean;
+  /** Collect was pressed and the detector is speeding up; recording has not begun. */
+  preparing: boolean;
   recording: boolean;
   /** The run in progress, for the live graph; empty when idle. */
   live: CartSample[];
@@ -62,7 +72,7 @@ export interface CartRecorder {
   elapsed: number;
   /** Why the last recording produced nothing, or null. */
   problem: string | null;
-  start: () => void;
+  start: () => Promise<void>;
   stop: () => void;
 }
 
@@ -75,12 +85,15 @@ const toCartSamples = (samples: readonly MotionSample[]): CartSample[] =>
 
 export const useCartRecorder = (
   onFinished: (recording: FinishedRecording) => void,
+  /** True while the calibrate screen is open, which wants a faster live reading. */
+  calibrating: boolean,
 ): CartRecorder => {
   const device = useVernierMotion();
   const calibration = useDetectorCalibration();
 
   const [rateHz, setRateHz] = useState<number>(DEFAULT_RATE_HZ);
   const [durationSeconds, setDurationSeconds] = useState<number>(DEFAULT_DURATION_SECONDS);
+  const [preparing, setPreparing] = useState(false);
   const [recording, setRecording] = useState(false);
   const [live, setLive] = useState<CartSample[]>([]);
   const [elapsed, setElapsed] = useState(0);
@@ -88,7 +101,9 @@ export const useCartRecorder = (
 
   const bufferRef = useRef<MotionSample[]>([]);
   const offsetRef = useRef<number | null>(null);
+  const lastRawTRef = useRef(-Infinity);
   const recordingRef = useRef(false);
+  const preparingRef = useRef(false);
   const wallStartRef = useRef(0);
   const scaleAtStartRef = useRef(calibration.scale);
   const onFinishedRef = useRef(onFinished);
@@ -97,6 +112,24 @@ export const useCartRecorder = (
   const periodSeconds = 1 / rateHz;
   const periodRef = useRef(periodSeconds);
   periodRef.current = periodSeconds;
+
+  /**
+   * The rate the current or latest run was started at. The rate select only
+   * sets the next run's rate: it must not retune a recording in progress, or
+   * stamp the wrong period on it.
+   */
+  const [runPeriod, setRunPeriod] = useState(periodSeconds);
+  const runPeriodRef = useRef(runPeriod);
+
+  /** What the detector should be doing right now. */
+  const streamPeriod =
+    preparing || recording
+      ? runPeriod
+      : calibrating
+        ? CALIBRATING_PERIOD_SECONDS
+        : IDLE_PERIOD_SECONDS;
+  const streamPeriodRef = useRef(streamPeriod);
+  streamPeriodRef.current = streamPeriod;
 
   // --- calibration ---------------------------------------------------------
 
@@ -117,6 +150,8 @@ export const useCartRecorder = (
   const streamedSourceRef = useRef<string | null>(null);
   /** What the open stream is running at, or null when none is open. */
   const appliedPeriodRef = useRef<number | null>(null);
+  /** The last start or retune still on its way to the device; retunes queue behind it. */
+  const inflightRef = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     const decision = decideStream(sourceId, statusKind, streamedSourceRef.current);
@@ -129,19 +164,31 @@ export const useCartRecorder = (
     if (decision === 'wait') return;
 
     streamedSourceRef.current = sourceId;
-    appliedPeriodRef.current = periodRef.current;
-    void startStream(periodRef.current);
+    appliedPeriodRef.current = streamPeriodRef.current;
+    inflightRef.current = Promise.resolve(startStream(streamPeriodRef.current)).catch(() => {});
   }, [sourceId, statusKind, startStream]);
 
-  // Rate changes are their own effect so a status transition cannot trigger one.
-  // A retune costs a stop/start round trip on the device, so asking for the rate
-  // already in force has to be free.
+  /**
+   * Retunes the open stream, resolving once the device has done it. A retune
+   * costs a stop/start round trip, so asking for the rate already in force has
+   * to be free.
+   */
+  const applyPeriod = useCallback(
+    (period: number): Promise<void> => {
+      if (streamedSourceRef.current === null || appliedPeriodRef.current === period) {
+        return inflightRef.current;
+      }
+      appliedPeriodRef.current = period;
+      inflightRef.current = inflightRef.current.then(() => setStreamPeriod(period)).catch(() => {});
+      return inflightRef.current;
+    },
+    [setStreamPeriod],
+  );
+
+  // Its own effect so a status transition cannot trigger a retune.
   useEffect(() => {
-    if (streamedSourceRef.current === null) return;
-    if (appliedPeriodRef.current === periodSeconds) return;
-    appliedPeriodRef.current = periodSeconds;
-    void setStreamPeriod(periodSeconds);
-  }, [periodSeconds, sourceId, statusKind, setStreamPeriod]);
+    void applyPeriod(streamPeriod);
+  }, [streamPeriod, sourceId, statusKind, applyPeriod]);
 
   // --- capture -------------------------------------------------------------
 
@@ -149,6 +196,13 @@ export const useCartRecorder = (
     () =>
       subscribe((sample) => {
         if (!recordingRef.current) return;
+        // A clock running backwards is a retune landing: whatever was captured
+        // before it is on the old timeline and is thrown away.
+        if (sample.t < lastRawTRef.current) {
+          bufferRef.current = [];
+          offsetRef.current = null;
+        }
+        lastRawTRef.current = sample.t;
         // Timestamps stay on the device clock, rezeroed at the first sample of
         // the run. Arrival time would fold USB jitter into every velocity.
         if (offsetRef.current === null) offsetRef.current = sample.t;
@@ -173,26 +227,44 @@ export const useCartRecorder = (
     setProblem(null);
     onFinishedRef.current({
       samples: filled,
-      periodSeconds: periodRef.current,
+      periodSeconds: runPeriodRef.current,
       distanceScale: scaleAtStartRef.current,
     });
   }, []);
 
   const connected = statusKind === 'ready' || statusKind === 'streaming';
+  const connectedRef = useRef(connected);
+  connectedRef.current = connected;
   const hasEcho = device.latest?.quality === 'ok';
 
-  const start = useCallback(() => {
-    if (recordingRef.current) return;
+  const start = useCallback(async () => {
+    if (recordingRef.current || preparingRef.current) return;
+    preparingRef.current = true;
+    runPeriodRef.current = periodRef.current;
+    setRunPeriod(periodRef.current);
+    setProblem(null);
+    setPreparing(true);
+
+    // Recording only begins once the detector is running at the run's rate, so
+    // no sample from the idle timeline can open the buffer.
+    await applyPeriod(periodRef.current);
+    preparingRef.current = false;
+    if (!connectedRef.current) {
+      setPreparing(false);
+      return;
+    }
+
     bufferRef.current = [];
     offsetRef.current = null;
+    lastRawTRef.current = -Infinity;
     scaleAtStartRef.current = calibrationScale;
     wallStartRef.current = Date.now();
     recordingRef.current = true;
-    setProblem(null);
     setElapsed(0);
     setLive([]);
     setRecording(true);
-  }, [calibrationScale]);
+    setPreparing(false);
+  }, [applyPeriod, calibrationScale]);
 
   // The recording clock: refresh the live graph, and end the run on the device
   // clock, with the wall clock as a backstop.
@@ -226,6 +298,7 @@ export const useCartRecorder = (
     setDurationSeconds,
     connected,
     hasEcho,
+    preparing,
     recording,
     live,
     elapsed,

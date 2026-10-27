@@ -1,0 +1,43 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Cart Lab
+description: Record a cart rolling down a ramp with a Vernier motion detector, fit a line to its velocity graph, and read off the acceleration.
+canonicalPath: /forces/cart-lab
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import CartLab from '../../components/forces/CartLab';
+import { mechanicsPath } from '../../data/modules';
+
+<ModuleHero module={mechanicsPath} currentPath="/forces/cart-lab" />
+
+
+## What you need
+
+**Vernier LabQuest Mini** (or LabQuest 2 or 3) connected by USB.
+**Motion Detector** in the **DIG 1** port, with its sensitivity switch on the cart setting.
+**Chrome or Edge.** Other web browsers are not supported.
+
+Put the detector at the high end of the track, aimed along it at the cart. Keep the cart at least 0.2 m from the detector, since it cannot see anything closer than 0.15 m. Distance from the detector grows as the cart rolls down, so down the ramp is the positive direction and the acceleration comes out positive.
+
+If the distances it reports do not match a tape measure, use **Calibrate detector** once the detector is connected.
+
+## Taking a run
+
+1. Hold the cart still at the release mark and press **Collect** (or Space).
+2. Let go without pushing. Catch the cart before it reaches the end of the track.
+3. Press **Stop**. The run appears on both graphs and in the table.
+4. Drag the dashed handles so the fit covers only the free acceleration.  **Do not include** any interval in which the velocity is changing unexpectedly.
+
+<InteractiveAnchor id="cart-lab" />
+
+<SimulationBlock
+  width="full"
+  height="tall"
+  title="Cart Lab"
+  description="Record a cart on a ramp and fit its velocity against time."
+>
+  <CartLab client:only="react" />
+</SimulationBlock>

@@ -98,13 +98,19 @@ const readPalette = (): Palette => {
   };
 };
 
+/** The words printed around a saved graph: a heading above it, lines below. */
+export interface PlotCaption {
+  title: string;
+  captionLines: string[];
+}
+
 /** Builds the standalone SVG document: title, the graph, then the caption. */
-const composeDocument = (plot: SVGSVGElement, meta: PlotExportMeta, fit: FitSummaryInput) => {
+const composeDocument = (plot: SVGSVGElement, { title, captionLines }: PlotCaption) => {
   const viewBox = plot.viewBox.baseVal;
   const plotWidth = viewBox.width || plot.clientWidth || 720;
   const plotHeight = viewBox.height || plot.clientHeight || 380;
   const palette = readPalette();
-  const captions = buildCaptionLines(meta, fit);
+  const captions = captionLines;
 
   const clone = plot.cloneNode(true) as SVGSVGElement;
   inlineComputedPaint(plot, clone);
@@ -115,7 +121,6 @@ const composeDocument = (plot: SVGSVGElement, meta: PlotExportMeta, fit: FitSumm
   clone.setAttribute('width', String(plotWidth));
   clone.setAttribute('height', String(plotHeight));
 
-  const title = meta.clipName ? `Video analysis — ${meta.clipName}` : 'Video analysis';
   const headerHeight = MARGIN + TITLE_SIZE + 10;
   const captionTop = headerHeight + plotHeight + 12;
   const totalHeight = captionTop + captions.length * LINE_STEP + MARGIN;
@@ -149,7 +154,7 @@ const composeDocument = (plot: SVGSVGElement, meta: PlotExportMeta, fit: FitSumm
   };
 };
 
-const downloadBlob = (blob: Blob, fileName: string) => {
+export const downloadBlob = (blob: Blob, fileName: string) => {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
@@ -165,13 +170,12 @@ const downloadBlob = (blob: Blob, fileName: string) => {
  * browser refuses to rasterise the SVG — in which case the caller should say so
  * rather than leave the button looking like it worked.
  */
-export const savePlotImage = async (
+export const savePlotWithCaption = async (
   plot: SVGSVGElement,
-  meta: PlotExportMeta,
-  fit: FitSummaryInput,
+  caption: PlotCaption,
   fileName: string,
 ): Promise<string> => {
-  const { width, height, markup } = composeDocument(plot, meta, fit);
+  const { width, height, markup } = composeDocument(plot, caption);
   const svgBlob = new Blob([markup], { type: 'image/svg+xml;charset=utf-8' });
   const svgUrl = URL.createObjectURL(svgBlob);
 
@@ -202,3 +206,19 @@ export const savePlotImage = async (
     URL.revokeObjectURL(svgUrl);
   }
 };
+
+/** The video lab's graph, captioned with the clip, frame rate and scale it came from. */
+export const savePlotImage = (
+  plot: SVGSVGElement,
+  meta: PlotExportMeta,
+  fit: FitSummaryInput,
+  fileName: string,
+): Promise<string> =>
+  savePlotWithCaption(
+    plot,
+    {
+      title: meta.clipName ? `Video analysis — ${meta.clipName}` : 'Video analysis',
+      captionLines: buildCaptionLines(meta, fit),
+    },
+    fileName,
+  );

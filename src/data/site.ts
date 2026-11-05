@@ -54,6 +54,14 @@ export const standalonePages: PageMeta[] = [
     noindex: true,
   },
   {
+    title: 'Wave Pool',
+    description:
+      'Place sources, barriers and shoals in a flat pool and watch waves reflect, refract, diffract and interfere.',
+    canonicalPath: '/waves/wave-pool',
+    image: '/social/physics-nook-card.svg',
+    noindex: true,
+  },
+  {
     title: 'Solar System Explorer',
     description:
       'Fly through a Sun-centered 3D solar system, advance time, and land on solid worlds.',

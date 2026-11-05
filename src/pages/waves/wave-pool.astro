@@ -1,0 +1,25 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import WavePool from '../../components/waves/WavePool';
+---
+
+<BaseLayout>
+  <div class="mx-auto max-w-4xl px-4 pt-10 md:px-6">
+    <h1 class="text-4xl font-semibold tracking-tight text-[var(--text-primary)]">
+      Wave pool
+    </h1>
+  </div>
+
+  <InteractiveAnchor id="wave-pool" />
+
+  <SimulationBlock
+    width="full"
+    title="Wave pool"
+    description="Choose a tool, then click or drag on the water. Right-drag to orbit and scroll to zoom."
+  >
+    <WavePool client:only="react" />
+  </SimulationBlock>
+
+</BaseLayout>

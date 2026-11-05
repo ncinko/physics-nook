@@ -26,6 +26,8 @@ export interface PlotSeries {
   color: string;
   shape: MarkerShape;
   points: PlotPoint[];
+  /** Drawn muted, for points a fit leaves out. Never gets a legend entry. */
+  faded?: boolean;
 }
 
 interface AnalysisPlotProps {
@@ -41,6 +43,8 @@ interface AnalysisPlotProps {
   summary: string;
   /** Lets the lab reach the rendered SVG in order to save it as an image. */
   exportRef?: { current: SVGSVGElement | null };
+  /** What an empty graph says; defaults to the video lab's prompt. */
+  emptyMessage?: string;
 }
 
 const VIEW_WIDTH = 720;
@@ -70,6 +74,7 @@ export function AnalysisPlot({
   residuals,
   summary,
   exportRef,
+  emptyMessage = 'Mark points on the video to build a graph.',
 }: AnalysisPlotProps) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   // One node, two holders: the drag maths needs it, and so does the exporter.
@@ -314,7 +319,12 @@ export function AnalysisPlot({
       )}
 
       {series.map((entry) => (
-        <g key={entry.key} stroke={entry.color} fill={entry.color}>
+        <g
+          key={entry.key}
+          stroke={entry.color}
+          fill={entry.color}
+          opacity={entry.faded ? 0.3 : undefined}
+        >
           {entry.points.map((point, index) => {
             const cx = xPix(point.x);
             const cy = yPix(point.y);
@@ -367,9 +377,11 @@ export function AnalysisPlot({
         </g>
       ))}
 
-      {series.length > 1 && (
+      {series.filter((entry) => !entry.faded).length > 1 && (
         <g>
-          {series.map((entry, index) => (
+          {series
+            .filter((entry) => !entry.faded)
+            .map((entry, index) => (
             <g key={`legend-${entry.key}`}>
               <path
                 d={markerPath(entry.shape, plotLeft + 10, plotTop + 12 + index * 16, 4)}
@@ -397,7 +409,7 @@ export function AnalysisPlot({
           fill="var(--text-muted)"
           fontSize="14"
         >
-          Mark points on the video to build a graph.
+          {emptyMessage}
         </text>
       )}
 

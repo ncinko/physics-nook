@@ -418,6 +418,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     kind: 'inline',
     tags: ['forces', 'friction', 'microscopic', 'springs'],
   },
+  {
+    id: 'cart-lab',
+    title: 'Cart Lab',
+    description:
+      'Record a cart rolling down a ramp with a Vernier motion detector, fit a line to its velocity graph, and read off the acceleration.',
+    href: '/forces/cart-lab#cart-lab',
+    module: 'Mechanics',
+    kind: 'standalone',
+    tags: ['forces', 'lab', 'hardware', 'graphs'],
+  },
   // Collisions page is being reworked; entries hidden from the catalog for now.
   // {
   //   id: 'elastic-collision-field',

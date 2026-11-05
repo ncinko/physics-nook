@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import './cartRun.test.ts';
 import {
   dampingRatio,
   formatMagnitude,

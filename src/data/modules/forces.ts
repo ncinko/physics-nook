@@ -70,5 +70,20 @@ export const forcesModule: ModuleMeta = {
         image: '/social/physics-nook-card.svg',
       },
     },
+    {
+      id: 'forces-cart-lab',
+      href: '/forces/cart-lab',
+      title: 'Cart Lab',
+      shortTitle: 'Cart Lab',
+      description:
+        'Record a cart rolling down a ramp with a Vernier motion detector and fit its velocity graph to find the acceleration.',
+      seo: {
+        title: 'Cart Lab',
+        description:
+          'Record a cart on a ramp with a Vernier motion detector, fit a straight line to its velocity-time graph, adjust the fit window, and save the plots or copy the data for a spreadsheet.',
+        canonicalPath: '/forces/cart-lab',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
   ],
 };

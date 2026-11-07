@@ -6,9 +6,14 @@ export const electromagnetismModule: ModuleMeta = {
   title: 'Electromagnetism',
   navLabel: 'Electromagnetism',
   summary:
-    'Coulomb’s law, electric fields, Gauss’ law and flux, electric potential, capacitance, and circuits with Ohm’s law.',
+    'Coulomb’s law, electric fields, Gauss’ law and flux, electric potential, capacitance, circuits with Ohm’s law, and the magnetic force and field of moving charges.',
   audience: 'Self-learners moving from mechanics into electricity and the field picture.',
-  prerequisites: ['Vectors in two dimensions', 'Coulomb’s law and charge', 'Work and potential energy'],
+  prerequisites: [
+    'Vectors in two dimensions, including the cross product',
+    'Coulomb’s law and charge',
+    'Work and potential energy',
+    'Uniform circular motion',
+  ],
   learningObjectives: [
     'Define the electric field as force per unit charge and build it from point charges',
     'Use superposition to combine fields and read field lines',
@@ -16,6 +21,8 @@ export const electromagnetismModule: ModuleMeta = {
     'Connect electric potential energy, electric potential, and the field as its gradient',
     'Relate capacitance to geometry and dielectrics and compute the energy stored in the field',
     'Relate microscopic electron drift to Ohm’s law and circuit behavior',
+    'Use the Lorentz force to predict how a charge moves in a magnetic field',
+    'Find magnetic fields from currents with the Biot–Savart law and Ampère’s law',
   ],
   status: 'active',
   navVisibility: 'menu',
@@ -95,6 +102,36 @@ export const electromagnetismModule: ModuleMeta = {
         description:
           'Learn electric current from the microscopic Drude model of electron drift through the surface charge that guides the field around a circuit, up to Ohm’s law, power, and series–parallel behavior.',
         canonicalPath: '/electromagnetism/current',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'electromagnetism-magnetic-force',
+      href: '/electromagnetism/magnetic-force',
+      title: 'Magnetic Force',
+      shortTitle: 'Magnetic Force',
+      description:
+        'Use the Lorentz force on a moving charge to find which way it bends, why its speed is constant, and how big its circle is.',
+      seo: {
+        title: 'Magnetic Force',
+        description:
+          'Learn the Lorentz force F = qv × B, the right-hand rule, and why charged particles move in circles with radius mv/|q|B, with an interactive charged-particle simulation.',
+        canonicalPath: '/electromagnetism/magnetic-force',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
+    {
+      id: 'electromagnetism-magnetic-field',
+      href: '/electromagnetism/magnetic-field',
+      title: 'Magnetic Field',
+      shortTitle: 'Magnetic Field',
+      description:
+        'Find magnetic fields from currents with the Biot–Savart law and Ampère’s law, and explore wires, loops, solenoids, and magnets in 3D.',
+      seo: {
+        title: 'Magnetic Field',
+        description:
+          'Learn the magnetic field of a current from the Biot–Savart law, the right-hand rule, and Ampère’s law, with interactive demos of a straight wire, an Amperian path, and 3D fields of loops, solenoids, and bar magnets.',
+        canonicalPath: '/electromagnetism/magnetic-field',
         image: '/social/physics-nook-card.svg',
       },
     },

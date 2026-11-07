@@ -1,0 +1,172 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Magnetic Force
+description: Use the Lorentz force F = qv × B to find the direction and size of the force on a moving charge, and see why it traces circles.
+canonicalPath: /electromagnetism/magnetic-force
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import MagneticForceSimulation from '../../components/electromagnetism/MagneticForceSimulation';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/magnetic-force" />
+
+<div id="page-content"></div>
+
+A charged particle sitting still in a magnetic field feels nothing.  If it's moving, the field pushes it *sideways*.  This magnetic force bends electron beams in old cathode-ray tubes, steers ions around the ring of a cyclotron, and guides charged particles from the Sun into spirals along Earth’s field lines. 
+
+A particle with charge $q$ moving with velocity $\vec{\mathbf v}$ through a magnetic field $\vec{\mathbf B}$ feels the **magnetic force**
+
+$$
+\vec{\mathbf F} = q\,\vec{\mathbf v}\times\vec{\mathbf B}.
+$$
+
+This equation uses the cross product, a mathematical operation between two vectors that outputs a third:
+
+- **Magnitude.** $F = |q|\,v\,B\sin\theta$, where $\theta$ is the angle between $\vec{\mathbf v}$ and $\vec{\mathbf B}$. The force is greatest when the motion is perpendicular to the field and zero when it is parallel or antiparallel to it.
+- **Direction.** Use the right-hand rule: point your index finger along $\vec{\mathbf v}$ and your middle finger along $\vec{\mathbf B}$. Your thumb points along $\vec{\mathbf F}$ for a *positive* charge. A negative charge is pushed the opposite way.
+
+## Circular Motion
+
+Suppose the field is uniform and the particle moves perpendicular to it. The force has constant magnitude and is always perpendicular to the velocity, which is precisely the conditions needed for uniform circular motion.  The simulation below uses a field perpendicular to the screen, shown by the dots (out of the page) or crosses (into the page).
+
+<InteractiveAnchor id="magnetic-force-playground" />
+
+<MagneticForceSimulation client:only="react" />
+
+Try these, watching the radius $r$ and the period $T$ in the readout:
+
+- Flip the field between **out of page** and **into page**. 
+- Compare a positive and a negative particle. 
+- Change $B$. What happens if $B=0$?
+- Raise the launch speed. 
+
+<DerivationPanel title="Why does the speed stay constant?">
+
+Work is the part of a force along the displacement. Since $\vec{\mathbf F}\perp\vec{\mathbf v}$ at every instant,
+
+$$
+\vec{\mathbf F}\cdot\vec{\mathbf v} = 0,
+$$
+
+so the magnetic force does no work and the particle’s kinetic energy cannot change. Only the direction of $\vec{\mathbf v}$ changes, never its magnitude.
+
+</DerivationPanel>
+
+<DerivationPanel title="Why is the path a circle, and how big is it?">
+
+For a particle moving perpendicular to a uniform field, $\sin\theta=1$ and the force has the constant magnitude $|q|vB$, always perpendicular to the velocity. This is the condition for uniform circular motion, so the magnetic force is *centripetal*:
+
+$$
+|q|vB = \frac{mv^2}{r}
+\quad\Longrightarrow\quad
+r = \frac{mv}{|q|B}.
+$$
+
+The radius is proportional to the particle’s momentum $mv$, which is how detectors measure momentum from the curvature of a track. The time for one "lap" is the circumference over the speed,
+
+$$
+T = \frac{2\pi r}{v} = \frac{2\pi m}{|q|B}.
+$$
+
+Every particle of the same charge:mass ratio $q/m$ has the same orbital frequency in a uniform magnetic field.  This is an important consequence for the operation of cyclotrons.
+
+</DerivationPanel>
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="A Proton in a Strong Field" accent="blue">
+    #### Problem
+
+    A proton enters a $0.80\,\text{T}$ field at $3.0\times10^{5}\,\text{m/s}$, perpendicular to the field. What is the radius of its path?
+
+    #### Use
+
+    $$
+    r = \frac{mv}{|q|B}.
+    $$
+
+    #### Solve
+
+    With $m_p = 1.67\times10^{-27}\,\text{kg}$ and $q = 1.60\times10^{-19}\,\text{C}$,
+
+    $$
+    r = \frac{(1.67\times10^{-27})(3.0\times10^{5})}{(1.60\times10^{-19})(0.80)} \approx 3.9\times10^{-3}\,\text{m} = 3.9\,\text{mm}.
+    $$
+
+    #### Check
+
+    A field this strong bends even a fast proton into a small circle. The speed is only about $0.1\%$ of the speed of light, so a radius of a few millimeters is reasonable.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Orbit Time of an Electron" accent="red">
+    #### Problem
+
+    An electron moves perpendicular to a $0.050\,\text{T}$ field. How long does one lap take, and does the answer depend on its speed?
+
+    #### Use
+
+    $$
+    T = \frac{2\pi m}{|q|B}.
+    $$
+
+    #### Solve
+
+    With $m_e = 9.11\times10^{-31}\,\text{kg}$ and $|q| = 1.60\times10^{-19}\,\text{C}$,
+
+    $$
+    T = \frac{2\pi(9.11\times10^{-31})}{(1.60\times10^{-19})(0.050)} \approx 7.2\times10^{-10}\,\text{s} = 0.72\,\text{ns}.
+    $$
+
+    #### Check
+
+    The speed does not appear in $T$, so the answer holds for any speed. Faster electrons trace bigger circles in the same time. This matches what the simulation’s period readout does when you change the launch speed.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Magnetic Force Checkpoint"
+  questions={[
+    {
+      id: 'magnetic-force-double-field',
+      question: 'A charged particle circles in a uniform field. If the field is doubled, with the same particle and speed, what happens to the radius and the period?',
+      options: [
+        { id: 'A', text: 'The radius doubles and the period doubles.', isCorrect: false, explanation: 'A stronger field turns the particle more sharply, so the circle shrinks rather than grows.' },
+        { id: 'B', text: 'The radius is halved and the period is halved.', isCorrect: true, explanation: 'Right. $r=mv/|q|B$ and $T=2\\pi m/|q|B$ are both proportional to $1/B$, so doubling $B$ halves each.' },
+        { id: 'C', text: 'The radius is halved and the period is unchanged.', isCorrect: false, explanation: 'The period does not depend on speed, but it does depend on $B$. A smaller circle at the same speed is also a shorter lap.' }
+      ]
+    },
+    {
+      id: 'magnetic-force-electron-direction',
+      question: 'Seen from above the screen, an electron moving to the right curves clockwise. Which way does the magnetic field point?',
+      options: [
+        { id: 'A', text: 'Out of the screen.', isCorrect: false, explanation: 'Out of the screen would push a positive charge moving right downward, which is clockwise. The electron is negative, so it would curve the other way.' },
+        { id: 'B', text: 'Into the screen.', isCorrect: true, explanation: 'Correct. Clockwise motion to the right means the force on the electron is downward. A positive charge would be pushed upward, and the right-hand rule with $\\vec{\\mathbf v}$ to the right and an upward thumb requires $\\vec{\\mathbf B}$ into the screen.' },
+        { id: 'C', text: 'Along the electron’s velocity, to the right.', isCorrect: false, explanation: 'A field parallel to the velocity exerts no force at all, so the electron would go straight.' }
+      ]
+    },
+    {
+      id: 'magnetic-force-parallel',
+      question: 'A proton moves in the same direction as a uniform magnetic field. What is the magnetic force on it?',
+      options: [
+        { id: 'A', text: 'It is zero.', isCorrect: true, explanation: 'Yes. $F=|q|vB\\sin\\theta$ with $\\theta=0$ gives zero, so the proton continues in a straight line.' },
+        { id: 'B', text: 'It is $qvB$, directed along the field.', isCorrect: false, explanation: 'The magnetic force is never along the field or along the velocity. It is perpendicular to both, and here it vanishes.' },
+        { id: 'C', text: 'It is $qvB$, directed perpendicular to the field.', isCorrect: false, explanation: 'That is the maximum, for motion perpendicular to the field. Moving parallel to the field, there is no force.' }
+      ]
+    },
+    {
+      id: 'magnetic-force-speed',
+      question: 'A particle crosses a region of uniform magnetic field and leaves it traveling in a new direction. How does its speed on leaving compare with its speed on entering?',
+      options: [
+        { id: 'A', text: 'It is smaller, because the particle lost energy turning.', isCorrect: false, explanation: 'Turning costs no energy here. The magnetic force is perpendicular to the velocity, so it does no work.' },
+        { id: 'B', text: 'It is larger, because the field supplied energy.', isCorrect: false, explanation: 'A magnetic field cannot supply energy to a free charge, because its force does no work.' },
+        { id: 'C', text: 'It is the same.', isCorrect: true, explanation: 'Correct. $\\vec{\\mathbf F}\\cdot\\vec{\\mathbf v}=0$, so kinetic energy and speed are unchanged. Only the direction of motion changes.' }
+      ]
+    }
+  ]}
+/>

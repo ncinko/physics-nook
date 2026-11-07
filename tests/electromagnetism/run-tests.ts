@@ -34,6 +34,13 @@ import { TUTORIAL_STEPS, analyzeLoop, tutorialProgress, REQUIRED_KINDS,
 import { boundChargeDensity, energyDensity, parallelCapacitance, parallelPlateCapacitance,
   plateState, seriesCapacitance, storedEnergy } from '../../src/lib/electromagnetism/capacitor.ts';
 
+import { MU0, advanceParticle, ampereRightSide, angularVelocity, barMagnetDipoles, buildPathSteps,
+  closePath, cyclotronPeriod, cyclotronRadius, dipoleField, enclosedCurrent, formatLineIntegral,
+  formatTesla, idealSolenoidField, isInsideBar, launchParticle, lineIntegral, loopAxisField, loopField,
+  particleSpeed, project, rotateYawPitch, sampleField, solenoidField, sourceField, straightWireField,
+  turnSense, windingNumber, wireFieldMagnitude, DEFAULT_SOURCE, SOLENOID_LENGTH, type CurrentWire,
+  type PathPoint, type SourceParams } from '../../src/lib/electromagnetism/index.ts';
+
 const near = (actual: number, expected: number, epsilon = 1e-9) => {
   assert.ok(Math.abs(actual - expected) <= epsilon, `${actual} should be near ${expected}`);
 };
@@ -1088,6 +1095,269 @@ assert.deepEqual(computeFieldLines(presets.dipole, { width: 0, height: H }), [])
   near(seriesCapacitance([3e-6, 6e-6]), 2e-6, 1e-18);
   assert.equal(parallelCapacitance([]), 0);
   assert.equal(seriesCapacitance([]), 0);
+}
+
+// --- Magnetic force: a charged particle in a uniform field -------------------
+{
+  const relative = (actual: number, expected: number, tolerance: number) =>
+    assert.ok(Math.abs(actual - expected) <= tolerance * Math.abs(expected), `${actual} should be within ${tolerance} of ${expected}`);
+
+  // Speed never changes, even with a coarse step.
+  let p = launchParticle(0, 0, 120, 1, 1);
+  for (let i = 0; i < 5000; i++) p = advanceParticle(p, 1, 0.03);
+  relative(particleSpeed(p), 120, 1e-9);
+
+  // The path is an exact circle of radius mv/|q|B: every point stays that far from the center.
+  const bz = 0.8, charge = 1.5, mass = 1.2, speed = 90;
+  const radius = cyclotronRadius(speed, charge, mass, bz);
+  relative(radius, (mass * speed) / (charge * bz), 1e-12);
+  // The launch is along +x and a positive charge in an out-of-page field turns clockwise on screen
+  // (toward +y, since screen y points down), so the center sits at +y from the start.
+  let q = launchParticle(0, 0, speed, charge, mass);
+  for (let i = 0; i < 400; i++) {
+    q = advanceParticle(q, bz, 0.05);
+    relative(Math.hypot(q.x, q.y - radius), radius, 1e-9);
+  }
+
+  // After one period the particle is back where it began, independent of speed.
+  const period = cyclotronPeriod(charge, mass, bz);
+  relative(period, (2 * Math.PI * mass) / (charge * bz), 1e-12);
+  for (const launchSpeed of [40, 220]) {
+    let r = launchParticle(10, 20, launchSpeed, charge, mass);
+    const steps = 1000;
+    for (let i = 0; i < steps; i++) r = advanceParticle(r, bz, period / steps);
+    near(r.x, 10, 1e-6);
+    near(r.y, 20, 1e-6);
+  }
+
+  // Doubling B halves the radius and the period.
+  relative(cyclotronRadius(speed, charge, mass, 2 * bz), radius / 2, 1e-12);
+  relative(cyclotronPeriod(charge, mass, 2 * bz), period / 2, 1e-12);
+
+  // Opposite charges, flipped field, and sign conventions.
+  assert.equal(turnSense(1, 1, 1), 1, 'positive charge, field out of page: clockwise');
+  assert.equal(turnSense(-1, 1, 1), -1, 'negative charge turns the other way');
+  assert.equal(turnSense(-1, 1, -1), 1, 'electron in a field into the page: clockwise');
+  assert.equal(turnSense(1, 1, 0), 0);
+  assert.equal(turnSense(0, 1, 1), 0);
+  near(angularVelocity(2, 4, 3), 1.5);
+  const up = advanceParticle(launchParticle(0, 0, 100, 1, 1), 1, 0.1);
+  const down = advanceParticle(launchParticle(0, 0, 100, -1, 1), 1, 0.1);
+  assert.ok(up.y > 0 && down.y < 0, 'opposite charges deflect opposite ways from the same launch');
+
+  // No field, no bend; a neutral particle goes straight.
+  const straight = advanceParticle(launchParticle(0, 0, 100, 1, 1), 0, 0.5);
+  near(straight.x, 50);
+  near(straight.y, 0);
+  assert.equal(cyclotronRadius(100, 1, 1, 0), Infinity);
+  const neutral = advanceParticle(launchParticle(0, 0, 100, 0, 1), 3, 0.5);
+  near(neutral.x, 50);
+  near(neutral.y, 0);
+
+  // Worked example: a proton at 3.0e5 m/s in 0.80 T curves with r of about 3.9 mm.
+  relative(cyclotronRadius(3.0e5, 1.602e-19, 1.673e-27, 0.8), 3.91e-3, 0.01);
+}
+
+// --- Straight wire -----------------------------------------------------------
+{
+  // Worked example: 5.0 A at 4.0 cm gives 25 uT.
+  near(wireFieldMagnitude(5, 0.04), 25e-6, 1e-12);
+  // Falls as 1/r and scales with current.
+  near(wireFieldMagnitude(2, 0.1) / wireFieldMagnitude(2, 0.2), 2, 1e-12);
+  near(wireFieldMagnitude(4, 0.1) / wireFieldMagnitude(2, 0.1), 2, 1e-12);
+
+  // Positive current (out of page) circulates counterclockwise: below the wire B points +x,
+  // to the right of it B points +y.
+  const right = straightWireField(0.1, 0, 3);
+  const below = straightWireField(0, -0.1, 3);
+  assert.ok(right.y > 0 && Math.abs(right.x) < 1e-18);
+  assert.ok(below.x > 0 && Math.abs(below.y) < 1e-18);
+  const reversed = straightWireField(0.1, 0, -3);
+  near(reversed.y, -right.y, 1e-18);
+  // Always perpendicular to the radius, with constant magnitude around a circle.
+  for (let angle = 0; angle < 6.2; angle += 0.7) {
+    const dx = 0.2 * Math.cos(angle), dy = 0.2 * Math.sin(angle);
+    const b = straightWireField(dx, dy, 2);
+    near(b.x * dx + b.y * dy, 0, 1e-18);
+    near(Math.hypot(b.x, b.y), wireFieldMagnitude(2, 0.2), 1e-15);
+  }
+  // Held finite on the wire.
+  const onWire = straightWireField(0, 1e-9, 1, 1e-3);
+  assert.ok(Number.isFinite(onWire.x) && Math.abs(onWire.x) <= wireFieldMagnitude(1, 1e-3) * 1.0001);
+  assert.deepEqual(straightWireField(0, 0, 1), { x: 0, y: 0 });
+}
+
+// --- Loops, solenoids, and dipoles ---------------------------------------------
+{
+  const relative = (actual: number, expected: number, tolerance: number) =>
+    assert.ok(Math.abs(actual - expected) <= tolerance * Math.abs(expected), `${actual} should be within ${tolerance} of ${expected}`);
+  const loop = { radius: 0.5, current: 3, segments: 72, tiltDeg: 0, center: { x: 0, y: 0, z: 0 } };
+
+  // Center of a loop: mu0 I / 2R, pointing along +z for counterclockwise current.
+  const center = loopField({ x: 0, y: 0, z: 0 }, loop);
+  relative(center.z, (MU0 * 3) / (2 * 0.5), 1e-3);
+  near(center.x, 0, 1e-12);
+  near(center.y, 0, 1e-12);
+
+  // On the axis the loop matches the closed form.
+  for (const z of [0.2, 0.5, 1.5]) {
+    relative(loopField({ x: 0, y: 0, z }, loop).z, loopAxisField(0.5, 3, z), 1e-3);
+  }
+  // Reversing the current reverses the field.
+  const flipped = loopField({ x: 0, y: 0, z: 0 }, { ...loop, current: -3 });
+  near(flipped.z, -center.z, 1e-15);
+
+  // Tilting the loop tilts its field: 90 degrees about x turns +z into -y.
+  const tilted = loopField({ x: 0, y: 0, z: 0 }, { ...loop, tiltDeg: 90 });
+  relative(tilted.y, -center.z, 1e-3);
+  near(tilted.z, 0, 1e-9);
+
+  // A long solenoid has the ideal interior field mu0 n I.
+  const solenoid = { radius: 0.05, current: 2, turns: 200, length: 5, segments: 48 };
+  const inside = solenoidField({ x: 0, y: 0, z: 0 }, solenoid);
+  relative(inside.z, idealSolenoidField(200 / 5, 2), 5e-3);
+  // Nearly uniform across the interior, and much weaker well outside.
+  relative(solenoidField({ x: 0.006, y: 0.004, z: 0.5 }, solenoid).z, inside.z, 1e-2);
+  assert.ok(Math.abs(solenoidField({ x: 0.5, y: 0, z: 0 }, solenoid).z) < 0.02 * Math.abs(inside.z));
+  // Worked example: n = 900 per meter at 1.2 A gives 1.36 mT.
+  relative(idealSolenoidField(900, 1.2), 1.357e-3, 1e-3);
+
+  // Dipole: on-axis field is twice the equatorial field at the same distance and opposite in sign.
+  const moment = { x: 0, y: 0, z: 1 };
+  const dipole = { position: { x: 0, y: 0, z: 0 }, moment };
+  const axial = dipoleField({ x: 0, y: 0, z: 1 }, dipole);
+  const equatorial = dipoleField({ x: 1, y: 0, z: 0 }, dipole);
+  relative(axial.z, 2e-7, 1e-4);
+  relative(equatorial.z, -1e-7, 1e-4);
+  // Falls off as 1/r^3.
+  relative(dipoleField({ x: 0, y: 0, z: 2 }, dipole).z, axial.z / 8, 1e-4);
+
+  // Far from a current loop, its field matches the dipole with m = I * area.
+  const far = { x: 0, y: 0, z: 20 };
+  const farLoop = loopField(far, { ...loop, current: 1, radius: 0.5 });
+  const farDipole = dipoleField(far, { position: { x: 0, y: 0, z: 0 }, moment: { x: 0, y: 0, z: Math.PI * 0.25 } });
+  relative(farLoop.z, farDipole.z, 1e-2);
+}
+
+// --- Explorer sources ------------------------------------------------------------
+{
+  const params = (over: Partial<SourceParams>): SourceParams => ({ ...DEFAULT_SOURCE, ...over });
+
+  // Bar magnets are masked out of the sample grid; sample points never sit inside one.
+  const barParams = params({ config: 'dipole' });
+  assert.ok(isInsideBar({ x: 0, y: 0, z: 0.5 }, barParams));
+  assert.ok(!isInsideBar({ x: 0.5, y: 0, z: 0 }, barParams));
+  assert.ok(!isInsideBar({ x: 0, y: 0, z: 0.5 }, params({ config: 'wire' })));
+  for (const sample of sampleField(7, barParams)) assert.ok(!isInsideBar(sample.point, barParams));
+  assert.ok(sampleField(7, barParams).length < sampleField(7, params({ config: 'wire' })).length);
+  assert.equal(barMagnetDipoles(params({ config: 'wire' })).length, 0);
+  assert.equal(barMagnetDipoles(params({ config: 'pair' })).length, 2);
+
+  // Tilt only applies to sources that can tilt.
+  const solenoidAt = (tiltDeg: number) => sourceField({ x: 0.3, y: 0.2, z: 0.4 }, params({ config: 'solenoid', tiltDeg }));
+  assert.deepEqual(solenoidAt(0), solenoidAt(40));
+
+  // Two magnets side by side. Opposite polarity: the fields cancel at the magnets' mid-height
+  // between them, and above or below that the field bridges across along x. Same polarity:
+  // the fields add there instead, pointing along -z.
+  const midHeight = { x: 0, y: 0.2, z: 0 };
+  const anti = sourceField(midHeight, params({ config: 'pair', pairMode: 'anti' }));
+  const same = sourceField(midHeight, params({ config: 'pair', pairMode: 'parallel' }));
+  near(Math.hypot(anti.x, anti.y, anti.z), 0, 1e-15);
+  assert.ok(same.z < -1e-8 && Math.abs(same.x) < 1e-15);
+  const bridge = sourceField({ x: 0, y: 0.2, z: 0.1 }, params({ config: 'pair', pairMode: 'anti' }));
+  assert.ok(Math.abs(bridge.x) > 1e-8);
+  near(bridge.y, 0, 1e-15);
+  near(bridge.z, 0, 1e-15);
+
+  // Current sign flips wire, loop, and solenoid fields.
+  for (const config of ['wire', 'loop', 'solenoid'] as const) {
+    const forward = sourceField({ x: 0.5, y: 0.3, z: 0.2 }, params({ config, currentSign: 1 }));
+    const backward = sourceField({ x: 0.5, y: 0.3, z: 0.2 }, params({ config, currentSign: -1 }));
+    near(forward.x, -backward.x, 1e-15);
+    near(forward.y, -backward.y, 1e-15);
+    near(forward.z, -backward.z, 1e-15);
+  }
+  // A wire's field has no z component; the solenoid is long enough to cover the sample cube.
+  assert.equal(sourceField({ x: 0.5, y: 0.3, z: 0.9 }, params({ config: 'wire' })).z, 0);
+  assert.ok(SOLENOID_LENGTH >= 2 * 1.2);
+
+  // Viewing: rotation preserves length; no rotation projects straight; closer points look larger.
+  const v = { x: 0.3, y: -0.7, z: 0.5 };
+  const turned = rotateYawPitch(v, { yaw: 0.8, pitch: -0.4 });
+  near(Math.hypot(turned.x, turned.y, turned.z), Math.hypot(v.x, v.y, v.z), 1e-12);
+  const flat = project({ x: 1, y: 2, z: 0 }, { yaw: 0, pitch: 0 });
+  near(flat.x, 1);
+  near(flat.y, 2);
+  assert.ok(project({ x: 0, y: 0, z: 1 }, { yaw: 0, pitch: 0 }).persp > 1);
+  assert.ok(project({ x: 0, y: 0, z: -1 }, { yaw: 0, pitch: 0 }).persp < 1);
+}
+
+// --- Ampere's law ----------------------------------------------------------------
+{
+  const circle = (cx: number, cy: number, radius: number, points = 120, clockwise = false): PathPoint[] =>
+    Array.from({ length: points + 1 }, (_, i) => {
+      const angle = ((clockwise ? -1 : 1) * 2 * Math.PI * i) / points;
+      return { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) };
+    });
+  const wire = (id: number, x: number, y: number, current: number): CurrentWire => ({ id, x, y, current });
+  const relative = (actual: number, expected: number, tolerance: number) =>
+    assert.ok(Math.abs(actual - expected) <= tolerance * Math.abs(expected), `${actual} should be within ${tolerance} of ${expected}`);
+
+  // A counterclockwise loop around one 1 A wire gives mu0 * I, wherever the wire sits inside.
+  for (const [x, y] of [[0, 0], [0.2, -0.1], [-0.3, 0.25]]) {
+    const wires = [wire(1, x, y, 1)];
+    const loop = circle(0, 0, 0.6);
+    relative(lineIntegral(loop, wires, 0.03), MU0, 1e-2);
+    relative(ampereRightSide(loop, wires), MU0, 1e-12);
+  }
+  // Clockwise gives the opposite sign, and so does reversing the current.
+  relative(lineIntegral(circle(0, 0, 0.6, 120, true), [wire(1, 0, 0, 1)], 0.03), -MU0, 1e-2);
+  relative(lineIntegral(circle(0, 0, 0.6), [wire(1, 0, 0, -1)], 0.03), -MU0, 1e-2);
+  assert.equal(windingNumber(circle(0, 0, 0.6), 0, 0), 1);
+  assert.equal(windingNumber(circle(0, 0, 0.6, 120, true), 0, 0), -1);
+  assert.equal(windingNumber(circle(0, 0, 0.6), 2, 0), 0);
+
+  // The integral counts only enclosed current: outside wires contribute nothing, and extra
+  // enclosed current adds.
+  const mixed = [wire(1, 0.1, 0, 2), wire(2, -0.2, 0.1, -1), wire(3, 1.5, 1.5, 4)];
+  near(enclosedCurrent(circle(0, 0, 0.6), mixed), 1);
+  relative(lineIntegral(circle(0, 0, 0.6), mixed, 0.03), MU0 * 1, 2e-2);
+  // Equal and opposite enclosed currents cancel.
+  near(lineIntegral(circle(0, 0, 0.6), [wire(1, 0.1, 0, 1), wire(2, -0.1, 0, -1)], 0.03), 0, 1e-9);
+  // A loop that does not enclose the wire gives zero.
+  near(lineIntegral(circle(2, 0, 0.5), [wire(1, 0, 0, 1)], 0.03), 0, 1e-9);
+
+  // The result does not depend on the shape of the loop, only on what it encloses.
+  const square: PathPoint[] = [
+    { x: -0.7, y: -0.5 }, { x: 0.7, y: -0.5 }, { x: 0.7, y: 0.5 }, { x: -0.7, y: 0.5 }, { x: -0.7, y: -0.5 },
+  ];
+  relative(lineIntegral(square, [wire(1, 0.1, 0.1, 1)], 0.02), MU0, 1e-2);
+
+  // The running total ends at the line integral, and the steps are consistent.
+  const steps = buildPathSteps(circle(0, 0, 0.6), [wire(1, 0, 0, 1)], 0.1);
+  near(steps[steps.length - 1].cumulative, lineIntegral(circle(0, 0, 0.6), [wire(1, 0, 0, 1)], 0.1), 1e-18);
+  near(steps.reduce((sum, step) => sum + step.bDotDl, 0), steps[steps.length - 1].cumulative, 1e-15);
+  assert.ok(steps.every((step) => step.bDotDl > 0), 'following the field the whole way gives positive steps');
+  assert.deepEqual(buildPathSteps([{ x: 0, y: 0 }], [wire(1, 0, 0, 1)], 0.1), []);
+  assert.equal(lineIntegral([], [], 0.1), 0);
+
+  // An open path (half a circle) gives about half of mu0 I, not the full value.
+  const half = circle(0, 0, 0.6, 120).slice(0, 61);
+  relative(lineIntegral(half, [wire(1, 0, 0, 1)], 0.03), MU0 / 2, 1e-2);
+
+  // Near-closed paths are closed automatically; far-open ones are left alone.
+  const almost = circle(0, 0, 0.6).slice(0, 118);
+  assert.equal(closePath(almost, 0.2).length, almost.length + 1);
+  assert.equal(closePath(half, 0.2).length, half.length);
+  assert.equal(closePath([{ x: 0, y: 0 }, { x: 0.01, y: 0 }], 0.2).length, 2);
+
+  assert.equal(formatLineIntegral(MU0), '1.257 µT·m');
+  assert.equal(formatLineIntegral(0), '0 T·m');
+  assert.equal(formatLineIntegral(Number.NaN), '—');
+  assert.equal(formatTesla(25e-6), '25.00 µT');
+  assert.equal(formatTesla(1.36e-3), '1.36 mT');
+  assert.equal(formatTesla(4e-8), '40.0 nT');
 }
 
 console.log('electromagnetism tests passed');

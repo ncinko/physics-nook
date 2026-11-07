@@ -2,6 +2,11 @@
 // Rendering and controls live in src/components/electromagnetism; this module
 // owns the deterministic physics so it can be unit tested in tests/electromagnetism.
 
+export * from './lorentz.ts';
+export * from './biotSavart.ts';
+export * from './ampere.ts';
+export * from './magneticSources.ts';
+
 export interface Vec2 {
   x: number;
   y: number;

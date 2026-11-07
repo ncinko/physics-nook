@@ -1,0 +1,229 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Magnetic Field
+description: Find magnetic fields from currents with the Biot–Savart law and Ampère’s law, then explore the fields of wires, loops, solenoids, and magnets in 3D.
+canonicalPath: /electromagnetism/magnetic-field
+---
+
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
+import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
+import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
+import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import StraightWireField from '../../components/electromagnetism/StraightWireField';
+import AmpereLoop from '../../components/electromagnetism/AmpereLoop';
+import MagneticFieldExplorer from '../../components/electromagnetism/MagneticFieldExplorer';
+import { electromagnetismPath } from '../../data/modules';
+
+<ModuleHero module={electromagnetismPath} currentPath="/electromagnetism/magnetic-field" />
+
+<div id="page-content"></div>
+
+Magnetic fields arise from the motion of electric charge.  This motion could be the flow of current in a wire, the convection of molten metal in Earth, the spin of electrons inside a bar magnet, etc.  (Quantum mechanically, things are a bit more complex.)
+
+Unlike an electric field, which points straight toward or away from its source charge, a magnetic field *circulates*.  Its direction is perpendicular to both electric current and the line from the current to the point of interest.
+
+The **Biot–Savart law** gives the field of a small piece of current. A short element of wire of length $d\vec{\mathbf l}$ carrying current $I$ contributes
+
+$$
+d\vec{\mathbf B} = \frac{\mu_0}{4\pi}\,\frac{I\,d\vec{\mathbf l}\times\hat{\mathbf r}}{r^2},
+$$
+
+where $\hat{\mathbf r}$ is the unit vector from the element to the point of interest, $r$ is the distance, and $\mu_0 = 4\pi\times10^{-7}\,\text{T}\cdot\text{m/A}$ is the **magnetic constant**. Adding up, or integrating, the contribution from every piece gives the total field.
+
+The direction is determined by the cross product between the current vector and $\hat{\mathbf r}$.  For a wire, use the **right-hand rule**: point your thumb along the current, and your curled fingers show the sense of $\vec{\mathbf B}$ around the wire.
+
+## A Straight Wire
+
+For a long straight wire, the Biot–Savart integral gives a field that circles the wire with magnitude
+
+$$
+B = \frac{\mu_0 I}{2\pi r},
+$$
+
+where $r$ is the distance from the wire.  It is strongest close to the wire and falls off as $1/r$.  Drag the probe below.  In the plot, a dot (•) means the current is out of the page and a cross (×) means it is into the page.
+
+<InteractiveAnchor id="straight-wire-field" />
+
+<StraightWireField client:only="react" />
+
+Try these:
+
+- Halve the distance $r$. How does the field strength change?
+- Reverse the current. 
+
+<DerivationPanel title="Where does the curl come from?">
+
+Each current element contributes a vector proportional to $d\vec{\mathbf l}\times\hat{\mathbf r}$. For a straight wire, $I\,d\vec{\mathbf l}$ points along the wire and $\hat{\mathbf r}$ points from the wire out to the point of interest. Their cross product is perpendicular to both, so it is tangent to a circle centered on the wire.
+
+Ampère’s law, in a similar spirit to Gauss's law, makes a more general statement about electric current and the geometry of the resulting magnetic field.  On a circular path of radius $r$ centered on the wire, $B$ is constant and $\vec{\mathbf B}$ is always tangent to the path, so
+
+$$
+\oint \vec{\mathbf B}\cdot d\vec{\mathbf l} = B\,(2\pi r) = \mu_0 I
+\quad\Longrightarrow\quad
+B = \frac{\mu_0 I}{2\pi r}.
+$$
+
+</DerivationPanel>
+
+## Ampère’s Law
+
+**Ampère’s law** relates the magnetic field around a *closed* path to the current passing through it:
+
+$$
+\oint \vec{\mathbf B}\cdot d\vec{\mathbf l} = \mu_0 I_{\text{enc}}.
+$$
+
+The left side adds up the component of $\vec{\mathbf B}$ along each short step of the path. The right side is $\mu_0$ times the net current $I_{\text{enc}}$ through the area the path encloses. It holds for every closed path and is most useful when symmetry makes the left side easy to evaluate.  Currents are counted by the right-hand rule: with your fingers curled the way the path is traveled, current along your thumb counts as positive. 
+
+Build a current distribution below, then draw a path through it and let the plot add up $\vec{\mathbf B}\cdot d\vec{\mathbf l}$.
+
+<InteractiveAnchor id="ampere-loop" />
+
+<AmpereLoop client:only="react" />
+
+Try these:
+
+- Draw a closed loop around a single wire. The total matches $\mu_0 I$, however the loop is shaped.
+- Add more current inside the loop. The total grows with the net enclosed current.
+- Add a wire *outside* the loop. The field along the path changes, but the total does not.
+- Place one out-of-page wire and one into-page wire inside the loop. The currents cancel and the total is zero, even though the field along the path is not.
+- Stop a path part-way around a wire. An open path does not give $\mu_0 I$.
+
+<DerivationPanel title="The field inside an ideal solenoid">
+
+A **solenoid** is a long coil of wire, with $n$ turns per unit length, carrying current $I$. Inside a long solenoid the field is nearly uniform and along the axis, and outside it is much weaker. Choose a rectangular Amperian loop with one side of length $\ell$ inside the solenoid, parallel to the axis, and the opposite side outside, where $B\approx0$. The two short sides are perpendicular to the field (or outside), so they add nothing:
+
+$$
+\oint \vec{\mathbf B}\cdot d\vec{\mathbf l} = B\ell.
+$$
+
+The loop encloses $n\ell$ turns, each carrying $I$, so $I_{\text{enc}} = n\ell I$. Ampère’s law then gives $B\ell=\mu_0 n\ell I$, or
+
+$$
+B = \mu_0 n I.
+$$
+
+</DerivationPanel>
+
+## Fields in Three Dimensions
+
+Complicated current arrangements need full vector superposition. The explorer below samples the field of five sources on a grid of points, which you can rotate and change. Start with the straight wire, then compare the current loop, the solenoid, and the bar magnets.
+
+<InteractiveAnchor id="magnetic-field-explorer" />
+
+<MagneticFieldExplorer client:only="react" />
+
+For a different view of the same ideas, try Falstad’s [3D vector field visualizer](https://www.falstad.com/vector3dm/).
+
+
+
+<DerivationPanel title="Why do the loop and the bar magnet look alike far away?">
+
+Any localized current distribution has a **magnetic dipole moment**,
+
+$$
+\vec{\mathbf m} = \frac{1}{2}\int \vec{\mathbf r}\times\left(I\,d\vec{\mathbf l}\right),
+$$
+
+which for a flat loop of area $A$ is $\vec{\mathbf m}=IA\,\hat{\mathbf n}$. Far from the source the details blur together and only the dipole moment matters. What remains is the field of an ideal dipole:
+
+$$
+\vec{\mathbf B}_{\text{dipole}} = \frac{\mu_0}{4\pi r^3}\left[3\left(\vec{\mathbf m}\cdot\hat{\mathbf r}\right)\hat{\mathbf r}-\vec{\mathbf m}\right].
+$$
+
+The important feature is that the field falls off as $1/r^3$, much faster than the $1/r$ of a long wire. The loop, the solenoid, and the bar magnet all look like dipoles from far away because each is, at heart, a circulation of current with a net magnetic moment.
+
+</DerivationPanel>
+
+<ProblemSolvingSection title="Problem Solving">
+  <WorkedExampleCard title="Field Near a Long Wire" accent="blue">
+    #### Problem
+
+    A field probe is $4.0\,\text{cm}$ from a long straight wire carrying $5.0\,\text{A}$. What magnetic field does it read?
+
+    #### Use
+
+    $$
+    B = \frac{\mu_0 I}{2\pi r}.
+    $$
+
+    #### Solve
+
+    $$
+    B = \frac{(4\pi\times10^{-7})(5.0)}{2\pi(0.040)} = 2.5\times10^{-5}\,\text{T} = 25\,\mu\text{T}.
+    $$
+
+    #### Check
+
+    This is about half the strength of Earth’s magnetic field at the surface, which is a few tens of microtesla. That is why a compass placed right next to a wire carrying several amperes can swing noticeably.
+  </WorkedExampleCard>
+
+  <WorkedExampleCard title="Inside a Solenoid" accent="red">
+    #### Problem
+
+    An ideal solenoid has $900$ turns per meter and carries $1.2\,\text{A}$. Estimate the field inside it.
+
+    #### Use
+
+    From Ampère’s law,
+
+    $$
+    B = \mu_0 n I.
+    $$
+
+    #### Solve
+
+    $$
+    B = (4\pi\times10^{-7})(900)(1.2) \approx 1.36\times10^{-3}\,\text{T} = 1.36\,\text{mT}.
+    $$
+
+    #### Check
+
+    A modest current in a tightly wound coil gives a field a few tens of times stronger than Earth’s. Only $n$ and $I$ matter. The radius of the coil does not appear.
+  </WorkedExampleCard>
+</ProblemSolvingSection>
+
+<QuestionSequence
+  client:load
+  eyebrow="Magnetic Field Checkpoint"
+  questions={[
+    {
+      id: 'magnetic-field-wire-distance',
+      question: 'The distance from a long straight wire is tripled while the current stays the same. What happens to the magnetic field?',
+      options: [
+        { id: 'A', text: 'It falls to one third.', isCorrect: true, explanation: 'Right. $B=\\mu_0I/2\\pi r$ is proportional to $1/r$, so tripling $r$ divides $B$ by three.' },
+        { id: 'B', text: 'It falls to one ninth.', isCorrect: false, explanation: 'An inverse-square law would give one ninth, as for a point charge. The field of a long wire falls off only as $1/r$.' },
+        { id: 'C', text: 'It triples.', isCorrect: false, explanation: 'The field is strongest close to the wire and weakens with distance.' }
+      ]
+    },
+    {
+      id: 'magnetic-field-ampere-cancel',
+      question: 'A closed path encloses one wire carrying $3\\,\\text{A}$ out of the page and another carrying $3\\,\\text{A}$ into the page. What is $\\oint\\vec{\\mathbf B}\\cdot d\\vec{\\mathbf l}$ around the path?',
+      options: [
+        { id: 'A', text: '$\\mu_0(6\\,\\text{A})$', isCorrect: false, explanation: 'Currents add with sign. Out of the page and into the page have opposite signs, so they do not add to $6\\,\\text{A}$.' },
+        { id: 'B', text: 'Zero, so $\\vec{\\mathbf B}$ must be zero everywhere on the path.', isCorrect: false, explanation: 'The line integral is zero, but the field itself is not. $\\vec{\\mathbf B}$ points forward along some stretches and backward along others, and the contributions cancel.' },
+        { id: 'C', text: 'Zero, even though $\\vec{\\mathbf B}$ is not zero on the path.', isCorrect: true, explanation: 'Correct. $I_{\\text{enc}}=3-3=0$, so the integral is zero. The field along the path is still nonzero, but the forward and backward contributions cancel.' }
+      ]
+    },
+    {
+      id: 'magnetic-field-outside-wire',
+      question: 'You move a second wire from outside an Amperian loop to a position far away, while the loop and the first wire stay put. The loop encloses only the first wire. What happens to $\\oint\\vec{\\mathbf B}\\cdot d\\vec{\\mathbf l}$?',
+      options: [
+        { id: 'A', text: 'It does not change, because only the enclosed current counts.', isCorrect: true, explanation: 'Yes. The second wire changes $\\vec{\\mathbf B}$ at every point on the path, but its contributions cancel around the loop. The result depends only on $I_{\\text{enc}}$.' },
+        { id: 'B', text: 'It decreases, because the second wire is farther away.', isCorrect: false, explanation: 'Distance matters for the field at a point, but a current that is not enclosed contributes nothing to the closed-loop integral at all.' },
+        { id: 'C', text: 'It increases, because the total current in the scene is larger.', isCorrect: false, explanation: 'Ampère’s law counts only the current through the loop. Current elsewhere, however large, does not enter.' }
+      ]
+    },
+    {
+      id: 'magnetic-field-magnet-pair',
+      question: 'In the explorer, two identical bar magnets stand side by side with opposite polarity (north beside south). At the point halfway between them, at the height of their centers, the field is zero. Why?',
+      options: [
+        { id: 'A', text: 'Magnetic fields from different sources cannot overlap.', isCorrect: false, explanation: 'Fields add by superposition, as electric fields do. They can overlap and also cancel.' },
+        { id: 'B', text: 'The two magnets contribute equal fields pointing in opposite directions there.', isCorrect: true, explanation: 'Correct. Beside a bar magnet, the field points from the north end toward the south end. The two magnets are reversed, so their contributions are equal and opposite at the midpoint. With the *same* polarity they point the same way and add.' },
+        { id: 'C', text: 'The field of a bar magnet is zero outside it.', isCorrect: false, explanation: 'A bar magnet’s field extends well outside it. It is how a magnet picks up paper clips.' }
+      ]
+    }
+  ]}
+/>

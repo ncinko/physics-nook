@@ -43,7 +43,7 @@ import {
 import { NGIO_SAMPLING_MODE } from './ngioPackets.ts';
 import { findSensor, isMotionSensor, isPhotogateSensor } from './sensorIds.ts';
 
-export type SessionProfileId = 'motion' | 'photogate';
+export type SessionProfileId = 'motion' | 'photogate' | 'probe';
 
 interface ProfileChannel {
   channel: number;
@@ -54,8 +54,13 @@ interface ProfileChannel {
 interface SessionProfile {
   channels: readonly ProfileChannel[];
   accepts: (sensorId: number) => boolean;
-  /** 'motion' pairs ping/echo into round trips; 'edges' passes edges through. */
-  decode: 'motion' | 'edges';
+  /**
+   * 'motion' pairs ping/echo into round trips; 'edges' passes edges through;
+   * 'raw' decodes nothing — the probe only wants the bytes in the traffic log.
+   */
+  decode: 'motion' | 'edges' | 'raw';
+  /** Fail the handshake if every channel is empty (all channels optional). */
+  requireAny?: boolean;
   fallbackName: string;
   describeMissing: (channel: number) => string;
   describeWrong: (channel: number, sensorId: number) => string;
@@ -101,6 +106,25 @@ const PROFILES: Record<SessionProfileId, SessionProfile> = {
     lookingFor: 'Looking for photogates on DIG 1 and DIG 2',
     configuring: 'Configuring the photogates',
   },
+  // Hardware probe: identify whatever is on any port and stream it undecoded,
+  // so the raw analog bytes can be read from the traffic log and the decoder
+  // written from a measurement rather than a guess.
+  probe: {
+    channels: [
+      { channel: NGIO_CHANNEL_ID.ANALOG1, required: false },
+      { channel: NGIO_CHANNEL_ID.ANALOG2, required: false },
+      { channel: NGIO_CHANNEL_ID.DIGITAL1, required: false },
+      { channel: NGIO_CHANNEL_ID.DIGITAL2, required: false },
+    ],
+    accepts: () => true,
+    decode: 'raw',
+    requireAny: true,
+    fallbackName: 'Sensor',
+    describeMissing: () => 'No sensor detected on CH 1, CH 2, DIG 1 or DIG 2.',
+    describeWrong: () => 'Unexpected sensor.',
+    lookingFor: 'Looking for sensors on every port',
+    configuring: 'Configuring the detected sensors',
+  },
 };
 
 /**
@@ -132,6 +156,8 @@ export interface SessionState {
   channel: number;
   /** Every channel found holding an acceptable sensor, in profile order. */
   activeChannels: number[];
+  /** Sensor ID found on each active channel, by channel number. */
+  channelSensorIds: Record<number, number>;
   /** Which profile channel `identify-sensor` is asking about. */
   identifyIndex: number;
   /** Which active channel `set-sampling-mode` is configuring. */
@@ -203,6 +229,7 @@ const createState = (options: SessionOptions = {}): SessionState => {
     profileId,
     channel: PROFILES[profileId].channels[0].channel,
     activeChannels: [],
+    channelSensorIds: {},
     identifyIndex: 0,
     modeIndex: 0,
     periodSeconds: options.periodSeconds ?? DEFAULT_PERIOD_SECONDS,
@@ -263,13 +290,17 @@ const commandForPhase = (
         params: setMeasurementPeriodParams(ALL_CHANNELS, state.periodSeconds),
       };
     case 'set-sampling-mode': {
-      const sensor = findSensor(state.sensorId);
-      const fallback =
-        profileOf(state).decode === 'edges'
-          ? NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT
-          : NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT;
-      const mode = sensor ? sensor.samplingMode : fallback;
       const channel = state.activeChannels[state.modeIndex] ?? state.channel;
+      const sensor = findSensor(state.channelSensorIds[channel] ?? state.sensorId);
+      const decode = profileOf(state).decode;
+      const isAnalog = channel >= NGIO_CHANNEL_ID.ANALOG1 && channel <= NGIO_CHANNEL_ID.ANALOG4;
+      const fallback =
+        decode === 'edges' || (decode === 'raw' && !isAnalog)
+          ? NGIO_SAMPLING_MODE.APERIODIC_EDGE_DETECT
+          : decode === 'raw'
+            ? NGIO_SAMPLING_MODE.PERIODIC_LEVEL_SNAPSHOT
+            : NGIO_SAMPLING_MODE.PERIODIC_MOTION_DETECT;
+      const mode = sensor ? sensor.samplingMode : fallback;
       return {
         command: NGIO_CMD_ID.SET_SAMPLING_MODE,
         params: setSamplingModeParams(channel, mode),
@@ -377,6 +408,10 @@ const consumeEdges = (state: SessionState, payload: Uint8Array): StepResult => {
 const consumeMeasurement = (state: SessionState, packet: NgioPacket): StepResult => {
   if (packet.kind !== 'measurement') return nothing(state);
   if (profileOf(state).decode === 'edges') return consumeEdges(state, packet.payload);
+  // Raw: count the blob, keep the bytes in the transport's traffic log.
+  if (profileOf(state).decode === 'raw') {
+    return nothing({ ...state, sampleCount: state.sampleCount + 1 });
+  }
 
   const samples: RawSample[] = [];
   let current = state;
@@ -463,6 +498,7 @@ const consumeResponse = (state: SessionState, packet: NgioPacket): StepResult =>
         : {
             ...state,
             activeChannels: [...state.activeChannels, channel],
+            channelSensorIds: { ...state.channelSensorIds, [channel]: sensorId },
             // The first sensor found names the session.
             ...(state.activeChannels.length === 0
               ? { sensorId, sensorName: findSensor(sensorId)?.name ?? profile.fallbackName }
@@ -474,6 +510,10 @@ const consumeResponse = (state: SessionState, packet: NgioPacket): StepResult =>
         { ...identified, identifyIndex: state.identifyIndex + 1 },
         'identify-sensor',
       );
+    }
+
+    if (profile.requireAny && identified.activeChannels.length === 0) {
+      return fail(identified, profile.describeMissing(channel));
     }
 
     return advanceTo(identified, nextPhaseAfter(state.phase));

@@ -17,6 +17,7 @@ import { fitPolynomial, type FitResult } from '../math/leastSquares.ts';
 import { fitSummaryLines, showMeasurement, type SummaryGroup } from '../kinematics/fitSummary.ts';
 import type { Measurement } from '../measurement/uncertainty.ts';
 import { fixed } from '../../utils/format.ts';
+import { formatNumber, joinRow } from '../sensors/delimited.ts';
 
 export interface CartSample {
   /** Seconds since the recording started. */
@@ -225,20 +226,8 @@ interface SerializeOptions {
   layout: ExportLayout;
 }
 
-/**
- * One cell of text. A comma-separated file quotes anything that could break a
- * row; a tab-separated one cannot quote, so it drops the characters that would.
- */
-const cell = (text: string, delimiter: '\t' | ','): string => {
-  if (delimiter === '\t') return text.replace(/[\t\r\n]+/g, ' ');
-  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-};
-
-const number = (value: number | null, digits: number): string =>
-  value === null || !Number.isFinite(value) ? '' : value.toFixed(digits);
-
-const join = (cells: string[], delimiter: '\t' | ',') =>
-  cells.map((entry) => cell(entry, delimiter)).join(delimiter);
+const number = formatNumber;
+const join = joinRow;
 
 /**
  * Raw time, position and velocity for pasting into a spreadsheet.

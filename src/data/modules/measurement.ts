@@ -71,5 +71,20 @@ export const measurementModule: ModuleMeta = {
         image: '/social/physics-nook-card.svg',
       },
     },
+    {
+      id: 'measurement-sensor-lab',
+      href: '/measurement/sensor-lab',
+      title: 'Sensor Lab',
+      shortTitle: 'Sensor Lab',
+      description:
+        'Connect Vernier sensors, record any channel against time, and graph, fit, and export the data.',
+      seo: {
+        title: 'Sensor Lab',
+        description:
+          'Record force, position, and other Vernier sensor channels against time, set a trigger, select an interval, read the statistics and area, fit a line, and export the data to a spreadsheet.',
+        canonicalPath: '/measurement/sensor-lab',
+        image: '/social/physics-nook-card.svg',
+      },
+    },
   ],
 };

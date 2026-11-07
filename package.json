@@ -30,6 +30,7 @@
     "test:vernier": "node --experimental-strip-types tests/vernier/run-tests.ts",
     "test:math": "node --experimental-strip-types tests/math/run-tests.ts",
     "test:measurement": "node --experimental-strip-types tests/measurement/run-tests.ts",
+    "test:sensors": "node --experimental-strip-types tests/sensors/run-tests.ts",
     "test:forces": "node --experimental-strip-types tests/forces/run-tests.ts",
     "test:quantum": "node --experimental-strip-types tests/quantum/run-tests.ts",
     "test:coaster": "node --experimental-strip-types tests/coaster/run-tests.ts",
@@ -46,7 +47,7 @@
     "test:wavepool": "node --experimental-strip-types tests/wavepool/run-tests.ts",
     "test:aurora": "node --experimental-strip-types tests/aurora/run-tests.ts",
     "test:home": "node --experimental-strip-types tests/home/run-tests.ts",
-    "test:all": "npm run test:shared && npm run test:math && npm run test:measurement && npm run test:kinematics && npm run test:vernier && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:waves && npm run test:ripple && npm run test:solar && npm run test:astronomy && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation && npm run test:hamlet && npm run test:aurora && npm run test:wavepool && npm run test:home"
+    "test:all": "npm run test:shared && npm run test:math && npm run test:measurement && npm run test:kinematics && npm run test:vernier && npm run test:sensors && npm run test:forces && npm run test:quantum && npm run test:coaster && npm run test:energy && npm run test:oscillations && npm run test:waves && npm run test:ripple && npm run test:solar && npm run test:astronomy && npm run test:caerbannog && npm run test:electromagnetism && npm run test:rotation && npm run test:hamlet && npm run test:aurora && npm run test:wavepool && npm run test:home"
   },
   "dependencies": {
     "@astrojs/mdx": "^5.0.4",

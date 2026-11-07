@@ -1334,4 +1334,50 @@ const runEdges = (
   }
 }
 
+// --- probe profile: any port, undecoded -----------------------------------
+{
+  const drive = (ids: Record<number, number>) => {
+    const opened = startSession({ profile: 'probe' });
+    let state: SessionState = opened.state;
+    let writes = opened.writes;
+    const sentIds: number[] = [];
+    for (let guard = 0; guard < 40 && state.phase !== 'streaming' && state.phase !== 'failed'; guard += 1) {
+      const written = writes[0];
+      if (written[4] === NGIO_CMD_ID.GET_SENSOR_ID) sentIds.push(written[5]);
+      const payload =
+        written[4] === NGIO_CMD_ID.GET_SENSOR_ID
+          ? [ids[written[5]] ?? 0, 0, 0, 0, 1, 0, 0, 0]
+          : [NGIO_STATUS.SUCCESS];
+      const result = step(state, { type: 'report', bytes: replyTo(written, payload) });
+      state = result.state;
+      writes = result.writes;
+    }
+    return { state, sentIds };
+  };
+
+  // A force sensor (made-up ID) on CH 1 and a photogate on DIG 2.
+  const { state, sentIds } = drive({ [NGIO_CHANNEL_ID.ANALOG1]: 77, [NGIO_CHANNEL_ID.DIGITAL2]: 4 });
+  assert.deepEqual(sentIds, [
+    NGIO_CHANNEL_ID.ANALOG1,
+    NGIO_CHANNEL_ID.ANALOG2,
+    NGIO_CHANNEL_ID.DIGITAL1,
+    NGIO_CHANNEL_ID.DIGITAL2,
+  ]);
+  assert.equal(state.phase, 'streaming');
+  assert.deepEqual(state.activeChannels, [NGIO_CHANNEL_ID.ANALOG1, NGIO_CHANNEL_ID.DIGITAL2]);
+  assert.equal(state.channelSensorIds[NGIO_CHANNEL_ID.ANALOG1], 77);
+
+  // Nothing plugged in anywhere fails with a plain message.
+  const empty = drive({});
+  assert.equal(empty.state.phase, 'failed');
+  assert.match(empty.state.error ?? '', /No sensor detected/);
+
+  // Raw measurement blobs are counted, not decoded.
+  const blob = Uint8Array.from([0x20, 12, 0x10, 0, 1, 0, 0, 0, 1, 2, 3, 4]);
+  blob[3] = ngioChecksum([...blob.subarray(0, 3), ...blob.subarray(4)]);
+  const after = step(state, { type: 'report', bytes: blob });
+  assert.equal(after.state.sampleCount, 1);
+  assert.equal(after.samples.length, 0);
+}
+
 console.log('vernier device layer tests passed');

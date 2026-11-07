@@ -428,6 +428,16 @@ export const interactiveEntries: InteractiveEntry[] = [
     kind: 'standalone',
     tags: ['forces', 'lab', 'hardware', 'graphs'],
   },
+  {
+    id: 'sensor-lab',
+    title: 'Sensor Lab',
+    description:
+      'Record any Vernier sensor channel against time, select an interval, and read statistics, area, and a line fit.',
+    href: '/measurement/sensor-lab#sensor-lab',
+    module: 'Measurement',
+    kind: 'standalone',
+    tags: ['measurement', 'lab', 'hardware', 'graphs'],
+  },
   // Collisions page is being reworked; entries hidden from the catalog for now.
   // {
   //   id: 'elastic-collision-field',

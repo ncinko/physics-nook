@@ -1,0 +1,37 @@
+---
+layout: ../../layouts/TextbookLayout.astro
+title: Sensor Lab
+description: Connect Vernier sensors, record any channel against time, and graph, fit, and export the data.
+canonicalPath: /measurement/sensor-lab
+---
+
+import SimulationBlock from '../../components/layout/SimulationBlock.astro';
+import ModuleHero from '../../components/modules/ModuleHero.astro';
+import InteractiveAnchor from '../../components/interactive/InteractiveAnchor.astro';
+import SensorLab from '../../components/sensors/SensorLab';
+import { measurementPath } from '../../data/modules';
+
+<ModuleHero module={measurementPath} currentPath="/measurement/sensor-lab" />
+
+## What you need
+
+**Chrome or Edge.** Other web browsers cannot talk to a LabQuest.
+**Vernier LabQuest Mini** (or LabQuest 2 or 3) connected by USB, with your sensors plugged in.
+
+Until LabQuest analog support is finished, use the simulated sensors to try everything below.
+
+1. Pick the channel to graph. Press **Zero** with nothing applied to the sensor.
+2. Choose how long to record and when to start. A trigger waits for the signal to cross a level, and the half second before it is kept.
+3. Press **Collect**, then **Stop** if you did not set a duration.
+4. Drag the dashed handles to select an interval. The readouts and the line fit cover only that interval.
+
+<InteractiveAnchor id="sensor-lab" />
+
+<SimulationBlock
+  width="full"
+  height="tall"
+  title="Sensor Lab"
+  description="Record, graph, and analyze any connected sensor channel."
+>
+  <SensorLab client:only="react" />
+</SimulationBlock>

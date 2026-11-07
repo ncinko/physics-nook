@@ -380,7 +380,7 @@ export default function MagneticFieldExplorer() {
       </ControlBar>
       <p className="type-supporting my-2 text-center">
         Drag the plot to rotate it. Every arrow is the same length and shows only the field’s direction; stronger
-        fields are bluer and more opaque. The gray lines are the x, y and z axes.
+        fields are bluer and more opaque. 
       </p>
     </div>
   );

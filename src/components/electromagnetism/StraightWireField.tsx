@@ -199,10 +199,6 @@ export default function StraightWireField() {
         <Readout.Value label="r" value={r.toFixed(3)} unit="m" />
         <Readout.Value label="|B|" value={current === 0 ? '0' : formatTesla(magnitude)} />
       </Readout>
-      <p className="type-supporting my-2 text-center">
-        Drag the probe, or focus the plot and use the arrow keys. The blue circle shows every point at the probe’s
-        distance, where the field has the same magnitude.
-      </p>
     </div>
   );
 }

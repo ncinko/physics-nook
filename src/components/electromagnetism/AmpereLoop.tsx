@@ -384,12 +384,6 @@ export default function AmpereLoop() {
           </p>
         ) : null}
       </div>
-      <p className="type-supporting my-2 text-center">
-        Dots (•) are current out of the page and crosses (×) are current into it. In <strong>Add</strong> mode, click the
-        plot to place a current. In <strong>Move</strong> mode, drag one. In <strong>Draw path</strong> mode, drag
-        a route; the green segment and arrow show where B · dl is being summed. A loop drawn counterclockwise counts
-        out-of-page current as positive.
-      </p>
     </div>
   );
 }

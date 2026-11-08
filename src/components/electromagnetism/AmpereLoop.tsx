@@ -6,6 +6,7 @@ import {
   ampereRightSide,
   buildPathSteps,
   closePath,
+  enclosedCurrent,
   fieldAt,
   formatLineIntegral,
   isClosedPath,
@@ -27,7 +28,10 @@ const CLOSE_TOLERANCE = 0.25;
 const MIN_POINT_GAP = 0.03;
 const HIT_RADIUS_PX = 20;
 const MAX_WIRES = 12;
-const ANIMATION_SECONDS = 3.5;
+// The walk along the path moves at a steady pace, within these limits.
+const SECONDS_PER_STEP = 0.05;
+const MIN_ANIMATION_SECONDS = 3;
+const MAX_ANIMATION_SECONDS = 9;
 
 type Mode = 'move' | 'addOut' | 'addIn' | 'draw';
 
@@ -205,7 +209,8 @@ export default function AmpereLoop() {
     const tick = (time: number) => {
       if (!started) started = time;
       const total = stepCount.current;
-      const rate = total / ANIMATION_SECONDS;
+      const seconds = clamp(total * SECONDS_PER_STEP, MIN_ANIMATION_SECONDS, MAX_ANIMATION_SECONDS);
+      const rate = total / seconds;
       const shown = Math.min(total, Math.floor(((time - started) / 1000) * rate) + 1);
       setIntegration((previous) => (previous ? { ...previous, shown } : previous));
       if (shown >= total) {
@@ -326,7 +331,11 @@ export default function AmpereLoop() {
   const finished = integration !== null && integration.shown >= integration.steps.length;
   const closedPath = integration ? isClosedPath(integration.path) : false;
   const cursor = mode === 'draw' ? 'crosshair' : mode === 'move' ? 'grab' : 'copy';
-  const totalCurrent = wires.reduce((sum, w) => sum + w.current, 0);
+  // Enclosed current only means something for a closed loop: the path being drawn
+  // (or the one being integrated) must end near where it started.
+  const loopPath = integration ? integration.path : closePath(path, CLOSE_TOLERANCE);
+  const loopClosed = isClosedPath(loopPath);
+  const enclosed = loopClosed ? enclosedCurrent(loopPath, wires) : null;
 
   return (
     <div className="not-prose mx-auto max-w-5xl p-3 text-[var(--text-primary)]">
@@ -372,7 +381,7 @@ export default function AmpereLoop() {
 
       <div role="status" aria-live="polite">
         <Readout variant="inline" className="justify-center">
-          <Readout.Value label="Net current" value={totalCurrent.toFixed(0)} unit="A" />
+          <Readout.Value label="Enclosed current" value={enclosed === null ? '—' : enclosed.toFixed(0)} unit={enclosed === null ? undefined : 'A'} />
           <Readout.Value label="∑ B · dl" value={running === null ? '—' : formatLineIntegral(running)} />
           {integration && finished && closedPath ? (
             <Readout.Value label="μ₀ I_enc" value={formatLineIntegral(ampereRightSide(integration.path, wires))} />

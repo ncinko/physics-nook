@@ -53,17 +53,48 @@ Try these:
 - Halve the distance $r$. How does the field strength change?
 - Reverse the current. 
 
-<DerivationPanel title="Where does the curl come from?">
+<DerivationPanel title="Deriving the field">
 
-Each current element contributes a vector proportional to $d\vec{\mathbf l}\times\hat{\mathbf r}$. For a straight wire, $I\,d\vec{\mathbf l}$ points along the wire and $\hat{\mathbf r}$ points from the wire out to the point of interest. Their cross product is perpendicular to both, so it is tangent to a circle centered on the wire.
+Place the wire along the $z$ axis, carrying current $I$ in the $+z$ direction, and find the field at a point a perpendicular distance $r$ from the wire. Choose the origin so the point lies at $z=0$. A current element sits at height $z$ and has $d\vec{\mathbf l}=dz\,\hat{\mathbf z}$. In this derivation the distance from the element to the point is $R=\sqrt{r^2+z^2}$, so that $r$ keeps its meaning as the distance from the wire.
 
-Ampère’s law, in a similar spirit to Gauss's law, makes a more general statement about electric current and the geometry of the resulting magnetic field.  On a circular path of radius $r$ centered on the wire, $B$ is constant and $\vec{\mathbf B}$ is always tangent to the path, so
+**Direction.** The vector from the element to the point is $R\,\hat{\mathbf R} = r\,\hat{\boldsymbol\rho} - z\,\hat{\mathbf z}$, where $\hat{\boldsymbol\rho}$ points straight out from the wire. Then
 
 $$
-\oint \vec{\mathbf B}\cdot d\vec{\mathbf l} = B\,(2\pi r) = \mu_0 I
-\quad\Longrightarrow\quad
-B = \frac{\mu_0 I}{2\pi r}.
+d\vec{\mathbf l}\times\hat{\mathbf R}
+= \frac{dz}{R}\,\hat{\mathbf z}\times\left(r\,\hat{\boldsymbol\rho} - z\,\hat{\mathbf z}\right)
+= \frac{r\,dz}{R}\,\hat{\boldsymbol\varphi},
 $$
+
+since $\hat{\mathbf z}\times\hat{\mathbf z}=0$ and $\hat{\mathbf z}\times\hat{\boldsymbol\rho}=\hat{\boldsymbol\varphi}$, the unit vector tangent to a circle around the wire. Every element along the wire contributes in this same direction, so the contributions add as plain numbers and $\vec{\mathbf B}$ circulates around the wire.
+
+**Magnitude.** Putting this into the Biot–Savart law gives the contribution of one element:
+
+$$
+dB = \frac{\mu_0 I}{4\pi}\,\frac{r\,dz}{R^3}
+= \frac{\mu_0 I}{4\pi}\,\frac{r\,dz}{\left(r^2+z^2\right)^{3/2}}.
+$$
+
+For an infinitely long wire, add up every element from $z=-\infty$ to $z=+\infty$:
+
+$$
+B = \frac{\mu_0 I\,r}{4\pi}\int_{-\infty}^{\infty}\frac{dz}{\left(r^2+z^2\right)^{3/2}}.
+$$
+
+Substitute $z = r\tan\theta$, so $dz = r\sec^2\theta\,d\theta$ and $\left(r^2+z^2\right)^{3/2} = r^3\sec^3\theta$. The limits $z\to\mp\infty$ become $\theta\to\mp\pi/2$, and the integral becomes
+
+$$
+\int_{-\infty}^{\infty}\frac{dz}{\left(r^2+z^2\right)^{3/2}}
+= \frac{1}{r^2}\int_{-\pi/2}^{\pi/2}\cos\theta\,d\theta
+= \frac{2}{r^2}.
+$$
+
+Therefore
+
+$$
+B = \frac{\mu_0 I\,r}{4\pi}\cdot\frac{2}{r^2} = \frac{\mu_0 I}{2\pi r}.
+$$
+
+Only the stretch of wire within a few multiples of $r$ of the point contributes much, because farther elements are suppressed by $1/R^2$ and by the shrinking $\sin$ of the angle in the cross product. That effective length grows in proportion to $r$, which turns the point-like $1/r^2$ into the wire's $1/r$.
 
 </DerivationPanel>
 

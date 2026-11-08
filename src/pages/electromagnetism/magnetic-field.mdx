@@ -11,6 +11,7 @@ import DerivationPanel from '../../components/textbook/DerivationPanel.astro';
 import ProblemSolvingSection from '../../components/textbook/ProblemSolvingSection.astro';
 import WorkedExampleCard from '../../components/textbook/WorkedExampleCard.astro';
 import QuestionSequence from '../../components/interactive/QuestionSequence.jsx';
+import BiotSavartGeometry from '../../components/electromagnetism/BiotSavartGeometry.astro';
 import StraightWireField from '../../components/electromagnetism/StraightWireField';
 import AmpereLoop from '../../components/electromagnetism/AmpereLoop';
 import MagneticFieldExplorer from '../../components/electromagnetism/MagneticFieldExplorer';
@@ -30,7 +31,11 @@ $$
 d\vec{\mathbf B} = \frac{\mu_0}{4\pi}\,\frac{I\,d\vec{\mathbf l}\times\hat{\mathbf r}}{r^2},
 $$
 
-where $\hat{\mathbf r}$ is the unit vector from the element to the point of interest, $r$ is the distance, and $\mu_0 = 4\pi\times10^{-7}\,\text{T}\cdot\text{m/A}$ is the **magnetic constant**. Adding up, or integrating, the contribution from every piece gives the total field.
+where $d\vec{\mathbf l}$ is a short vector along the wire in the direction of the current, $\hat{\mathbf r}$ is the unit vector from the element to the point of interest, $r$ is the distance, and $\mu_0 = 4\pi\times10^{-7}\,\text{T}\cdot\text{m/A}$ is the **magnetic constant**. Adding up, or integrating, the contribution from every piece gives the total field.
+
+<BiotSavartGeometry />
+
+In the sketch, $d\vec{\mathbf l}\times\hat{\mathbf r}$ points out of the page, so $d\vec{\mathbf B}$ does too.
 
 The direction is determined by the cross product between the current vector and $\hat{\mathbf r}$.  For a wire, use the **right-hand rule**: point your thumb along the current, and your curled fingers show the sense of $\vec{\mathbf B}$ around the wire.
 
@@ -57,7 +62,7 @@ Try these:
 
 Place the wire along the $z$ axis, carrying current $I$ in the $+z$ direction, and find the field at a point a perpendicular distance $r$ from the wire. Choose the origin so the point lies at $z=0$. A current element sits at height $z$ and has $d\vec{\mathbf l}=dz\,\hat{\mathbf z}$. In this derivation the distance from the element to the point is $R=\sqrt{r^2+z^2}$, so that $r$ keeps its meaning as the distance from the wire.
 
-**Direction.** The vector from the element to the point is $R\,\hat{\mathbf R} = r\,\hat{\boldsymbol\rho} - z\,\hat{\mathbf z}$, where $\hat{\boldsymbol\rho}$ points straight out from the wire. Then
+**Direction.** The vector from the current element to the point of interest is $\vec{\mathbf R} = r\,\hat{\boldsymbol\rho} - z\,\hat{\mathbf z}$, where $\hat{\boldsymbol\rho}$ points straight out from the wire. Then
 
 $$
 d\vec{\mathbf l}\times\hat{\mathbf R}
@@ -65,7 +70,7 @@ d\vec{\mathbf l}\times\hat{\mathbf R}
 = \frac{r\,dz}{R}\,\hat{\boldsymbol\varphi},
 $$
 
-since $\hat{\mathbf z}\times\hat{\mathbf z}=0$ and $\hat{\mathbf z}\times\hat{\boldsymbol\rho}=\hat{\boldsymbol\varphi}$, the unit vector tangent to a circle around the wire. Every element along the wire contributes in this same direction, so the contributions add as plain numbers and $\vec{\mathbf B}$ circulates around the wire.
+since $\hat{\mathbf z}\times\hat{\mathbf z}=0$ and $\hat{\mathbf z}\times\hat{\boldsymbol\rho}=\hat{\boldsymbol\varphi}$, the unit vector tangent to a circle around the wire. Every element along the wire contributes in this same direction, so the contributions add as numbers and $\vec{\mathbf B}$ circulates around the wire.
 
 **Magnitude.** Putting this into the Biot–Savart law gives the contribution of one element:
 

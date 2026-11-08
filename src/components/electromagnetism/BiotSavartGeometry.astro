@@ -1,10 +1,15 @@
 ---
 // Geometry of the Biot–Savart law: a current element dl, the unit vector r-hat
 // from the element to the field point, and the resulting dB (out of the page).
+//
+// Hovering a part of this diagram highlights the matching symbol in the equation
+// (and vice versa). Equation symbols are tagged in the MDX with
+// `\htmlClass{bs-part bs-key-<key>}{...}`; diagram parts carry the same classes.
+// Keys: I, dl, rhat, r, dB.
 const label =
   'A curved wire carrying current. One short element of the wire, dl, points along the current. A dashed line of length r runs from the element to the point of interest, and the unit vector r-hat points along it. The contribution dB at that point is perpendicular to both and points out of the page.';
 ---
-<figure class="my-5">
+<figure class="bs-figure my-5">
   <svg viewBox="20 40 450 190" role="img" aria-label={label} class="mx-auto w-full max-w-xl"
     style="color:var(--text-primary);font-size:15px">
     <defs>
@@ -17,23 +22,107 @@ const label =
     </defs>
 
     <!-- The wire, with the current direction -->
-    <path d="M 40 190 Q 220 140 440 175" fill="none" stroke="var(--accent-red)" stroke-width="2" opacity="0.55" marker-end="url(#bsg-red)" />
-    <text x="62" y="214" fill="var(--accent-red)" font-style="italic">I</text>
+    <g class="bs-part bs-key-I">
+      <path d="M 40 190 Q 220 140 440 175" fill="none" stroke="var(--accent-red)" stroke-width="2" opacity="0.55" marker-end="url(#bsg-red)" />
+      <path d="M 40 190 Q 220 140 440 175" fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" />
+      <text x="62" y="214" fill="var(--accent-red)" font-style="italic">I</text>
+    </g>
+
+    <!-- Line from the element to the point of interest -->
+    <g class="bs-part bs-key-r">
+      <path d="M 215 162 L 330 70" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.6" />
+      <path d="M 215 162 L 330 70" fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" />
+      <text x="294" y="124" fill="currentColor" font-style="italic" opacity="0.85">r</text>
+    </g>
 
     <!-- The current element dl -->
-    <path d="M 190 164 L 240 160" fill="none" stroke="var(--accent-red)" stroke-width="4" marker-end="url(#bsg-red)" />
-    <text x="205" y="190" fill="var(--accent-red)">d<tspan font-weight="700" font-style="italic">l</tspan></text>
+    <g class="bs-part bs-key-dl">
+      <path d="M 190 164 L 240 160" fill="none" stroke="var(--accent-red)" stroke-width="4" marker-end="url(#bsg-red)" />
+      <path d="M 190 164 L 240 160" fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" />
+      <text x="205" y="190" fill="var(--accent-red)">d<tspan font-weight="700" font-style="italic">l</tspan></text>
+    </g>
 
-    <!-- Line from the element to the point of interest, and r-hat -->
-    <path d="M 215 162 L 330 70" fill="none" stroke="currentColor" stroke-width="1.4" stroke-dasharray="5 4" opacity="0.6" />
-    <path d="M 215 162 L 262 124" fill="none" stroke="var(--accent-blue)" stroke-width="3" marker-end="url(#bsg-blue)" />
-    <text x="236" y="118" fill="var(--accent-blue)" font-weight="700" font-style="italic">r̂</text>
-    <text x="294" y="124" fill="currentColor" font-style="italic" opacity="0.85">r</text>
+    <!-- The unit vector r-hat -->
+    <g class="bs-part bs-key-rhat">
+      <path d="M 215 162 L 262 124" fill="none" stroke="var(--accent-blue)" stroke-width="3" marker-end="url(#bsg-blue)" />
+      <path d="M 215 162 L 262 124" fill="none" stroke="transparent" stroke-width="16" pointer-events="stroke" />
+      <text x="236" y="118" fill="var(--accent-blue)" font-weight="700" font-style="italic">r̂</text>
+    </g>
 
     <!-- The point of interest, with dB out of the page -->
-    <circle cx="330" cy="70" r="10" fill="var(--surface-plot, transparent)" stroke="currentColor" stroke-width="1.8" />
-    <circle cx="330" cy="70" r="3" fill="currentColor" />
-    <text x="348" y="66" fill="currentColor">d<tspan font-weight="700" font-style="italic">B</tspan> (out of page)</text>
-    <text x="348" y="86" fill="currentColor" opacity="0.8">point of interest</text>
+    <g class="bs-part bs-key-dB">
+      <circle cx="330" cy="70" r="14" fill="transparent" />
+      <circle cx="330" cy="70" r="10" fill="var(--surface-plot, transparent)" stroke="currentColor" stroke-width="1.8" />
+      <circle cx="330" cy="70" r="3" fill="currentColor" />
+      <text x="348" y="66" fill="currentColor">d<tspan font-weight="700" font-style="italic">B</tspan> (out of page)</text>
+      <text x="348" y="86" fill="currentColor" opacity="0.8">point of interest</text>
+    </g>
   </svg>
 </figure>
+
+<style is:global>
+  .bs-key-I,
+  .bs-key-dl { --bs-glow: var(--accent-red); }
+  .bs-key-rhat { --bs-glow: var(--accent-blue); }
+  .bs-key-r,
+  .bs-key-dB { --bs-glow: var(--text-primary); }
+
+  /* Symbols in the equation and prose. */
+  .katex .bs-part {
+    cursor: pointer;
+    border-radius: 0.2em;
+    transition: background-color 150ms ease;
+  }
+  .katex .bs-part.is-active {
+    background: color-mix(in srgb, var(--bs-glow) 20%, transparent);
+  }
+
+  /* Parts of the diagram: dim everything else while one is highlighted. */
+  .bs-figure svg .bs-part {
+    cursor: pointer;
+    transition: opacity 150ms ease, filter 150ms ease;
+  }
+  .bs-hovering .bs-figure svg .bs-part:not(.is-active) {
+    opacity: 0.3;
+  }
+  .bs-figure svg .bs-part.is-active {
+    filter: drop-shadow(0 0 4px var(--bs-glow));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .katex .bs-part,
+    .bs-figure svg .bs-part {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  // Link every `.bs-key-<key>` element on the page, in the equation and the diagram.
+  const keyOf = (el: Element) =>
+    [...el.classList].find((c) => c.startsWith('bs-key-'))?.slice('bs-key-'.length);
+
+  const groups = new Map<string, Element[]>();
+  for (const el of document.querySelectorAll('.bs-part')) {
+    const key = keyOf(el);
+    if (!key) continue;
+    groups.set(key, [...(groups.get(key) ?? []), el]);
+  }
+
+  const setActive = (key: string | null) => {
+    for (const [k, els] of groups) {
+      for (const el of els) el.classList.toggle('is-active', k === key);
+    }
+    document.documentElement.classList.toggle('bs-hovering', key !== null);
+  };
+
+  for (const [key, els] of groups) {
+    for (const el of els) {
+      el.addEventListener('pointerenter', (event) => {
+        if ((event as PointerEvent).pointerType === 'touch') return;
+        setActive(key);
+      });
+      el.addEventListener('pointerleave', () => setActive(null));
+    }
+  }
+</script>

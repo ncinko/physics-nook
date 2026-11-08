@@ -1,7 +1,8 @@
-import { useId, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useId, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { niceTicks } from '../../../lib/kinematics/videoAnalysis';
 import { markerPath, type MarkerShape } from './trackColors';
 import { fixed } from '../../../utils/format';
+import { nearestPoint, type HoverCandidate } from '../../../lib/sensors/hover';
 
 /**
  * The graph half of the lab: an SVG scatter with error bars, an optional fit
@@ -30,6 +31,9 @@ export interface PlotSeries {
   faded?: boolean;
 }
 
+/** A data point the user clicked to keep on screen. */
+export type PlotPin = HoverCandidate;
+
 interface AnalysisPlotProps {
   series: PlotSeries[];
   xLabel: string;
@@ -52,6 +56,18 @@ interface AnalysisPlotProps {
    */
   xRange?: { min: number; max: number } | null;
   yRange?: { min: number; max: number } | null;
+  /** Snap to the nearest data point under the pointer and show its value. */
+  hover?: boolean;
+  /** Text for a hovered or pinned point; defaults to "x, y". */
+  formatHover?: (point: HoverCandidate) => string;
+  /** Pinned points. Clicking a point toggles it when `onPinsChange` is given. */
+  pins?: PlotPin[];
+  onPinsChange?: (pins: PlotPin[]) => void;
+  /** Makes each axis label a button (opens the caller range controls). */
+  onAxisLabelClick?: (axis: 'x' | 'y') => void;
+  /** Appends "(zoomed)" to the label so a custom range is never silent. */
+  xCustom?: boolean;
+  yCustom?: boolean;
 }
 
 const VIEW_WIDTH = 720;
@@ -84,8 +100,17 @@ export function AnalysisPlot({
   emptyMessage = 'Mark points on the video to build a graph.',
   xRange = null,
   yRange = null,
+  hover = false,
+  formatHover,
+  pins = [],
+  onPinsChange,
+  onAxisLabelClick,
+  xCustom = false,
+  yCustom = false,
 }: AnalysisPlotProps) {
   const clipId = useId();
+  const [hovered, setHovered] = useState<HoverCandidate | null>(null);
+  const clickRef = useRef<HoverCandidate | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
   // One node, two holders: the drag maths needs it, and so does the exporter.
   const attachSvg = (node: SVGSVGElement | null) => {
@@ -93,6 +118,26 @@ export function AnalysisPlot({
     if (exportRef) exportRef.current = node;
   };
   const draggingRef = useRef<'min' | 'max' | null>(null);
+
+  const labelClass =
+    'outline-none [&:hover>text]:underline [&:focus-visible>text]:underline' +
+    (onAxisLabelClick ? ' cursor-pointer' : '');
+  const labelButtonProps = (axis: 'x' | 'y') =>
+    onAxisLabelClick
+      ? {
+          role: 'button' as const,
+          tabIndex: 0,
+          'aria-label': `Set ${axis === 'x' ? 'horizontal' : 'vertical'} axis range`,
+          onClick: () => onAxisLabelClick(axis),
+          onPointerDown: (event: ReactPointerEvent<SVGGElement>) => event.stopPropagation(),
+          onKeyDown: (event: KeyboardEvent<SVGGElement>) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onAxisLabelClick(axis);
+            }
+          },
+        }
+      : {};
 
   const showResiduals = residuals !== null && residuals.length > 0;
   const viewHeight = PLOT_HEIGHT + (showResiduals ? RESIDUAL_HEIGHT : 0);
@@ -165,22 +210,56 @@ export function AnalysisPlot({
   const residualPix = (value: number) =>
     residualZero - (value / residualExtent) * ((residualBottom - residualTop) / 2);
 
-  const pointerToData = (event: ReactPointerEvent<SVGSVGElement>) => {
+  // Through the SVG screen transform, so a letterboxed plot (the page may cap
+  // its height) still maps the pointer onto the right data.
+  const toView = (event: ReactPointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
-    if (!svg) return null;
-    const rect = svg.getBoundingClientRect();
-    if (rect.width <= 0) return null;
-    const viewX = ((event.clientX - rect.left) / rect.width) * VIEW_WIDTH;
-    return xData(viewX);
+    const matrix = svg?.getScreenCTM();
+    if (!svg || !matrix) return null;
+    const point = svg.createSVGPoint();
+    point.x = event.clientX;
+    point.y = event.clientY;
+    const mapped = point.matrixTransform(matrix.inverse());
+    return { x: mapped.x, y: mapped.y };
   };
 
+  const pointerToData = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const view = toView(event);
+    return view ? xData(view.x) : null;
+  };
+
+  const candidates: HoverCandidate[] = hover
+    ? series.flatMap((entry) =>
+        entry.faded
+          ? []
+          : entry.points.map((point) => ({
+              seriesKey: entry.key,
+              seriesLabel: entry.label,
+              x: point.x,
+              y: point.y,
+            })),
+      )
+    : [];
+
+  const pointUnder = (event: ReactPointerEvent<SVGSVGElement>): HoverCandidate | null => {
+    if (!hover) return null;
+    const view = toView(event);
+    if (!view) return null;
+    if (view.x < plotLeft || view.x > plotRight || view.y < plotTop || view.y > plotBottom) return null;
+    return nearestPoint(candidates, view.x, view.y, { x: xPix, y: yPix });
+  };
+
+  const samePin = (a: PlotPin, b: PlotPin) => a.seriesKey === b.seriesKey && a.x === b.x && a.y === b.y;
+
   const handlePointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    clickRef.current = pointUnder(event);
     if (!fitRange) return;
     const value = pointerToData(event);
     if (value === null) return;
     const toMin = Math.abs(xPix(value) - xPix(fitRange.min));
     const toMax = Math.abs(xPix(value) - xPix(fitRange.max));
     if (Math.min(toMin, toMax) > 18) return;
+    clickRef.current = null;
     draggingRef.current = toMin <= toMax ? 'min' : 'max';
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -191,7 +270,11 @@ export function AnalysisPlot({
 
   const handlePointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
     const handle = draggingRef.current;
-    if (!handle || !fitRange) return;
+    if (!handle) {
+      if (hover) setHovered(pointUnder(event));
+      return;
+    }
+    if (!fitRange) return;
     const value = pointerToData(event);
     if (value === null) return;
     if (handle === 'min') onFitRangeChange(Math.min(value, fitRange.max), fitRange.max);
@@ -199,7 +282,17 @@ export function AnalysisPlot({
   };
 
   const handlePointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const wasDragging = draggingRef.current !== null;
     draggingRef.current = null;
+    const clicked = clickRef.current;
+    clickRef.current = null;
+    if (!wasDragging && clicked && onPinsChange) {
+      onPinsChange(
+        pins.some((pin) => samePin(pin, clicked))
+          ? pins.filter((pin) => !samePin(pin, clicked))
+          : [...pins, clicked],
+      );
+    }
     try {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -220,6 +313,7 @@ export function AnalysisPlot({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onPointerLeave={() => setHovered(null)}
     >
       {yTicks.map((tick) => (
         <g key={`y-${tick}`}>
@@ -269,27 +363,41 @@ export function AnalysisPlot({
       <line x1={plotLeft} y1={plotTop} x2={plotLeft} y2={plotBottom} stroke="var(--grid-line)" />
       <line x1={plotLeft} y1={plotBottom} x2={plotRight} y2={plotBottom} stroke="var(--grid-line)" />
 
-      <text
-        x={(plotLeft + plotRight) / 2}
-        y={plotBottom + 38}
-        textAnchor="middle"
-        fill="var(--text-primary)"
-        fontSize="13"
-        fontWeight={600}
-      >
-        {xLabel}
-      </text>
-      <text
-        x={16}
-        y={(plotTop + plotBottom) / 2}
-        textAnchor="middle"
-        fill="var(--text-primary)"
-        fontSize="13"
-        fontWeight={600}
+      <g data-axis-label="x" {...labelButtonProps('x')} className={labelClass}>
+        {onAxisLabelClick && (
+          <rect x={(plotLeft + plotRight) / 2 - 100} y={plotBottom + 24} width={200} height={20} fill="transparent" />
+        )}
+        <text
+          x={(plotLeft + plotRight) / 2}
+          y={plotBottom + 38}
+          textAnchor="middle"
+          fill="var(--text-primary)"
+          fontSize="13"
+          fontWeight={600}
+        >
+          {xCustom ? `${xLabel} (zoomed)` : xLabel}
+        </text>
+      </g>
+      <g
+        data-axis-label="y"
+        {...labelButtonProps('y')}
+        className={labelClass}
         transform={`rotate(-90 16 ${(plotTop + plotBottom) / 2})`}
       >
-        {yLabel}
-      </text>
+        {onAxisLabelClick && (
+          <rect x={16 - 100} y={(plotTop + plotBottom) / 2 - 14} width={200} height={20} fill="transparent" />
+        )}
+        <text
+          x={16}
+          y={(plotTop + plotBottom) / 2}
+          textAnchor="middle"
+          fill="var(--text-primary)"
+          fontSize="13"
+          fontWeight={600}
+        >
+          {yCustom ? `${yLabel} (zoomed)` : yLabel}
+        </text>
+      </g>
 
       {/* The fit range, drawn under the data so it never hides a point. */}
       {fitRange && (
@@ -400,6 +508,41 @@ export function AnalysisPlot({
           })}
         </g>
       ))}
+
+      {[
+        ...pins.map((pin) => ({ pin, pinned: true })),
+        ...(hovered ? [{ pin: hovered, pinned: false }] : []),
+      ]
+        .filter(({ pin }) => {
+          const px = xPix(pin.x);
+          const py = yPix(pin.y);
+          return px >= plotLeft && px <= plotRight && py >= plotTop && py <= plotBottom;
+        })
+        .map(({ pin, pinned }, index) => {
+          const text = formatHover ? formatHover(pin) : `${axisFormat(pin.x)}, ${axisFormat(pin.y)}`;
+          const width = text.length * 6.6 + 14;
+          const cx = xPix(pin.x);
+          const cy = yPix(pin.y);
+          const tx = cx + 12 + width > plotRight ? cx - 12 - width : cx + 12;
+          const ty = cy - 30 < plotTop ? cy + 12 : cy - 30;
+          return (
+            <g key={`${pinned ? 'pin' : 'hover'}-${index}`} pointerEvents="none">
+              <circle cx={cx} cy={cy} r={7} fill="none" stroke="var(--text-primary)" strokeWidth={1.6} />
+              <rect
+                x={tx}
+                y={ty}
+                width={width}
+                height={20}
+                rx={4}
+                fill="var(--surface-elevated)"
+                stroke={pinned ? 'var(--accent-blue)' : 'var(--grid-line)'}
+              />
+              <text x={tx + 7} y={ty + 14} fontSize="11.5" fill="var(--text-primary)">
+                {text}
+              </text>
+            </g>
+          );
+        })}
 
       {series.filter((entry) => !entry.faded).length > 1 && (
         <g>

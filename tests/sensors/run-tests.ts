@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {
+  computeFit,
+  fitProportional,
+  sampleFit,
   derivative,
   findPeaks,
   fitSeries,
@@ -17,6 +20,7 @@ import {
   simulatedSignal,
 } from '../../src/lib/sensors/simulatedSource.ts';
 import { boundsOf, withBound, zoomRange } from '../../src/lib/sensors/axis.ts';
+import { nearestPoint } from '../../src/lib/sensors/hover.ts';
 import type { SensorChannel } from '../../src/lib/sensors/types.ts';
 
 const near = (a: number, b: number, tol = 1e-9) =>
@@ -166,6 +170,45 @@ near(simulatedSignal(BUMP_PERIOD_S + BUMP_WIDTH_S / 2).force, BUMP_PEAK_N, 1e-9)
   assert.deepEqual(withBound({ min: 0, max: 10 }, 'max', '5'), { min: 0, max: 5 });
   assert.equal(withBound({ min: 0, max: 10 }, 'max', '-1'), null);
   assert.equal(withBound({ min: 0, max: 10 }, 'min', 'abc'), null);
+}
+
+// --- functional fits --------------------------------------------------------
+{
+  const t = [0, 1, 2, 3, 4];
+  const prop = fitProportional(t, t.map((x) => 2.5 * x))!;
+  near(prop.k, 2.5);
+  near(prop.rSquared, 1);
+  // Window excludes the outlier at t = 4.
+  const noisy = [0, 2, 4, 6, 100];
+  near(fitProportional(t, noisy, { min: 0, max: 3 })!.k, 2);
+  assert.equal(fitProportional([0], [1]), null);
+  assert.equal(fitProportional([0, 0], [1, 2]), null);
+
+  const lin = computeFit('linear', t, t.map((x) => 3 * x - 1), null, { x: 't', y: 'F' })!;
+  assert.equal(lin.equation, 'F = 3·t − 1');
+  near(lin.predict(10), 29, 1e-9);
+  const quad = computeFit('quadratic', t, t.map((x) => x * x), null)!;
+  near(quad.coefficients[2], 1, 1e-9);
+  assert.match(quad.equation, /^y = 1·t² /);
+  assert.equal(computeFit('none', t, t, null), null);
+  assert.equal(computeFit('quadratic', [0, 1], [0, 1], null), null);
+  const curve = sampleFit(lin, { min: 0, max: 4 }, 5);
+  assert.equal(curve.length, 5);
+  near(curve[4].y, 11, 1e-9);
+}
+
+// --- hover hit test ---------------------------------------------------------
+{
+  const scale = { x: (v: number) => v * 100, y: (v: number) => v * 10 };
+  const pts = [
+    { seriesKey: 'a', seriesLabel: 'A', x: 1, y: 1 },
+    { seriesKey: 'a', seriesLabel: 'A', x: 2, y: 1 },
+  ];
+  assert.equal(nearestPoint(pts, 190, 12, scale)!.x, 2);
+  assert.equal(nearestPoint(pts, 105, 5, scale)!.x, 1);
+  // Beyond the pixel radius there is no hover.
+  assert.equal(nearestPoint(pts, 150, 10, scale, 20), null);
+  assert.equal(nearestPoint([], 0, 0, scale), null);
 }
 
 console.log('Sensor lab library tests passed.');

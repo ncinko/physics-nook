@@ -1,14 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Cable, Download, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
-import { AnalysisPlot, type PlotSeries } from '../kinematics/videoAnalysis/AnalysisPlot';
+import { Cable, Download, Trash2 } from 'lucide-react';
+import {
+  AnalysisPlot,
+  type PlotPin,
+  type PlotSeries,
+} from '../kinematics/videoAnalysis/AnalysisPlot';
 import { downloadBlob, savePlotWithCaption } from '../kinematics/videoAnalysis/exportPlot';
 import { trackColor, trackShape } from '../kinematics/videoAnalysis/trackColors';
-import { Button, ControlBar, Select, Toggle } from '../shared/InlineControls';
+import { Button, Select, Toggle } from '../shared/InlineControls';
 import Readout from '../shared/Readout';
+import AnalysisStrip from './AnalysisStrip';
+import AxisPopover from './AxisPopover';
 import { copyText } from '../../utils/clipboard';
-import { predictPolynomial } from '../../lib/math/leastSquares';
-import { boundsOf, withBound, zoomRange, type AxisRange } from '../../lib/sensors/axis';
-import { fitSeries, integrate, seriesStats, findPeaks } from '../../lib/sensors/analysis';
+import { boundsOf, type AxisRange } from '../../lib/sensors/axis';
+import {
+  computeFit,
+  findPeaks,
+  integrate,
+  sampleFit,
+  seriesStats,
+  type FitKind,
+} from '../../lib/sensors/analysis';
 import { serializeSensorRuns, type ExportLayout } from '../../lib/sensors/export';
 import { isProbeSupported, runHardwareProbe } from '../../lib/sensors/hardwareProbe';
 import {
@@ -29,6 +41,8 @@ const LIVE_REFRESH_MS = 100;
 const PERIOD_S = 0.05;
 const MAX_PLOT_POINTS = 700;
 const MAX_LIVE_SAMPLES = 12000;
+
+type Mode = 'explore' | 'analyze';
 
 const loadRuns = (): SensorRun[] => {
   try {
@@ -70,73 +84,6 @@ const TRIGGER_OPTIONS = [
   { value: 'falling', label: 'Falling through level' },
 ];
 
-/**
- * Editable bounds for one axis: two number fields, zoom in/out about the
- * centre, and a button back to auto-scale. A half-typed number sits in a draft
- * until Enter or blur commits it, so typing "-" does not collapse the plot.
- */
-function AxisFields({
-  label,
-  unit,
-  range,
-  manual,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  range: AxisRange;
-  manual: boolean;
-  onChange: (range: AxisRange | null) => void;
-}) {
-  const [draft, setDraft] = useState<{ which: 'min' | 'max'; text: string } | null>(null);
-
-  const commit = () => {
-    if (draft) {
-      const next = withBound(range, draft.which, draft.text);
-      if (next) onChange(next);
-    }
-    setDraft(null);
-  };
-
-  const field = (which: 'min' | 'max') => (
-    <input
-      type="text"
-      inputMode="decimal"
-      aria-label={`${label} axis ${which}`}
-      value={draft?.which === which ? draft.text : fmt(range[which], 3)}
-      onFocus={(event) => event.currentTarget.select()}
-      onChange={(event) => setDraft({ which, text: event.target.value })}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') commit();
-        if (event.key === 'Escape') setDraft(null);
-      }}
-      className="w-20 rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] px-2 py-1 text-right font-mono tabular-nums text-[var(--text-primary)]"
-    />
-  );
-
-  return (
-    <div className="inline-flex flex-wrap items-center gap-1.5">
-      <span className="font-medium">{label}</span>
-      {field('min')}
-      <span className="text-[var(--text-muted)]">to</span>
-      {field('max')}
-      <span className="text-[var(--text-muted)]">{unit}</span>
-      <Button variant="secondary" aria-label={`Zoom in on ${label}`} onClick={() => onChange(zoomRange(range, 0.5))}>
-        <ZoomIn aria-hidden="true" className="h-4 w-4" />
-      </Button>
-      <Button variant="secondary" aria-label={`Zoom out on ${label}`} onClick={() => onChange(zoomRange(range, 2))}>
-        <ZoomOut aria-hidden="true" className="h-4 w-4" />
-      </Button>
-      {manual ? (
-        <Button variant="secondary" onClick={() => onChange(null)}>
-          Auto
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
 export default function SensorLab() {
   const sourceRef = useRef<SensorSource | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
@@ -144,6 +91,7 @@ export default function SensorLab() {
   const latestRef = useRef<Record<string, number>>({});
   const offsetsRef = useRef<Record<string, number>>({});
   const plotRef = useRef<SVGSVGElement | null>(null);
+  const exportMenuRef = useRef<HTMLDetailsElement | null>(null);
   /** Stream time at which the current recording began; null when not recording. */
   const recStartRef = useRef<number | null>(null);
 
@@ -158,7 +106,11 @@ export default function SensorLab() {
   const [triggerMode, setTriggerMode] = useState<TriggerMode>('immediate');
   const [triggerLevel, setTriggerLevel] = useState('1');
   const [overlay, setOverlay] = useState(false);
+  const [mode, setMode] = useState<Mode>('explore');
   const [fitRange, setFitRange] = useState<TimeRange | null>(null);
+  const [fitKind, setFitKind] = useState<FitKind>('none');
+  const [pins, setPins] = useState<PlotPin[]>([]);
+  const [openAxis, setOpenAxis] = useState<'x' | 'y' | null>(null);
   const [xRange, setXRange] = useState<AxisRange | null>(null);
   const [yRange, setYRange] = useState<AxisRange | null>(null);
   const [layout, setLayout] = useState<ExportLayout>('wide');
@@ -177,14 +129,24 @@ export default function SensorLab() {
   }, [runs, loaded]);
 
   useEffect(() => {
-    // Ranges are in the channel's units; a different channel starts on auto.
+    // Ranges are in the channel units; a different channel starts on auto.
     setXRange(null);
     setYRange(null);
+    setOpenAxis(null);
   }, [channelId]);
+
+  useEffect(() => {
+    // Pins are points on one particular view of one run.
+    setPins([]);
+  }, [activeRunId, overlay, channelId]);
+
+  const closeAxis = useCallback(() => setOpenAxis(null), []);
 
   const channel = channels.find((entry) => entry.id === channelId) ?? channels[0] ?? null;
   const activeRun = runs.find((run) => run.id === activeRunId) ?? null;
   const connected = status.kind === 'ready' || status.kind === 'streaming';
+  const canAnalyze = activeRun !== null && !overlay;
+  const analyzing = mode === 'analyze' && canAnalyze;
 
   const finishRecording = useCallback(() => {
     const recorder = recorderRef.current;
@@ -279,10 +241,13 @@ export default function SensorLab() {
     });
     const liveT = liveRef.current.t;
     recStartRef.current = liveT.length > 0 ? liveT[liveT.length - 1] : 0;
-    // Collecting always returns to the live view, so the run draws as it grows.
+    // Collecting always returns to the quiet live view, so the run draws as it grows.
     setActiveRunId(null);
     setOverlay(false);
+    setMode('explore');
     setFitRange(null);
+    setPins([]);
+    setOpenAxis(null);
     setRecording(true);
     setNotice(null);
   };
@@ -295,6 +260,19 @@ export default function SensorLab() {
     offsetsRef.current[channel.id] = previous + tareOffset(recent);
   };
 
+  const showLive = () => {
+    setActiveRunId(null);
+    setOverlay(false);
+    setFitRange(null);
+    setFitKind('none');
+  };
+  const showRun = (id: string) => {
+    setActiveRunId(id);
+    setOverlay(false);
+    setFitRange(null);
+    setFitKind('none');
+  };
+
   const channelIndex = (run: SensorRun, id: string) => run.channels.findIndex((c) => c.id === id);
 
   // --- plotting -------------------------------------------------------------
@@ -304,11 +282,20 @@ export default function SensorLab() {
     return index === -1 ? null : activeRun.values[index];
   }, [activeRun, channel]);
 
-  const fit = useMemo(() => {
-    if (!activeRun || !analysisY || !fitRange) return null;
-    const result = fitSeries(activeRun.t, analysisY, 1, fitRange);
-    return result.ok ? result.fit : null;
-  }, [activeRun, analysisY, fitRange]);
+  const windowRange: TimeRange | null = activeRun
+    ? (fitRange ?? { min: 0, max: activeRun.t[activeRun.t.length - 1] ?? 1 })
+    : null;
+
+  const fitSummary = useMemo(
+    () =>
+      analyzing && activeRun && analysisY && windowRange && channel
+        ? computeFit(fitKind, activeRun.t, analysisY, windowRange, { x: 't', y: channel.quantity })
+        : null,
+    // windowRange is derived from fitRange and activeRun.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [analyzing, activeRun, analysisY, fitRange, fitKind, channel],
+  );
+  const fitCurve = fitSummary && windowRange ? sampleFit(fitSummary, windowRange) : null;
 
   const buildSeries = (): PlotSeries[] => {
     if (!channel) return [];
@@ -353,38 +340,49 @@ export default function SensorLab() {
   const shownX = xRange ?? autoX;
   const shownY = yRange ?? autoY;
 
-  const fitCurve = useMemo(() => {
-    if (!fit || !fitRange) return null;
-    return [fitRange.min, fitRange.max].map((x) => ({ x, y: predictPolynomial(fit.coefficients, x) }));
-  }, [fit, fitRange]);
-
-  const stats = activeRun && analysisY ? seriesStats(activeRun.t, analysisY, fitRange) : null;
-  const area = activeRun && analysisY ? integrate(activeRun.t, analysisY, fitRange) : null;
-  const peaks = useMemo(() => {
-    if (!activeRun || !analysisY) return [];
+  const stats =
+    analyzing && activeRun && analysisY ? seriesStats(activeRun.t, analysisY, windowRange) : null;
+  const area =
+    analyzing && activeRun && analysisY ? integrate(activeRun.t, analysisY, windowRange) : null;
+  const peakCount = useMemo(() => {
+    if (!analyzing || !activeRun || !analysisY) return 0;
     const span = Math.max(...analysisY) - Math.min(...analysisY);
-    return span > 0 ? findPeaks(activeRun.t, analysisY, span * 0.25, fitRange) : [];
-  }, [activeRun, analysisY, fitRange]);
+    return span > 0 ? findPeaks(activeRun.t, analysisY, span * 0.25, windowRange).length : 0;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyzing, activeRun, analysisY, fitRange]);
 
   const xLabel = 'Time (s)';
   const yLabel = channel ? `${channel.quantity} (${channel.unit})` : 'Value';
+  const viewingLive = activeRunId === null && !overlay;
+
+  const formatHover = (point: PlotPin) =>
+    `${overlay ? `${point.seriesLabel}: ` : ''}t = ${fmt(point.x)} s · ${channel?.quantity ?? 'value'} = ${fmt(point.y)} ${channel?.unit ?? ''}`.trim();
 
   // --- export ---------------------------------------------------------------
   const exportRuns = overlay || !activeRun ? runs : [activeRun];
+  const closeExport = () => {
+    if (exportMenuRef.current) exportMenuRef.current.open = false;
+  };
   const download = () => {
     const text = serializeSensorRuns(exportRuns, { delimiter: ',', layout });
     downloadBlob(new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' }), 'sensor-lab.csv');
+    closeExport();
   };
   const copy = async () => {
     const ok = await copyText(serializeSensorRuns(exportRuns, { delimiter: '\t', layout }));
     setNotice(ok ? 'Copied. Paste into a spreadsheet.' : 'The browser blocked copying.');
+    closeExport();
   };
   const savePlot = async () => {
+    closeExport();
     if (!plotRef.current) return;
     try {
       await savePlotWithCaption(
         plotRef.current,
-        { title: `Sensor Lab — ${activeRun?.label ?? 'live'}`, captionLines: [yLabel] },
+        {
+          title: `Sensor Lab — ${activeRun?.label ?? 'live'}`,
+          captionLines: [yLabel, ...(fitSummary ? [`${fitSummary.equation} (R² = ${fmt(fitSummary.rSquared, 4)})`] : [])],
+        },
         'sensor-lab-plot.png',
       );
     } catch (error) {
@@ -406,78 +404,119 @@ export default function SensorLab() {
   };
   const channelOptions = channels.map((entry) => ({ value: entry.id, label: `${entry.name} (${entry.unit})` }));
   const latest = channel ? latestRef.current[channel.id] : undefined;
-  const viewingLive = activeRunId === null && !overlay;
 
   return (
     <div className="not-prose flex flex-col gap-3 p-3 text-[var(--text-primary)] sm:p-4">
       <section
         aria-label="Connection"
-        className="rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-3"
+        className="rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] px-3 py-2"
       >
         <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={() => void connectSimulated()} disabled={connected}>
-            <Cable aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-            Use simulated sensors
-          </Button>
           {connected ? (
             <Button variant="secondary" onClick={() => void disconnect()}>
               Disconnect
             </Button>
-          ) : null}
-          {supportsUsb && isProbeSupported() ? (
-            <Button variant="secondary" onClick={() => void probe()} disabled={probing || connected}>
-              {probing ? 'Probing…' : 'Probe LabQuest hardware'}
+          ) : (
+            <Button onClick={() => void connectSimulated()}>
+              <Cable aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+              Use simulated sensors
             </Button>
-          ) : null}
-          {probeText ? (
-            <Button
-              variant="secondary"
-              onClick={async () =>
-                setNotice((await copyText(probeText)) ? 'Probe output copied.' : 'The browser blocked copying.')
-              }
-            >
-              Copy probe output
-            </Button>
-          ) : null}
+          )}
           <span role="status" className="type-supporting text-[var(--text-muted)]">
             {probing ? probeProgress : status.message}
           </span>
+          {supportsUsb && isProbeSupported() && !connected ? (
+            <details className="ml-auto text-sm">
+              <summary className="cursor-pointer text-[var(--text-muted)]">Hardware tools</summary>
+              <div className="mt-2 flex flex-col gap-2">
+                <p className="type-supporting m-0 max-w-prose text-[var(--text-muted)]">
+                  LabQuest analog sensors (force, force plate) are not connectable yet. Plug sensors into the
+                  LabQuest and run the probe to capture what it sends.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="secondary" onClick={() => void probe()} disabled={probing}>
+                    {probing ? 'Probing…' : 'Probe LabQuest hardware'}
+                  </Button>
+                  {probeText ? (
+                    <Button
+                      variant="secondary"
+                      onClick={async () =>
+                        setNotice(
+                          (await copyText(probeText)) ? 'Probe output copied.' : 'The browser blocked copying.',
+                        )
+                      }
+                    >
+                      Copy probe output
+                    </Button>
+                  ) : null}
+                </div>
+                {probeText ? (
+                  <textarea
+                    readOnly
+                    aria-label="Probe output"
+                    value={probeText}
+                    rows={8}
+                    className="w-full min-w-[20rem] rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] p-2 font-mono text-xs text-[var(--text-primary)]"
+                  />
+                ) : null}
+              </div>
+            </details>
+          ) : null}
         </div>
-        <p hidden={connected} className="type-supporting mt-2 text-[var(--text-muted)]">
-          {supportsUsb
-            ? 'LabQuest analog sensors (force, force plate) are not connectable yet. Plug sensors into the LabQuest and run the probe to capture what it sends.'
-            : 'LabQuest connections need Chrome or Edge.'}
-        </p>
-        {probeText ? (
-          <textarea
-            readOnly
-            aria-label="Probe output"
-            value={probeText}
-            rows={8}
-            className="mt-2 w-full rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] p-2 font-mono text-xs text-[var(--text-primary)]"
-          />
+        {!supportsUsb ? (
+          <p className="type-supporting mt-1 mb-0 text-[var(--text-muted)]">
+            LabQuest connections need Chrome or Edge.
+          </p>
         ) : null}
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <div className="flex min-w-0 flex-col gap-2">
           {connected || runs.length > 0 ? (
             <>
-              <div className="[&_svg]:mx-auto [&_svg]:max-h-[60vh]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="type-label m-0">
+                  {overlay ? 'All runs' : (activeRun?.label ?? (recording ? 'Recording' : 'Live'))}
+                </p>
+                <div className="flex items-center gap-2">
+                  {pins.length > 0 ? (
+                    <Button variant="secondary" onClick={() => setPins([])}>
+                      Clear pins ({pins.length})
+                    </Button>
+                  ) : null}
+                  <div role="group" aria-label="Plot mode" className="inline-flex gap-1">
+                    <Button
+                      variant={analyzing ? 'secondary' : 'primary'}
+                      aria-pressed={!analyzing}
+                      onClick={() => setMode('explore')}
+                    >
+                      Explore
+                    </Button>
+                    <Button
+                      variant={analyzing ? 'primary' : 'secondary'}
+                      aria-pressed={analyzing}
+                      disabled={!canAnalyze}
+                      title={canAnalyze ? undefined : 'Select a single run to analyze it'}
+                      onClick={() => setMode('analyze')}
+                    >
+                      Analyze
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <div className="relative [&_svg]:mx-auto [&_svg]:max-h-[60vh]">
                 <AnalysisPlot
                   series={series}
                   xLabel={xLabel}
                   yLabel={yLabel}
                   fitCurve={fitCurve}
                   fitColor="var(--accent-orange)"
-                  fitRange={
-                    activeRun ? (fitRange ?? { min: 0, max: activeRun.t[activeRun.t.length - 1] ?? 1 }) : null
-                  }
+                  fitRange={analyzing ? windowRange : null}
                   onFitRangeChange={(min, max) => setFitRange({ min, max })}
                   residuals={null}
                   summary={
-                    fit
-                      ? `Linear fit: slope ${fmt(fit.coefficients[1], 4)} ${channel?.unit ?? ''}/s`
+                    fitSummary
+                      ? `${fitSummary.equation}`
                       : activeRun
                         ? `${activeRun.label}, ${activeRun.t.length} samples`
                         : 'Live view'
@@ -486,35 +525,57 @@ export default function SensorLab() {
                   emptyMessage="Connect sensors to see a live graph."
                   xRange={xRange}
                   yRange={yRange}
+                  hover
+                  formatHover={formatHover}
+                  pins={pins}
+                  onPinsChange={viewingLive ? undefined : setPins}
+                  onAxisLabelClick={(axis) => setOpenAxis((current) => (current === axis ? null : axis))}
+                  xCustom={xRange !== null}
+                  yCustom={yRange !== null}
                 />
-              </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
-                <AxisFields
-                  label="Time"
-                  unit="s"
-                  range={shownX}
-                  manual={xRange !== null}
-                  onChange={setXRange}
-                />
-                <AxisFields
-                  label={channel?.quantity ?? 'Value'}
-                  unit={channel?.unit ?? ''}
-                  range={shownY}
-                  manual={yRange !== null}
-                  onChange={setYRange}
-                />
-                {xRange || yRange ? (
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setXRange(null);
-                      setYRange(null);
-                    }}
-                  >
-                    Autoscale both
-                  </Button>
+                {openAxis === 'x' ? (
+                  <AxisPopover
+                    axis="x"
+                    label="Time"
+                    unit="s"
+                    range={shownX}
+                    manual={xRange !== null}
+                    onChange={setXRange}
+                    onClose={closeAxis}
+                    className="bottom-14 left-1/2 -translate-x-1/2"
+                  />
+                ) : null}
+                {openAxis === 'y' ? (
+                  <AxisPopover
+                    axis="y"
+                    label={channel?.quantity ?? 'Value'}
+                    unit={channel?.unit ?? ''}
+                    range={shownY}
+                    manual={yRange !== null}
+                    onChange={setYRange}
+                    onClose={closeAxis}
+                    className="left-20 top-1/2 -translate-y-1/2"
+                  />
                 ) : null}
               </div>
+              {analyzing && activeRun && windowRange ? (
+                <AnalysisStrip
+                  runLabel={activeRun.label}
+                  window={windowRange}
+                  unit={channel?.unit ?? ''}
+                  stats={stats}
+                  area={area}
+                  peaks={peakCount}
+                  fitKind={fitKind}
+                  onFitKind={setFitKind}
+                  fit={fitSummary}
+                />
+              ) : (
+                <p className="type-supporting m-0 text-[var(--text-muted)]">
+                  Hover over the graph to read values and click a point to pin it. Click an axis label to set
+                  its range.
+                </p>
+              )}
             </>
           ) : (
             <p className="type-supporting text-[var(--text-muted)]">
@@ -575,46 +636,15 @@ export default function SensorLab() {
             </section>
           ) : null}
 
-          {activeRun && stats ? (
-            <section aria-label="Analysis" className="flex flex-col gap-2">
-              <p className="type-label">
-                {activeRun.label}
-                {fitRange ? `, t from ${fmt(fitRange.min, 2)} to ${fmt(fitRange.max, 2)} s` : ', whole run'}
-              </p>
-              <Readout variant="inline">
-                <Readout.Value label="Max" value={fmt(stats.max)} unit={channel?.unit} />
-                <Readout.Value label="Min" value={fmt(stats.min)} unit={channel?.unit} />
-                <Readout.Value label="Mean" value={fmt(stats.mean)} unit={channel?.unit} />
-                <Readout.Value label="Std dev" value={fmt(stats.std)} unit={channel?.unit} />
-                <Readout.Value label="Area" value={fmt(area)} unit={channel ? `${channel.unit}·s` : ''} />
-                {fit ? (
-                  <Readout.Value
-                    label="Slope"
-                    value={fmt(fit.coefficients[1], 4)}
-                    unit={channel ? `${channel.unit}/s` : ''}
-                  />
-                ) : null}
-                <Readout.Value label="Peaks" value={String(peaks.length)} />
-              </Readout>
-              <p className="type-supporting text-[var(--text-muted)]">
-                Drag the dashed handles to choose the interval.
-              </p>
-            </section>
-          ) : null}
-
           {connected || runs.length > 0 ? (
             <section aria-label="Runs" className="flex flex-col gap-2">
-              <ul className="flex flex-wrap gap-2">
+              <ul className="m-0 flex list-none flex-wrap gap-2 p-0">
                 <li>
                   <Button
                     variant={viewingLive ? 'primary' : 'secondary'}
                     disabled={!connected}
                     aria-pressed={viewingLive}
-                    onClick={() => {
-                      setActiveRunId(null);
-                      setOverlay(false);
-                      setFitRange(null);
-                    }}
+                    onClick={showLive}
                   >
                     Live
                   </Button>
@@ -623,11 +653,7 @@ export default function SensorLab() {
                   <li key={run.id} className="inline-flex items-center gap-1">
                     <Button
                       variant={run.id === activeRunId ? 'primary' : 'secondary'}
-                      onClick={() => {
-                        setActiveRunId(run.id);
-                        setOverlay(false);
-                        setFitRange(null);
-                      }}
+                      onClick={() => showRun(run.id)}
                       aria-pressed={run.id === activeRunId}
                     >
                       {run.label}
@@ -647,30 +673,35 @@ export default function SensorLab() {
                 ))}
               </ul>
               {runs.length > 0 ? (
-                <>
+                <div className="flex flex-wrap items-center gap-3">
                   <Toggle label="Overlay all runs" checked={overlay} onChange={setOverlay} />
-                  <ControlBar align="start" className="gap-x-2">
-                    <Select
-                      ariaLabel="Export layout"
-                      value={layout}
-                      onChange={(value) => setLayout(value as ExportLayout)}
-                      options={[
-                        { value: 'wide', label: 'Columns per run' },
-                        { value: 'long', label: 'One row per sample' },
-                      ]}
-                    />
-                    <Button variant="secondary" onClick={download}>
+                  <details ref={exportMenuRef} className="relative">
+                    <summary className="btn btn-secondary cursor-pointer list-none">
                       <Download aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-                      CSV
-                    </Button>
-                    <Button variant="secondary" onClick={() => void copy()}>
-                      Copy
-                    </Button>
-                    <Button variant="secondary" onClick={() => void savePlot()}>
-                      Save plot
-                    </Button>
-                  </ControlBar>
-                </>
+                      Export
+                    </summary>
+                    <div className="absolute right-0 z-10 mt-1 flex w-56 flex-col gap-2 rounded-[var(--radius-control)] border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-3 shadow-md">
+                      <Select
+                        ariaLabel="Export layout"
+                        value={layout}
+                        onChange={(value) => setLayout(value as ExportLayout)}
+                        options={[
+                          { value: 'wide', label: 'Columns per run' },
+                          { value: 'long', label: 'One row per sample' },
+                        ]}
+                      />
+                      <Button variant="secondary" onClick={download}>
+                        Download CSV
+                      </Button>
+                      <Button variant="secondary" onClick={() => void copy()}>
+                        Copy for spreadsheet
+                      </Button>
+                      <Button variant="secondary" onClick={() => void savePlot()}>
+                        Save plot image
+                      </Button>
+                    </div>
+                  </details>
+                </div>
               ) : null}
             </section>
           ) : null}

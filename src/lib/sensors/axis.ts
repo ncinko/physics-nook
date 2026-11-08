@@ -45,3 +45,13 @@ export const withBound = (range: AxisRange, which: 'min' | 'max', text: string):
   const next = which === 'min' ? { min: value, max: range.max } : { min: range.min, max: value };
   return next.max - next.min > MIN_SPAN ? next : null;
 };
+
+/**
+ * The part of `view` that lies inside `extent`, or null when they do not
+ * overlap. Used to start an analysis window on exactly what is on screen.
+ */
+export const clampWindow = (view: AxisRange, extent: AxisRange): AxisRange | null => {
+  const min = Math.max(view.min, extent.min);
+  const max = Math.min(view.max, extent.max);
+  return max - min > MIN_SPAN ? { min, max } : null;
+};

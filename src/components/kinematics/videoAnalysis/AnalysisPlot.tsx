@@ -2,7 +2,7 @@ import { useId, useRef, useState, type KeyboardEvent, type PointerEvent as React
 import { niceTicks } from '../../../lib/kinematics/videoAnalysis';
 import { markerPath, type MarkerShape } from './trackColors';
 import { fixed } from '../../../utils/format';
-import { nearestPoint, type HoverCandidate } from '../../../lib/sensors/hover';
+import { nearestPoint, placeLabels, type HoverCandidate } from '../../../lib/sensors/hover';
 
 /**
  * The graph half of the lab: an SVG scatter with error bars, an optional fit
@@ -302,6 +302,56 @@ export function AnalysisPlot({
     }
   };
 
+  // Pinned labels are placed first, then the hover label around them, so a
+  // pin never jumps when the pointer moves. Each label tries several spots
+  // beside its point and takes the first that overlaps nothing.
+  const inFrame = (pin: PlotPin) => {
+    const px = xPix(pin.x);
+    const py = yPix(pin.y);
+    return px >= plotLeft && px <= plotRight && py >= plotTop && py <= plotBottom;
+  };
+  const labelText = (pin: PlotPin) =>
+    formatHover ? formatHover(pin) : `${axisFormat(pin.x)}, ${axisFormat(pin.y)}`;
+  const labelBounds = { x: plotLeft, y: plotTop, width: plotRight - plotLeft, height: plotBottom - plotTop };
+  const labelEntries = [
+    ...pins.filter(inFrame).map((pin) => ({ pin, pinned: true })),
+    ...(hover && hovered && inFrame(hovered) ? [{ pin: hovered, pinned: false }] : []),
+  ].map((entry) => {
+    const text = labelText(entry.pin);
+    return { ...entry, text, width: text.length * 6.6 + 14 };
+  });
+  const markerBoxes = labelEntries.map(({ pin }) => ({
+    x: xPix(pin.x) - 8,
+    y: yPix(pin.y) - 8,
+    width: 16,
+    height: 16,
+  }));
+  const pinnedCount = labelEntries.filter((entry) => entry.pinned).length;
+  const pinnedBoxes = placeLabels(
+    labelEntries.slice(0, pinnedCount).map(({ pin, width }) => ({
+      cx: xPix(pin.x),
+      cy: yPix(pin.y),
+      width,
+      height: 20,
+    })),
+    labelBounds,
+    markerBoxes,
+  );
+  const hoverBoxes = placeLabels(
+    labelEntries.slice(pinnedCount).map(({ pin, width }) => ({
+      cx: xPix(pin.x),
+      cy: yPix(pin.y),
+      width,
+      height: 20,
+    })),
+    labelBounds,
+    [...markerBoxes, ...pinnedBoxes],
+  );
+  const labelPlacements = labelEntries.map((entry, index) => ({
+    ...entry,
+    box: index < pinnedCount ? pinnedBoxes[index] : hoverBoxes[index - pinnedCount],
+  }));
+
   return (
     <svg
       ref={attachSvg}
@@ -438,17 +488,6 @@ export function AnalysisPlot({
         <rect x={plotLeft} y={plotTop} width={plotRight - plotLeft} height={plotBottom - plotTop} />
       </clipPath>
 
-      {fitCurve && fitCurve.length > 1 && (
-        <polyline
-          clipPath={`url(#${clipId})`}
-          points={fitCurve.map((point) => `${xPix(point.x)},${yPix(point.y)}`).join(' ')}
-          fill="none"
-          stroke={fitColor}
-          strokeWidth={2}
-          opacity={0.9}
-        />
-      )}
-
       {series.map((entry) => (
         <g
           key={entry.key}
@@ -509,40 +548,48 @@ export function AnalysisPlot({
         </g>
       ))}
 
-      {[
-        ...pins.map((pin) => ({ pin, pinned: true })),
-        ...(hovered ? [{ pin: hovered, pinned: false }] : []),
-      ]
-        .filter(({ pin }) => {
-          const px = xPix(pin.x);
-          const py = yPix(pin.y);
-          return px >= plotLeft && px <= plotRight && py >= plotTop && py <= plotBottom;
-        })
-        .map(({ pin, pinned }, index) => {
-          const text = formatHover ? formatHover(pin) : `${axisFormat(pin.x)}, ${axisFormat(pin.y)}`;
-          const width = text.length * 6.6 + 14;
-          const cx = xPix(pin.x);
-          const cy = yPix(pin.y);
-          const tx = cx + 12 + width > plotRight ? cx - 12 - width : cx + 12;
-          const ty = cy - 30 < plotTop ? cy + 12 : cy - 30;
-          return (
-            <g key={`${pinned ? 'pin' : 'hover'}-${index}`} pointerEvents="none">
-              <circle cx={cx} cy={cy} r={7} fill="none" stroke="var(--text-primary)" strokeWidth={1.6} />
-              <rect
-                x={tx}
-                y={ty}
-                width={width}
-                height={20}
-                rx={4}
-                fill="var(--surface-elevated)"
-                stroke={pinned ? 'var(--accent-blue)' : 'var(--grid-line)'}
-              />
-              <text x={tx + 7} y={ty + 14} fontSize="11.5" fill="var(--text-primary)">
-                {text}
-              </text>
-            </g>
-          );
-        })}
+      {/* The fit is drawn over the data, on a halo in the plot colour, so a
+          dense run of points can never hide the function that describes it. */}
+      {fitCurve && fitCurve.length > 1 && (
+        <g clipPath={`url(#${clipId})`} fill="none" strokeLinejoin="round" strokeLinecap="round">
+          <polyline
+            points={fitCurve.map((point) => `${xPix(point.x)},${yPix(point.y)}`).join(' ')}
+            stroke="var(--surface-plot)"
+            strokeWidth={7}
+            opacity={0.85}
+          />
+          <polyline
+            points={fitCurve.map((point) => `${xPix(point.x)},${yPix(point.y)}`).join(' ')}
+            stroke={fitColor}
+            strokeWidth={3}
+          />
+        </g>
+      )}
+
+      {labelPlacements.map(({ pin, pinned, box, text }, index) => (
+        <g key={`${pinned ? 'pin' : 'hover'}-${index}`} pointerEvents="none">
+          <circle
+            cx={xPix(pin.x)}
+            cy={yPix(pin.y)}
+            r={7}
+            fill="none"
+            stroke="var(--text-primary)"
+            strokeWidth={1.6}
+          />
+          <rect
+            x={box.x}
+            y={box.y}
+            width={box.width}
+            height={box.height}
+            rx={4}
+            fill="var(--surface-elevated)"
+            stroke={pinned ? 'var(--accent-blue)' : 'var(--grid-line)'}
+          />
+          <text x={box.x + 7} y={box.y + 14} fontSize="11.5" fill="var(--text-primary)">
+            {text}
+          </text>
+        </g>
+      ))}
 
       {series.filter((entry) => !entry.faded).length > 1 && (
         <g>

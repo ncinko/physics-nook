@@ -12,10 +12,9 @@ import Readout from '../shared/Readout';
 import AnalysisStrip from './AnalysisStrip';
 import AxisPopover from './AxisPopover';
 import { copyText } from '../../utils/clipboard';
-import { boundsOf, type AxisRange } from '../../lib/sensors/axis';
+import { boundsOf, clampWindow, type AxisRange } from '../../lib/sensors/axis';
 import {
   computeFit,
-  findPeaks,
   integrate,
   sampleFit,
   seriesStats,
@@ -139,6 +138,25 @@ export default function SensorLab() {
     // Pins are points on one particular view of one run.
     setPins([]);
   }, [activeRunId, overlay, channelId]);
+
+  // The run extent, so a zoomed view can be turned into an analysis window.
+  const runExtent = (): AxisRange | null =>
+    activeRun ? { min: activeRun.t[0] ?? 0, max: activeRun.t[activeRun.t.length - 1] ?? 1 } : null;
+
+  const enterAnalyze = () => {
+    const extent = runExtent();
+    // Start the window on what is on screen, so the handles are reachable.
+    if (xRange && extent) setFitRange(clampWindow(xRange, extent));
+    setMode('analyze');
+  };
+
+  useEffect(() => {
+    // Zooming time while analysing moves the window with the view.
+    const extent = runExtent();
+    if (analyzing && xRange && extent) setFitRange(clampWindow(xRange, extent));
+    // Only a change of the zoom should move the window.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [xRange]);
 
   const closeAxis = useCallback(() => setOpenAxis(null), []);
 
@@ -344,12 +362,6 @@ export default function SensorLab() {
     analyzing && activeRun && analysisY ? seriesStats(activeRun.t, analysisY, windowRange) : null;
   const area =
     analyzing && activeRun && analysisY ? integrate(activeRun.t, analysisY, windowRange) : null;
-  const peakCount = useMemo(() => {
-    if (!analyzing || !activeRun || !analysisY) return 0;
-    const span = Math.max(...analysisY) - Math.min(...analysisY);
-    return span > 0 ? findPeaks(activeRun.t, analysisY, span * 0.25, windowRange).length : 0;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analyzing, activeRun, analysisY, fitRange]);
 
   const xLabel = 'Time (s)';
   const yLabel = channel ? `${channel.quantity} (${channel.unit})` : 'Value';
@@ -479,7 +491,7 @@ export default function SensorLab() {
                   {overlay ? 'All runs' : (activeRun?.label ?? (recording ? 'Recording' : 'Live'))}
                 </p>
                 <div className="flex items-center gap-2">
-                  {pins.length > 0 ? (
+                  {pins.length > 0 && !analyzing ? (
                     <Button variant="secondary" onClick={() => setPins([])}>
                       Clear pins ({pins.length})
                     </Button>
@@ -497,7 +509,7 @@ export default function SensorLab() {
                       aria-pressed={analyzing}
                       disabled={!canAnalyze}
                       title={canAnalyze ? undefined : 'Select a single run to analyze it'}
-                      onClick={() => setMode('analyze')}
+                      onClick={enterAnalyze}
                     >
                       Analyze
                     </Button>
@@ -510,7 +522,7 @@ export default function SensorLab() {
                   xLabel={xLabel}
                   yLabel={yLabel}
                   fitCurve={fitCurve}
-                  fitColor="var(--accent-orange)"
+                  fitColor="var(--accent-red)"
                   fitRange={analyzing ? windowRange : null}
                   onFitRangeChange={(min, max) => setFitRange({ min, max })}
                   residuals={null}
@@ -525,10 +537,10 @@ export default function SensorLab() {
                   emptyMessage="Connect sensors to see a live graph."
                   xRange={xRange}
                   yRange={yRange}
-                  hover
+                  hover={!analyzing}
                   formatHover={formatHover}
-                  pins={pins}
-                  onPinsChange={viewingLive ? undefined : setPins}
+                  pins={analyzing ? [] : pins}
+                  onPinsChange={viewingLive || analyzing ? undefined : setPins}
                   onAxisLabelClick={(axis) => setOpenAxis((current) => (current === axis ? null : axis))}
                   xCustom={xRange !== null}
                   yCustom={yRange !== null}
@@ -565,7 +577,6 @@ export default function SensorLab() {
                   unit={channel?.unit ?? ''}
                   stats={stats}
                   area={area}
-                  peaks={peakCount}
                   fitKind={fitKind}
                   onFitKind={setFitKind}
                   fit={fitSummary}

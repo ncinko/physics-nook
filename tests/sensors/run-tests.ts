@@ -4,7 +4,6 @@ import {
   fitProportional,
   sampleFit,
   derivative,
-  findPeaks,
   fitSeries,
   integrate,
   seriesStats,
@@ -19,8 +18,8 @@ import {
   BUMP_WIDTH_S,
   simulatedSignal,
 } from '../../src/lib/sensors/simulatedSource.ts';
-import { boundsOf, withBound, zoomRange } from '../../src/lib/sensors/axis.ts';
-import { nearestPoint } from '../../src/lib/sensors/hover.ts';
+import { boundsOf, clampWindow, withBound, zoomRange } from '../../src/lib/sensors/axis.ts';
+import { nearestPoint, placeLabels } from '../../src/lib/sensors/hover.ts';
 import type { SensorChannel } from '../../src/lib/sensors/types.ts';
 
 const near = (a: number, b: number, tol = 1e-9) =>
@@ -45,18 +44,13 @@ const force: SensorChannel = { id: 'ch1', name: 'Force', unit: 'N', quantity: 'F
   near(seriesStats([0, 1, 2], [1, NaN, 3])!.mean, 2);
 }
 
-// --- derivative / smooth / peaks -------------------------------------------
+// --- derivative / smooth -------------------------------------------
 {
   const t = [0, 1, 2, 3];
   const y = [0, 2, 4, 6];
   derivative(t, y).forEach((value) => near(value, 2));
   near(smooth([0, 3, 0], 3)[1], 1);
 
-  const pt = [0, 1, 2, 3, 4, 5, 6];
-  const py = [0, 5, 0, 0.1, 0, 4, 0];
-  const peaks = findPeaks(pt, py, 1);
-  assert.deepEqual(peaks.map((p) => p.t), [1, 5]);
-  assert.equal(findPeaks(pt, py, 10).length, 0);
 }
 
 // --- fit --------------------------------------------------------------------
@@ -170,6 +164,10 @@ near(simulatedSignal(BUMP_PERIOD_S + BUMP_WIDTH_S / 2).force, BUMP_PEAK_N, 1e-9)
   assert.deepEqual(withBound({ min: 0, max: 10 }, 'max', '5'), { min: 0, max: 5 });
   assert.equal(withBound({ min: 0, max: 10 }, 'max', '-1'), null);
   assert.equal(withBound({ min: 0, max: 10 }, 'min', 'abc'), null);
+  // The analysis window starts on the zoomed view, limited to the run.
+  assert.deepEqual(clampWindow({ min: 1, max: 3 }, { min: 0, max: 10 }), { min: 1, max: 3 });
+  assert.deepEqual(clampWindow({ min: -2, max: 12 }, { min: 0, max: 10 }), { min: 0, max: 10 });
+  assert.equal(clampWindow({ min: 20, max: 30 }, { min: 0, max: 10 }), null);
 }
 
 // --- functional fits --------------------------------------------------------
@@ -209,6 +207,44 @@ near(simulatedSignal(BUMP_PERIOD_S + BUMP_WIDTH_S / 2).force, BUMP_PEAK_N, 1e-9)
   // Beyond the pixel radius there is no hover.
   assert.equal(nearestPoint(pts, 150, 10, scale, 20), null);
   assert.equal(nearestPoint([], 0, 0, scale), null);
+}
+
+// --- smart label placement --------------------------------------------------
+{
+  const bounds = { x: 0, y: 0, width: 400, height: 300 };
+  const overlap = (a: { x: number; y: number; width: number; height: number }, b: typeof a) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+  const inBounds = (b: { x: number; y: number; width: number; height: number }) =>
+    b.x >= 0 && b.y >= 0 && b.x + b.width <= 400 && b.y + b.height <= 300;
+
+  // Two nearby points: the second label must not sit on the first.
+  const two = placeLabels(
+    [
+      { cx: 200, cy: 150, width: 120, height: 20 },
+      { cx: 210, cy: 152, width: 120, height: 20 },
+    ],
+    bounds,
+  );
+  assert.ok(!overlap(two[0], two[1]));
+  assert.ok(two.every(inBounds));
+
+  // A point in the top-right corner gets a label that stays inside the plot.
+  const corner = placeLabels([{ cx: 395, cy: 5, width: 120, height: 20 }], bounds)[0];
+  assert.ok(inBounds(corner));
+
+  // Several close points all find separate spots.
+  const crowd = placeLabels(
+    [0, 1, 2, 3].map((i) => ({ cx: 200 + i * 4, cy: 150 + i * 3, width: 110, height: 20 })),
+    bounds,
+  );
+  for (let i = 0; i < crowd.length; i += 1) {
+    for (let j = i + 1; j < crowd.length; j += 1) assert.ok(!overlap(crowd[i], crowd[j]), `${i} vs ${j}`);
+  }
+
+  // A label avoids an occupied box (another point marker).
+  const marker = { x: 212, y: 120, width: 16, height: 16 };
+  const avoid = placeLabels([{ cx: 200, cy: 150, width: 120, height: 20 }], bounds, [marker])[0];
+  assert.ok(!overlap(avoid, marker));
 }
 
 console.log('Sensor lab library tests passed.');

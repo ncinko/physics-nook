@@ -126,42 +126,6 @@ export const smooth = (y: readonly number[], width: number): number[] => {
   });
 };
 
-export interface Peak {
-  index: number;
-  t: number;
-  value: number;
-}
-
-/**
- * Local maxima at least `minProminence` above the lowest point reached before
- * the next higher peak on either side. A cheap, honest definition: it ignores
- * noise wiggles smaller than the threshold without needing a smoothing pass.
- */
-export const findPeaks = (
-  t: readonly number[],
-  y: readonly number[],
-  minProminence: number,
-  range: TimeRange | null = null,
-): Peak[] => {
-  const data = windowSeries(t, y, range);
-  const peaks: Peak[] = [];
-  for (let index = 1; index < data.y.length - 1; index += 1) {
-    const value = data.y[index];
-    if (!(value > data.y[index - 1] && value >= data.y[index + 1])) continue;
-
-    let leftMin = value;
-    for (let k = index - 1; k >= 0 && data.y[k] <= value; k -= 1) leftMin = Math.min(leftMin, data.y[k]);
-    let rightMin = value;
-    for (let k = index + 1; k < data.y.length && data.y[k] <= value; k += 1) {
-      rightMin = Math.min(rightMin, data.y[k]);
-    }
-    if (value - Math.max(leftMin, rightMin) >= minProminence) {
-      peaks.push({ index, t: data.t[index], value });
-    }
-  }
-  return peaks;
-};
-
 export const fitSeries = (
   t: readonly number[],
   y: readonly number[],

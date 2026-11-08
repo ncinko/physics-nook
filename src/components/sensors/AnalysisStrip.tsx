@@ -18,7 +18,6 @@ interface AnalysisStripProps {
   unit: string;
   stats: SeriesStats | null;
   area: number | null;
-  peaks: number;
   fitKind: FitKind;
   onFitKind: (kind: FitKind) => void;
   fit: FitSummary | null;
@@ -34,7 +33,6 @@ export default function AnalysisStrip({
   unit,
   stats,
   area,
-  peaks,
   fitKind,
   onFitKind,
   fit,
@@ -57,7 +55,6 @@ export default function AnalysisStrip({
           <Readout.Value label="Mean" value={fmt(stats.mean)} unit={unit} />
           <Readout.Value label="Std dev" value={fmt(stats.std)} unit={unit} />
           <Readout.Value label="Area" value={fmt(area)} unit={`${unit}·s`} />
-          <Readout.Value label="Peaks" value={String(peaks)} />
         </Readout>
       ) : (
         <p className="type-supporting m-0 text-[var(--text-muted)]">No samples in this window.</p>

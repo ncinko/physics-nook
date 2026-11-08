@@ -1,4 +1,4 @@
-import { useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useId, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { niceTicks } from '../../../lib/kinematics/videoAnalysis';
 import { markerPath, type MarkerShape } from './trackColors';
 import { fixed } from '../../../utils/format';
@@ -45,6 +45,13 @@ interface AnalysisPlotProps {
   exportRef?: { current: SVGSVGElement | null };
   /** What an empty graph says; defaults to the video lab's prompt. */
   emptyMessage?: string;
+  /**
+   * Fixed axis bounds, used exactly as given (no padding). Null or omitted
+   * means auto-scale to the data. Data outside a fixed range is clipped to the
+   * plot frame, so zooming in never draws over the axes.
+   */
+  xRange?: { min: number; max: number } | null;
+  yRange?: { min: number; max: number } | null;
 }
 
 const VIEW_WIDTH = 720;
@@ -75,7 +82,10 @@ export function AnalysisPlot({
   summary,
   exportRef,
   emptyMessage = 'Mark points on the video to build a graph.',
+  xRange = null,
+  yRange = null,
 }: AnalysisPlotProps) {
+  const clipId = useId();
   const svgRef = useRef<SVGSVGElement | null>(null);
   // One node, two holders: the drag maths needs it, and so does the exporter.
   const attachSvg = (node: SVGSVGElement | null) => {
@@ -127,6 +137,14 @@ export function AnalysisPlot({
   xMax += xPad;
   yMin -= yPad;
   yMax += yPad;
+  if (xRange && xRange.max > xRange.min) {
+    xMin = xRange.min;
+    xMax = xRange.max;
+  }
+  if (yRange && yRange.max > yRange.min) {
+    yMin = yRange.min;
+    yMax = yRange.max;
+  }
 
   const xPix = (value: number) =>
     plotLeft + ((value - xMin) / (xMax - xMin)) * (plotRight - plotLeft);
@@ -308,8 +326,13 @@ export function AnalysisPlot({
         </g>
       )}
 
+      <clipPath id={clipId}>
+        <rect x={plotLeft} y={plotTop} width={plotRight - plotLeft} height={plotBottom - plotTop} />
+      </clipPath>
+
       {fitCurve && fitCurve.length > 1 && (
         <polyline
+          clipPath={`url(#${clipId})`}
           points={fitCurve.map((point) => `${xPix(point.x)},${yPix(point.y)}`).join(' ')}
           fill="none"
           stroke={fitColor}
@@ -321,6 +344,7 @@ export function AnalysisPlot({
       {series.map((entry) => (
         <g
           key={entry.key}
+          clipPath={`url(#${clipId})`}
           stroke={entry.color}
           fill={entry.color}
           opacity={entry.faded ? 0.3 : undefined}

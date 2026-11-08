@@ -16,6 +16,7 @@ import {
   BUMP_WIDTH_S,
   simulatedSignal,
 } from '../../src/lib/sensors/simulatedSource.ts';
+import { boundsOf, withBound, zoomRange } from '../../src/lib/sensors/axis.ts';
 import type { SensorChannel } from '../../src/lib/sensors/types.ts';
 
 const near = (a: number, b: number, tol = 1e-9) =>
@@ -147,5 +148,24 @@ assert.equal(cell('a\tb', '\t'), 'a b');
 near(simulatedSignal(BUMP_WIDTH_S / 2).force, BUMP_PEAK_N, 1e-9);
 near(simulatedSignal(BUMP_WIDTH_S + 0.1).force, 0);
 near(simulatedSignal(BUMP_PERIOD_S + BUMP_WIDTH_S / 2).force, BUMP_PEAK_N, 1e-9);
+
+// --- axis ranges ------------------------------------------------------------
+{
+  const b = boundsOf([0, 10, NaN])!;
+  near(b.min, -0.6);
+  near(b.max, 10.6);
+  assert.equal(boundsOf([]), null);
+  const flat = boundsOf([2, 2])!;
+  assert.ok(flat.max > flat.min);
+  const z = zoomRange({ min: 0, max: 10 }, 0.5);
+  near(z.min, 2.5);
+  near(z.max, 7.5);
+  const out = zoomRange({ min: 0, max: 10 }, 2);
+  near(out.min, -5);
+  near(out.max, 15);
+  assert.deepEqual(withBound({ min: 0, max: 10 }, 'max', '5'), { min: 0, max: 5 });
+  assert.equal(withBound({ min: 0, max: 10 }, 'max', '-1'), null);
+  assert.equal(withBound({ min: 0, max: 10 }, 'min', 'abc'), null);
+}
 
 console.log('Sensor lab library tests passed.');

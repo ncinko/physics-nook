@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Cable, Download, Trash2 } from 'lucide-react';
+import { Cable, Download, Trash2, ZoomIn, ZoomOut } from 'lucide-react';
 import { AnalysisPlot, type PlotSeries } from '../kinematics/videoAnalysis/AnalysisPlot';
 import { downloadBlob, savePlotWithCaption } from '../kinematics/videoAnalysis/exportPlot';
 import { trackColor, trackShape } from '../kinematics/videoAnalysis/trackColors';
@@ -7,8 +7,10 @@ import { Button, ControlBar, Select, Toggle } from '../shared/InlineControls';
 import Readout from '../shared/Readout';
 import { copyText } from '../../utils/clipboard';
 import { predictPolynomial } from '../../lib/math/leastSquares';
+import { boundsOf, withBound, zoomRange, type AxisRange } from '../../lib/sensors/axis';
 import { fitSeries, integrate, seriesStats, findPeaks } from '../../lib/sensors/analysis';
 import { serializeSensorRuns, type ExportLayout } from '../../lib/sensors/export';
+import { isProbeSupported, runHardwareProbe } from '../../lib/sensors/hardwareProbe';
 import {
   createRecorder,
   nextRunLabel,
@@ -17,7 +19,6 @@ import {
   type TriggerMode,
 } from '../../lib/sensors/recording';
 import type { SensorSource, SensorSourceStatus } from '../../lib/sensors/source';
-import { isProbeSupported, runHardwareProbe } from '../../lib/sensors/hardwareProbe';
 import { createSimulatedSource } from '../../lib/sensors/simulatedSource';
 import type { SensorChannel, SensorRun, TimeRange } from '../../lib/sensors/types';
 
@@ -27,6 +28,7 @@ const LIVE_WINDOW_S = 10;
 const LIVE_REFRESH_MS = 100;
 const PERIOD_S = 0.05;
 const MAX_PLOT_POINTS = 700;
+const MAX_LIVE_SAMPLES = 12000;
 
 const loadRuns = (): SensorRun[] => {
   try {
@@ -68,6 +70,73 @@ const TRIGGER_OPTIONS = [
   { value: 'falling', label: 'Falling through level' },
 ];
 
+/**
+ * Editable bounds for one axis: two number fields, zoom in/out about the
+ * centre, and a button back to auto-scale. A half-typed number sits in a draft
+ * until Enter or blur commits it, so typing "-" does not collapse the plot.
+ */
+function AxisFields({
+  label,
+  unit,
+  range,
+  manual,
+  onChange,
+}: {
+  label: string;
+  unit: string;
+  range: AxisRange;
+  manual: boolean;
+  onChange: (range: AxisRange | null) => void;
+}) {
+  const [draft, setDraft] = useState<{ which: 'min' | 'max'; text: string } | null>(null);
+
+  const commit = () => {
+    if (draft) {
+      const next = withBound(range, draft.which, draft.text);
+      if (next) onChange(next);
+    }
+    setDraft(null);
+  };
+
+  const field = (which: 'min' | 'max') => (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={`${label} axis ${which}`}
+      value={draft?.which === which ? draft.text : fmt(range[which], 3)}
+      onFocus={(event) => event.currentTarget.select()}
+      onChange={(event) => setDraft({ which, text: event.target.value })}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') commit();
+        if (event.key === 'Escape') setDraft(null);
+      }}
+      className="w-20 rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] px-2 py-1 text-right font-mono tabular-nums text-[var(--text-primary)]"
+    />
+  );
+
+  return (
+    <div className="inline-flex flex-wrap items-center gap-1.5">
+      <span className="font-medium">{label}</span>
+      {field('min')}
+      <span className="text-[var(--text-muted)]">to</span>
+      {field('max')}
+      <span className="text-[var(--text-muted)]">{unit}</span>
+      <Button variant="secondary" aria-label={`Zoom in on ${label}`} onClick={() => onChange(zoomRange(range, 0.5))}>
+        <ZoomIn aria-hidden="true" className="h-4 w-4" />
+      </Button>
+      <Button variant="secondary" aria-label={`Zoom out on ${label}`} onClick={() => onChange(zoomRange(range, 2))}>
+        <ZoomOut aria-hidden="true" className="h-4 w-4" />
+      </Button>
+      {manual ? (
+        <Button variant="secondary" onClick={() => onChange(null)}>
+          Auto
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
 export default function SensorLab() {
   const sourceRef = useRef<SensorSource | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
@@ -75,6 +144,8 @@ export default function SensorLab() {
   const latestRef = useRef<Record<string, number>>({});
   const offsetsRef = useRef<Record<string, number>>({});
   const plotRef = useRef<SVGSVGElement | null>(null);
+  /** Stream time at which the current recording began; null when not recording. */
+  const recStartRef = useRef<number | null>(null);
 
   const [status, setStatus] = useState<SensorSourceStatus>({ kind: 'idle', message: 'Not connected' });
   const [channels, setChannels] = useState<SensorChannel[]>([]);
@@ -88,6 +159,8 @@ export default function SensorLab() {
   const [triggerLevel, setTriggerLevel] = useState('1');
   const [overlay, setOverlay] = useState(false);
   const [fitRange, setFitRange] = useState<TimeRange | null>(null);
+  const [xRange, setXRange] = useState<AxisRange | null>(null);
+  const [yRange, setYRange] = useState<AxisRange | null>(null);
   const [layout, setLayout] = useState<ExportLayout>('wide');
   const [notice, setNotice] = useState<string | null>(null);
   const [, setTick] = useState(0);
@@ -103,6 +176,12 @@ export default function SensorLab() {
     if (loaded) saveRuns(runs);
   }, [runs, loaded]);
 
+  useEffect(() => {
+    // Ranges are in the channel's units; a different channel starts on auto.
+    setXRange(null);
+    setYRange(null);
+  }, [channelId]);
+
   const channel = channels.find((entry) => entry.id === channelId) ?? channels[0] ?? null;
   const activeRun = runs.find((run) => run.id === activeRunId) ?? null;
   const connected = status.kind === 'ready' || status.kind === 'streaming';
@@ -111,13 +190,10 @@ export default function SensorLab() {
     const recorder = recorderRef.current;
     if (!recorder) return;
     recorderRef.current = null;
+    recStartRef.current = null;
     setRecording(false);
     setRuns((previous) => {
-      const run = recorder.finish(
-        nextRunLabel(previous),
-        `run-${Date.now()}`,
-        Date.now(),
-      );
+      const run = recorder.finish(nextRunLabel(previous), `run-${Date.now()}`, Date.now());
       if (run.t.length === 0) {
         setNotice('No samples were recorded. If a trigger was set, the signal never crossed its level.');
         return previous;
@@ -146,7 +222,13 @@ export default function SensorLab() {
         latestRef.current[id] = value;
         (live.v[id] ??= []).push(value);
       });
-      while (live.t.length > 0 && sample.t - live.t[0] > LIVE_WINDOW_S) {
+      // While recording, keep everything since the run began so the live plot
+      // can show it growing; otherwise only a sliding window.
+      const isRecording = recStartRef.current !== null;
+      while (
+        live.t.length > 0 &&
+        (isRecording ? live.t.length > MAX_LIVE_SAMPLES : sample.t - live.t[0] > LIVE_WINDOW_S)
+      ) {
         live.t.shift();
         Object.values(live.v).forEach((series) => series.shift());
       }
@@ -195,6 +277,12 @@ export default function SensorLab() {
       preTriggerSeconds: 0.5,
       durationSeconds: duration === 'manual' ? null : Number(duration),
     });
+    const liveT = liveRef.current.t;
+    recStartRef.current = liveT.length > 0 ? liveT[liveT.length - 1] : 0;
+    // Collecting always returns to the live view, so the run draws as it grows.
+    setActiveRunId(null);
+    setOverlay(false);
+    setFitRange(null);
     setRecording(true);
     setNotice(null);
   };
@@ -227,13 +315,17 @@ export default function SensorLab() {
     if (!activeRun && !overlay) {
       const live = liveRef.current;
       const y = live.v[channel.id] ?? [];
+      const origin = recStartRef.current;
+      const points = live.t
+        .map((t, i) => ({ x: origin === null ? t : t - origin, y: y[i], sigmaX: null, sigmaY: null }))
+        .filter((point) => origin === null || point.x >= 0);
       return [
         {
           key: 'live',
           label: `${channel.name} (live)`,
           color: trackColor(0),
           shape: trackShape(0),
-          points: decimate(live.t.map((x, i) => ({ x, y: y[i], sigmaX: null, sigmaY: null }))),
+          points: decimate(points),
         },
       ];
     }
@@ -255,6 +347,11 @@ export default function SensorLab() {
   };
   // Not memoised: the live branch reads refs and must follow every tick render.
   const series = buildSeries();
+  const plotPoints = series.flatMap((entry) => entry.points);
+  const autoX = boundsOf(plotPoints.map((point) => point.x)) ?? { min: 0, max: 1 };
+  const autoY = boundsOf(plotPoints.map((point) => point.y)) ?? { min: 0, max: 1 };
+  const shownX = xRange ?? autoX;
+  const shownY = yRange ?? autoY;
 
   const fitCurve = useMemo(() => {
     if (!fit || !fitRange) return null;
@@ -308,14 +405,14 @@ export default function SensorLab() {
     }
   };
   const channelOptions = channels.map((entry) => ({ value: entry.id, label: `${entry.name} (${entry.unit})` }));
-  const live = liveRef.current;
   const latest = channel ? latestRef.current[channel.id] : undefined;
+  const viewingLive = activeRunId === null && !overlay;
 
   return (
-    <div className="not-prose flex flex-col gap-4 p-4 text-[var(--text-primary)]">
+    <div className="not-prose flex flex-col gap-3 p-3 text-[var(--text-primary)] sm:p-4">
       <section
         aria-label="Connection"
-        className="rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-4"
+        className="rounded-lg border border-[var(--grid-line)] bg-[var(--surface-elevated)] p-3"
       >
         <div className="flex flex-wrap items-center gap-3">
           <Button onClick={() => void connectSimulated()} disabled={connected}>
@@ -327,208 +424,258 @@ export default function SensorLab() {
               Disconnect
             </Button>
           ) : null}
+          {supportsUsb && isProbeSupported() ? (
+            <Button variant="secondary" onClick={() => void probe()} disabled={probing || connected}>
+              {probing ? 'Probing…' : 'Probe LabQuest hardware'}
+            </Button>
+          ) : null}
+          {probeText ? (
+            <Button
+              variant="secondary"
+              onClick={async () =>
+                setNotice((await copyText(probeText)) ? 'Probe output copied.' : 'The browser blocked copying.')
+              }
+            >
+              Copy probe output
+            </Button>
+          ) : null}
           <span role="status" className="type-supporting text-[var(--text-muted)]">
-            {status.message}
+            {probing ? probeProgress : status.message}
           </span>
         </div>
-        <p className="type-supporting mt-2 text-[var(--text-muted)]">
+        <p hidden={connected} className="type-supporting mt-2 text-[var(--text-muted)]">
           {supportsUsb
             ? 'LabQuest analog sensors (force, force plate) are not connectable yet. Plug sensors into the LabQuest and run the probe to capture what it sends.'
             : 'LabQuest connections need Chrome or Edge.'}
         </p>
-        {supportsUsb && isProbeSupported() ? (
-          <div className="mt-3 flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button variant="secondary" onClick={() => void probe()} disabled={probing || connected}>
-                {probing ? 'Probing…' : 'Probe LabQuest hardware'}
-              </Button>
-              {probing ? (
-                <span role="status" className="type-supporting text-[var(--text-muted)]">
-                  {probeProgress}
-                </span>
-              ) : null}
-              {probeText ? (
-                <Button
-                  variant="secondary"
-                  onClick={async () =>
-                    setNotice((await copyText(probeText)) ? 'Probe output copied.' : 'The browser blocked copying.')
-                  }
-                >
-                  Copy output
-                </Button>
-              ) : null}
-            </div>
-            {probeText ? (
-              <textarea
-                readOnly
-                aria-label="Probe output"
-                value={probeText}
-                rows={14}
-                className="w-full rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] p-2 font-mono text-xs text-[var(--text-primary)]"
-              />
-            ) : null}
-          </div>
+        {probeText ? (
+          <textarea
+            readOnly
+            aria-label="Probe output"
+            value={probeText}
+            rows={8}
+            className="mt-2 w-full rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] p-2 font-mono text-xs text-[var(--text-primary)]"
+          />
         ) : null}
       </section>
 
-      {connected && channel ? (
-        <>
-          <ControlBar align="start">
-            <Select label="Channel" value={channel.id} onChange={setChannelId} options={channelOptions} />
-            <Button variant="secondary" onClick={tare} disabled={recording}>
-              Zero {channel.quantity.toLowerCase()}
-            </Button>
-            <Readout variant="inline">
-              <Readout.Value label={channel.quantity} value={fmt(latest)} unit={channel.unit} />
-            </Readout>
-          </ControlBar>
-
-          <ControlBar align="start">
-            <Select label="Record for" value={duration} onChange={setDuration} options={DURATION_OPTIONS} />
-            <Select
-              label="Start"
-              value={triggerMode}
-              onChange={(value) => setTriggerMode(value as TriggerMode)}
-              options={TRIGGER_OPTIONS}
-            />
-            {triggerMode !== 'immediate' ? (
-              <label className="inline-flex items-center gap-2 text-sm">
-                <span className="font-medium">Level</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={triggerLevel}
-                  onChange={(event) => setTriggerLevel(event.target.value)}
-                  className="w-20 rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] px-2 py-1 text-right font-mono tabular-nums"
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="flex min-w-0 flex-col gap-2">
+          {connected || runs.length > 0 ? (
+            <>
+              <div className="[&_svg]:mx-auto [&_svg]:max-h-[60vh]">
+                <AnalysisPlot
+                  series={series}
+                  xLabel={xLabel}
+                  yLabel={yLabel}
+                  fitCurve={fitCurve}
+                  fitColor="var(--accent-orange)"
+                  fitRange={
+                    activeRun ? (fitRange ?? { min: 0, max: activeRun.t[activeRun.t.length - 1] ?? 1 }) : null
+                  }
+                  onFitRangeChange={(min, max) => setFitRange({ min, max })}
+                  residuals={null}
+                  summary={
+                    fit
+                      ? `Linear fit: slope ${fmt(fit.coefficients[1], 4)} ${channel?.unit ?? ''}/s`
+                      : activeRun
+                        ? `${activeRun.label}, ${activeRun.t.length} samples`
+                        : 'Live view'
+                  }
+                  exportRef={plotRef}
+                  emptyMessage="Connect sensors to see a live graph."
+                  xRange={xRange}
+                  yRange={yRange}
                 />
-                <span className="text-[var(--text-muted)]">{channel.unit}</span>
-              </label>
-            ) : null}
-            {recording ? (
-              <Button onClick={finishRecording}>Stop</Button>
-            ) : (
-              <Button onClick={startRecording}>Collect</Button>
-            )}
-            {recording && recorderRef.current && !recorderRef.current.triggered() ? (
-              <span className="type-supporting text-[var(--text-muted)]">Waiting for trigger…</span>
-            ) : null}
-          </ControlBar>
-        </>
-      ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                <AxisFields
+                  label="Time"
+                  unit="s"
+                  range={shownX}
+                  manual={xRange !== null}
+                  onChange={setXRange}
+                />
+                <AxisFields
+                  label={channel?.quantity ?? 'Value'}
+                  unit={channel?.unit ?? ''}
+                  range={shownY}
+                  manual={yRange !== null}
+                  onChange={setYRange}
+                />
+                {xRange || yRange ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setXRange(null);
+                      setYRange(null);
+                    }}
+                  >
+                    Autoscale both
+                  </Button>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <p className="type-supporting text-[var(--text-muted)]">
+              Connect sensors above, then press Collect to record a run.
+            </p>
+          )}
+          {notice ? (
+            <p role="status" className="type-supporting text-[var(--text-muted)]">
+              {notice}
+            </p>
+          ) : null}
+        </div>
 
-      {notice ? (
-        <p role="status" className="type-supporting text-[var(--text-muted)]">
-          {notice}
-        </p>
-      ) : null}
-
-      {connected || runs.length > 0 ? (
-        <AnalysisPlot
-          series={series}
-          xLabel={xLabel}
-          yLabel={yLabel}
-          fitCurve={fitCurve}
-          fitColor="var(--accent-orange)"
-          fitRange={activeRun ? (fitRange ?? { min: 0, max: activeRun.t[activeRun.t.length - 1] ?? 1 }) : null}
-          onFitRangeChange={(min, max) => setFitRange({ min, max })}
-          residuals={null}
-          summary={
-            fit
-              ? `Linear fit: slope ${fmt(fit.coefficients[1], 4)} ${channel?.unit ?? ''}/s`
-              : (activeRun ? `${activeRun.label}, ${activeRun.t.length} samples` : 'Live view')
-          }
-          exportRef={plotRef}
-          emptyMessage="Connect sensors to see a live graph."
-        />
-      ) : null}
-
-      {live.t.length === 0 && !connected && runs.length === 0 ? (
-        <p className="type-supporting text-[var(--text-muted)]">
-          Connect sensors above, then press Collect to record a run.
-        </p>
-      ) : null}
-
-      {activeRun && stats ? (
-        <section aria-label="Analysis" className="flex flex-col gap-2">
-          <p className="type-label">
-            {activeRun.label}
-            {fitRange ? `, t from ${fmt(fitRange.min, 2)} to ${fmt(fitRange.max, 2)} s` : ', whole run'}
-          </p>
-          <Readout variant="inline">
-            <Readout.Value label="Max" value={fmt(stats.max)} unit={channel?.unit} />
-            <Readout.Value label="Min" value={fmt(stats.min)} unit={channel?.unit} />
-            <Readout.Value label="Mean" value={fmt(stats.mean)} unit={channel?.unit} />
-            <Readout.Value label="Std dev" value={fmt(stats.std)} unit={channel?.unit} />
-            <Readout.Value label="Area" value={fmt(area)} unit={channel ? `${channel.unit}·s` : ''} />
-            {fit ? (
-              <Readout.Value
-                label="Slope"
-                value={fmt(fit.coefficients[1], 4)}
-                unit={channel ? `${channel.unit}/s` : ''}
-              />
-            ) : null}
-            <Readout.Value label="Peaks" value={String(peaks.length)} />
-          </Readout>
-          <p className="type-supporting text-[var(--text-muted)]">
-            Drag the dashed handles to choose the interval. Area is the integral over that interval
-            (for force, the impulse).
-          </p>
-        </section>
-      ) : null}
-
-      {runs.length > 0 ? (
-        <section aria-label="Runs" className="flex flex-col gap-2">
-          <ul className="flex flex-wrap gap-2">
-            {runs.map((run) => (
-              <li key={run.id} className="inline-flex items-center gap-1">
-                <Button
-                  variant={run.id === activeRunId ? 'primary' : 'secondary'}
-                  onClick={() => {
-                    setActiveRunId(run.id === activeRunId ? null : run.id);
-                    setFitRange(null);
-                  }}
-                  aria-pressed={run.id === activeRunId}
-                >
-                  {run.label}
+        <aside className="flex min-w-0 flex-col gap-4">
+          {connected && channel ? (
+            <section aria-label="Collect" className="flex flex-col gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Select label="Channel" value={channel.id} onChange={setChannelId} options={channelOptions} />
+                <Button variant="secondary" onClick={tare} disabled={recording}>
+                  Zero
                 </Button>
-                <button
-                  type="button"
-                  aria-label={`Delete ${run.label}`}
-                  className="p-1 text-[var(--text-muted)] hover:text-[var(--accent-red)]"
-                  onClick={() => {
-                    setRuns((previous) => previous.filter((entry) => entry.id !== run.id));
-                    if (run.id === activeRunId) setActiveRunId(null);
-                  }}
-                >
-                  <Trash2 aria-hidden="true" className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-          <ControlBar align="start">
-            <Toggle label="Overlay all runs" checked={overlay} onChange={setOverlay} />
-            <Select
-              label="Layout"
-              value={layout}
-              onChange={(value) => setLayout(value as ExportLayout)}
-              options={[
-                { value: 'wide', label: 'Columns per run' },
-                { value: 'long', label: 'One row per sample' },
-              ]}
-            />
-            <Button variant="secondary" onClick={download}>
-              <Download aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
-              CSV
-            </Button>
-            <Button variant="secondary" onClick={() => void copy()}>
-              Copy for spreadsheet
-            </Button>
-            <Button variant="secondary" onClick={() => void savePlot()}>
-              Save plot
-            </Button>
-          </ControlBar>
-        </section>
-      ) : null}
+              </div>
+              <Readout variant="inline">
+                <Readout.Value label={channel.quantity} value={fmt(latest)} unit={channel.unit} />
+              </Readout>
+              <div className="flex flex-wrap items-center gap-3">
+                <Select label="Record for" value={duration} onChange={setDuration} options={DURATION_OPTIONS} />
+                <Select
+                  label="Start"
+                  value={triggerMode}
+                  onChange={(value) => setTriggerMode(value as TriggerMode)}
+                  options={TRIGGER_OPTIONS}
+                />
+                {triggerMode !== 'immediate' ? (
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <span className="font-medium">Level</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={triggerLevel}
+                      onChange={(event) => setTriggerLevel(event.target.value)}
+                      className="w-20 rounded-md border border-[var(--grid-line)] bg-[var(--surface-plot)] px-2 py-1 text-right font-mono tabular-nums"
+                    />
+                    <span className="text-[var(--text-muted)]">{channel.unit}</span>
+                  </label>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {recording ? (
+                  <Button onClick={finishRecording}>Stop</Button>
+                ) : (
+                  <Button onClick={startRecording}>Collect</Button>
+                )}
+                {recording && recorderRef.current && !recorderRef.current.triggered() ? (
+                  <span className="type-supporting text-[var(--text-muted)]">Waiting for trigger…</span>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {activeRun && stats ? (
+            <section aria-label="Analysis" className="flex flex-col gap-2">
+              <p className="type-label">
+                {activeRun.label}
+                {fitRange ? `, t from ${fmt(fitRange.min, 2)} to ${fmt(fitRange.max, 2)} s` : ', whole run'}
+              </p>
+              <Readout variant="inline">
+                <Readout.Value label="Max" value={fmt(stats.max)} unit={channel?.unit} />
+                <Readout.Value label="Min" value={fmt(stats.min)} unit={channel?.unit} />
+                <Readout.Value label="Mean" value={fmt(stats.mean)} unit={channel?.unit} />
+                <Readout.Value label="Std dev" value={fmt(stats.std)} unit={channel?.unit} />
+                <Readout.Value label="Area" value={fmt(area)} unit={channel ? `${channel.unit}·s` : ''} />
+                {fit ? (
+                  <Readout.Value
+                    label="Slope"
+                    value={fmt(fit.coefficients[1], 4)}
+                    unit={channel ? `${channel.unit}/s` : ''}
+                  />
+                ) : null}
+                <Readout.Value label="Peaks" value={String(peaks.length)} />
+              </Readout>
+              <p className="type-supporting text-[var(--text-muted)]">
+                Drag the dashed handles to choose the interval.
+              </p>
+            </section>
+          ) : null}
+
+          {connected || runs.length > 0 ? (
+            <section aria-label="Runs" className="flex flex-col gap-2">
+              <ul className="flex flex-wrap gap-2">
+                <li>
+                  <Button
+                    variant={viewingLive ? 'primary' : 'secondary'}
+                    disabled={!connected}
+                    aria-pressed={viewingLive}
+                    onClick={() => {
+                      setActiveRunId(null);
+                      setOverlay(false);
+                      setFitRange(null);
+                    }}
+                  >
+                    Live
+                  </Button>
+                </li>
+                {runs.map((run) => (
+                  <li key={run.id} className="inline-flex items-center gap-1">
+                    <Button
+                      variant={run.id === activeRunId ? 'primary' : 'secondary'}
+                      onClick={() => {
+                        setActiveRunId(run.id);
+                        setOverlay(false);
+                        setFitRange(null);
+                      }}
+                      aria-pressed={run.id === activeRunId}
+                    >
+                      {run.label}
+                    </Button>
+                    <button
+                      type="button"
+                      aria-label={`Delete ${run.label}`}
+                      className="p-1 text-[var(--text-muted)] hover:text-[var(--accent-red)]"
+                      onClick={() => {
+                        setRuns((previous) => previous.filter((entry) => entry.id !== run.id));
+                        if (run.id === activeRunId) setActiveRunId(null);
+                      }}
+                    >
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              {runs.length > 0 ? (
+                <>
+                  <Toggle label="Overlay all runs" checked={overlay} onChange={setOverlay} />
+                  <ControlBar align="start" className="gap-x-2">
+                    <Select
+                      ariaLabel="Export layout"
+                      value={layout}
+                      onChange={(value) => setLayout(value as ExportLayout)}
+                      options={[
+                        { value: 'wide', label: 'Columns per run' },
+                        { value: 'long', label: 'One row per sample' },
+                      ]}
+                    />
+                    <Button variant="secondary" onClick={download}>
+                      <Download aria-hidden="true" className="mr-1.5 inline h-4 w-4 align-text-bottom" />
+                      CSV
+                    </Button>
+                    <Button variant="secondary" onClick={() => void copy()}>
+                      Copy
+                    </Button>
+                    <Button variant="secondary" onClick={() => void savePlot()}>
+                      Save plot
+                    </Button>
+                  </ControlBar>
+                </>
+              ) : null}
+            </section>
+          ) : null}
+        </aside>
+      </div>
     </div>
   );
 }

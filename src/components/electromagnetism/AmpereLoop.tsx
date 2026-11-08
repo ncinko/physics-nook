@@ -109,8 +109,8 @@ export default function AmpereLoop() {
         continue;
       }
       const t = Math.sqrt(s.magnitude / strongest);
-      const length = spacingPx * (0.3 + 0.5 * t);
-      ctx.globalAlpha = 0.28 + 0.65 * t;
+      const length = spacingPx * (0.15 + 0.65 * t);
+      ctx.globalAlpha = 0.14 + 0.79 * t;
       ctx.strokeStyle = fieldColor;
       ctx.fillStyle = fieldColor;
       drawArrow(

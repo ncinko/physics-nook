@@ -23,6 +23,7 @@ import { drawArrow, drawCurrentMark, pointerPosition, prepareCanvas, useCanvasSu
 const WORLD_WIDTH = 6;
 const WORLD_HEIGHT = 4;
 const ARROW_SPACING = 0.5;
+const REFERENCE_DISTANCE = 0.2; // meters; arrows are full size at least this close to a wire
 const STEP_LENGTH = 0.1;
 const CLOSE_TOLERANCE = 0.25;
 const MIN_POINT_GAP = 0.03;
@@ -86,14 +87,19 @@ export default function AmpereLoop() {
     const cols = Math.floor(WORLD_WIDTH / ARROW_SPACING);
     const rows = Math.floor(WORLD_HEIGHT / ARROW_SPACING);
     const samples: { x: number; y: number; bx: number; by: number; magnitude: number }[] = [];
-    let strongest = 0;
+    // Arrow size is judged against a fixed reference, not the strongest arrow on the
+    // lattice. That maximum jumps around as a wire passes between lattice points,
+    // which made arrows grow and shrink while a wire was dragged away. The reference
+    // is the field at REFERENCE_DISTANCE from wires carrying the total current of
+    // all wires, so it changes only when currents are added or removed.
+    const totalAbsCurrent = wires.reduce((sum, w) => sum + Math.abs(w.current), 0);
+    const reference = (2e-7 * totalAbsCurrent) / REFERENCE_DISTANCE;
     for (let i = 0; i < cols; i++) {
       for (let j = 0; j < rows; j++) {
         const x = -WORLD_WIDTH / 2 + ARROW_SPACING * (i + 0.5);
         const y = -WORLD_HEIGHT / 2 + ARROW_SPACING * (j + 0.5);
         const b = fieldAt(wires, x, y);
         const magnitude = Math.hypot(b.x, b.y);
-        strongest = Math.max(strongest, magnitude);
         samples.push({ x, y, bx: b.x, by: b.y, magnitude });
       }
     }
@@ -101,14 +107,14 @@ export default function AmpereLoop() {
     ctx.lineWidth = 1.6;
     for (const s of samples) {
       const base = toPixel(s);
-      if (s.magnitude === 0 || strongest === 0) {
+      if (s.magnitude === 0 || reference === 0) {
         ctx.fillStyle = palette.grid;
         ctx.beginPath();
         ctx.arc(base.x, base.y, 1.5, 0, Math.PI * 2);
         ctx.fill();
         continue;
       }
-      const t = Math.sqrt(s.magnitude / strongest);
+      const t = Math.min(1, Math.sqrt(s.magnitude / reference));
       const length = spacingPx * (0.15 + 0.65 * t);
       ctx.globalAlpha = 0.14 + 0.79 * t;
       ctx.strokeStyle = fieldColor;

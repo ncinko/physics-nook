@@ -14,7 +14,7 @@ import {
   type PathPoint,
   type PathStep,
 } from '../../lib/electromagnetism/ampere';
-import { drawArrow, drawCurrentMark, pointerPosition, prepareCanvas, useCanvasSurface, usePrefersReducedMotion } from './useCanvasSurface';
+import { drawArrow, drawCurrentMark, pointerPosition, prepareCanvas, useCanvasSurface } from './useCanvasSurface';
 
 // Build a set of long straight currents, draw a path through their field, and
 // watch B · dl add up step by step. The window is 6 m by 4 m, so the numbers do
@@ -55,7 +55,6 @@ const circlePath = (radius: number, points = 96): PathPoint[] =>
 
 export default function AmpereLoop() {
   const { containerRef, canvasRef, size } = useCanvasSurface();
-  const reducedMotion = usePrefersReducedMotion();
 
   const [wires, setWires] = useState<CurrentWire[]>(INITIAL_WIRES);
   const [nextId, setNextId] = useState(2);
@@ -296,8 +295,10 @@ export default function AmpereLoop() {
     const closed = closePath(path, CLOSE_TOLERANCE);
     const steps = buildPathSteps(closed, wires, STEP_LENGTH);
     if (steps.length === 0) return;
-    setIntegration({ steps, path: closed, shown: reducedMotion ? steps.length : 1 });
-    setAnimating(!reducedMotion);
+    // The step-by-step walk is the point of this tool, so it plays even when the
+    // OS asks for reduced motion (it is a slow trace, not a sweeping animation).
+    setIntegration({ steps, path: closed, shown: 1 });
+    setAnimating(true);
   };
 
   const showCircle = () => {
